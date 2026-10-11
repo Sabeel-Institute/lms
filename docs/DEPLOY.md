@@ -61,6 +61,7 @@ could have run for free.
 | **Keyboard** | debug | Every text field: the field stays visible above the keyboard |
 | **Gestures** | debug | Long-press and swipe paths |
 | **Safe area** | either | Notch and gesture bar (the app is `screenOrientation="portrait"`, so there is only one orientation to check) |
+| **Institute clock on Hermes** | either | The audit log shows an afternoon entry as `13:05`, not `01:05`, and the Zoom import picker gives each card the right AM/PM; typing in the picker's search box does not lag. Both read the same `Intl` parts (`wallClock` in `@sabeel/shared`), which only the device's engine can answer for. The picker needs the live Zoom account, so that half is **release** |
 | **Flex/wrap** | debug | Long class and student names — Yoga defaults `flexShrink` to 0, and a real device is the only place that shows. The seeded world carries names chosen to break this |
 
 A screenshot is not the check for any row above except the last two.

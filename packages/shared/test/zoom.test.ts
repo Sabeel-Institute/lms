@@ -11,10 +11,14 @@ describe('zoomRecordingDate', () => {
     expect(zoomRecordingDate({ startTime: '2026-10-09T00:02:00Z' })).toBe('2026-10-08');
   });
 
-  it('moves the line an hour once the clocks go back', () => {
-    // 6 pm CST is midnight UTC; 5:59 pm is still the 11th in both.
-    expect(zoomRecordingDate({ startTime: '2026-11-12T00:00:00Z' })).toBe('2026-11-11');
-    expect(zoomRecordingDate({ startTime: '2026-11-11T23:59:00Z' })).toBe('2026-11-11');
+  /*
+   * The same UTC clock time on either side of the change: 05:30 UTC is 12:30
+   * am CDT in October but 11:30 pm CST in November. Any fixed offset gets one
+   * of the two wrong.
+   */
+  it('follows the clocks going back, not a fixed offset', () => {
+    expect(zoomRecordingDate({ startTime: '2026-10-09T05:30:00Z' })).toBe('2026-10-09');
+    expect(zoomRecordingDate({ startTime: '2026-11-12T05:30:00Z' })).toBe('2026-11-11');
   });
 
   it('leaves a daytime class on its own date', () => {

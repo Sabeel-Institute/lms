@@ -112,6 +112,39 @@ export interface CompletionEventDoc {
 // -------------------------------------------------------- date-only maths --
 
 /**
+ * One formatter per shape and timezone, built on first use and kept.
+ *
+ * Building an `Intl.DateTimeFormat` is the expensive part of using one, and on
+ * Hermes markedly so. The Zoom picker dates every row it filters and prints
+ * the hours of every card on each render — each keystroke in its search box —
+ * so building them per call would cost hundreds a keystroke. Formatting with a
+ * built one is cheap.
+ */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function formatterFor(shape: 'date' | 'clock', timeZone: string): Intl.DateTimeFormat {
+  const key = `${shape} ${timeZone}`;
+  let f = formatters.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat(
+      'en-CA',
+      shape === 'date'
+        ? { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }
+        : {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+          },
+    );
+    formatters.set(key, f);
+  }
+  return f;
+}
+
+/**
  * Today's calendar date in a timezone, as `YYYY-MM-DD`.
  *
  * `en-CA` formats as ISO `YYYY-MM-DD`, and `timeZone` makes the rollover happen
@@ -119,12 +152,7 @@ export interface CompletionEventDoc {
  * `...-24`, not the 25th that UTC would give. No date library needed.
  */
 export function todayInZone(timeZone: string, now: number = Date.now()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(now));
+  return formatterFor('date', timeZone).format(new Date(now));
 }
 
 /**
@@ -184,15 +212,7 @@ function wallClock(
   timeZone: string,
   ms: number,
 ): { year: string; month: string; day: string; hour: string; minute: string } {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(new Date(ms));
+  const parts = formatterFor('clock', timeZone).formatToParts(new Date(ms));
   const at = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
   return { year: at('year'), month: at('month'), day: at('day'), hour: at('hour'), minute: at('minute') };
 }

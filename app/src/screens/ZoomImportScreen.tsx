@@ -144,10 +144,11 @@ export function ZoomImportScreen({
         <Empty>Loading recordings…</Empty>
       ) : filtered.length === 0 ? (
         // A wider range cannot help while the list is pinned to one date, so
-        // that case names the toggle that can.
+        // that case names the toggle that can — beside the filters, which may
+        // be what is hiding that day's recording.
         <Empty>
           {sessionDayOnly
-            ? `No recordings match on ${unbreakableDate(session.date)}. Untick "Only recordings from this session's date" to see the whole range.`
+            ? `No recordings match on ${unbreakableDate(session.date)}. Change the filters above, or untick "Only recordings from this session's date" to see the whole range.`
             : 'No recordings match. Widen the date range or the filters, then Load.'}
         </Empty>
       ) : (
