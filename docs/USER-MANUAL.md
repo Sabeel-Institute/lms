@@ -420,6 +420,15 @@ well under 30 MB. (Uploading audio rather than a video file is the single bigges
 thing that keeps this app free to run.) The recording takes its title, date, and
 notes from the session, so you don't retype them.
 
+**Importing from Zoom.** Every class in a cohort is held in the same recurring
+Zoom meeting, so every recording in the list has the same title. What tells them
+apart is when the audio ran: each card shows the date and the hours, for example
+*2026-10-08 · 6:02–8:18 PM*, so the 6 pm and 7 pm classes of one evening are two
+different cards. The list opens showing only recordings from the session's own
+date. Untick **Only recordings from this session's date** to see everything in
+the date range. Dates and hours are institute time (America/Chicago), so an
+evening class is listed under the day it was held.
+
 **Or say it wasn't recorded.** Some classes aren't, and until you say so the app
 keeps asking: **Today** shows the session as waiting for its recording, and you
 get the "attendance still not taken" reminder every morning. **This class was not

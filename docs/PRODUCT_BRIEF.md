@@ -105,6 +105,9 @@ and grants access, is course-scoped as everything else is.
 - Managers can import recordings from approved Zoom sources for their assigned class scopes.
 - Staff see a list of available Zoom cloud recordings.
 - The Zoom import picker supports date range, meeting title, import status, and duration filters.
+- Each Zoom recording in the picker shows the date and the hours its audio ran, in institute time on a 12-hour clock. One recurring meeting carries every class in a cohort, so the topic is the same on every row and two classes can share a date; the hours are what tell them apart.
+- The picker opens filtered to the session's own date, as a toggle staff can turn off. Its date range is in institute dates too: an evening class, which Zoom stamps on the next UTC day, is listed under the day it was held.
+- One Zoom meeting is one class. Teachers end the meeting between classes rather than stopping and restarting the recording inside it; the picker takes one audio file per meeting (decision, 2026-10-10).
 - Already imported Zoom recordings show as imported and link to the existing app recording.
 - Failed imports show a needs-attention status with retry and useful error details.
 - Drafts take their duration and source details from Zoom. Title and date come from the session, which owns them — see the data model — so the Zoom topic and start time are not copied onto the recording.

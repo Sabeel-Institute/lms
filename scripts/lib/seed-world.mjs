@@ -481,9 +481,11 @@ export async function seedWorld({ db, auth, browser, base }) {
    *  `attendanceMissing` notification exists for, and a real staff screen. */
   const blocking = await seedSession('sw-s5', 'sw-s5r', 'Session 5 — Reliance and Trust',
     { daysAgo: 4, dueOffset: 7, attendance: null });
-  /** A session with NO RECORDING — the only route to the Zoom import screen. */
+  /** A session with NO RECORDING — the only route to the Zoom import screen,
+   *  whose same-day filter is keyed on this date. */
+  const PENDING_DATE = iso(now);
   await db.collection('sessions').doc('sw-s6').set({
-    courseId: COURSE, cohortId: COHORT, date: iso(now), title: 'Session 6 — Today (recording pending)',
+    courseId: COURSE, cohortId: COHORT, date: PENDING_DATE, title: 'Session 6 — Today (recording pending)',
     dueDate: iso(now + 7 * DAY), notes: '', recordingId: null, attendance: {},
     attendanceSubmittedAt: null, notRecorded: false, createdAt: now, createdBy: adminUid, updatedAt: now,
   });
@@ -599,7 +601,7 @@ export async function seedWorld({ db, auth, browser, base }) {
   // past the fixture's own vocabulary into its internals.
   return {
     STUDENT, DISABLED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived,
-    HISTORY_ROW, HISTORY_ROW_MANAGED,
+    HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE,
   };
 }
 

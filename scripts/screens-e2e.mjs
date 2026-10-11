@@ -99,7 +99,7 @@ import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID, EMULATOR_STORAGE_BUCKET } from './lib/project.mjs';
 import { backButton, byId, byName, resetEmulators, seedWorld, tap } from './lib/seed-world.mjs';
 // The built workspace package — `screens-e2e.sh` builds it before this runs.
-import { PUSH_DEVICE_MESSAGE } from '@sabeel/shared';
+import { PUSH_DEVICE_MESSAGE, addDays } from '@sabeel/shared';
 
 const BASE = process.env.E2E_BASE ?? `http://127.0.0.1:${WEB_PORTS.sweep}/`;
 const ROOT = resolve(import.meta.dirname, '..');
@@ -288,8 +288,28 @@ const browser = await chromium.launch();
 const world = await seedWorld({ db, auth, browser, base: BASE });
 const {
   STUDENT, DISABLED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived,
-  HISTORY_ROW, HISTORY_ROW_MANAGED,
+  HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE,
 } = world;
+
+/**
+ * What `listZoomRecordings` answers in this sweep — see the `zoom-import`
+ * visit. Instants are written in UTC from the pending session's date, so the
+ * Houston date of each is fixed whichever side of a DST change the run falls.
+ */
+function zoomRows() {
+  const at = (days, time) => `${addDays(PENDING_DATE, days)}T${time}Z`;
+  const row = (meetingUuid, startTime, minutes, imported = null) => ({
+    meetingUuid, topic: 'Quran Immersion Fall', startTime, durationSec: minutes * 60,
+    fileId: `${meetingUuid}-aud`, sizeBytes: minutes * 560_000,
+    alreadyImported: imported ? 'sw-s1r' : null, importedCourseName: imported,
+  });
+  return [
+    row('zoom-evening', at(1, '00:30:00'), 75), // 7:30 pm CDT / 6:30 pm CST on the session's date
+    row('zoom-day', at(0, '18:00:00'), 65), // 1 pm CDT / noon CST on it
+    row('zoom-blip', at(0, '17:40:00'), 1), // a test click: hidden as under 2 minutes
+    row('zoom-earlier', at(-6, '00:30:00'), 136, 'Arabic I & Qur’anic Morphology — Tuesday Evening Section'),
+  ];
+}
 
 // ---- assertions ------------------------------------------------------------
 
@@ -960,7 +980,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 32;
+const STAFF_SCREENS = 33;
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
@@ -1127,29 +1147,54 @@ async function tourStaff(page, tag) {
   check(`${tag} an open grant on an archived class reads as closed, not as still to do`,
     /Closed \(course archived\)/.test(await byId(page, `ledger-row-${STUDENT.name}`).innerText().catch(() => '')));
   /*
-   * MEASURED IN ITS ERROR STATE, AND SAID SO.
+   * THE PICKER'S ROWS, FROM A ZOOM THAT ANSWERS AT THE BROWSER.
    *
-   * The picker loads on mount, the emulator suite has no Zoom credentials, and
-   * `listZoomRecordings` therefore throws — so what these five widths measure is
-   * the date range, the filters and an error line. The picker's ROWS, which is
-   * where a layout would actually break, are laid out at no width at all here
-   * and cannot be until this run can reach a Zoom account.
+   * The emulator suite has no Zoom credentials, so the real callable throws and
+   * the rows — where this screen's layout actually breaks — would be laid out
+   * at no width at all. The callable's reply is served here instead, in the
+   * shape `ZoomImportRow` declares; what it skips is the Zoom client, which
+   * `functions/test/unit/zoomRange.test.ts` drives against a fake `fetch`.
    *
-   * The `zoom-load` button renders in every state, so it could never have told
-   * anyone that. The assertion below does: if credentials ever arrive, it fails,
-   * and whoever is holding it then extends the tour to a row.
+   * The rows are the case the picker exists to settle: one recurring meeting,
+   * so one topic on every card, and a class at 7:30 pm Houston time whose
+   * UTC stamp is the NEXT day. The anchor is that evening row — it appears
+   * under the session's date, with the same-day filter on by default, only if
+   * the picker dates rows by the institute's calendar.
    */
-  await visit('zoom-import', async () => {
+  await page.route('**/listZoomRecordings', (route) => {
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' };
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ result: zoomRows() }) });
+  });
+  const openZoomImport = async () => {
     await openCourse();
     await tap(byId(page, 'nav-sessions'));
     await tap(byId(page, 'session-open-Session 6 — Today (recording pending)'));
     await tap(byId(page, 'recording-import-zoom'));
-  }, 'zoom-load');
+  };
+  await visit('zoom-import', openZoomImport, 'zoom-import-zoom-evening');
   check(
-    `${tag} / zoom import is toured WITHOUT credentials — its rows are unmeasured`,
-    (await page.locator('[data-testid^="zoom-import-"]').count()) === 0 &&
+    `${tag} / zoom import opens on the session's date: its two classes, nothing from other days`,
+    (await page.locator('[data-testid^="zoom-import-"]').count()) === 2 &&
       (await page.locator('[data-testid^="zoom-open-"]').count()) === 0,
-    'the picker loaded rows: extend this tour to measure one',
+  );
+  const evening = (await byId(page, 'zoom-when-zoom-evening').innerText().catch(() => '')).replace(/\u2011/g, '-');
+  check(
+    `${tag} / zoom import dates an evening class by Houston's calendar and shows its hours`,
+    new RegExp(`^${PENDING_DATE} · \\d{1,2}:\\d{2}–\\d{1,2}:\\d{2} PM$`).test(evening),
+    JSON.stringify(evening),
+  );
+  // Every date, every status: the "already imported" row — the longest line a
+  // card carries, naming the class it went into — exists in no other state.
+  await visit('zoom-import-all', async () => {
+    await openZoomImport();
+    await tap(byId(page, 'zoom-session-day'));
+    await tap(byId(page, 'zoom-filter-all'));
+  }, 'zoom-open-zoom-earlier');
+  check(
+    `${tag} / zoom import with the date filter off shows the other days too`,
+    (await page.locator('[data-testid^="zoom-import-"]').count()) === 2 &&
+      (await page.locator('[data-testid^="zoom-open-"]').count()) === 1,
   );
   await visit('library', () => tap(byId(page, 'tab-library')), 'library-filter-all');
   // With a cohort CHOSEN: the clear control exists in no other state, and two
