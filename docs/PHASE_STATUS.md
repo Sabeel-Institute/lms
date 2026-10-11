@@ -1504,6 +1504,31 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-07 — **Set-password links, measured against production after a
+  teacher's report.** A student kept landing on Firebase's hosted "Try
+  resetting your password again". That is the reset handler's one failure
+  screen (read from its `action.js`), so the screen names no cause; the causes
+  were measured with throwaway password-less accounts and are tabulated in
+  `docs/DEV-TOOLING.md`, "A student can't set a password". Every send the app
+  makes (creation, Resend, "Email me a password link", Change password) kills
+  every earlier link at once; a used or truncated link fails the same way, and
+  every link expires an hour after it is issued (valid at 58 minutes,
+  `EXPIRED_OOB_CODE` at 60); a disabled account fails at Save; opening a link
+  does not consume it.
+  **No student had ever signed in.** Of the 31 student records, nine are not
+  students: two test accounts and seven staff members' own accounts, matched to
+  `staffUsers` by name, and every sign-in in the collection was one of those.
+  The 22 students were all created 10–25 September; 21 have never set a
+  password, and the one who did (a little after 1 pm on 6 October, after 14
+  links went out in the noon hour) has not signed in. Auth's request counts
+  are project-wide and cannot be split by account, so they place events in
+  time and count nothing per student.
+  **Open, Faisal's decision:** a continue URL, so "Password changed" leads to
+  sign-in; an action handler of our own (the template's action URL changes in
+  the console); password-setup status and audited resends on the student page;
+  a fresh link at a student's first excusal. Added `npm run students:report`,
+  which counts the students apart from the staff and test records.
+
 - 2026-09-11 — **v0.6.4: the second review round.**
 
   Five review agents over the round-1 diff and the areas beside it, then

@@ -28,7 +28,8 @@
     "seed:emulators": "node scripts/seed-emulator-world.mjs",
     "smoke:prod": "node scripts/prod-smoke.mjs",
     "check:queries": "node scripts/check-query-shapes.mjs",
-    "check:push": "node scripts/check-push.mjs"
+    "check:push": "node scripts/check-push.mjs",
+    "students:report": "node scripts/students-report.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

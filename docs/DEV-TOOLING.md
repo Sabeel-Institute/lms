@@ -25,6 +25,7 @@ emulator — not your diff.
 | `npm run check:queries` | **Against the REAL project.** Every query shape the app sends, checked for a missing composite index |
 | `npm run check:push` | **Against the REAL project.** FCM credentials, the VAPID key, and that the code FCM returns for a dead token is one the app prunes on |
 | `npm run smoke:prod` | **Against the LIVE site.** The auth handler, the three store pages, the build label for this checkout's version and commit, a provoked Auth request going to Google and not an emulator, no dev sign-in rows, and the bundle's `.map` not served |
+| `npm run students:report [-- --email <address>]` | **Against the REAL project, read-only.** Every student's account: whether a password has ever been set and when, last sign-in, last activity. Test accounts and staff members' own student accounts are listed apart and left out of the counts. `--email` shows one record with its audited history and what its state means for the next set-password link. Start here when a student can't get in (see "A student can't set a password") |
 | `npm run seed:emulators` | Seeds the sweep's world into an already-running emulator suite and leaves it there, for a device pass (needs the web dev server up: see `docs/DEPLOY.md`) |
 | `node scripts/repro-stale-scope.mjs delete\|remove\|none` | The WEB-4 regression: a manager's cold load with a stale cached course list must render the work queue and report no listener refusal. Needs emulators + the e2e dev server; resets the emulators; exit 1 on a refusal |
 | `node scripts/set-min-version.mjs <versionCode>` | **Against the REAL project** (or the emulator with `CHECK_PROJECT` + `FIRESTORE_EMULATOR_HOST`). Sets the oldest Android build allowed to run |
@@ -487,3 +488,54 @@ npx serve -s app/dist-web -l 4601
 ```
 
 Confirmed absent on 2026-07-21 against a production export.
+
+## A student can't set a password
+
+Run `npm run students:report -- --email <address>` first, with the address
+exactly as it appears on the student's page. It says whether a set-password link
+has ever worked for that student (Auth's `passwordUpdatedAt`; an account
+`createStudent` makes has no password until one does), whether they have signed
+in since, whether the account is switched off, and their audited history. The
+full list, `npm run students:report`, is how to tell one student's problem from
+everyone's. It counts students only: a record named "Test…", on an institute
+address, or carrying a staff member's name (the same first name as someone in
+`staffUsers`, and the same surname to within one letter, or none on one side)
+is listed apart with the reason. Staff open student accounts on personal
+addresses, and counted with the class they can hide the answer.
+
+What students report is the page Firebase Hosting serves at
+`sabeel-class-recordings.firebaseapp.com/__/auth/action`. It is not part of the
+app, and its wording cannot be changed. Its reset handler renders **"Try
+resetting your password again"** for every failure of `verifyPasswordResetCode`
+(on load) or `confirmPasswordReset` (on Save) except a weak password; that is
+read from the page's own `action.js`. Measured against production with
+throwaway password-less accounts and Admin-generated links:
+
+| Situation | What the link does |
+|---|---|
+| A newer link was issued: by `createStudent`, **Resend password link**, **Email me a password link** or **More → Change password** (all one client call, `sendPasswordResetEmail`), or by the Admin SDK | Every earlier link fails at once (`INVALID_OOB_CODE`) |
+| The link was used to set a password | Fails from then on (`INVALID_OOB_CODE`) |
+| The code was cut off or altered in copying | Fails (`INVALID_OOB_CODE`) |
+| The account is disabled | Opens the form; Save fails and no password is set |
+| The link is more than an hour old | Fails (`EXPIRED_OOB_CODE`). Valid at 58 minutes, expired at 60 |
+| The link was only opened | Still valid. Verifying does not consume it, so link previews and mail scanners do not burn it |
+
+After a successful Save the page reads "Password changed" and offers no way
+onward: it renders a Continue button only for a continue URL, and the app calls
+`sendPasswordResetEmail` without `ActionCodeSettings`.
+
+The app records no sends. They are client calls, so no callable sees them, and
+the audit log holds only `createStudent`. Firebase Auth outside Identity
+Platform keeps no per-user log either. The one timeline is Cloud Monitoring's
+`serviceruntime.googleapis.com/api/request_count` for
+`resource.type="consumed_api"` and
+`resource.labels.service="identitytoolkit.googleapis.com"`, summed per hour and
+grouped by `resource.labels.method` and `metric.labels.response_code`:
+
+- `GetOobCode` 200: a link email requested. Each `npm run smoke:prod` adds one,
+  to an address that does not exist, so nothing is sent.
+- `ResetPassword` 200: a link opened or a password saved. One successful set is
+  two.
+- `ResetPassword` 400: a link that no longer worked.
+
+Links the Admin SDK generates do not appear there.
