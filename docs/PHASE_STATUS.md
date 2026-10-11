@@ -32,9 +32,32 @@ and commit messages, and renaming them would strand every one of those.
 | 6 | Zoom import | **built** — waiting on institute credentials and its first live import |
 | 7 | Notifications | **complete** (2026-08-15: delivered to an Android device end to end; web delivery still a browser check) |
 | 8 | Admin backend stats | not started |
-| 9 | Deploy, manual, release | **complete** (2026-09-17: v0.7.0 deployed, device pass on tb_emu including a real push, published to both release homes and the download page) |
+| 9 | Deploy, manual, release | **complete** (2026-10-11: v0.7.1 deployed, device pass on tb_emu, published to both release homes and the download page) |
 
 ## Decision log
+
+- 2026-10-11 — **v0.7.1 shipped to every surface** (build commit `56c3c8d`,
+  versionCode 34): functions → hosting, `smoke:prod`, `check:queries` and
+  `check:push` green against the live project, CI dispatched by hand and
+  green on the build commit, tagged, both release homes, download page and
+  manual PDF. Functions went out from `32a16dd`; nothing under `functions/`
+  or `packages/` changed after it. In it: the Zoom picker's hours and its
+  same-day filter, and Zoom recordings dated by the institute's calendar in
+  the picker and in the range the server asks Zoom for.
+  Device pass on `tb_emu`. The release APK installed at `v0.7.1 · 56c3c8d`,
+  versionCode 34, with no dev panel. The debug build against the emulators:
+  on Hermes the audit log printed an entry stamped 18:05 UTC as
+  `2026-10-10 13:05` and a 1 am one as `01:14`, the 24-hour institute clock
+  (`wallClock`) the picker's AM/PM is built from; at font scale 1.3 the
+  picker's date checkbox label wraps to two lines inside the column, the
+  whole row toggles it, and Android reads its checked state.
+  What no emulator can show: the picker's cards against the live Zoom
+  account, since the emulator holds no Zoom credentials. That is Faisal's
+  check on production.
+  Seen during the pass and not from this release (nothing in
+  `app/src/components` changed since v0.7.0): on a tab root with no header,
+  such as Today, scrolled content passes under the status bar's clock and
+  icons.
 
 - 2026-09-17 — **v0.7.0 shipped to every surface** (build commit `8cbddc5`,
   versionCode 33): rules → functions → hosting, `smoke:prod` and
