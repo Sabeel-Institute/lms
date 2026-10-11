@@ -8,6 +8,7 @@ import {
   dueBucket,
   hasRecordingAccess,
   canPlayNow,
+  clockRangeInZone,
   isOverdue,
   stampInZone,
   unbreakableDate,
@@ -61,6 +62,38 @@ describe('stampInZone', () => {
     // Midnight is 00, not 24 — `hourCycle: 'h23'` rather than 'h24'.
     expect(stampInZone('America/Chicago', Date.parse('2026-09-04T05:00:00Z'))).toBe(
       '2026-09-04 00:00',
+    );
+  });
+});
+
+describe('clockRangeInZone', () => {
+  const at = (iso: string) => Date.parse(iso);
+
+  it('writes the meridiem once when both ends share it', () => {
+    // 18:02–20:18 CDT.
+    expect(clockRangeInZone('America/Chicago', at('2026-10-08T23:02:00Z'), at('2026-10-09T01:18:00Z'))).toBe(
+      '6:02–8:18 PM',
+    );
+  });
+
+  it('writes both when the span crosses noon', () => {
+    expect(clockRangeInZone('America/Chicago', at('2026-10-08T16:30:00Z'), at('2026-10-08T18:05:00Z'))).toBe(
+      '11:30 AM–1:05 PM',
+    );
+  });
+
+  it('calls noon 12 PM and midnight 12 AM, never 0', () => {
+    expect(clockRangeInZone('America/Chicago', at('2026-10-08T17:00:00Z'), at('2026-10-08T17:45:00Z'))).toBe(
+      '12:00–12:45 PM',
+    );
+    expect(clockRangeInZone('America/Chicago', at('2026-10-09T04:30:00Z'), at('2026-10-09T05:15:00Z'))).toBe(
+      '11:30 PM–12:15 AM',
+    );
+  });
+
+  it('follows the clocks going back — the same 6 pm class is an hour later in UTC', () => {
+    expect(clockRangeInZone('America/Chicago', at('2026-11-12T00:00:00Z'), at('2026-11-12T01:00:00Z'))).toBe(
+      '6:00–7:00 PM',
     );
   });
 });

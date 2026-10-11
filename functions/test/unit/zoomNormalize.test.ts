@@ -27,18 +27,53 @@ describe('pickAudioRecording', () => {
     expect(r?.durationSec).toBe(300); // 5 min from recording_start/end, not the coarse meeting minutes
   });
 
-  it('falls back to meeting duration (minutes) when the file has no start/end', () => {
+  /*
+   * The card prints start + duration as the hours the class ran, and duration
+   * already came from the FILE — so a start taken from the meeting would
+   * stretch the span over the minutes before anyone pressed record, and the end
+   * it printed would match nothing.
+   */
+  it('starts the recording when the audio started, not when the meeting opened', () => {
+    const r = pickAudioRecording({
+      uuid: 'x',
+      start_time: '2026-10-08T22:50:00Z',
+      duration: 150,
+      recording_files: [
+        {
+          id: 'aud',
+          recording_type: 'audio_only',
+          file_type: 'M4A',
+          recording_start: '2026-10-08T23:02:00Z',
+          recording_end: '2026-10-09T01:18:00Z',
+        },
+      ],
+    });
+    expect(r).toMatchObject({ startTime: '2026-10-08T23:02:00Z', durationSec: 136 * 60 });
+  });
+
+  it('falls back to the meeting start and duration (minutes) when the file has no start/end', () => {
+    const r = pickAudioRecording({
+      uuid: 'x',
+      start_time: '2026-10-08T23:00:00Z',
+      duration: 12,
+      recording_files: [{ id: 'a', recording_type: 'audio_only', file_type: 'M4A' }],
+    });
+    expect(r).toMatchObject({ startTime: '2026-10-08T23:00:00Z', durationSec: 720 });
+  });
+
+  it('drops a recording with no start at all — it has no date to list it under', () => {
     const r = pickAudioRecording({
       uuid: 'x',
       duration: 12,
       recording_files: [{ id: 'a', recording_type: 'audio_only', file_type: 'M4A' }],
     });
-    expect(r?.durationSec).toBe(720);
+    expect(r).toBeNull();
   });
 
   it('matches by M4A extension even when recording_type is absent', () => {
     const r = pickAudioRecording({
       uuid: 'x',
+      start_time: '2026-10-08T23:00:00Z',
       recording_files: [{ id: 'a', file_type: 'M4A', file_extension: 'M4A' }],
     });
     expect(r?.fileId).toBe('a');

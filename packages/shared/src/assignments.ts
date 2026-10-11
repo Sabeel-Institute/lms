@@ -146,6 +146,44 @@ export function todayInZone(timeZone: string, now: number = Date.now()): string 
  * is pinned, and the tests assert the exact string rather than its shape.
  */
 export function stampInZone(timeZone: string, ms: number): string {
+  const at = wallClock(timeZone, ms);
+  return `${at.year}-${at.month}-${at.day} ${at.hour}:${at.minute}`;
+}
+
+/**
+ * The span between two moments on a 12-hour clock in a timezone:
+ * `6:02–8:18 PM`, or `11:30 AM–1:05 PM` when it crosses noon.
+ *
+ * For a schedule rather than a record. Staff match these against a timetable
+ * they say aloud as "the 6 PM class", which is why this is not `stampInZone`'s
+ * 24-hour clock. The meridiem is written once when both ends share it.
+ *
+ * BUILT FROM THE 24-HOUR PARTS rather than from an `hour12` format, for the
+ * reason `stampInZone` assembles its own: the locale would pick the marker
+ * (`p.m.`, `PM` behind a narrow no-break space in newer ICU) and an engine's
+ * Intl decides the rest, so the string would be whatever the device says.
+ */
+export function clockRangeInZone(timeZone: string, startMs: number, endMs: number): string {
+  const clock = (ms: number) => {
+    const { hour, minute } = wallClock(timeZone, ms);
+    const h = Number(hour);
+    return { time: `${h % 12 || 12}:${minute}`, meridiem: h < 12 ? 'AM' : 'PM' };
+  };
+  const start = clock(startMs);
+  const end = clock(endMs);
+  const head = start.meridiem === end.meridiem ? start.time : `${start.time} ${start.meridiem}`;
+  return `${head}–${end.time} ${end.meridiem}`;
+}
+
+/**
+ * A moment's calendar and clock fields in a timezone, zero-padded, 24-hour —
+ * the one place a wall clock is read. The locale is pinned for the reason
+ * `stampInZone` gives; `h23` makes midnight `00` rather than `24`.
+ */
+function wallClock(
+  timeZone: string,
+  ms: number,
+): { year: string; month: string; day: string; hour: string; minute: string } {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',
@@ -156,7 +194,7 @@ export function stampInZone(timeZone: string, ms: number): string {
     hourCycle: 'h23',
   }).formatToParts(new Date(ms));
   const at = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-  return `${at('year')}-${at('month')}-${at('day')} ${at('hour')}:${at('minute')}`;
+  return { year: at('year'), month: at('month'), day: at('day'), hour: at('hour'), minute: at('minute') };
 }
 
 /**

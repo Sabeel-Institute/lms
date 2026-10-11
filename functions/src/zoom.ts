@@ -1,4 +1,5 @@
 import { defineSecret } from 'firebase-functions/params';
+import { addDays, zoomRecordingDate } from '@sabeel/shared';
 import { getStorage } from 'firebase-admin/storage';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -25,14 +26,17 @@ const ZOOM_SOURCE_EMAIL = 'marketing@oursabeel.com';
 export interface ZoomAudioRecording {
   meetingUuid: string;
   topic: string;
-  startTime: string; // ISO 8601
+  startTime: string; // ISO 8601 — when the AUDIO began, see `audioSpan`
   durationSec: number;
   fileId: string; // the audio_only M4A file's id
   sizeBytes: number;
 }
 
 export interface ZoomClient {
-  /** Recordings (with an audio-only M4A) for the source user, newest first. */
+  /**
+   * Recordings (with an audio-only M4A) for the source user whose audio began
+   * on `fromDate..toDate` inclusive in the INSTITUTE's calendar, newest first.
+   */
   listAudioRecordings(fromDate: string, toDate: string): Promise<ZoomAudioRecording[]>;
   /** Re-read one meeting at import time for a FRESH download URL (they expire). */
   freshAudioFile(
@@ -105,20 +109,26 @@ function audioFileOf(m: ZoomMeeting): ZoomFile | null {
   );
 }
 
-function fileDurationSec(f: ZoomFile, m: ZoomMeeting): number {
+/**
+ * When the AUDIO ran: the file's own start and length, which bracket exactly
+ * what students will hear — the meeting may have opened minutes before anyone
+ * pressed record. Start and length come from the same source, so the end the
+ * picker prints (start + length) is the file's end. The meeting's start and
+ * whole minutes only when the file does not say.
+ */
+function audioSpan(f: ZoomFile, m: ZoomMeeting): { startTime: string; durationSec: number } {
   if (f.recording_start && f.recording_end) {
     const d = (Date.parse(f.recording_end) - Date.parse(f.recording_start)) / 1000;
-    if (Number.isFinite(d) && d > 0) return Math.round(d);
+    if (Number.isFinite(d) && d > 0) return { startTime: f.recording_start, durationSec: Math.round(d) };
   }
-  return Math.round((m.duration ?? 0) * 60);
+  return { startTime: m.start_time ?? '', durationSec: Math.round((m.duration ?? 0) * 60) };
 }
 
 function toRecording(m: ZoomMeeting, f: ZoomFile): ZoomAudioRecording {
   return {
     meetingUuid: m.uuid ?? '',
     topic: m.topic ?? '',
-    startTime: m.start_time ?? '',
-    durationSec: fileDurationSec(f, m),
+    ...audioSpan(f, m),
     fileId: f.id ?? '',
     sizeBytes: f.file_size ?? 0,
   };
@@ -128,10 +138,15 @@ function toRecording(m: ZoomMeeting, f: ZoomFile): ZoomAudioRecording {
  * A meeting → a normalized audio row, or null if it has no audio-only file.
  * Pure (no network) — the one bit of Zoom-JSON parsing worth unit-testing, since
  * the fake client used in integration tests hands back already-normalized rows.
+ *
+ * Null too for a recording with no readable start: it has no date, so no range
+ * could hold it, and dating it would throw on the whole list.
  */
 export function pickAudioRecording(m: ZoomMeeting): ZoomAudioRecording | null {
   const f = audioFileOf(m);
-  return f ? toRecording(m, f) : null;
+  if (!f) return null;
+  const rec = toRecording(m, f);
+  return Number.isFinite(Date.parse(rec.startTime)) ? rec : null;
 }
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -158,8 +173,16 @@ export function dateWindows(fromDate: string, toDate: string): { from: string; t
 
 export const zoomClient: ZoomClient = {
   async listAudioRecordings(fromDate, toDate) {
+    /*
+     * ZOOM'S DATES ARE UTC; STAFF'S ARE HOUSTON'S. An evening class on the 8th
+     * is stamped on the 9th in UTC, so asking Zoom for the 8th alone misses it
+     * and returns the previous evening's class instead. So ask for one more
+     * day, which covers every Houston evening (the institute is behind UTC, never
+     * ahead), then keep what began on the requested dates by the institute's
+     * calendar. That holds whichever calendar Zoom actually reads them in.
+     */
     const byUuid = new Map<string, ZoomAudioRecording>();
-    for (const window of dateWindows(fromDate, toDate)) {
+    for (const window of dateWindows(fromDate, addDays(toDate, 1))) {
       let pageToken = '';
       do {
         const url = new URL(
@@ -177,7 +200,12 @@ export const zoomClient: ZoomClient = {
         pageToken = body.next_page_token ?? '';
       } while (pageToken);
     }
-    return [...byUuid.values()].sort((a, b) => b.startTime.localeCompare(a.startTime));
+    return [...byUuid.values()]
+      .filter((r) => {
+        const date = zoomRecordingDate(r);
+        return date >= fromDate && date <= toDate;
+      })
+      .sort((a, b) => b.startTime.localeCompare(a.startTime));
   },
 
   async freshAudioFile(meetingUuid, fileId) {
