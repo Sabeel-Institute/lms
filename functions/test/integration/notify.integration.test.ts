@@ -478,10 +478,29 @@ describe('the notify audience', () => {
 
   async function readyFor(uid: string) {
     await seedStudentAccount(uid);
+    await getAuth().setCustomUserClaims(uid, { role: 'student', status: 'active' });
     await withDevice(uid);
     await seedRecording('r1', 'sess1', 'published');
     return seedGrant(uid, 'r1');
   }
+
+  it('tells staff and not students when the audience is staff', async () => {
+    process.env.NOTIFY_AUDIENCE = 'staff';
+    await seedStaffAccount('mgr1');
+    await getAuth().setCustomUserClaims('mgr1', { role: 'manager', status: 'active' });
+    await withDevice('mgr1');
+    await seedSession('sess1', { date: '2026-08-10', attendanceSubmittedAt: null });
+    expect(await notifyAttendanceMissing(db(), '2026-08-20')).toBe(1);
+
+    expect(await notifyRecordingReady(db(), await readyFor('s1'), TODAY)).toBe(false);
+    expect(outbox.map((o) => o.tokens)).toEqual([['tok-mgr1']]);
+  });
+
+  it('tells a test student named alongside staff', async () => {
+    process.env.NOTIFY_AUDIENCE = 'staff,s1@example.com';
+    expect(await notifyRecordingReady(db(), await readyFor('s1'), TODAY)).toBe(true);
+    expect(outbox.map((o) => o.tokens)).toEqual([['tok-s1']]);
+  });
 
   it('tells a tester on the list', async () => {
     process.env.NOTIFY_AUDIENCE = 'someone@oursabeel.com, S1@Example.com';
@@ -512,7 +531,7 @@ describe('the notify audience', () => {
 
   it('refuses a list that is not email addresses, rather than guess', async () => {
     const edge = await readyFor('s1');
-    for (const value of ['Everyone', 's1']) {
+    for (const value of ['Everyone', 's1', 'staff,everyone']) {
       process.env.NOTIFY_AUDIENCE = value;
       await expect(notifyRecordingReady(db(), edge, TODAY)).rejects.toThrow(/NOTIFY_AUDIENCE/);
     }
