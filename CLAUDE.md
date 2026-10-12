@@ -2,10 +2,11 @@
 
 ## What this project is
 
-Class recordings for Sabeel Institute: audio-only recordings of Hikam
-Foundations classes, in-app listening for adult students, and an accountability
-ledger for staff. Faisal is the developer; the institute's staff are the
-admins/managers.
+The learning management system for Sabeel Institute's adult classes:
+attendance, class recordings, assignments and grades. Built today: attendance
+registers, audio-only class recordings with in-app listening for students who
+missed a class, and an accountability ledger for staff. Faisal is the
+developer; the institute's staff are the admins/managers.
 
 **This repo is the permanent home, and it is mid-move.** `Sabeel-Institute/lms`
 on GitHub, Firebase project `oursabeel-lms` under the oursabeel.com account.
@@ -22,10 +23,10 @@ until switchover day. Never point a command from this checkout at
 - **Deploy nothing until Phase 0 of `docs/plans/SWITCHOVER.md` is done.** The
   code still uses Firebase Storage, and this project has no bucket: media moves
   to R2 first.
-- **Push notifications reach only the testers in `NOTIFY_AUDIENCE`**
-  (`functions/.env.oursabeel-lms`) until switchover day, when it becomes
+- **Push notifications reach only staff** (`NOTIFY_AUDIENCE=staff` in
+  `functions/.env.oursabeel-lms`) until switchover day, when it becomes
   `everyone`. The project holds a copy of every real account while the live app
-  still notifies them; without the list a student would hear everything twice.
+  still notifies them; without it a student would hear everything twice.
 
 The plans:
 

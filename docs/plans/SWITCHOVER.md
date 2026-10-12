@@ -94,13 +94,15 @@ Also done: the two bucket-scoped R2 API tokens from
 Manager; and a Cloudflare budget alert at $10/month, which, like Google's,
 alerts and never stops anything.
 
-Still to do (each with exact steps in `TODO.md`):
+Also done: the Web Push key pair (public key in `firebase-config.ts`); the
+Android app `com.sabeelinstitute.lms` registered by the agent from the CLI
+(app id `1:226338267845:android:a85d5935fb8f4555cac6ac`) with the debug key's
+SHA-1, its `google-services.json` in place (gitignored).
 
-1. Generate the Web Push key pair for this project, so web push can register.
-2. Register the Android app (`com.sabeelinstitute.lms`) with the debug key's
-   SHA-1, and later the release key's, then download its
-   `google-services.json`. The Android build needs that file.
-3. Workers starts on the Free plan; the M1 copy spike decides whether Paid
+Still to do (steps in `TODO.md`):
+
+1. The release signing key, whose SHA-1 joins the same registration.
+2. Workers starts on the Free plan; the M1 copy spike decides whether Paid
    ($5/month) is needed.
 
 ### Agent (code)
@@ -114,14 +116,15 @@ Still to do (each with exact steps in `TODO.md`):
    than retargeted: the seed copies data they have already fixed.
 2. **New Android identity.** Done: package `com.sabeelinstitute.lms` in
    `app.json`, Gradle and the Kotlin sources, launcher label "Sabeel LMS",
-   link scheme `sabeellms`. Still open: the release signing key (the legacy
-   build signs release APKs with the debug keystore; the new app gets its
-   own, kept out of git like every other secret), and where the APK is
-   downloaded from (`DOWNLOAD_PAGE_URL` and `get-app.html` still point at the
-   legacy download page).
-3. **Notifications go to testers only until switchover.** Done:
-   `NOTIFY_AUDIENCE` in `functions/.env.oursabeel-lms` lists the testers by
-   email; empty or absent means nobody.
+   link scheme `sabeellms`. The download page is
+   `faisal-shah.github.io/sabeel-institute-lms/` (pre-release until
+   switchover), and the APKs are release assets on `Sabeel-Institute/lms`.
+   Still open: the release signing key (the legacy build signs release APKs
+   with the debug keystore; the new app gets its own, kept out of git like
+   every other secret).
+3. **Notifications go to staff only until switchover.** Done:
+   `NOTIFY_AUDIENCE=staff` in `functions/.env.oursabeel-lms`; empty or absent
+   means nobody.
 4. Docs: `CLAUDE.md`, `docs/DEPLOY.md`, `docs/SECRETS.md`, `TODO.md` and
    `docs/DEV-TOOLING.md` rewritten for the new accounts, with the R2 move's
    docs (M6), so they are rewritten once.
@@ -161,7 +164,9 @@ user counts between the two projects and fails loudly on any difference.
    with a plain message, and whose app shows that the institute has moved.
 3. Final seed, count check, smoke test on the new address. Set
    `NOTIFY_AUDIENCE=everyone` in `functions/.env.oursabeel-lms` and deploy
-   functions, so the new app notifies everyone from here on.
+   functions, so the new app notifies everyone from here on. List
+   `sabeel-institute-lms/` on Faisal's site index, make its buttons live, and
+   point the legacy `sabeel-recording-app/` page at it.
 4. **Retire the legacy Android app** with a final update whose only screen
    says the app has moved and links to the new one. This is allowed by the
    store rule in `CLAUDE.md`: it points to an app, not to a sign-up flow.
@@ -176,9 +181,6 @@ step 4 the new project is the record.
 
 ## Open questions
 
-- Where the new Android app is downloaded from. The legacy app's page is on
-  Faisal's personal GitHub Pages site; the obvious home is a release asset on
-  `Sabeel-Institute/lms`, linked from the app's own `/get-app` page.
 
 - A custom domain later (for example `app.oursabeel.com`); it would also
   become the auth domain, and the OAuth redirect URIs change with it.

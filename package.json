@@ -2,7 +2,7 @@
   "name": "sabeel-institute-lms",
   "version": "0.0.0",
   "private": true,
-  "description": "Sabeel Institute LMS \u2014 class recordings with in-app listening and a staff accountability ledger (Android + web from one Expo codebase, Firebase backend)",
+  "description": "Sabeel Institute LMS \u2014 attendance, class recordings, assignments and grades (Android + web from one Expo codebase, Firebase backend)",
   "workspaces": [
     "packages/*",
     "functions",

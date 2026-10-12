@@ -1,12 +1,14 @@
 # Sabeel Institute LMS
 
-Class recordings for Sabeel Institute — audio-only recordings of Hikam
-Foundations classes, in-app listening for adult students, and an accountability
-ledger for staff.
+The learning management system for Sabeel Institute's adult classes:
+attendance, class recordings, assignments and grades. Built today: attendance
+registers, audio recordings that students who missed a class listen to, and an
+accountability ledger for staff. Planned: video and several recordings per
+session, and assignments with grades (`docs/plans/`, `docs/proposals/`).
 
 One Expo codebase targets **Android and web**, with the architecture kept ready
-for a later iOS build. Backend is Firebase: Firestore, Cloud Functions, and Cloud
-Storage for the audio.
+for a later iOS build. Backend is Firebase: Firestore and Cloud Functions; media
+moves to Cloudflare R2 (`docs/plans/MEDIA-ON-CLOUDFLARE.md`).
 
 ## Status
 

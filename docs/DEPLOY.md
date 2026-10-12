@@ -10,8 +10,8 @@ ships separately — see "Cutting a release".)
 
 **Function parameters** (not secrets) are in `functions/.env.<projectId>`, which
 `firebase deploy` reads for that project. `NOTIFY_AUDIENCE` decides who push
-notifications go to: the testers listed there until switchover day, `everyone`
-after it. Empty or absent means nobody.
+notifications go to: `staff` (optionally with test accounts' email addresses)
+until switchover day, `everyone` after it. Empty or absent means nobody.
 
 ## The device pass, before any of it
 

@@ -17,37 +17,24 @@ The institute's project. The sections after this one record the setup of the
 legacy project, `sabeel-class-recordings`, and are rewritten for the new one
 with the rest of the Phase 0 docs ([docs/plans/SWITCHOVER.md](docs/plans/SWITCHOVER.md)).
 
-- [ ] **Web Push key pair.** Firebase console → `oursabeel-lms` → Project
-      settings → **Cloud Messaging** → Web configuration → **Generate key
-      pair**. Send me the PUBLIC key (the long string shown in the list). It
-      is not a secret: it ships in every web bundle. I put it in
-      `app/src/firebase-config.ts` and run `npm run check:push`. Until then web
-      push registers nothing.
-- [ ] **Register the Android app.** Firebase console → `oursabeel-lms` →
-      Project settings → Your apps → **Add app → Android**:
-      package `com.sabeelinstitute.lms`, nickname `Sabeel LMS Android`, debug
-      signing SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`
-      (the repo's `app/android/app/debug.keystore`). Then download
-      `google-services.json` and put it at both `app/google-services.json` and
-      `app/android/app/google-services.json` (gitignored). The Android build
-      fails without it. I can do all of this from the CLI instead if you say so.
 - [ ] **Decide the release signing key** for the new app: where the keystore
       file and its password live (a password manager, with the file backed
       up; losing it means no update path ever). Its SHA-1 then goes on the
       same Android app registration.
-- [ ] **Decide where the APK is downloaded from.** The legacy page is on your
-      personal GitHub Pages site. Suggested: a release asset on
-      `Sabeel-Institute/lms`, linked from the app's own `/get-app` page.
 - [ ] **Password-reset email** (Authentication → Templates → Password reset):
       the same rewording as item 3 below, naming "Sabeel Institute LMS".
 - [ ] **Google sign-in consent screen**: Google Cloud console →
       `oursabeel-lms` → APIs & Services → OAuth consent screen. Check the app
       name reads "Sabeel Institute LMS" and the support email is an
       institute address.
-- [ ] **Testers for notifications.** Until switchover day the new app sends
-      push notifications only to the email addresses in `NOTIFY_AUDIENCE`
-      (`functions/.env.oursabeel-lms`); it starts with yours. Tell me who else
-      should be on it.
+- Notifications go to staff only until switchover day (`NOTIFY_AUDIENCE=staff`
+  in `functions/.env.oursabeel-lms`). Done: the Web Push key and the Android
+  app registration (debug SHA-1, `google-services.json` in place).
+- `npm run check:push` uses Application Default Credentials, which on this
+  machine are the gmail account (another repo relies on them), so it cannot
+  reach `oursabeel-lms`. The same probe was run with the oursabeel.com
+  account's token on 2026-10-12: FCM answered `UNREGISTERED`, i.e. reachable
+  and accepted as this project.
 
 ---
 
