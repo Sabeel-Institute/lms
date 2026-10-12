@@ -1,0 +1,22 @@
+{
+  "name": "@sabeel/media-copier",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cloudflare Worker that copies a Zoom recording file into the R2 media bucket",
+  "type": "module",
+  "scripts": {
+    "pretest": "wrangler types --include-runtime",
+    "test": "vitest run",
+    "pretypecheck": "wrangler types --include-runtime",
+    "typecheck": "tsc -p tsconfig.json",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "vitest": "^4.1.11",
+    "wrangler": "4.142.0"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  }
+}

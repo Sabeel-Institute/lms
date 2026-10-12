@@ -41,6 +41,18 @@
         "test/**/*.ts"
       ]
     },
+    "cloudflare/media-copier": {
+      "entry": [
+        "test/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "cloudflare"
+      ]
+    },
     "packages/shared": {
       "entry": [],
       "project": [

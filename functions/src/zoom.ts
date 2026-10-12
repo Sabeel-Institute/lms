@@ -1,6 +1,6 @@
 import { defineSecret } from 'firebase-functions/params';
 import { addDays, zoomRecordingDate } from '@sabeel/shared';
-import { putStream } from './mediaStore';
+import { copyThroughWorker } from './mediaCopier';
 
 /**
  * Zoom cloud-recording import — the Server-to-Server OAuth client.
@@ -41,10 +41,11 @@ export interface ZoomClient {
     fileId: string,
   ): Promise<{ rec: ZoomAudioRecording; downloadUrl: string }>;
   /**
-   * Copy the file into the media store at `key`, which must not exist yet
-   * (bounded copy — never buffered whole).
+   * Copy the file into the media store at `key`, which must not exist yet.
+   * `sizeBytes` is what Zoom's API listed; the copy refuses a file of any
+   * other length.
    */
-  copyToMediaStore(downloadUrl: string, key: string): Promise<void>;
+  copyToMediaStore(downloadUrl: string, key: string, sizeBytes: number): Promise<void>;
 }
 
 // ---- Zoom response shapes (only the fields we read) ----
@@ -218,19 +219,23 @@ export const zoomClient: ZoomClient = {
     return { rec: toRecording(m, f), downloadUrl: f.download_url };
   },
 
-  // INTERIM: streams through this Function, which in production bills every
-  // byte as Google egress. The Cloudflare Worker copier replaces it before the
-  // first deploy (docs/plans/MEDIA-ON-CLOUDFLARE.md, "Zoom import").
-  async copyToMediaStore(downloadUrl, key) {
-    let res = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${await accessToken()}` } });
-    if (res.status === 401) {
-      const u = new URL(downloadUrl);
-      u.searchParams.set('access_token', await accessToken());
-      res = await fetch(u.toString());
+  /*
+   * Zoom's `download_url` answers the account's bearer token with a 302 to a
+   * self-contained CloudFront link: valid an hour, for this one file, needing
+   * no other credential (checked 2026-10-12). Only that link is handed to the
+   * Worker, so no Zoom credential leaves Google, and the bytes go from Zoom to
+   * Cloudflare without passing through here.
+   */
+  async copyToMediaStore(downloadUrl, key, sizeBytes) {
+    const res = await fetch(downloadUrl, {
+      headers: { Authorization: `Bearer ${await accessToken()}` },
+      redirect: 'manual',
+    });
+    await res.body?.cancel();
+    const link = res.headers.get('location');
+    if (res.status !== 302 || !link) {
+      throw new Error(`Zoom did not hand over a download link (HTTP ${res.status}).`);
     }
-    if (!res.ok || !res.body) throw new Error(`Zoom download failed (HTTP ${res.status}).`);
-    const size = Number(res.headers.get('content-length'));
-    if (!size) throw new Error('Zoom did not say how large the file is.');
-    await putStream(key, res.body, size, 'audio/mp4');
+    await copyThroughWorker({ sourceUrl: link, key, size: sizeBytes, contentType: 'audio/mp4' });
   },
 };

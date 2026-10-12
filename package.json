@@ -6,7 +6,8 @@
   "workspaces": [
     "packages/*",
     "functions",
-    "app"
+    "app",
+    "cloudflare/media-copier"
   ],
   "engines": {
     "node": ">=22"

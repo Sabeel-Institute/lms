@@ -19,12 +19,19 @@ key is signed, not how. Built so far:
   Storage, `storage.rules` and its emulator are gone.
 - SeaweedFS in `test:emulator`, `test:screens` and `npm run emulators`, with
   the read and write keys split as in production.
+- The copier Worker, `cloudflare/media-copier` (an npm workspace): one
+  streamed put per file, Google ID token checked with `jose`, Zoom-only
+  sources with redirects refused, recording audio keys only, never
+  overwriting. Its tests run inside workerd (`@cloudflare/vitest-pool-workers`).
+  `functions/src/mediaCopier.ts` resolves Zoom's file link and calls it; the
+  Function no longer touches the bytes. Not deployed yet. Under the emulator
+  Zoom import is driven by a fake client, since the Worker writes to R2, not
+  to the local SeaweedFS.
 
-Still to do before the first deploy: the Worker copier (Zoom import streams
-through the Function until then), bucket CORS and lifecycle applied from the
-repo, `s3-conformance.mjs` against SeaweedFS and R2 (which is also the first
-use of the real R2 keys), and `seed-demo-prod.mjs` / `wipe-demo-prod.mjs` on
-R2.
+Still to do before the first deploy: bucket CORS and lifecycle applied from
+the repo, `s3-conformance.mjs` against SeaweedFS and R2 (which is also the
+first use of the real R2 keys), `seed-demo-prod.mjs` / `wipe-demo-prod.mjs`
+on R2, and the deploy itself (Worker first, then Functions).
 
 ## Why
 

@@ -30,7 +30,7 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 async function downloadIntoRecording(
   recordingId: string,
   downloadUrl: string,
-  durationSec: number,
+  zoom: { durationSec: number; sizeBytes: number },
   client: ZoomClient,
 ): Promise<void> {
   const ref = getFirestore().collection(COLLECTIONS.recordings).doc(recordingId);
@@ -40,8 +40,8 @@ async function downloadIntoRecording(
     // left is removed first: this only runs on a draft or needs-attention
     // recording (the callers check), so nothing a student can hear is at stake.
     await deleteObject(key);
-    await client.copyToMediaStore(downloadUrl, key);
-    await finalizeRecording({ recordingId, durationSec });
+    await client.copyToMediaStore(downloadUrl, key, zoom.sizeBytes);
+    await finalizeRecording({ recordingId, durationSec: zoom.durationSec });
     await ref.update({
       status: 'draft',
       attentionReason: FieldValue.delete(),
@@ -106,7 +106,7 @@ export async function applyImportZoomRecording(
     { source: 'zoom', zoomUuid: input.meetingUuid, zoomFileId: rec.fileId },
   );
 
-  await downloadIntoRecording(id, downloadUrl, rec.durationSec, client);
+  await downloadIntoRecording(id, downloadUrl, rec, client);
   return { recordingId: id, alreadyExisted: false };
 }
 
@@ -135,7 +135,7 @@ export async function applyRetryZoomImport(
     throw new HttpsError('failed-precondition', 'That recording already has its audio.');
   }
   const { rec: fresh, downloadUrl } = await client.freshAudioFile(rec.zoomUuid, rec.zoomFileId);
-  await downloadIntoRecording(recordingId, downloadUrl, fresh.durationSec, client);
+  await downloadIntoRecording(recordingId, downloadUrl, fresh, client);
   return { recordingId };
 }
 
@@ -144,13 +144,14 @@ export async function applyRetryZoomImport(
 /**
  * Moving a class recording is not a normal callable.
  *
- * The whole audio file is streamed through the function (Zoom → media store), and a
- * two-hour class is 100-250 MB. On the platform defaults — 60 s, 256 MiB — that
- * is a coin flip, and the failure surfaces to staff as an upload that "did not
- * work" the first time and worked the second. The client timeout is raised to
- * match in app/src/zoom.ts; raising only one end just moves which side gives up.
+ * The bytes go from Zoom to the bucket through the Cloudflare Worker, not
+ * through here, but the callable waits for the copy: about 6 s for a 100 MB
+ * audio file, longer when Zoom is slow. The platform default of 60 s would turn
+ * a slow day into an import that "did not work" the first time and worked the
+ * second. The client timeout is raised to match in app/src/zoom.ts; raising
+ * only one end just moves which side gives up.
  */
-const IMPORT_RUNTIME = { timeoutSeconds: 540, memory: '512MiB' } as const;
+const IMPORT_RUNTIME = { timeoutSeconds: 540 } as const;
 
 export const listZoomRecordings = reportedCall(async (req) => {
   requireStaff(req); // the central list is not class-specific

@@ -21,9 +21,10 @@ until switchover day. Never point a command from this checkout at
   them to it and fails if the legacy project id, its project number or the old
   Android package appears in any code or config.
 - **Deploy nothing until Phase 0 of `docs/plans/SWITCHOVER.md` is done.** Media
-  is on R2, but Zoom imports still stream through a Function, which in
-  production would bill every byte as Google egress, until the Worker copier
-  replaces it.
+  is on R2 and Zoom imports go through the copier Worker
+  (`cloudflare/media-copier`, its own workspace with tests that run in workerd);
+  what remains is listed in `docs/plans/MEDIA-ON-CLOUDFLARE.md`. The Worker
+  deploys before the Functions that call it.
 - **Push notifications reach only staff** (`NOTIFY_AUDIENCE=staff` in
   `functions/.env.oursabeel-lms`) until switchover day, when it becomes
   `everyone`. The project holds a copy of every real account while the live app

@@ -20,11 +20,10 @@ import { isEmulatorProject } from './env';
  * project's own configuration (`functions/.env.<projectId>`), never from a
  * fallback.
  *
- * Nothing here moves media bytes through a Function except `putStream`, which
- * only the Zoom import uses until the Cloudflare Worker copier replaces it
- * (docs/plans/MEDIA-ON-CLOUDFLARE.md). Playback and uploads are pre-signed URLs
- * the client uses directly, so the 60-minute function timeout never meets a
- * two-hour recording.
+ * Nothing here moves media bytes through a Function. Playback and uploads are
+ * pre-signed URLs the client uses directly, and Zoom imports are copied by the
+ * Cloudflare Worker (`mediaCopier.ts`), so the 60-minute function timeout never
+ * meets a two-hour recording and no byte is billed as Google egress.
  *
  * TWO KEYS, scoped to the bucket: a read key that can only sign playback, and a
  * read-write key for uploads and deletes. Each is a secret bound only to the
@@ -160,27 +159,4 @@ export async function head(key: string): Promise<{ sizeBytes: number; contentTyp
 /** Delete an object. Deleting one that does not exist is not an error. */
 export async function deleteObject(key: string): Promise<void> {
   await client('write').send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
-}
-
-/**
- * Write an object from a stream of known length. Zoom import only, until the
- * Worker copier replaces it: in production this would bill the bytes as
- * Google egress, which is the one thing the Worker exists to avoid.
- */
-export async function putStream(
-  key: string,
-  body: ReadableStream<Uint8Array>,
-  sizeBytes: number,
-  contentType: string,
-): Promise<void> {
-  await client('write').send(
-    new PutObjectCommand({
-      Bucket: bucket(),
-      Key: key,
-      Body: body,
-      ContentLength: sizeBytes,
-      ContentType: contentType,
-      IfNoneMatch: '*',
-    }),
-  );
 }

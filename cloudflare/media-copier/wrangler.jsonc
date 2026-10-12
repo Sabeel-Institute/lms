@@ -1,0 +1,19 @@
+// The Zoom → R2 copier. Deployed with `npm run deploy -w @sabeel/media-copier`.
+// docs/plans/MEDIA-ON-CLOUDFLARE.md, "The Worker".
+{
+  "name": "media-copier",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-15",
+  "account_id": "2695af9675357bbe44e188b0414b850f",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "oursabeel-lms-media" }],
+  "vars": {
+    // The Cloud Functions runtime service account of oursabeel-lms: the only
+    // caller whose Google ID token is accepted.
+    "ALLOWED_CALLER": "226338267845-compute@developer.gserviceaccount.com",
+    // This Worker's own address, the audience a token must be minted for.
+    // functions/.env.oursabeel-lms names the same address as MEDIA_COPIER_URL.
+    "AUDIENCE": "https://media-copier.oursabeel.workers.dev"
+  }
+}

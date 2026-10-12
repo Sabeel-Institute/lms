@@ -64,11 +64,11 @@ function fakeClient(rec: ZoomAudioRecording, opts: { fail?: boolean } = {}): Zoo
     async freshAudioFile(meetingUuid, fileId) {
       return { rec, downloadUrl: `fake://${meetingUuid}/${fileId}` };
     },
-    async copyToMediaStore(_downloadUrl, key) {
+    async copyToMediaStore(_downloadUrl, key, sizeBytes) {
       if (opts.fail) throw new Error('network boom');
       // Write-once, like the real copy: an object already there is an error.
       if (await objectExists(key)) throw new Error(`refusing to overwrite ${key}`);
-      await putObject(key, new Uint8Array(rec.sizeBytes || 4096));
+      await putObject(key, new Uint8Array(sizeBytes || 4096));
     },
   };
 }
