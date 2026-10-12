@@ -31,7 +31,11 @@ const { S3Client, CreateBucketCommand, PutBucketCorsCommand, PutObjectCommand } 
 /** The pinned release (docs/DEV-TOOLING.md); `WEED_BIN` overrides, CI sets it. */
 const WEED_BIN = process.env.WEED_BIN ?? join(homedir(), 'opt', 'seaweedfs-4.47', 'weed');
 
-/** Browser origins that may upload to the local store: the dev servers. */
+/**
+ * Browser origins that may upload to the local store: the dev servers. The
+ * methods and headers come from the production bucket's own CORS file, so a
+ * header the app needs and R2 does not allow fails here too.
+ */
 const DEV_ORIGINS = [
   'http://127.0.0.1:61310',
   'http://127.0.0.1:61311',
@@ -40,7 +44,7 @@ const DEV_ORIGINS = [
 ];
 
 /** The demo project's function parameters, as `KEY=value` lines. */
-function localMediaConfig() {
+export function localMediaConfig() {
   const file = new URL(`../../functions/.env.${EMULATOR_PROJECT_ID}`, import.meta.url);
   const env = Object.fromEntries(
     readFileSync(file, 'utf8')
@@ -180,19 +184,18 @@ export async function startMediaStore({ log = process.stderr } = {}) {
         await new Promise((r) => setTimeout(r, 200));
       }
     }
+    const cors = JSON.parse(readFileSync(new URL('../../cloudflare/media-bucket/cors.json', import.meta.url), 'utf8'));
     await s3.send(
       new PutBucketCorsCommand({
         Bucket: cfg.bucket,
         CORSConfiguration: {
-          CORSRules: [
-            {
-              AllowedOrigins: DEV_ORIGINS,
-              AllowedMethods: ['GET', 'HEAD', 'PUT'],
-              AllowedHeaders: ['content-type', 'if-none-match', 'range'],
-              ExposeHeaders: ['ETag', 'Content-Length', 'Content-Range', 'Accept-Ranges'],
-              MaxAgeSeconds: 3600,
-            },
-          ],
+          CORSRules: cors.rules.map((r) => ({
+            AllowedOrigins: DEV_ORIGINS,
+            AllowedMethods: r.allowed.methods,
+            AllowedHeaders: r.allowed.headers,
+            ExposeHeaders: r.exposeHeaders,
+            MaxAgeSeconds: r.maxAgeSeconds,
+          })),
         },
       }),
     );

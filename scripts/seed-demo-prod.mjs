@@ -28,22 +28,23 @@ import { createRequire } from 'node:module';
 import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { r2Config, s3For } from './lib/r2.mjs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
+const { CopyObjectCommand, DeleteObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 const PROJECT = FIREBASE_PROJECT_ID;
-// No such bucket exists: media moves to R2 before the first deploy, and this
-// script moves with it (docs/plans/MEDIA-ON-CLOUDFLARE.md, M2).
-const BUCKET = `${PROJECT}.firebasestorage.app`;
 if (process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error('FIRESTORE_EMULATOR_HOST is set — this script targets production.');
 }
-admin.initializeApp({ projectId: PROJECT, storageBucket: BUCKET });
+admin.initializeApp({ projectId: PROJECT });
 const auth = admin.auth();
 const db = admin.firestore();
-const bucket = admin.storage().bucket();
+// The media bucket (R2), with the write key from Secret Manager.
+const media = r2Config();
+const s3 = s3For(media.endpoint, media.write);
 
 const DEMO = { demoSeed: true }; // the wipe key — on every document we create
 const day = 86400000;
@@ -237,7 +238,7 @@ console.log('     ' + courses.map((c) => `${c.name}: ${roster.get(c.courseId).le
 console.log('3/6  sessions, attendance, recordings');
 ensureAudio();
 const MASTER = 'demo-seed/master.m4a';
-await bucket.upload(AUDIO, { destination: MASTER, metadata: { contentType: 'audio/mp4' } });
+await s3.send(new PutObjectCommand({ Bucket: media.bucket, Key: MASTER, Body: readFileSync(AUDIO), ContentType: 'audio/mp4' }));
 
 const sessionWrites = [];
 const recordingWrites = [];
@@ -317,9 +318,9 @@ console.log(`     ${sessionCount} sessions (${attendanceCount} with attendance),
 console.log(`4/6  audio: server-side copy x${audioCopies.length} (no re-upload)`);
 for (let i = 0; i < audioCopies.length; i += 12) {
   await Promise.all(audioCopies.slice(i, i + 12).map((id) =>
-    bucket.file(MASTER).copy(bucket.file(`recordings/${id}/audio.m4a`))));
+    s3.send(new CopyObjectCommand({ Bucket: media.bucket, CopySource: `${media.bucket}/${MASTER}`, Key: `recordings/${id}/audio.m4a` }))));
 }
-await bucket.file(MASTER).delete().catch(() => {});
+await s3.send(new DeleteObjectCommand({ Bucket: media.bucket, Key: MASTER })).catch(() => {});
 
 // ===================================================== 5. let triggers run ==
 console.log('5/6  waiting for onRecordingWritten / onSessionWritten fan-out…');

@@ -51,21 +51,33 @@
  */
 import { createRequire } from 'node:module';
 import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
+import { r2Config, s3For } from './lib/r2.mjs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
+const { DeleteObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 
 const PROJECT = FIREBASE_PROJECT_ID;
-// No such bucket exists: media moves to R2 before the first deploy, and this
-// script moves with it (docs/plans/MEDIA-ON-CLOUDFLARE.md, M2).
-const BUCKET = `${PROJECT}.firebasestorage.app`;
 const EXECUTE = process.argv.includes('--yes');
 if (process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error('FIRESTORE_EMULATOR_HOST is set — this script targets production.');
 }
-admin.initializeApp({ projectId: PROJECT, storageBucket: BUCKET });
+admin.initializeApp({ projectId: PROJECT });
 const db = admin.firestore();
 const auth = admin.auth();
-const bucket = admin.storage().bucket();
+// The media bucket (R2), with the write key from Secret Manager.
+const media = r2Config();
+const s3 = s3For(media.endpoint, media.write);
+/** Every key under a prefix. */
+async function listKeys(prefix) {
+  const keys = [];
+  let token;
+  do {
+    const r = await s3.send(new ListObjectsV2Command({ Bucket: media.bucket, Prefix: prefix, ContinuationToken: token }));
+    keys.push(...(r.Contents ?? []).map((o) => o.Key));
+    token = r.IsTruncated ? r.NextContinuationToken : undefined;
+  } while (token);
+  return keys;
+}
 const { FieldValue, FieldPath } = admin.firestore;
 
 const isDemoId = (v) => String(v ?? '').startsWith('demo-');
@@ -151,9 +163,8 @@ const strayMarkers = (await db.collectionGroup('sent').get()).docs.filter(
 const removedRecordingIds = new Set(
   plan.filter((p) => p.label.startsWith('recordings')).flatMap((p) => p.docs.map((d) => d.id)),
 );
-const [allFiles] = await bucket.getFiles({ prefix: 'recordings/' });
-const orphanFiles = allFiles.filter((f) => removedRecordingIds.has(f.name.split('/')[1]));
-const [seedTmp] = await bucket.getFiles({ prefix: 'demo-seed/' });
+const orphanFiles = (await listKeys('recordings/')).filter((k) => removedRecordingIds.has(k.split('/')[1]));
+const seedTmp = await listKeys('demo-seed/');
 
 const demoUsers = [];
 let page;
@@ -230,7 +241,8 @@ for (const group of chunk(strayMarkers, 400)) {
 console.log(`   removed ${strayMarkers.length} stray sent markers`);
 for (const group of [orphanFiles, seedTmp]) {
   for (let i = 0; i < group.length; i += 20) {
-    await Promise.all(group.slice(i, i + 20).map((f) => f.delete().catch(() => {})));
+    await Promise.all(group.slice(i, i + 20).map((Key) =>
+      s3.send(new DeleteObjectCommand({ Bucket: media.bucket, Key })).catch(() => {})));
   }
 }
 console.log(`   removed ${orphanFiles.length + seedTmp.length} storage objects`);

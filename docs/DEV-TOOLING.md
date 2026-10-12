@@ -32,6 +32,9 @@ emulator — not your diff.
 | `node scripts/repro-stale-scope.mjs delete\|remove\|none` | The WEB-4 regression: a manager's cold load with a stale cached course list must render the work queue and report no listener refusal. Needs emulators + the e2e dev server; resets the emulators; exit 1 on a refusal |
 | `node scripts/set-min-version.mjs <versionCode>` | **Against the REAL project** (or the emulator with `CHECK_PROJECT` + `FIRESTORE_EMULATOR_HOST`). Sets the oldest Android build allowed to run |
 | `node scripts/set-auth-email.mjs [--yes]` | **Against the REAL project**, as the active gcloud account. Applies the password email's sender, reply-to, subject and body from the script; dry run without `--yes`. Fails if Google refuses a field |
+| `node scripts/s3-conformance.mjs local\|r2` | The 17 S3 behaviours the media code relies on (signatures, expiry, write-once PUT, signed type, `Range`, multipart ETags, CORS, read key cannot write), against SeaweedFS or **against the REAL R2 bucket** with the real keys from Secret Manager. Writes and deletes a few objects under `conformance/`. Run after changing either |
+| `npm run bucket-config -w @sabeel/media-copier` | **Against the REAL R2 bucket.** Applies `cloudflare/media-bucket/cors.json` and `lifecycle.json`; `wrangler r2 bucket cors list` / `lifecycle list` read them back |
+| `npm test -w @sabeel/media-copier` | The copier Worker's tests, inside workerd with a local R2 |
 | `node scripts/send-test-push.mjs <fcm-token> [title] [body]` | **Against the REAL project's FCM.** One real push to one device token, in the shape `fcmSender` sends; writes nothing. The device check for "a push is shown" with the app open and then closed — no emulator delivers a push. The token is in the `devices` collection of whichever Firestore the device registered with |
 
 The last two are **pre-release checks, not part of the loop**: both authenticate

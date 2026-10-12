@@ -28,10 +28,19 @@ key is signed, not how. Built so far:
   Zoom import is driven by a fake client, since the Worker writes to R2, not
   to the local SeaweedFS.
 
-Still to do before the first deploy: bucket CORS and lifecycle applied from
-the repo, `s3-conformance.mjs` against SeaweedFS and R2 (which is also the
-first use of the real R2 keys), `seed-demo-prod.mjs` / `wipe-demo-prod.mjs`
-on R2, and the deploy itself (Worker first, then Functions).
+- Bucket CORS (the two web app origins; GET, HEAD, PUT) and lifecycle (abort
+  incomplete multipart uploads after a day) in `cloudflare/media-bucket/`,
+  applied to `oursabeel-lms-media` on 2026-10-12. The local store takes its
+  methods and headers from the same file.
+- `scripts/s3-conformance.mjs`: 17 checks, all passing against SeaweedFS and
+  against R2 on 2026-10-12. That run was the first use of the real keys: the
+  read key reads and cannot write or delete; the write key creates once.
+- `seed-demo-prod.mjs` / `wipe-demo-prod.mjs` write and delete media in R2
+  (not yet run: nothing is deployed).
+
+Still to do: the deploy itself, Worker first, then Functions; then one real
+Zoom import end to end in production, the one path no local test reaches (the
+ID token from the metadata server and the Worker's check of it).
 
 ## Why
 

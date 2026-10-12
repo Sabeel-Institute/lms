@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://oursabeel-lms.web.app", "https://oursabeel-lms.firebaseapp.com"],
+        "methods": ["GET", "HEAD", "PUT"],
+        "headers": ["content-type", "if-none-match", "range"]
+      },
+      "exposeHeaders": ["ETag", "Content-Length", "Content-Range", "Accept-Ranges"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

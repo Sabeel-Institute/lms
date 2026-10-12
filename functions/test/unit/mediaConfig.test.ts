@@ -41,8 +41,20 @@ describe('the copier Worker and the Functions agree', () => {
   const env = envFile(FIREBASE_PROJECT_ID);
   const w = wrangler();
 
-  it('on the bucket', () => {
+  it('on the bucket, which is also the one the bucket settings are applied to', () => {
     expect(w.r2_buckets).toEqual([{ binding: 'BUCKET', bucket_name: env.MEDIA_BUCKET }]);
+    const script = JSON.parse(read('cloudflare/media-copier/package.json')).scripts['bucket-config'] as string;
+    const targets = [...script.matchAll(/r2 bucket \w+ set (\S+)/g)].map((m) => m[1]);
+    expect(targets).toEqual([env.MEDIA_BUCKET, env.MEDIA_BUCKET]);
+  });
+
+  it('on where uploads may come from: the web app this project serves', () => {
+    const cors = JSON.parse(read('cloudflare/media-bucket/cors.json')) as {
+      rules: { allowed: { origins: string[] } }[];
+    };
+    expect(cors.rules.flatMap((r) => r.allowed.origins).sort()).toEqual(
+      [`https://${FIREBASE_PROJECT_ID}.firebaseapp.com`, `https://${FIREBASE_PROJECT_ID}.web.app`].sort(),
+    );
   });
 
   it('on the Worker’s address, which is the token audience', () => {

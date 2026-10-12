@@ -1,0 +1,10 @@
+{
+  "rules": [
+    {
+      "id": "abort-incomplete-uploads",
+      "enabled": true,
+      "conditions": { "prefix": "" },
+      "abortMultipartUploadsTransition": { "condition": { "type": "Age", "maxAge": 86400 } }
+    }
+  ]
+}

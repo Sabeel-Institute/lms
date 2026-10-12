@@ -9,7 +9,8 @@
     "test": "vitest run",
     "pretypecheck": "wrangler types --include-runtime",
     "typecheck": "tsc -p tsconfig.json",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "bucket-config": "wrangler r2 bucket cors set oursabeel-lms-media --file ../media-bucket/cors.json --force && wrangler r2 bucket lifecycle set oursabeel-lms-media --file ../media-bucket/lifecycle.json --force"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",
