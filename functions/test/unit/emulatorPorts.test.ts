@@ -103,13 +103,13 @@ function sweepWebPortFromShell(): number {
 /**
  * This checkout's block. Bases are 100 apart, one per repo on this machine.
  *
- * 61100+ because the ephemeral range here is 32768-60999
+ * 61300+ because the ephemeral range here is 32768-60999
  * (`/proc/sys/net/ipv4/ip_local_port_range`) so nothing above it is handed out
  * at random, and Firebase's own defaults top out at 9499
  * (`firebase-tools/lib/emulator/constants.js`) so the block collides with
  * nothing the CLI would choose for itself.
  */
-const BLOCK_START = 61100;
+const BLOCK_START = 61300;
 const BLOCK_END = BLOCK_START + 99;
 
 describe('emulator ports agree across every file that states them', () => {

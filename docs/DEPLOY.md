@@ -96,13 +96,13 @@ npm run seed:emulators        # prints the student's credentials and the fixture
 kill %2                       # release 8081 (job 2: the AVD is job 1, the dev server job 2)
 
 ( cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo run:android )   # its own Metro
-adb reverse tcp:61107 tcp:61107                                  # the audio, see below
+adb reverse tcp:61307 tcp:61307                                  # the audio, see below
 ```
 
 The emulators bind loopback, which the AVD reaches as `10.0.2.2` — already wired
 in `app/src/env.ts`. **Playback is the exception:** the emulator's playback URL
 is minted server-side from `FIREBASE_STORAGE_EMULATOR_HOST`, so it names
-`127.0.0.1:61107`, which on the AVD is the AVD itself. Without the `adb reverse`
+`127.0.0.1:61307`, which on the AVD is the AVD itself. Without the `adb reverse`
 above every recording fails with "Source error" the moment it is opened
 (`ECONNREFUSED` in logcat), and the failure looks like the player's. `run:android`
 adds the Metro mapping itself; this one is yours. And `adb root` drops every

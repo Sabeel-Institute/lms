@@ -28,10 +28,10 @@ if [ -n "${JAVA_HOME:-}" ]; then
   export PATH="$JAVA_HOME/bin:$PATH"
 fi
 
-# 61110, not the 61111 `test:e2e` uses. Two suites that grab the same port cannot
+# 61310, not the 61311 `test:e2e` uses. Two suites that grab the same port cannot
 # be run side by side, and the failure mode is not "port busy" — see the stale
 # server note below.
-WEB_PORT="${SWEEP_WEB_PORT:-61110}"
+WEB_PORT="${SWEEP_WEB_PORT:-61310}"
 
 # Repo-local, not /tmp. Three sibling checkouts share this machine and all three
 # used the same generic /tmp log names, so a concurrent run overwrote the log
@@ -67,7 +67,7 @@ npm run build -w functions
 # missing lsof is indistinguishable from "no listener", and BOTH the stale-server
 # kill and the cleanup trap become silent no-ops. That is the two safety
 # mechanisms in this script switching off with nothing to show for it. Measured:
-# `lsof -ti:61110 ... | wc -l` returns 0 without the toolchain env sourced while
+# `lsof -ti:61310 ... | wc -l` returns 0 without the toolchain env sourced while
 # a server is demonstrably bound. `scripts/free-emulator-ports.sh` already uses
 # `ss` for this; deviating from it was the mistake.
 pids_on_port() {

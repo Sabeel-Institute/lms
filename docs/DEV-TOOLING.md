@@ -125,15 +125,15 @@ audit lie, and an audit that reports nothing is worse than no audit.
 - **JDK 21+ required.** `scripts/test-emulator.sh` resolves `SR_JDK21_HOME` →
   `~/opt/jdk-21` → whatever `java` is on PATH, so JDK 17 can stay the default for
   the Android/Gradle build.
-> **This checkout owns emulator ports 61100-61107** and web dev-server ports
-> 61110 (sweep) / 61111 (`test:e2e`). The sibling Sabeel repos own 61000+ and
-> 61200+. Three of them share this machine and all three used to pin
-> 8080/9099/5001/9199, so whichever suite started second killed the other's
-> Firestore. `61103` also reads as "this project, functions" at a glance — the
+> **This checkout owns emulator ports 61300-61307** and web dev-server ports
+> 61310 (sweep) / 61311 (`test:e2e`). The legacy `sabeel-recording-app` checkout
+> owns 61100+, and the sibling Sabeel repos own 61000+ and 61200+. The repos
+> share this machine and all used to pin 8080/9099/5001/9199, so whichever
+> suite started second killed the other's Firestore. `61303` also reads as "this project, functions" at a glance — the
 > diagnostic that was missing when one session killed another's emulator after
 > misreading a truncated `ps` line.
 >
-> 61100+ specifically: the ephemeral range here is 32768-60999
+> 61300+ specifically: the ephemeral range here is 32768-60999
 > (`/proc/sys/net/ipv4/ip_local_port_range`) so nothing above it is handed out at
 > random, and Firebase's own defaults top out at 9499
 > (`firebase-tools/lib/emulator/constants.js`) so the block cannot collide with
@@ -156,7 +156,7 @@ audit lie, and an audit that reports nothing is worse than no audit.
 > is fine and concurrent *native* work stays one session at a time.
 
 - **`free-emulator-ports.sh` runs first, every time.** A killed run leaves
-  emulators squatting on this checkout's ports, **61100-61107**. The
+  emulators squatting on this checkout's ports, **61300-61307**. The
   next run then talks to a half-dead emulator that answers on the port but has no
   functions registered, so every callable 404s — and a 404 carries no CORS
   headers, so the browser reports "blocked by CORS policy" while the callable
@@ -167,7 +167,7 @@ audit lie, and an audit that reports nothing is worse than no audit.
   The script looks up owners by port instead. The same trap catches
   `pkill -f "expo start"` / `pkill -f "expo run"` — it matches the agent's own
   tool process and the command exits **144** as its shell is killed mid-run.
-  **Kill dev servers by port:** `ss -lptn 'sport = :61111' | grep -oP 'pid=\K[0-9]+' | xargs -r kill`
+  **Kill dev servers by port:** `ss -lptn 'sport = :61311' | grep -oP 'pid=\K[0-9]+' | xargs -r kill`
   (`lsof` is not on PATH in a non-interactive shell without the toolchain env
   sourced, and a missing `lsof` turns a port guard into a silent no-op)
   (or `free-emulator-ports.sh` for the emulator suite).
@@ -181,7 +181,7 @@ audit lie, and an audit that reports nothing is worse than no audit.
 
 ```bash
 firebase emulators:start --project demo-sabeel-recordings --only firestore,auth,storage,functions
-cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61111 --clear
+cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61311 --clear
 ```
 
 **`npm run test:emulator` will kill that emulator suite.** It runs
@@ -227,7 +227,7 @@ the layout regression harness: every screen of both populations at five widths,
 **asserted**, and it exits non-zero.
 
 **It needs nothing running.** The runner starts the emulator suite and its own
-Expo web dev server on port **61110** (not `test:e2e`'s 61111) and kills both on
+Expo web dev server on port **61310** (not `test:e2e`'s 61311) and kills both on
 the way out. That is the whole reason it is in CI and `test:e2e` is not — it
 never touches a world somebody else built.
 

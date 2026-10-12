@@ -12,16 +12,16 @@
  * emulator that answers on a port nobody expected — or, far worse, as a SIBLING
  * repo's emulator answering, which reads and writes happily and passes.
  *
- * 61100+ because this machine's ephemeral range is 32768-60999
+ * 61300+ because this machine's ephemeral range is 32768-60999
  * (`/proc/sys/net/ipv4/ip_local_port_range`), so nothing above it is handed out
  * at random, and Firebase's own defaults top out at 9499
  * (`firebase-tools/lib/emulator/constants.js`), so the block collides with
  * nothing the CLI would pick for itself. The bases are 100 apart, one per repo
- * on this machine, so `61103` reads as "this project, functions" at a glance —
+ * on this machine, so `61303` reads as "this project, functions" at a glance —
  * the diagnostic that was missing when one session killed another's emulator
  * after misreading a truncated `ps` line.
  */
-const PORT_BASE = 61100;
+const PORT_BASE = 61300;
 
 export const EMULATOR_PORTS = {
   firestore: PORT_BASE + 0,

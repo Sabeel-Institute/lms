@@ -3,7 +3,7 @@
  * Set the oldest Android build allowed to run, in `config/app`.
  *
  *     node scripts/set-min-version.mjs <versionCode>          # against production
- *     CHECK_PROJECT=demo-sabeel-recordings FIRESTORE_EMULATOR_HOST=127.0.0.1:61100 \
+ *     CHECK_PROJECT=demo-sabeel-recordings FIRESTORE_EMULATOR_HOST=127.0.0.1:61300 \
  *       node scripts/set-min-version.mjs <versionCode>        # against the emulator
  *
  * Every Android build below the floor shows the update screen instead of the
