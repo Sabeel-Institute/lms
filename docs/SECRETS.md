@@ -20,6 +20,15 @@ The Firebase "apiKey" is not a credential. It identifies the project; access is
 controlled by security rules and App Check. Treating it as a secret leads people
 to hide it and then commit something that genuinely matters.
 
+Secret scanners flag it anyway (GitGuardian did on 2026-10-12, on this public
+repo). The answer is in the key's restrictions, not in hiding it: the
+"Browser key (auto created by Firebase)" may call only Firebase's own APIs
+(27 of them; no Maps, no AI, nothing billable outside Firebase), checked with
+`gcloud services api-keys list --project=oursabeel-lms`. It deliberately has
+no website-address (referrer) restriction: the Android app uses this same key
+through the JS SDK, and its requests carry no referrer, so that restriction
+would lock the phone app out. Mark such alerts as false positives.
+
 ## Setting a server secret
 
 The agent never handles values. It outputs the command; Faisal runs it:
