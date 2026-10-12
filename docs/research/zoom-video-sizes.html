@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Quran Immersion Video Sizes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Marcellus&display=swap">
+<style>
+/* Layout: one reading column; measured data first, then what drives size, then how to make it smaller. Sabeel brand, single light theme. */
+:root {
+  --canvas: #F6EBDD;
+  --surface: #FBF6F0;
+  --raised: #FFFFFF;
+  --ink: #3A2F28;
+  --ink-2: #6A5748;
+  --line: #DFD1C1;
+  --line-strong: #C9B7A7;
+  --plum: #83114F;
+  --plum-soft: #E6CCC9;
+  --gold: #C6A15B;
+  --gold-text: #795E2A;
+  --gold-soft: #ECDCC3;
+  --sage: #A8B89A;
+  --success: #4E7A43;
+  --display: "Marcellus", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { background: var(--canvas); color: var(--ink); font: 15px/1.6 var(--body); padding-inline: 16px; padding-block: 40px 64px; }
+.wrap { max-width: 920px; margin: 0 auto; display: grid; gap: 30px; }
+h1, h2 { font-family: var(--display); font-weight: 400; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 40px); line-height: 1.15; }
+h2 { font-size: 26px; line-height: 1.2; }
+h3 { font: 600 16px/1.3 var(--body); margin: 0; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--plum); }
+a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-text); }
+header.top { display: grid; gap: 10px; }
+.lede { color: var(--ink-2); font-size: 16px; }
+
+section.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px clamp(16px, 3vw, 28px); display: grid; gap: 18px; min-width: 0; }
+.card > header { display: grid; gap: 6px; }
+.card > header p { color: var(--ink-2); }
+
+.keyline { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.keyline div { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; }
+.keyline b { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.keyline span { color: var(--ink-2); font-size: 13px; }
+.keyline div:first-child { background: var(--plum); color: var(--surface); }
+.keyline div:first-child span { color: var(--plum-soft); }
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 620px; }
+th, td { padding: 9px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); background: var(--surface); white-space: normal; vertical-align: bottom; }
+tbody tr:last-child td { border-bottom: 0; }
+tfoot td { font-weight: 700; border-top: 2px solid var(--line-strong); border-bottom: 0; background: var(--surface); }
+td small { color: var(--ink-2); font-weight: 400; }
+tr.hot td { background: var(--gold-soft); }
+
+.chart { background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 14px 10px 8px; }
+.chart h3 { margin: 0 6px 6px; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 0 6px 6px; font-size: 13px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+svg { display: block; width: 100%; height: auto; }
+svg text { font-family: var(--body); font-size: 12px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+svg .grid { stroke: var(--line); stroke-width: 1; }
+
+.points { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.point { background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.point p { color: var(--ink-2); font-size: 14px; }
+
+ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 70ch; }
+.note { color: var(--ink-2); font-size: 13px; }
+.callout { background: var(--gold-soft); border: 1px solid var(--gold); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">Sabeel Class Recordings · Zoom video survey · 12 October 2026</span>
+    <h1>How big Quran Immersion's Zoom videos are</h1>
+    <p class="lede">The five "Quran Immersion Fall" classes on the Sabeel Zoom account, measured without downloading them. Every class already has video stored. How big that video is depends far more on what is on screen than on how long the class runs.</p>
+  </header>
+
+  <div class="keyline" aria-label="Summary">
+    <div><b>5 classes · 11.3 hours</b><span>17 September to 8 October 2026, all with video</span></div>
+    <div><b>1080p only</b><span>Zoom keeps one copy of each video. There are no smaller versions to download.</span></div>
+    <div><b>85 to 370 MB per hour</b><span>Slides and speaker video, the same course on the same settings</span></div>
+  </div>
+
+  <section class="card" aria-labelledby="measured-h">
+    <header>
+      <span class="eyebrow">What Zoom has stored</span>
+      <h2 id="measured-h">Three versions of every class</h2>
+      <p>Zoom saved each class as slides with the speaker's camera, slides alone, and audio alone, plus a transcript, chat and timeline of a few megabytes. The app imports only the audio today.</p>
+    </header>
+
+    <div class="table-scroll" tabindex="0" aria-label="Files per class">
+      <table>
+        <thead>
+          <tr>
+            <th>Class (Houston time)</th><th>Length</th>
+            <th>Slides + speaker</th><th>Slides only</th><th>Audio only</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+        <tfoot id="foot"></tfoot>
+      </table>
+    </div>
+
+    <div class="chart">
+      <h3>Megabytes per hour of class</h3>
+      <div class="legend">
+        <span><i style="background:var(--plum)"></i>Slides + speaker</span>
+        <span><i style="background:var(--gold)"></i>Slides only</span>
+        <span><i style="background:var(--sage)"></i>Audio only</span>
+      </div>
+      <svg id="chart" viewBox="0 0 760 360" role="img" aria-label="Grouped bar chart of megabytes per hour for each class and file type"></svg>
+    </div>
+
+    <p class="note">All video is H.264 at 1920×1080 and 25 frames a second (1920×1200 on 17 September, which followed the shared screen's shape). Audio inside the files runs at 66 to 76 kbps. Sizes come from Zoom's recording list, and resolutions from reading each file's header. No video was downloaded.</p>
+  </section>
+
+  <section class="card" aria-labelledby="content-h">
+    <header>
+      <span class="eyebrow">Why the sizes differ</span>
+      <h2 id="content-h">Size follows movement, not length</h2>
+      <p>A video file stores what changes from one frame to the next. A still slide costs almost nothing after its first frame. A moving camera changes every part of the picture, all the time, and every change has to be stored.</p>
+    </header>
+    <div class="points">
+      <div class="point">
+        <h3>Slides only: steady</h3>
+        <p>48 to 65 MB per hour in every class. Slides change a few times a minute and nothing else moves.</p>
+      </div>
+      <div class="point">
+        <h3>Slides + speaker: depends on the camera</h3>
+        <p>85 to 126 MB per hour on four classes, and 370 MB per hour on 1 October. Same course, same settings, same length as 24 September. The file headers cannot say what moved more that day, only that something did.</p>
+      </div>
+      <div class="point">
+        <h3>A whiteboard camera is the hard case</h3>
+        <p>A camera filming a board sees the teacher move, the light shift and its own sensor noise. If it is hand-held or keeps moving, all of that is stored. The cost calculator assumes 1 GB per hour for that reason.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="tripod-h">
+    <header>
+      <span class="eyebrow">Recording the whiteboard</span>
+      <h2 id="tripod-h">Put the camera on a tripod</h2>
+      <p>A phone on a tripod is enough. A camera that stays still, framed on the board, keeps the writing readable for students and keeps the file small, because most of the picture stays the same from frame to frame.</p>
+    </header>
+    <ul class="plain">
+      <li><b>Frame the board and leave it.</b> The whole board in view, close enough to read, and no panning or zooming during class.</li>
+      <li><b>Keep the light steady.</b> Avoid pointing the camera at a window or a bright light behind the board. Changing light makes the camera adjust and the whole picture shift.</li>
+      <li><b>Getting it into the recording.</b> A phone can join the class as its own participant with its microphone muted and its camera spotlighted. A second camera plugged into the teacher's computer can be shared as content (Share, then Advanced, then Content from 2nd Camera), so the board fills the shared-screen file.</li>
+    </ul>
+    <div class="callout">
+      <h3>What a steady camera should come to</h3>
+      <p>Probably in the range the slide classes already show: 0.1 to 0.4 GB per hour at 1080p, against about 1 GB per hour for a moving camera. This is an estimate. One test class with a tripod camera will give the real figure.</p>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="transcode-h">
+    <header>
+      <span class="eyebrow">After the class</span>
+      <h2 id="transcode-h">Converting to 720p roughly halves it again</h2>
+      <p>720p has 44% of the pixels of 1080p, and a board written in marker reads well at that size. The app would keep a 720p copy of each class and serve that to students. A board also needs fewer than 25 frames a second, and a lower frame rate saves more.</p>
+    </header>
+    <ul class="plain">
+      <li><b>Expect about half the size</b> from 720p alone, and more with a lower frame rate. In a test on deliberately noisy 1080p video, converting to 720p at 10 frames a second made the file 78% smaller.</li>
+      <li><b>It can run on Firebase.</b> A background function with 8 processors and 8 GB of memory should convert a 3-hour class in about 8 to 15 minutes, inside its 30-minute limit. The memory needed is small.</li>
+      <li><b>The computing is likely free.</b> A month of Quran Immersion would use about a tenth of the free allowance.</li>
+    </ul>
+  </section>
+
+  <section class="card" aria-labelledby="cost-h">
+    <header>
+      <span class="eyebrow">What it means for cost</span>
+      <h2 id="cost-h">Smaller files stretch the free tier</h2>
+      <p>Firebase gives 5 GB of storage and 100 GB of downloads a month free, then charges $0.020 per GB a month to store and $0.12 per GB downloaded.</p>
+    </header>
+    <div class="table-scroll" tabindex="0" aria-label="Cost by recording setup">
+      <table>
+        <thead>
+          <tr>
+            <th>Recording</th><th>Size per hour</th>
+            <th>Hours stored free</th><th>Each further stored hour, per month</th>
+            <th>Hours watched free, per month</th><th>Each further hour watched</th>
+          </tr>
+        </thead>
+        <tbody id="scenarios"></tbody>
+      </table>
+    </div>
+    <p class="note">The first row is the calculator's assumption. The second and third are estimates until a test class is recorded. Work out monthly costs for any number of students in the <a href="video-cost-calculator.html">class video cost calculator</a>.</p>
+  </section>
+
+  <section class="card" aria-labelledby="next-h">
+    <header>
+      <span class="eyebrow">Next step</span>
+      <h2 id="next-h">Record one test class</h2>
+      <p>Record one class with the board camera on a tripod. The same read-only survey then gives its real size per hour, and a 720p conversion of that file gives the size students would actually download. Both numbers replace the estimates above.</p>
+    </header>
+  </section>
+</div>
+
+<script>
+(() => {
+  /* Measured from the Zoom recordings list on 12 October 2026 (minutes, MB). */
+  const CLASSES = [
+    { date: '17 September', time: '9:58 AM',  min: 114.1, speaker: 175.8,  slides: 112.9, audio: 58.1 },
+    { date: '24 September', time: '9:58 AM',  min: 187.1, speaker: 264.0,  slides: 182.1, audio: 108.4 },
+    { date: '1 October',    time: '10:02 AM', min: 187.2, speaker: 1155.3, slides: 151.3, audio: 98.6 },
+    { date: '8 October',    time: '9:54 AM',  min: 135.6, speaker: 228.6,  slides: 146.5, audio: 79.0 },
+    { date: '8 October',    time: '12:11 PM', min: 55.9,  speaker: 117.0,  slides: 53.7,  audio: 30.4 },
+  ];
+  const SCENARIOS = [
+    { name: 'Moving or hand-held camera, 1080p', gb: 1.0 },
+    { name: 'Tripod camera, 1080p (estimate)', gb: 0.35 },
+    { name: 'Tripod camera, converted to 720p (estimate)', gb: 0.175 },
+  ];
+  const $ = (id) => document.getElementById(id);
+  const n = (v, d = 0) => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const perHour = (mb, min) => mb / (min / 60);
+  const len = (min) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, '0')} min`;
+  const cell = (mb, min) => `${n(mb, 1)} MB <small>· ${n(perHour(mb, min))} MB/h</small>`;
+
+  $('rows').innerHTML = CLASSES.map(c => `
+    <tr class="${perHour(c.speaker, c.min) > 300 ? 'hot' : ''}">
+      <td>${c.date}, ${c.time}</td><td>${len(c.min)}</td>
+      <td>${cell(c.speaker, c.min)}</td><td>${cell(c.slides, c.min)}</td><td>${cell(c.audio, c.min)}</td>
+    </tr>`).join('');
+  const sum = (k) => CLASSES.reduce((a, c) => a + c[k], 0);
+  const totMin = sum('min');
+  const totCell = (k) => `${n(sum(k) / 1000, 2)} GB <small>· ${n(perHour(sum(k), totMin))} MB/h</small>`;
+  $('foot').innerHTML = `<tr><td>All five</td><td>${len(totMin)}</td><td>${totCell('speaker')}</td><td>${totCell('slides')}</td><td>${totCell('audio')}</td></tr>`;
+
+  $('scenarios').innerHTML = SCENARIOS.map(s => `
+    <tr>
+      <td>${s.name}</td><td>${n(s.gb, s.gb < 1 ? 2 : 1)} GB</td>
+      <td>${n(5 / s.gb)} h</td><td>$${n(0.02 * s.gb, 4)}</td>
+      <td>${n(100 / s.gb)} h</td><td>$${n(0.12 * s.gb, 3)}</td>
+    </tr>`).join('');
+
+  /* Grouped bars, MB per hour, one scale for all marks. */
+  const svg = $('chart');
+  const W = 760, H = 360, L = 58, R = 16, T = 22, B = 52;
+  const pw = W - L - R, ph = H - T - B, max = 400, ticks = 4;
+  const y = (v) => T + ph - (v / max) * ph;
+  const slot = pw / CLASSES.length, bw = Math.min(30, slot / 4.2);
+  const series = [['speaker', 'var(--plum)'], ['slides', 'var(--gold)'], ['audio', 'var(--sage)']];
+  let s = '';
+  for (let k = 0; k <= ticks; k++) {
+    const v = (max / ticks) * k;
+    s += `<line class="grid" x1="${L}" x2="${L + pw}" y1="${y(v)}" y2="${y(v)}"/>`;
+    s += `<text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  }
+  CLASSES.forEach((c, i) => {
+    const cx = L + slot * i + slot / 2;
+    series.forEach(([k, color], j) => {
+      const v = perHour(c[k], c.min);
+      const x = cx + (j - 1) * (bw + 4) - bw / 2;
+      s += `<rect x="${x}" y="${y(v)}" width="${bw}" height="${T + ph - y(v)}" rx="2" fill="${color}"><title>${c.date} ${c.time}, ${k}: ${n(v)} MB per hour</title></rect>`;
+      s += `<text x="${x + bw / 2}" y="${y(v) - 5}" text-anchor="middle" style="font-size:11px">${n(v)}</text>`;
+    });
+    s += `<text x="${cx}" y="${H - 28}" text-anchor="middle">${c.date.replace('September', 'Sep').replace('October', 'Oct')}</text>`;
+    s += `<text x="${cx}" y="${H - 12}" text-anchor="middle">${c.time}</text>`;
+  });
+  svg.innerHTML = s;
+})();
+</script>
+
+</body>
+</html>

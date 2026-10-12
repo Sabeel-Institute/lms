@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Class Video Costs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Marcellus&display=swap">
+<style>
+/* Layout: one reading column, two calculator sections, each inputs-then-results. Sabeel brand, single light theme. */
+:root {
+  --canvas: #F6EBDD;
+  --surface: #FBF6F0;
+  --raised: #FFFFFF;
+  --ink: #3A2F28;
+  --ink-2: #6A5748;
+  --muted: #A58D7A;
+  --line: #DFD1C1;
+  --line-strong: #C9B7A7;
+  --plum: #83114F;
+  --plum-soft: #E6CCC9;
+  --gold: #C6A15B;
+  --gold-text: #795E2A;
+  --gold-soft: #ECDCC3;
+  --success: #4E7A43;
+  --display: "Marcellus", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font: 15px/1.55 var(--body);
+  padding-inline: 16px;
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 920px; margin: 0 auto; display: grid; gap: 28px; }
+h1, h2 { font-family: var(--display); font-weight: 400; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 40px); line-height: 1.15; }
+h2 { font-size: 26px; line-height: 1.2; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-text); }
+header { display: grid; gap: 10px; }
+.lede { color: var(--ink-2); font-size: 16px; }
+
+.basis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+}
+.basis div { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; }
+.basis b { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.basis span { color: var(--ink-2); font-size: 13px; }
+.basis div:first-child { background: var(--plum); color: var(--surface); }
+.basis div:first-child span { color: var(--plum-soft); }
+
+section.calc {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 24px clamp(16px, 3vw, 28px); display: grid; gap: 20px; min-width: 0;
+}
+.calc > header p { color: var(--ink-2); }
+
+.control { display: grid; gap: 8px; }
+.control label { font-weight: 600; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+.control output { font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; color: var(--plum); }
+.control output small { font-size: 14px; font-weight: 500; color: var(--ink-2); }
+.control .hint { color: var(--ink-2); font-size: 13px; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px 28px; }
+input[type=range] { width: 100%; accent-color: var(--plum); height: 28px; }
+.check { display: flex; gap: 10px; align-items: center; font-weight: 500; cursor: pointer; width: fit-content; }
+.check input { width: 18px; height: 18px; accent-color: var(--plum); margin: 0; }
+.check input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+input[type=range]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--raised); display: grid; gap: 2px; }
+.tile .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .k { font-size: 13px; color: var(--ink-2); }
+.tile.key { background: var(--gold-soft); border-color: var(--gold); }
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 640px; }
+th, td { padding: 9px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); background: var(--surface); white-space: normal; vertical-align: bottom; }
+tbody tr:last-child td { border-bottom: 0; }
+tfoot td { font-weight: 700; border-top: 2px solid var(--line-strong); border-bottom: 0; background: var(--surface); }
+tfoot tr.avg td { border-top: 1px solid var(--line); font-weight: 600; }
+td.free { color: var(--success); }
+
+.chart { background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 14px 10px 6px; }
+.chart h3 { font: 600 15px var(--body); margin: 0 6px 6px; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 0 6px 4px; font-size: 13px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+svg { display: block; width: 100%; height: auto; }
+svg text { font-family: var(--body); font-size: 12px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+svg .grid { stroke: var(--line); stroke-width: 1; }
+svg .axis { stroke: var(--line-strong); stroke-width: 1; }
+
+.formula { font-size: 14px; color: var(--ink-2); background: var(--canvas); border-radius: 8px; padding: 10px 14px; font-variant-numeric: tabular-nums; }
+.formula b { color: var(--ink); font-weight: 600; }
+.notes { color: var(--ink-2); font-size: 13px; display: grid; gap: 4px; padding-left: 18px; margin: 0; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Sabeel Class Recordings · video estimate</span>
+    <h1>What class video would cost on Firebase</h1>
+    <p class="lede">Storing and streaming whiteboard video from Firebase Cloud Storage. Every figure below is in hours of video, and an hour of video is taken as 1&nbsp;GB.</p>
+  </header>
+
+  <div class="basis" aria-label="Assumptions">
+    <div><b>1 GB = 1 hour</b><span>Assumed size of one hour of 1080p whiteboard video</span></div>
+    <div><b>5 hours free</b><span>Storage, per month (5 GB-months), then $0.020 per hour per month</span></div>
+    <div><b>100 hours free</b><span>Viewing, per month (100 GB downloaded), then $0.12 per hour watched</span></div>
+  </div>
+
+  <section class="calc" aria-labelledby="storage-h">
+    <header style="display:grid;gap:6px">
+      <span class="eyebrow">1 · Storage</span>
+      <h2 id="storage-h">Keeping every recording for a year</h2>
+      <p>Video is added at the same rate every day of the week: the weekly hours divided by 7. Storage is billed on the average amount held over each month, so each month costs a little more than the one before. Nothing is deleted.</p>
+    </header>
+
+    <div class="control">
+      <label for="weekly">Hours of video recorded per week <output id="weeklyOut" for="weekly"></output></label>
+      <input id="weekly" type="range" min="0.5" max="40" step="0.5" value="20">
+      <span class="hint" id="dailyHint"></span>
+    </div>
+    <label class="check" for="storageNoFree"><input id="storageNoFree" type="checkbox"> No free tier (bill every hour stored)</label>
+
+    <div class="tiles">
+      <div class="tile"><span class="v" id="tAdded"></span><span class="k">Recorded in the year</span></div>
+      <div class="tile"><span class="v" id="tDec"></span><span class="k">December storage bill</span></div>
+      <div class="tile key"><span class="v" id="tYear"></span><span class="k">Storage for the whole year</span></div>
+      <div class="tile key"><span class="v" id="tAvg"></span><span class="k">Average per month over the year</span></div>
+    </div>
+
+    <div class="table-scroll" tabindex="0" aria-label="Storage by month">
+      <table>
+        <thead>
+          <tr>
+            <th>Month</th><th>Days</th><th>Video added</th><th>Stored at month end</th>
+            <th>Average stored (GB-months)</th><th id="billedHead">Billed after 5 free</th><th>Monthly cost</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+        <tfoot><tr><td>Year</td><td id="fDays"></td><td id="fAdded"></td><td>–</td><td>–</td><td>–</td><td id="fCost"></td></tr>
+          <tr class="avg"><td>Average per month</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td id="fAvg"></td></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="chart">
+      <h3>Hours stored and monthly cost</h3>
+      <div class="legend">
+        <span><i style="background:var(--plum)"></i>Monthly cost (left)</span>
+        <span><i style="background:var(--gold)"></i>Average hours stored (right)</span>
+        <span id="freeKey"><i style="background:none;border-top:2px dashed var(--success);height:0;border-radius:0"></i>5 free hours</span>
+      </div>
+      <svg id="chart" viewBox="0 0 760 330" role="img" aria-label="Bar chart of monthly storage cost with a line of average hours stored"></svg>
+    </div>
+  </section>
+
+  <section class="calc" aria-labelledby="view-h">
+    <header style="display:grid;gap:6px">
+      <span class="eyebrow">2 · Viewing</span>
+      <h2 id="view-h">Students watching</h2>
+      <p>Every hour a student watches is an hour of video downloaded, whether it is a first watch or a replay.</p>
+    </header>
+
+    <div class="controls">
+      <div class="control">
+        <label for="students">Students watching <output id="studentsOut" for="students"></output></label>
+        <input id="students" type="range" min="1" max="25" step="1" value="20">
+      </div>
+      <div class="control">
+        <label for="perStudent">Hours each student watches per week <output id="perStudentOut" for="perStudent"></output></label>
+        <input id="perStudent" type="range" min="0.5" max="20" step="0.5" value="3">
+      </div>
+    </div>
+
+    <label class="check" for="viewNoFree"><input id="viewNoFree" type="checkbox"> No free tier (bill every hour watched)</label>
+
+    <div class="formula" id="viewFormula"></div>
+
+    <div class="tiles">
+      <div class="tile"><span class="v" id="vHours"></span><span class="k">Hours watched per month</span></div>
+      <div class="tile"><span class="v" id="vBilled"></span><span class="k" id="vBilledLabel">Billed after 100 free</span></div>
+      <div class="tile key"><span class="v" id="vCost"></span><span class="k">Viewing cost per month</span></div>
+      <div class="tile"><span class="v" id="vYear"></span><span class="k">Viewing cost per year</span></div>
+    </div>
+  </section>
+
+  <ul class="notes">
+    <li>Prices are for a Cloud Storage bucket in us-central1, as used in the project's cost research: $0.020 per GB-month stored and $0.12 per GB downloaded. Google bills these in GiB, about 7% larger than a GB, so real bills run slightly lower.</li>
+    <li>The free 5 GB and 100 GB are shared by the whole project, including the audio recordings. Audio uses about 0.03 GB an hour.</li>
+    <li>A month is taken as 52 ÷ 12 = 4.33 weeks. The storage table uses the actual days in each month of 2027.</li>
+  </ul>
+</div>
+
+<script>
+(() => {
+  const GB_PER_HOUR = 1;
+  const STORAGE_FREE = 5, STORAGE_PRICE = 0.02;
+  const VIEW_FREE = 100, VIEW_PRICE = 0.12;
+  const WEEKS_PER_MONTH = 52 / 12;
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DAYS = [31,28,31,30,31,30,31,31,30,31,30,31];
+
+  const $ = (id) => document.getElementById(id);
+  const hrs = (n) => `${n.toLocaleString('en-US', { maximumFractionDigits: 1, minimumFractionDigits: n < 100 && n % 1 ? 1 : 0 })} h`;
+  const usd = (n) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtNum = (n, d = 1) => n.toLocaleString('en-US', { maximumFractionDigits: d });
+
+  /* Each day's video is added that morning and is stored for the whole day.
+     A month's GB-months are the mean of its daily stored amounts. */
+  function storageYear(weekly, free) {
+    const perDay = weekly / 7;
+    let day = 0;
+    return DAYS.map((days, i) => {
+      let sum = 0;
+      for (let d = 0; d < days; d++) { day++; sum += perDay * day; }
+      const avg = (sum / days) * GB_PER_HOUR;
+      const billed = Math.max(0, avg - free);
+      return { month: MONTHS[i], days, added: perDay * days, end: perDay * day, avg, billed, cost: billed * STORAGE_PRICE };
+    });
+  }
+
+  function niceMax(v) {
+    if (v <= 0) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p;
+    return 10 * p;
+  }
+
+  function drawChart(rows, free) {
+    const svg = $('chart');
+    const W = 760, H = 330, L = 64, R = 70, T = 14, B = 34;
+    const pw = W - L - R, ph = H - T - B;
+    const costMax = niceMax(Math.max(...rows.map(r => r.cost), 0.01));
+    const hoursMax = niceMax(Math.max(...rows.map(r => r.avg)));
+    const ticks = 5;
+    const yC = (v) => T + ph - (v / costMax) * ph;
+    const yH = (v) => T + ph - (v / hoursMax) * ph;
+    const slot = pw / rows.length, bw = slot * 0.56;
+    const cx = (i) => L + slot * i + slot / 2;
+    const costLabel = (v) => costMax < 1 ? `$${v.toFixed(2)}` : costMax < 10 ? `$${v.toFixed(1)}` : `$${fmtNum(v, 0)}`;
+    let s = '';
+    for (let k = 0; k <= ticks; k++) {
+      const y = T + ph - (k / ticks) * ph;
+      s += `<line class="grid" x1="${L}" x2="${L + pw}" y1="${y}" y2="${y}"/>`;
+      s += `<text x="${L - 8}" y="${y + 4}" text-anchor="end">${costLabel(costMax * k / ticks)}</text>`;
+      s += `<text x="${L + pw + 8}" y="${y + 4}" text-anchor="start">${fmtNum(hoursMax * k / ticks, 0)} h</text>`;
+    }
+    s += `<line class="axis" x1="${L}" x2="${L + pw}" y1="${T + ph}" y2="${T + ph}"/>`;
+    rows.forEach((r, i) => {
+      const y = yC(r.cost), h = T + ph - y;
+      s += `<rect x="${cx(i) - bw / 2}" y="${y}" width="${bw}" height="${Math.max(h, 0)}" rx="2" fill="var(--plum)"><title>${r.month}: ${usd(r.cost)}</title></rect>`;
+      s += `<text x="${cx(i)}" y="${H - 12}" text-anchor="middle">${r.month.slice(0, 3)}</text>`;
+    });
+    const pts = rows.map((r, i) => `${cx(i)},${yH(r.avg)}`).join(' ');
+    s += `<polyline points="${pts}" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round"/>`;
+    rows.forEach((r, i) => {
+      s += `<circle cx="${cx(i)}" cy="${yH(r.avg)}" r="${i === rows.length - 1 ? 5 : 3.5}" fill="var(--gold)" stroke="var(--raised)" stroke-width="1.5"><title>${r.month}: ${hrs(r.avg)} stored on average</title></circle>`;
+    });
+    const freeY = yH(free);
+    if (free > 0 && free < hoursMax) {
+      s += `<line x1="${L}" x2="${L + pw}" y1="${freeY}" y2="${freeY}" stroke="var(--success)" stroke-width="1" stroke-dasharray="4 4"/>`;
+    }
+    svg.innerHTML = s;
+  }
+
+  function renderStorage() {
+    const weekly = Number($('weekly').value);
+    $('weeklyOut').innerHTML = `${fmtNum(weekly)} <small>h / week</small>`;
+    $('dailyHint').textContent = `${fmtNum(weekly / 7, 2)} hours a day, every day of the week.`;
+    const free = $('storageNoFree').checked ? 0 : STORAGE_FREE;
+    $('billedHead').textContent = free ? `Billed after ${free} free` : 'Billed (no free tier)';
+    $('freeKey').hidden = !free;
+    const rows = storageYear(weekly, free);
+    $('rows').innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.month}</td><td>${r.days}</td><td>${hrs(r.added)}</td><td>${hrs(r.end)}</td>
+        <td>${hrs(r.avg)}</td><td>${hrs(r.billed)}</td>
+        <td class="${r.cost === 0 ? 'free' : ''}">${r.cost === 0 ? 'Free' : usd(r.cost)}</td>
+      </tr>`).join('');
+    const added = rows.reduce((a, r) => a + r.added, 0);
+    const year = rows.reduce((a, r) => a + r.cost, 0);
+    $('fDays').textContent = DAYS.reduce((a, b) => a + b, 0);
+    $('fAdded').textContent = hrs(added);
+    $('fCost').textContent = usd(year);
+    $('tAdded').textContent = hrs(added);
+    $('tDec').textContent = usd(rows[11].cost);
+    $('tYear').textContent = usd(year);
+    $('tAvg').textContent = usd(year / 12);
+    $('fAvg').textContent = usd(year / 12);
+    drawChart(rows, free);
+  }
+
+  function renderViewing() {
+    const students = Number($('students').value);
+    const per = Number($('perStudent').value);
+    $('studentsOut').textContent = students;
+    $('perStudentOut').innerHTML = `${fmtNum(per)} <small>h</small>`;
+    const total = WEEKS_PER_MONTH * students * per;
+    const free = $('viewNoFree').checked ? 0 : VIEW_FREE;
+    const billed = Math.max(0, total - free);
+    const cost = billed * VIEW_PRICE;
+    $('vBilledLabel').textContent = free ? `Billed after ${free} free` : 'Billed (no free tier)';
+    const step = !free
+      ? `<b>${fmtNum(billed)} h</b> × $0.12 = <b>${usd(cost)}</b>`
+      : billed > 0
+        ? `${fmtNum(total)} − ${free} free = <b>${fmtNum(billed)} h</b> × $0.12 = <b>${usd(cost)}</b>`
+        : `Inside the ${free} free hours, so <b>$0.00</b>`;
+    $('viewFormula').innerHTML =
+      `4.33 weeks × <b>${students}</b> students × <b>${fmtNum(per)} h</b> = <b>${fmtNum(total)} h</b> a month. ${step}`;
+    $('vHours').textContent = hrs(total);
+    $('vBilled').textContent = hrs(billed);
+    $('vCost').textContent = usd(cost);
+    $('vYear').textContent = usd(cost * 12);
+  }
+
+  $('weekly').addEventListener('input', renderStorage);
+  $('students').addEventListener('input', renderViewing);
+  $('perStudent').addEventListener('input', renderViewing);
+  $('storageNoFree').addEventListener('change', renderStorage);
+  $('viewNoFree').addEventListener('change', renderViewing);
+  renderStorage();
+  renderViewing();
+})();
+</script>
+
+</body>
+</html>

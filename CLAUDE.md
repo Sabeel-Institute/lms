@@ -7,8 +7,24 @@ Foundations classes, in-app listening for adult students, and an accountability
 ledger for staff. Faisal is the developer; the institute's staff are the
 admins/managers.
 
-**Still being built** — the admin backend-stats surface is not started; Zoom
-import is built and waiting on institute credentials.
+**This repo is the permanent home, and it is mid-move.** `Sabeel-Institute/lms`
+on GitHub, Firebase project `oursabeel-lms` under the oursabeel.com account.
+It carries the full history of `faisal-shah/sabeel-recording-app`, whose
+Firebase project `sabeel-class-recordings` (gmail account) stays the live app
+until switchover day. **The code here still names the legacy project in about
+twenty places: deploy nothing from this repo until Phase 0 of
+`docs/plans/SWITCHOVER.md` is done.** Never point a command from this checkout
+at `sabeel-class-recordings`. The plans:
+
+- `docs/plans/SWITCHOVER.md` — accounts, Phase 0, seeding, switchover day.
+- `docs/plans/MEDIA-ON-CLOUDFLARE.md` — all media on R2, Zoom copied by a
+  Cloudflare Worker.
+- `docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md` — video, parts and versions per
+  session, the new Zoom picker and player.
+- `docs/proposals/lms-assignments-proposal.html` — assignments and grades.
+
+The rules below describe the app as it is today. Each plan lists the rules it
+changes; change them in the same batch as the code.
 Source of truth: `docs/PRODUCT_BRIEF.md` (product decisions & data model),
 `PLAN.md` (the build order and locked architecture decisions),
 `docs/PHASE_STATUS.md` (live status), `docs/DEV-TOOLING.md` (what each script
