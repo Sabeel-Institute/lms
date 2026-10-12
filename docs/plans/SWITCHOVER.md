@@ -20,10 +20,11 @@ the assignments proposal, [../proposals/lms-assignments-proposal.html](../propos
 | GitHub | `faisal-shah/sabeel-recording-app` | `Sabeel-Institute/lms` |
 | Local checkout | `~/repos/faisal-shah/sabeel-recording-app` | `~/repos/Sabeel-Institute/lms` |
 | Google account | faisal.shah@gmail.com | faisal.shah@oursabeel.com |
-| Firebase / GCP project | `sabeel-class-recordings` | `oursabeel-lms` |
+| Firebase / GCP project | `sabeel-class-recordings` | `oursabeel-lms` (number 226338267845) |
 | Web address | `sabeel-class-recordings.web.app` | `oursabeel-lms.web.app` (custom domain to decide) |
-| Android package | `com.sabeelinstitute.classrecordings` | new ID, proposed `com.sabeelinstitute.lms` (confirm before the first Android build: it is permanent once published) |
-| Media storage | Firebase Cloud Storage | Cloudflare R2 |
+| Android package | `com.sabeelinstitute.classrecordings` | `com.sabeelinstitute.lms` |
+| Media storage | Firebase Cloud Storage | Cloudflare R2 (no Firebase Storage bucket at all) |
+| Billing | personal | `My Billing Account` (`014B85-39659A-255E25`), shared with `oursabeel-website` |
 | Sentry | personal org, existing projects | same projects for now |
 
 In this checkout, `git remote legacy` points at the old repo for fetching any
@@ -43,8 +44,14 @@ the first line.
 - Repo `Sabeel-Institute/lms`, public, full history.
 - Firebase project `oursabeel-lms` under oursabeel.com. No "preview",
   "staging" or "v2" in any permanent name.
-- A **new** Android package ID. The new app installs beside the old one; the
-  old one is retired with a final update that points to the new one (below).
+- A **new** Android package ID, `com.sabeelinstitute.lms`. The new app
+  installs beside the old one; the old one is retired with a final update
+  that points to the new one (below).
+- **No Firebase Storage bucket.** Media goes to R2 from the first deploy, so
+  the R2 move ([MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md)) is part of
+  Phase 0 rather than a later migration. Nothing else needs a default bucket:
+  Functions deploys use their own `gcf-*` buckets, and the seeding export uses
+  a bucket in the legacy project.
 - Sentry: the existing projects for now. `app/.env.local`,
   `app/android/sentry.properties` and `functions/.secret.local` were copied
   from the legacy checkout. Both `google-services.json` files were **not**
@@ -59,28 +66,25 @@ code still names the legacy project in about twenty places.
 
 ### Faisal (consoles and credentials)
 
-1. `gcloud auth login faisal.shah@oursabeel.com` and
-   `npx firebase login --reauth` (both oursabeel.com logins had expired on
-   2026-10-12).
-2. Create the GCP project `oursabeel-lms` under the oursabeel.com
-   organization, add Firebase, and link a billing account (Blaze: Functions
-   need it).
-3. Firestore: Native mode, location **`nam5`**, matching the legacy database.
-   The location is permanent.
-4. Authentication: enable Email/Password and Google. Add the hosting domain
+Done on 2026-10-12: both oursabeel.com logins renewed; GCP project
+`oursabeel-lms` (number 226338267845) created under the oursabeel.com
+organization with Firebase added; billing linked; Firestore Native in
+**`nam5`**, matching the legacy database; web app "Sabeel LMS web"
+(`1:226338267845:web:2e285dbdf341e54bcac6ac`) registered.
+
+Still to do:
+
+1. Authentication: enable Email/Password and Google. Add the hosting domain
    and any custom domain to the authorized domains. Configure the OAuth
    consent screen for internal (oursabeel.com) plus the student population.
-5. Grant the Functions runtime service account
-   `roles/iam.serviceAccountTokenCreator` on itself (the first-deploy blocker
-   from `docs/SECRETS.md`; still needed while any signing uses Google).
-6. Secrets in Secret Manager, set by Faisal: `ZOOM_ACCOUNT_ID`,
+2. Secrets in Secret Manager, set by Faisal: `ZOOM_ACCOUNT_ID`,
    `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `SENTRY_DSN`, then the R2 and
    Worker secrets in [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md).
    The agent prints the exact `firebase functions:secrets:set` commands and
    never handles a value.
-7. Register the web app; later the Android app with the new package ID and
-   the signing key's SHA-1.
-8. Cloudflare account for the institute (card on file, R2 enabled), and a
+3. Register the Android app (`com.sabeelinstitute.lms`) with the new
+   release key's SHA-1.
+4. Cloudflare account for the institute (card on file, R2 enabled), and a
    `wrangler login`.
 
 ### Agent (code)
@@ -102,7 +106,12 @@ code still names the legacy project in about twenty places.
    app during development would get every reminder twice.
 4. Docs: `CLAUDE.md`, `docs/DEPLOY.md`, `docs/SECRETS.md`, `TODO.md` and
    `docs/DEV-TOOLING.md` rewritten for the new accounts in the same batch.
-5. First deploy of rules, indexes, functions and hosting to `oursabeel-lms`,
+5. The media move to R2 and the Worker, per
+   [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md), before any deploy.
+   `storage.rules` and the `storage` block in `firebase.json` are deleted;
+   there is no `roles/iam.serviceAccountTokenCreator` grant to make, since
+   URLs are signed with R2 keys.
+6. First deploy of rules, indexes, functions and hosting to `oursabeel-lms`,
    then `npm run smoke:prod` against the new address.
 
 ## Seeding from the legacy project
@@ -149,5 +158,4 @@ step 4 the new project is the record.
 - Custom domain for the app (for example `app.oursabeel.com`), which would
   also become the auth domain.
 - The app's display name now that it is more than recordings.
-- The confirmed Android package ID.
 - When to move Sentry to institute-owned projects.
