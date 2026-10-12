@@ -138,24 +138,36 @@ Still to do (steps in `TODO.md`):
 
 ## Seeding from the legacy project
 
-A re-runnable script, run by Faisal (it touches both projects' credentials),
-copies a snapshot so that teachers and students can sign in with what they
-already use:
+`scripts/seed-from-legacy.mjs` copies a snapshot, so teachers and students sign
+in here with what they already use. First run: 2026-10-12, before the first
+deploy (994 documents, 46 accounts, 8 audio files, 442.5 MB; counts matched).
+
+```bash
+node scripts/seed-from-legacy.mjs --from sabeel-class-recordings --from-account faisal.shah@gmail.com         # dry run
+node scripts/seed-from-legacy.mjs --from sabeel-class-recordings --from-account faisal.shah@gmail.com --yes   # wipe here, copy
+```
+
+The legacy project is named only on the command line, and the script only
+reads it (GETs and lists, with the gmail account's token; no export bucket, no
+IAM change there).
 
 | What | How | Notes |
 |---|---|---|
-| Accounts | `firebase auth:export` from legacy, `firebase auth:import` into `oursabeel-lms` with the legacy project's scrypt hash parameters | Same uids, same passwords, same Google links, same custom claims (`role`, `status`). The hash parameters come from the legacy console and are treated as a secret. |
-| Firestore | `gcloud firestore export` to a bucket, grant the new project's Firestore service agent read on it, `gcloud firestore import` | Same document ids, so every reference by uid or id stays intact. |
-| Media | Copy each object from the legacy bucket into R2 at the same key | See [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md); a few hundred MB today. |
-| Push registrations | **Deleted** after import | FCM tokens belong to the legacy project's sender and cannot deliver from the new one. Devices re-register on first sign-in. |
+| Accounts | Identity Toolkit `accounts:batchGet` from legacy, `accounts:batchCreate` here with legacy's scrypt parameters (read from its Auth config into the process, never printed) | Same uids, same passwords, same Google links, same custom claims (`role`, `status`). |
+| Firestore | Every document, recursively, through the REST API, field values passed through unchanged | Same document ids, so every reference by uid or id stays intact. |
+| Media | Every object under `recordings/` in the legacy bucket, streamed into R2 at the same key | Through this machine: pennies of Google egress at this size. |
+| Push registrations | **Not copied** (`notifications/{uid}/devices`) | FCM tokens belong to the legacy project's sender and cannot deliver from here. Devices register again on first sign-in. |
 | Zoom import markers | Kept | So a recording imported in legacy is not offered again. |
 
-Re-seeding during development wipes the new project first. Anything entered
-in `oursabeel-lms` before switchover is test data and is lost on the next
-seed; staff trying features early are told so.
+Every run wipes this project first: anything entered here before switchover is
+test data and is lost on the next run, and staff trying features early are told
+so. After copying, it counts documents per collection shape, accounts, claims,
+and media objects and sizes on both sides, and fails on any difference.
 
-After every seed, a count check compares document counts per collection and
-user counts between the two projects and fails loudly on any difference.
+Once functions are deployed, a re-run's writes fire the triggers here
+(`onRecordingWritten`, `onSessionWritten`, `onAssignmentWritten`). They
+reconcile what was just copied and change nothing, and notifications go to
+staff only until switchover (`NOTIFY_AUDIENCE`).
 
 ## Switchover day
 
