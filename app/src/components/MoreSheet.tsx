@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
-import { PRIVACY_URL, type Role } from '@sabeel/shared';
+import { APP_NAME, PRIVACY_URL, type Role } from '@sabeel/shared';
 import { Sheet, SheetOption, SheetSection } from './Sheet';
 import { signOut } from '../session';
 import { sendMyPasswordReset } from '../students';
@@ -146,7 +146,7 @@ export function MoreSheet({
           only place the version appears is the screen you have already left. */}
       <View style={styles.build}>
         <Text style={styles.buildText}>
-          Class Recordings · {BUILD_LABEL}
+          {APP_NAME} · {BUILD_LABEL}
         </Text>
       </View>
     </Sheet>

@@ -17,7 +17,7 @@
  * and the number is typed by hand.
  */
 import { createRequire } from 'node:module';
-import { APP_CONFIG_DOC, COLLECTIONS } from '@sabeel/shared';
+import { APP_CONFIG_DOC, COLLECTIONS, FIREBASE_PROJECT_ID } from '@sabeel/shared';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
@@ -28,7 +28,7 @@ if (!raw || !Number.isInteger(minVersionCode) || minVersionCode < 1) {
   console.error(`usage: set-min-version.mjs <versionCode>  (got "${raw ?? ''}")`);
   process.exit(2);
 }
-const PROJECT_ID = process.env.CHECK_PROJECT ?? 'sabeel-class-recordings';
+const PROJECT_ID = process.env.CHECK_PROJECT ?? FIREBASE_PROJECT_ID;
 admin.initializeApp({ projectId: PROJECT_ID });
 const db = admin.firestore();
 const ref = db.collection(COLLECTIONS.config).doc(APP_CONFIG_DOC);

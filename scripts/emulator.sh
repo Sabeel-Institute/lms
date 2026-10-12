@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sabeel Class Recordings Android emulator helper (same AVD as other projects).
+# Sabeel Institute LMS Android emulator helper (same AVD as other projects).
 # AVD: tb_emu — Pixel 6 (1080x2400), API 35, Google APIs (Play services, so Google
 # Sign-In works).
 #

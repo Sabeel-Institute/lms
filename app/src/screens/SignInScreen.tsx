@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { FIRST_ADMIN_LOCAL_PART } from '@sabeel/shared';
+import { APP_NAME, FIRST_ADMIN_LOCAL_PART } from '@sabeel/shared';
 import { auth } from '../firebase';
 import { signInWithGoogle } from '../auth/google';
 import { signInMessage } from '../auth/signInMessage';
@@ -40,7 +40,7 @@ export function SignInScreen() {
   };
 
   return (
-    <Screen title="Class Recordings" subtitle="Sabeel Institute">
+    <Screen title={APP_NAME}>
       <View style={styles.block}>
         <Text style={styles.groupTitle}>Staff</Text>
         <Text style={styles.groupHint}>

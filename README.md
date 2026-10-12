@@ -1,4 +1,4 @@
-# Sabeel Class Recordings
+# Sabeel Institute LMS
 
 Class recordings for Sabeel Institute — audio-only recordings of Hikam
 Foundations classes, in-app listening for adult students, and an accountability

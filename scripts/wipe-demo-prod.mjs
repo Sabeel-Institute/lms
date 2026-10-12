@@ -50,11 +50,14 @@
  * course's `managerUids`. Real students' marks are untouched.
  */
 import { createRequire } from 'node:module';
+import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 
-const PROJECT = 'sabeel-class-recordings';
-const BUCKET = 'sabeel-class-recordings.firebasestorage.app';
+const PROJECT = FIREBASE_PROJECT_ID;
+// No such bucket exists: media moves to R2 before the first deploy, and this
+// script moves with it (docs/plans/MEDIA-ON-CLOUDFLARE.md, M2).
+const BUCKET = `${PROJECT}.firebasestorage.app`;
 const EXECUTE = process.argv.includes('--yes');
 if (process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error('FIRESTORE_EMULATOR_HOST is set — this script targets production.');

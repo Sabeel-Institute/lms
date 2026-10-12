@@ -14,7 +14,7 @@ import {
   useRoute,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import type { Role } from '@sabeel/shared';
+import { APP_NAME, APP_SHORT_NAME, type Role } from '@sabeel/shared';
 import { useMinVersion } from './src/minVersion';
 import { useSession } from './src/session';
 import { liveDueDate, useMyAssignmentState } from './src/completion';
@@ -162,7 +162,7 @@ const STUDENT_LINKING = buildLinking(STUDENT_PATHS);
 /** Otherwise the browser tab reads the route name — "CourseDetail". */
 const documentTitle = {
   formatter: (options?: { title?: string }, route?: { name?: string }) =>
-    `${options?.title ?? route?.name ?? ''} · Class Recordings`,
+    `${options?.title ?? route?.name ?? ''} · ${APP_SHORT_NAME}`,
 };
 
 /** Shown while a screen's documents are still resolving from their ids. */
@@ -270,7 +270,7 @@ export default function App() {
                   and its own heading already names it — so `Screen` takes over the
                   status-bar inset there instead. One list decides which is which:
                   `HEADERLESS`, read by `screenOptions` below. */}
-              <Stack.Screen name="Home" options={screenOptions('Home', 'Class Recordings')}>
+              <Stack.Screen name="Home" options={screenOptions('Home', APP_NAME)}>
                 {() => <Landing role={role} uid={user.uid} isAdmin={isAdmin} />}
               </Stack.Screen>
               <Stack.Screen name="Notifications" options={screenOptions('Notifications', 'Notifications')}>

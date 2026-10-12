@@ -17,7 +17,7 @@
  * or production's for a release build.
  */
 import { createRequire } from 'node:module';
-import { PUSH_CHANNEL_ID, WEB_APP_URL } from '@sabeel/shared';
+import { FIREBASE_PROJECT_ID, PUSH_CHANNEL_ID, WEB_APP_URL } from '@sabeel/shared';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
@@ -29,7 +29,7 @@ if (!token || token.length < 100) {
   process.exit(2);
 }
 
-admin.initializeApp({ projectId: 'sabeel-class-recordings' });
+admin.initializeApp({ projectId: FIREBASE_PROJECT_ID });
 const id = await admin.messaging().send({
   token,
   notification: { title, body },

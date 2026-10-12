@@ -18,7 +18,7 @@
  * different fields, add the shape here in the same change.
  */
 import { createRequire } from 'node:module';
-import { AUDIT_PAGE } from '@sabeel/shared';
+import { AUDIT_PAGE, FIREBASE_PROJECT_ID } from '@sabeel/shared';
 
 // Resolved from the functions workspace, which already depends on the Admin SDK.
 // Adding it at the root would be a second copy of a large package for one
@@ -26,7 +26,7 @@ import { AUDIT_PAGE } from '@sabeel/shared';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 
-const PROJECT_ID = process.env.CHECK_PROJECT ?? 'sabeel-class-recordings';
+const PROJECT_ID = process.env.CHECK_PROJECT ?? FIREBASE_PROJECT_ID;
 admin.initializeApp({ projectId: PROJECT_ID });
 const db = admin.firestore();
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 
 /**
  * The web push service worker carries its OWN copy of the Firebase config.
@@ -22,10 +23,15 @@ function field(src: string, key: string): string | undefined {
 }
 
 describe('the push service worker restates the app’s Firebase config', () => {
-  it.each(['apiKey', 'projectId', 'messagingSenderId', 'appId'])('%s matches', (key) => {
+  it.each(['apiKey', 'messagingSenderId', 'appId'])('%s matches', (key) => {
     const expected = field(config, key);
     expect(expected, `${key} not found in firebase-config.ts`).toBeTruthy();
     expect(field(worker, key), `${key} in the service worker`).toBe(expected);
+  });
+
+  it('projectId matches the shared project id the app config is built from', () => {
+    expect(config).toMatch(/\bprojectId:\s*FIREBASE_PROJECT_ID\b/);
+    expect(field(worker, 'projectId')).toBe(FIREBASE_PROJECT_ID);
   });
 
   it('pins the same compat SDK major as the app bundles', () => {

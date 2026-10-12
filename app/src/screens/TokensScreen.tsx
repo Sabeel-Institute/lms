@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CONTENT_MAX_WIDTH, getTheme, spacing, useTheme } from '../theme';
+import { APP_NAME } from '@sabeel/shared';
 
 const t = getTheme();
 
@@ -51,7 +52,7 @@ export function TokensScreen() {
       style={styles.canvas}
       contentContainerStyle={styles.content}
     >
-      <Text style={styles.h1}>Class Recordings</Text>
+      <Text style={styles.h1}>{APP_NAME}</Text>
       <Text style={styles.lede}>
         Design tokens — Sabeel Institute, Option 1 palette. Single light theme.
       </Text>

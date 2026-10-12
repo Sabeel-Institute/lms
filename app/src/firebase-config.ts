@@ -1,29 +1,31 @@
+import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
+
 // Firebase WEB APP client config — NOT a secret (it ships in every client bundle).
-// From Firebase console → Project settings → Your apps → Web app.
+// From Firebase console → Project settings → Your apps → Web app ("Sabeel LMS
+// web"), or `firebase apps:sdkconfig WEB <appId>`.
 //
-// These are the REAL `sabeel-class-recordings` values (live since Phase 3).
+// The project id comes from `@sabeel/shared`, the one place that names it.
 // Under EXPO_PUBLIC_USE_EMULATORS=1, firebase.ts overrides projectId to the demo
-// project and ignores the rest, so a dev/emulator bundle never touches them.
+// project and the bucket to the emulator's, so a dev/emulator bundle never
+// touches the real values.
 //
-// Two things that were got right here, both recorded in docs/DEPLOY.md:
-//  - `authDomain` must be the HOSTING domain (<project>.web.app), not
-//    firebaseapp.com. Hosting serves /__/auth/* itself, keeping the sign-in
-//    redirect same-origin — required in storage-partitioned in-app webviews,
-//    where the cross-domain helper dies with "missing initial state".
-//  - `storageBucket` must be a modern *.firebasestorage.app bucket in
-//    us-central1, us-west1 or us-east1. Only those get the 5 GB-month /
-//    100 GB-month no-cost quotas; a legacy appspot.com bucket is capped at
-//    1 GB/day of downloads (docs/research/firebase-recording-costs.md).
+// `authDomain` must be the HOSTING domain (<project>.web.app), not the
+// console-supplied firebaseapp.com. Hosting serves /__/auth/* itself, keeping
+// the sign-in redirect same-origin — required in storage-partitioned in-app
+// webviews, where the cross-domain helper dies with "missing initial state"
+// (docs/DEPLOY.md). Both domains are authorized for sign-in, so it can be
+// switched back without console work if it ever needs to be.
+//
+// `storageBucket` names a bucket that does not exist: this project has no
+// Firebase Storage bucket, and media moves to Cloudflare R2 before the first
+// deploy (docs/plans/MEDIA-ON-CLOUDFLARE.md). The field goes with that move.
 export const firebaseConfig = {
-  apiKey: "AIzaSyB53BouBcPy1_dTi3sCXcDibbCFSWTSBCk",
-  // Hosting domain, NOT the console-supplied firebaseapp.com — see the note
-  // above. Both are registered as OAuth redirect URIs, so this can be switched
-  // back without console work if it ever needs to be.
-  authDomain: "sabeel-class-recordings.web.app",
-  projectId: "sabeel-class-recordings",
-  storageBucket: "sabeel-class-recordings.firebasestorage.app",
-  messagingSenderId: "977423479850",
-  appId: "1:977423479850:web:ffb551dcf015bd5f33bf53"
+  apiKey: 'AIzaSyC6N2JTrBAwLQ9zpwLdoAbQNt0nrOunwQQ',
+  authDomain: `${FIREBASE_PROJECT_ID}.web.app`,
+  projectId: FIREBASE_PROJECT_ID,
+  storageBucket: `${FIREBASE_PROJECT_ID}.firebasestorage.app`,
+  messagingSenderId: '226338267845',
+  appId: '1:226338267845:web:2e285dbdf341e54bcac6ac',
 };
 
 
@@ -45,9 +47,8 @@ export { GOOGLE_WEB_CLIENT_ID as WEB_CLIENT_ID } from '@sabeel/shared';
  * the pair, and shipping it in every client bundle is precisely its job — the
  * browser needs it to subscribe. The private half never leaves Google.
  *
- * An empty value is still handled: `push.web.ts` returns no token and the
- * settings screen says the device cannot receive push, rather than throwing on
- * load. That is the state a fresh clone of a different project would be in.
+ * Empty until the key pair is generated for this project (TODO.md). An empty
+ * value is handled: `push.web.ts` returns no token and the settings screen says
+ * the device cannot receive push, rather than throwing on load.
  */
-export const VAPID_PUBLIC_KEY =
-  'BCUDRuIrVz3izxyxeoTgq8bU8LZ0yDQ4OWEXQYhtjlswv-MIcdMk-b1TNiHbifsWzU7Ro9t9ZkKmZXplqGD-aRs';
+export const VAPID_PUBLIC_KEY = '';

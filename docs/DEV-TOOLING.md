@@ -441,7 +441,7 @@ denied. Note the two different URL shapes: reads use
   any screenshot:
 
   ```bash
-  adb shell dumpsys package com.sabeelinstitute.classrecordings | grep versionName
+  adb shell dumpsys package com.sabeelinstitute.lms | grep versionName
   ```
 
   It must match `version` in `app/app.json`.

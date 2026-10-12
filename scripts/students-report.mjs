@@ -47,12 +47,12 @@
  * transcripts; `--email` prints back only the address it was given.
  */
 import { createRequire } from 'node:module';
-import { COLLECTIONS, INSTITUTE_TIMEZONE, isAllowedStaffEmail } from '@sabeel/shared';
+import { COLLECTIONS, FIREBASE_PROJECT_ID, INSTITUTE_TIMEZONE, isAllowedStaffEmail } from '@sabeel/shared';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 
-const PROJECT = 'sabeel-class-recordings';
+const PROJECT = FIREBASE_PROJECT_ID;
 const USAGE = 'usage: npm run students:report [-- --email <student address>]';
 
 const args = process.argv.slice(2);

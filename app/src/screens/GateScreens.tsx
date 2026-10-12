@@ -1,5 +1,5 @@
 import { Linking, StyleSheet, Text } from 'react-native';
-import { DOWNLOAD_PAGE_URL } from '@sabeel/shared';
+import { APP_NAME, DOWNLOAD_PAGE_URL } from '@sabeel/shared';
 import { Button, Card, Notice, Screen } from '../components/ui';
 import { BUILD_LABEL } from '../buildInfo';
 import { signOut } from '../session';
@@ -76,7 +76,7 @@ export function ProvisioningScreen() {
  */
 export function UpdateScreen({ signedIn }: { signedIn: boolean }) {
   return (
-    <Screen title="Update needed" subtitle="This version of Class Recordings is out of date">
+    <Screen title="Update needed" subtitle={`This version of ${APP_NAME} is out of date`}>
       <Card>
         <Notice tone="info">
           Install the current build to keep using the app. Your listening records are kept;

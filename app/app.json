@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Class Recordings",
-    "slug": "sabeel-class-recordings",
-    "scheme": "sabeelclassrecordings",
+    "name": "Sabeel Institute LMS",
+    "slug": "sabeel-institute-lms",
+    "scheme": "sabeellms",
     "version": "0.7.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -12,7 +12,7 @@
     ],
     "icon": "./assets/icon.png",
     "android": {
-      "package": "com.sabeelinstitute.classrecordings",
+      "package": "com.sabeelinstitute.lms",
       "versionCode": 34,
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,

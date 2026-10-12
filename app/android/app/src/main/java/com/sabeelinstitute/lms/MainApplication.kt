@@ -1,4 +1,4 @@
-package com.sabeelinstitute.classrecordings
+package com.sabeelinstitute.lms
 
 import android.app.Application
 import android.content.res.Configuration

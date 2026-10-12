@@ -23,12 +23,13 @@ importScripts('https://www.gstatic.com/firebasejs/12.15.0/firebase-messaging-com
 
 // Only the messaging fields matter here; this worker never reads Firestore or
 // signs anyone in. `apiKey` and `projectId` are not secrets — they ship in the
-// app bundle already.
+// app bundle already. A worker has no bundler, so these are literals;
+// `serviceWorkerConfig.test.ts` holds them to `firebase-config.ts`.
 firebase.initializeApp({
-  apiKey: 'AIzaSyB53BouBcPy1_dTi3sCXcDibbCFSWTSBCk',
-  projectId: 'sabeel-class-recordings',
-  messagingSenderId: '977423479850',
-  appId: '1:977423479850:web:ffb551dcf015bd5f33bf53',
+  apiKey: 'AIzaSyC6N2JTrBAwLQ9zpwLdoAbQNt0nrOunwQQ',
+  projectId: 'oursabeel-lms',
+  messagingSenderId: '226338267845',
+  appId: '1:226338267845:web:2e285dbdf341e54bcac6ac',
 });
 
 // Registering messaging is enough for a closed or hidden tab: the SDK shows the

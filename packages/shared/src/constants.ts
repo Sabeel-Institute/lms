@@ -1,3 +1,25 @@
+/**
+ * The Firebase / Google Cloud project this repo deploys to, and the one place
+ * that names it.
+ *
+ * Everything else derives from it: the web address below, the client config
+ * (`app/src/firebase-config.ts`), the admin scripts. The few files that cannot
+ * import it — `.firebaserc`, the push service worker — restate it, and
+ * `functions/test/unit/projectIdentity.test.ts` holds them to it. That test also
+ * fails if the retired personal project's id appears anywhere outside `docs/`,
+ * so no command from this checkout can reach it by accident.
+ */
+export const FIREBASE_PROJECT_ID = 'oursabeel-lms';
+
+/** The app's name, as the web app and the screens show it. */
+export const APP_NAME = 'Sabeel Institute LMS';
+
+/**
+ * The name where there is room for little: the Android home screen (launchers
+ * cut labels at about 12 characters) and the browser tab suffix.
+ */
+export const APP_SHORT_NAME = 'Sabeel LMS';
+
 /** Cloud Functions region. One constant so app, functions and tests agree. */
 export const REGION = 'us-central1';
 
@@ -99,7 +121,7 @@ export const SIGNED_URL_REFRESH_MS = 60 * 60 * 1000;
  * Absolute, not a relative path: it is opened from the native apps as well as
  * the browser, where there is no origin to be relative to.
  */
-export const WEB_APP_URL = 'https://sabeel-class-recordings.web.app/';
+export const WEB_APP_URL = `https://${FIREBASE_PROJECT_ID}.web.app/`;
 export const PRIVACY_URL = `${WEB_APP_URL}privacy`;
 
 /**
@@ -197,4 +219,4 @@ export const AUDIT_PAGE = 200;
  * classic source of the opaque `DEVELOPER_ERROR`.
  */
 export const GOOGLE_WEB_CLIENT_ID =
-  '977423479850-k1r54fn135p62fa165n8gfngbafssv5q.apps.googleusercontent.com';
+  '226338267845-4ik78e1nokc2nu5rt9rujo0sr89cg9cp.apps.googleusercontent.com';

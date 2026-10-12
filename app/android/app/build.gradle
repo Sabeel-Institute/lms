@@ -88,9 +88,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.sabeelinstitute.classrecordings'
+    namespace 'com.sabeelinstitute.lms'
     defaultConfig {
-        applicationId 'com.sabeelinstitute.classrecordings'
+        applicationId 'com.sabeelinstitute.lms'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 34

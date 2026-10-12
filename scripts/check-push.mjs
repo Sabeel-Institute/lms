@@ -36,16 +36,17 @@
  */
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import { FIREBASE_PROJECT_ID as projectId } from '@sabeel/shared';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 
 const ROOT = new URL('..', import.meta.url);
 
-// Read the SHIPPED values rather than restating them, so this cannot pass
-// against a key the app does not actually carry.
+// Read the SHIPPED key rather than restating it, so this cannot pass against a
+// key the app does not actually carry. The project id is the shared constant
+// the app's config is built from.
 const config = readFileSync(new URL('app/src/firebase-config.ts', ROOT), 'utf8');
-const projectId = config.match(/projectId:\s*["']([^"']+)["']/)?.[1];
 const vapid = config.match(/VAPID_PUBLIC_KEY\s*=\s*\n?\s*'([^']*)'/)?.[1] ?? '';
 
 console.log(`Push send path against ${projectId}\n`);

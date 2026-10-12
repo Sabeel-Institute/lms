@@ -25,6 +25,7 @@
  *    consistent with the real engine rather than a parallel invention of it.
  */
 import { createRequire } from 'node:module';
+import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
@@ -32,8 +33,10 @@ import { dirname, resolve } from 'node:path';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 
-const PROJECT = 'sabeel-class-recordings';
-const BUCKET = 'sabeel-class-recordings.firebasestorage.app';
+const PROJECT = FIREBASE_PROJECT_ID;
+// No such bucket exists: media moves to R2 before the first deploy, and this
+// script moves with it (docs/plans/MEDIA-ON-CLOUDFLARE.md, M2).
+const BUCKET = `${PROJECT}.firebasestorage.app`;
 if (process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error('FIRESTORE_EMULATOR_HOST is set — this script targets production.');
 }

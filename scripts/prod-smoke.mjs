@@ -15,9 +15,9 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { FIREBASE_PROJECT_ID as PROJECT_ID, WEB_APP_URL } from '@sabeel/shared';
 
-const BASE = process.env.SMOKE_BASE ?? 'https://sabeel-class-recordings.web.app';
-const PROJECT_ID = 'sabeel-class-recordings';
+const BASE = process.env.SMOKE_BASE ?? WEB_APP_URL.replace(/\/$/, '');
 const ROOT = new URL('..', import.meta.url).pathname;
 
 const fails = [];

@@ -349,7 +349,7 @@ Slurper can copy straight from a GCS bucket for free if that ever matters.
 | Step | What | Proves |
 |---|---|---|
 | M1 spike | Worker copies one real Zoom recording (the 1.2 GB 2026-10-01 file) into a scratch R2 bucket | Free-plan CPU and subrequests, time for a 3-hour class, the link's 60-minute window in practice |
-| M2 | `MediaStore` on R2 + SeaweedFS in all three test harnesses; `s3-conformance.mjs` against both; playback signs from R2 | Real signed playback locally; expiry is asserted |
+| M2 | `MediaStore` on R2 + SeaweedFS in all three test harnesses; `s3-conformance.mjs` against both; playback signs from R2; `seed-demo-prod.mjs` and `wipe-demo-prod.mjs` write and delete media in R2 | Real signed playback locally; expiry is asserted |
 | M3 | Staff upload: single PUT and multipart, probe, write-once, failure cleanup | Browser and Android uploads (Android on the AVD: native seam) |
 | M4 | Zoom import through the Worker, async with task queue | Copy of a 3-hour class end to end; retry after the link has expired |
 | M5 | Migration in the seed script; deletion cascade; sweep | Count and byte checks between legacy and R2 |
