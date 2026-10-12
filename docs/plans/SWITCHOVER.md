@@ -62,8 +62,7 @@ the first line.
 
 ## Phase 0: the project, and the code pointing at it
 
-Nothing in this repo may be deployed until this phase is done. Until then the
-code still names the legacy project in about twenty places.
+Nothing in this repo may be deployed until this phase is done.
 
 ### Faisal (consoles and credentials)
 
@@ -89,41 +88,43 @@ R2 enabled. `wrangler` is logged in here as faisal.shah@oursabeel.com. Bucket
 disabled, no custom domain. Its CORS and lifecycle rules are applied from the
 repo during the media work.
 
-Still to do:
+Also done: the two bucket-scoped R2 API tokens from
+[MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md) (`R2_READ_*` Object Read,
+`R2_WRITE_*` Object Read & Write), pasted by Faisal straight into Secret
+Manager; and a Cloudflare budget alert at $10/month, which, like Google's,
+alerts and never stops anything.
 
-1. The two bucket-scoped R2 API tokens from
-   [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md), created in the Cloudflare
-   dashboard (R2 → Manage API tokens; wrangler's login cannot create them),
-   and their key id and secret pasted by Faisal straight into Secret Manager
-   (`firebase functions:secrets:set`, or the Secret Manager page in the
-   console). Never through chat.
-2. A Cloudflare budget alert at $10/month (Billing → Billable Usage → Create
-   budget alert). Dashboard only; like Google's, it alerts and never stops
-   anything.
-3. Register the Android app (`com.sabeelinstitute.lms`) with the new
-   release key's SHA-1.
-4. Workers starts on the Free plan; the M1 copy spike decides whether Paid
+Still to do (each with exact steps in `TODO.md`):
+
+1. Generate the Web Push key pair for this project, so web push can register.
+2. Register the Android app (`com.sabeelinstitute.lms`) with the debug key's
+   SHA-1, and later the release key's, then download its
+   `google-services.json`. The Android build needs that file.
+3. Workers starts on the Free plan; the M1 copy spike decides whether Paid
    ($5/month) is needed.
 
 ### Agent (code)
 
-1. **One source for the project's identity.** Replace every literal
-   `sabeel-class-recordings` with values derived from one place
-   (`packages/shared` constants plus the generated web config), and add a
-   test that fails if the legacy id appears anywhere outside `docs/` and the
-   one-off migration scripts. Files that name it today include
-   `.firebaserc`, `app/src/firebase-config.ts`, `app/app.json`,
-   `app/public/firebase-messaging-sw.js`, `packages/shared/src/constants.ts`,
-   `package.json` and the admin scripts under `scripts/`.
-2. **New Android identity:** `applicationId`, `app.json` package, the
-   Google web client id, the release signing key (the legacy build signs
-   release APKs with the debug keystore; the new app should get its own
-   release key, kept out of git like every other secret).
-3. **Notifications go to testers only until switchover.** A server-side
-   allowlist of uids. Without it, a real student who signs in to the new web
-   app during development would get every reminder twice.
+1. **One source for the project's identity.** Done: `FIREBASE_PROJECT_ID`,
+   `APP_NAME` and `APP_SHORT_NAME` in `packages/shared`; the web config, the
+   Google web client id and the admin scripts derive from them, and
+   `projectIdentity.test.ts` fails if the legacy project id, its project
+   number or the old Android package appears in any code or config. The
+   one-off migrations already run on the legacy data were deleted rather
+   than retargeted: the seed copies data they have already fixed.
+2. **New Android identity.** Done: package `com.sabeelinstitute.lms` in
+   `app.json`, Gradle and the Kotlin sources, launcher label "Sabeel LMS",
+   link scheme `sabeellms`. Still open: the release signing key (the legacy
+   build signs release APKs with the debug keystore; the new app gets its
+   own, kept out of git like every other secret), and where the APK is
+   downloaded from (`DOWNLOAD_PAGE_URL` and `get-app.html` still point at the
+   legacy download page).
+3. **Notifications go to testers only until switchover.** Done:
+   `NOTIFY_AUDIENCE` in `functions/.env.oursabeel-lms` lists the testers by
+   email; empty or absent means nobody.
 4. Docs: `CLAUDE.md`, `docs/DEPLOY.md`, `docs/SECRETS.md`, `TODO.md` and
-   `docs/DEV-TOOLING.md` rewritten for the new accounts in the same batch.
+   `docs/DEV-TOOLING.md` rewritten for the new accounts, with the R2 move's
+   docs (M6), so they are rewritten once.
 5. The media move to R2 and the Worker, per
    [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md), before any deploy.
    `storage.rules` and the `storage` block in `firebase.json` are deleted;
@@ -158,7 +159,9 @@ user counts between the two projects and fails loudly on any difference.
 1. Announce the date and the new app to staff and students a week ahead.
 2. **Freeze legacy:** deploy a legacy release whose server refuses writes
    with a plain message, and whose app shows that the institute has moved.
-3. Final seed, count check, smoke test on the new address.
+3. Final seed, count check, smoke test on the new address. Set
+   `NOTIFY_AUDIENCE=everyone` in `functions/.env.oursabeel-lms` and deploy
+   functions, so the new app notifies everyone from here on.
 4. **Retire the legacy Android app** with a final update whose only screen
    says the app has moved and links to the new one. This is allowed by the
    store rule in `CLAUDE.md`: it points to an app, not to a sign-up flow.
@@ -172,6 +175,10 @@ user counts between the two projects and fails loudly on any difference.
 step 4 the new project is the record.
 
 ## Open questions
+
+- Where the new Android app is downloaded from. The legacy app's page is on
+  Faisal's personal GitHub Pages site; the obvious home is a release asset on
+  `Sabeel-Institute/lms`, linked from the app's own `/get-app` page.
 
 - A custom domain later (for example `app.oursabeel.com`); it would also
   become the auth domain, and the OAuth redirect URIs change with it.

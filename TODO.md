@@ -11,6 +11,46 @@ cannot be minted against the emulator at all.
 
 ---
 
+## oursabeel-lms — Phase 0 (open)
+
+The institute's project. The sections after this one record the setup of the
+legacy project, `sabeel-class-recordings`, and are rewritten for the new one
+with the rest of the Phase 0 docs ([docs/plans/SWITCHOVER.md](docs/plans/SWITCHOVER.md)).
+
+- [ ] **Web Push key pair.** Firebase console → `oursabeel-lms` → Project
+      settings → **Cloud Messaging** → Web configuration → **Generate key
+      pair**. Send me the PUBLIC key (the long string shown in the list). It
+      is not a secret: it ships in every web bundle. I put it in
+      `app/src/firebase-config.ts` and run `npm run check:push`. Until then web
+      push registers nothing.
+- [ ] **Register the Android app.** Firebase console → `oursabeel-lms` →
+      Project settings → Your apps → **Add app → Android**:
+      package `com.sabeelinstitute.lms`, nickname `Sabeel LMS Android`, debug
+      signing SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`
+      (the repo's `app/android/app/debug.keystore`). Then download
+      `google-services.json` and put it at both `app/google-services.json` and
+      `app/android/app/google-services.json` (gitignored). The Android build
+      fails without it. I can do all of this from the CLI instead if you say so.
+- [ ] **Decide the release signing key** for the new app: where the keystore
+      file and its password live (a password manager, with the file backed
+      up; losing it means no update path ever). Its SHA-1 then goes on the
+      same Android app registration.
+- [ ] **Decide where the APK is downloaded from.** The legacy page is on your
+      personal GitHub Pages site. Suggested: a release asset on
+      `Sabeel-Institute/lms`, linked from the app's own `/get-app` page.
+- [ ] **Password-reset email** (Authentication → Templates → Password reset):
+      the same rewording as item 3 below, naming "Sabeel Institute LMS".
+- [ ] **Google sign-in consent screen**: Google Cloud console →
+      `oursabeel-lms` → APIs & Services → OAuth consent screen. Check the app
+      name reads "Sabeel Institute LMS" and the support email is an
+      institute address.
+- [ ] **Testers for notifications.** Until switchover day the new app sends
+      push notifications only to the email addresses in `NOTIFY_AUDIENCE`
+      (`functions/.env.oursabeel-lms`); it starts with yours. Tell me who else
+      should be on it.
+
+---
+
 ## ✅ Phase 3 setup — DONE (2026-07-22)
 
 Kept for the record, because the ordering trap in step 3 is easy to hit again.
@@ -184,14 +224,6 @@ One small deferral, not blocking: **native source-map upload** (the Gradle
 plugin needs a `prebuild`), so release APK stack traces are minified until
 then; the errors still report. Web source maps upload on every hosting deploy
 (`scripts/web-release.mjs`).
-
-### 1. Nothing for the excused-only change
-
-It needs no console work. The one data step, `scripts/migrate-excused-only.mjs`,
-runs from the repo between the functions and hosting deploys — see
-`docs/DEPLOY.md`. Worth knowing before it runs: it drops active obligations from
-175 to roughly 49 on the current data, because being marked *absent* no longer
-grants anything. Nothing is deleted; the rows stay for the ledger.
 
 ### ✅ 2. Notifications — DONE except one browser check (2026-08-15)
 

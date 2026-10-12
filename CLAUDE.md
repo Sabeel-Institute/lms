@@ -1,4 +1,4 @@
-# Sabeel Class Recordings — Working Rules for Claude
+# Sabeel Institute LMS — Working Rules for Claude
 
 ## What this project is
 
@@ -11,10 +11,23 @@ admins/managers.
 on GitHub, Firebase project `oursabeel-lms` under the oursabeel.com account.
 It carries the full history of `faisal-shah/sabeel-recording-app`, whose
 Firebase project `sabeel-class-recordings` (gmail account) stays the live app
-until switchover day. **The code here still names the legacy project in about
-twenty places: deploy nothing from this repo until Phase 0 of
-`docs/plans/SWITCHOVER.md` is done.** Never point a command from this checkout
-at `sabeel-class-recordings`. The plans:
+until switchover day. Never point a command from this checkout at
+`sabeel-class-recordings`.
+
+- **The project's identity has one source:** `FIREBASE_PROJECT_ID`, `APP_NAME`
+  and `APP_SHORT_NAME` in `packages/shared/src/constants.ts`. Files that cannot
+  import it restate it, and `functions/test/unit/projectIdentity.test.ts` holds
+  them to it and fails if the legacy project id, its project number or the old
+  Android package appears in any code or config.
+- **Deploy nothing until Phase 0 of `docs/plans/SWITCHOVER.md` is done.** The
+  code still uses Firebase Storage, and this project has no bucket: media moves
+  to R2 first.
+- **Push notifications reach only the testers in `NOTIFY_AUDIENCE`**
+  (`functions/.env.oursabeel-lms`) until switchover day, when it becomes
+  `everyone`. The project holds a copy of every real account while the live app
+  still notifies them; without the list a student would hear everything twice.
+
+The plans:
 
 - `docs/plans/SWITCHOVER.md` — accounts, Phase 0, seeding, switchover day.
 - `docs/plans/MEDIA-ON-CLOUDFLARE.md` — all media on R2, Zoom copied by a
@@ -304,7 +317,7 @@ skip the browser check.
 - **`BUILD SUCCESSFUL` is not proof the APK installed.** If the AVD drops during
   the run, yesterday's build stays on the device and every screenshot after it is
   a lie. Confirm with
-  `adb shell dumpsys package com.sabeelinstitute.classrecordings | grep versionName`
+  `adb shell dumpsys package com.sabeelinstitute.lms | grep versionName`
   against **`app/android/app/build.gradle`**, which is the file that produces it
   — `android/` is committed, not prebuilt, so `app.json` does not feed it.
   `functions/test/unit/appVersion.test.ts` asserts the two agree, so in practice

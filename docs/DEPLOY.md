@@ -1,10 +1,17 @@
 # Deploy
 
-**The app is live** — web at `sabeel-class-recordings.web.app`, functions and
-rules deployed, `.firebaserc` aliased to `sabeel-class-recordings`, and
-`firebase-config.ts` holds the real (non-secret) client config. This file records
-the order, the traps, and the versioned release cycle so a deploy is never
-improvised. (The Android build ships separately — see "Cutting a release".)
+**Nothing has been deployed to `oursabeel-lms` yet.** `.firebaserc` and
+`firebase-config.ts` point at it, but the first deploy waits for the rest of
+Phase 0 in [plans/SWITCHOVER.md](plans/SWITCHOVER.md), and this file is
+rewritten for the new accounts in that batch; until then the commands and
+history below describe the legacy project. It records the order, the traps, and
+the versioned release cycle so a deploy is never improvised. (The Android build
+ships separately — see "Cutting a release".)
+
+**Function parameters** (not secrets) are in `functions/.env.<projectId>`, which
+`firebase deploy` reads for that project. `NOTIFY_AUDIENCE` decides who push
+notifications go to: the testers listed there until switchover day, `everyone`
+after it. Empty or absent means nobody.
 
 ## The device pass, before any of it
 
@@ -279,41 +286,6 @@ accounts as it always has — so a hosting deploy carries no such constraint. An
 the reverse mistake is harmless: the callable can sit deployed and uncalled for
 as long as you like, which is why it is worth deploying it early rather than in
 the same rush as a release.
-
-### One-off: the excused-only migration (2026-08-14)
-
-The switch to excused-only access needs one data step, and it goes **after
-functions and before hosting**:
-
-```bash
-node scripts/migrate-excused-only.mjs --dry-run   # read the counts first
-node scripts/migrate-excused-only.mjs
-```
-
-It backfills the due dates that became required and then touches every session,
-letting the deployed `onSessionWritten` re-derive the grants and write each
-student's attendance projection. Running it against the OLD functions would
-faithfully re-create the very grants it exists to remove, and report success
-doing so — hence the position in the order. Hosting goes last so no student sees
-the new screens against un-migrated data.
-
-### One-off: the `notRecorded` rename (v0.5.0)
-
-`sessions.archived` became `sessions.notRecorded`, which is the field the new
-"This class was not recorded" control writes. It goes **after functions**, and
-its position is the only thing that matters — hosting can come before or after:
-
-```bash
-node scripts/migrate-not-recorded.mjs --dry-run   # read the counts first
-node scripts/migrate-not-recorded.mjs
-```
-
-Unlike the excused-only migration this changes no behaviour and wakes no
-trigger. Both readers of the field test truthiness, so a session carrying
-neither name already behaves as `notRecorded: false`; the sweep exists so the
-stored documents match the type that says the field is required. It refuses to
-run if it finds `archived: true`, which nothing could ever have written — a
-value there means the assumption behind the rename is wrong.
 
 `storage:rules` errors with "Could not find rules for the following storage
 targets: rules" — the `storage` block in `firebase.json` is a single unnamed
