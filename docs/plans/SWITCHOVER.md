@@ -102,8 +102,8 @@ SHA-1, its `google-services.json` in place (gitignored).
 Still to do (steps in `TODO.md`):
 
 1. The release signing key, whose SHA-1 joins the same registration.
-2. Workers starts on the Free plan; the M1 copy spike decides whether Paid
-   ($5/month) is needed.
+2. Nothing for Workers: spike M1 showed the Free plan is enough
+   ([MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md#the-worker-cloudflaremedia-copier)).
 
 ### Agent (code)
 

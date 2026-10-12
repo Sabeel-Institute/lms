@@ -22,7 +22,7 @@ At the planning size of 1 GB per hour of video
 | Downloads (students playing) | 100 GB/month free, then $0.12/GB | free, unlimited |
 | Read requests | free at this scale | 10 M/month free, then $0.36/M |
 | Copying a Zoom file in | free (Google to Google) | free (Zoom to Cloudflare) |
-| Fixed | $0 | $0, or $5/month if Workers Paid is needed |
+| Fixed | $0 | $0 (Workers Free is enough; spike M1) |
 
 Worked example: 20 hours of video a week, kept a year, 20 students each
 watching 3 hours a week. Firebase: about $29.50/month on average, rising with
@@ -82,8 +82,8 @@ flowchart LR
   Fn <--> FS
   Fn -- "Zoom API: list, resolve\none-hour file link" --> Zoom
   Fn -- "copy request + Google ID token\n(a few hundred bytes)" --> W
-  W -- "GET (Range)" --> Zoom
-  W -- "put / multipart" --> R2
+  W -- "GET (streamed)" --> Zoom
+  W -- "put (streamed)" --> R2
   App -- "pre-signed GET (Range)\nplayback" --> R2
   App -- "pre-signed PUT\nstaff upload" --> R2
   Fn -- "HEAD / DELETE\n(no media bytes)" --> R2
@@ -140,8 +140,8 @@ sequenceDiagram
   F->>Z: GET download_url, redirect: manual
   Z-->>F: 302 to ssrweb.zoom.us link (60 min, this file only)
   F->>W: POST /copy {sourceUrl, key, size, contentType} + Google ID token
-  W->>Z: GET (Range per part)
-  W->>R: multipart upload, streaming
+  W->>Z: GET (one stream)
+  W->>R: put, streaming the response body
   W-->>F: {etag, size}
   F->>F: probe, media item ready (or failed with reason)
 ```
@@ -210,21 +210,50 @@ repo, with an R2 binding to the bucket and no R2 keys of its own.
   `*.zoom.us` host (no open relay); `key` must match `^media/[A-Za-z0-9]+/[A-Za-z0-9]+\.(m4a|mp4)$`;
   `size` must be at or under the media cap and must equal the source's
   `Content-Length`; an existing object at `key` is never overwritten.
-- **Copies in parts:** `createMultipartUpload`, then for each part a ranged
-  `fetch` of the Zoom link piped straight into `uploadPart`, then `complete`.
-  Parts let a failed chunk be retried, avoid the 5 GiB single-put limit, and
-  keep every byte off the JS heap. Part size 100 MiB; a 3.5 GB worst-case
-  3-hour class is 36 parts, 72 subrequests.
-- **Returns** `{etag, size}`; on failure aborts the multipart upload and
-  returns a reason the Function records on the media item.
+- **Copies in one stream:** a single `fetch` of the Zoom link whose body is
+  passed straight to `env.BUCKET.put`. The bytes never touch the JS heap, the
+  object appears only when complete (so a retry after a dropped connection is
+  safe: `head` first, copy again if absent), and it costs 2 subrequests and
+  about 3 ms of CPU however large the file. Files over 4.9 GiB, which R2
+  cannot take in one put, are refused with a reason rather than split: the
+  largest Zoom file the institute has is 1.2 GB for a 3-hour class.
+- **Returns** `{etag, size}`; on failure returns a reason the Function
+  records on the media item.
 
 Workers limits that matter ([limits](https://developers.cloudflare.com/workers/platform/limits/)):
 no wall-clock limit while the caller stays connected; network waits do not
-count as CPU; 128 MB memory; subrequests 50 per invocation on Free and 10,000
-on Paid. **The Free plan's 50 subrequests cap a copy at 24 parts (2.4 GiB at
-100 MiB parts) and its 10 ms CPU per request is untested for streaming.**
-Spike M1 settles both; the expected outcome is Workers Paid at $5/month, which
-also lifts CPU to 5 minutes per request.
+count as CPU; 128 MB memory; 50 subrequests per invocation on Free; 10 ms CPU
+per request on Free.
+
+**Spike M1 (2026-10-12), on Workers Free**, copying the 2026-10-01 class
+(Quran Immersion Fall, 187 min) from Zoom into a scratch bucket, each copy
+checked by size and by SHA-256 of three 1 MiB windows against Zoom:
+
+| Copy | Wall time | CPU | Subrequests | Result |
+|---|---|---|---|---|
+| 98.6 MB M4A, one put | 6.5 s | 2 ms | 2 | match |
+| 1,155 MB MP4, one put | 62 s (18.5 MB/s) | 3 ms | 2 | match |
+| 1,155 MB MP4, 12 parts of 100 MiB | 130 s | 27 ms | 27 | match |
+| 1,155 MB MP4, parts of 20 MiB | stopped at 46 s | 43 ms | 50 fetches | "Too many subrequests" |
+
+What it settled:
+
+- **Workers Free is enough.** One streamed put uses 3 ms of CPU, inside the
+  10 ms limit with room for verifying the Google ID token, and 2 subrequests.
+  At the measured rate a 3.5 GB file takes about 3 minutes.
+- **Multipart is not worth it here.** It is twice as slow (parts run one
+  after another), costs about 2 ms of CPU per part, which exceeded the Free
+  limit (Cloudflare did not stop it, but that is not a promise), and its
+  ranged fetches hit a quirk: the **first ranged request** of an invocation to
+  the Zoom link came back `200` with the whole file, every later one `206`.
+  Any ranged reader of a Zoom link must check `Content-Range` and retry.
+- **Only `fetch` counts toward the 50 subrequests;** R2 binding calls do not
+  (the 20 MiB run stopped after 50 fetches and 50 R2 calls).
+- The resolved link worked from Cloudflare exactly as from a desktop: no IP
+  lock, no other credential.
+
+The account's Workers address is `oursabeel.workers.dev` (registered for the
+spike; the copier will be `media-copier.oursabeel.workers.dev`).
 
 ### Functions
 
@@ -325,7 +354,7 @@ behaviour is checked against the real thing, not assumed.
 - The Worker has its own tests with `@cloudflare/vitest-pool-workers`
   (Miniflare's local R2): token verification (forged, expired, wrong
   audience, wrong service account), host allowlist, key pattern, size
-  mismatch, overwrite refusal, part retry, abort on failure.
+  mismatch, overwrite refusal, a dropped connection retried after `head`.
 
 Tests rewritten, following "test the promise, not the mechanism":
 
@@ -348,7 +377,7 @@ Slurper can copy straight from a GCS bucket for free if that ever matters.
 
 | Step | What | Proves |
 |---|---|---|
-| M1 spike | Worker copies one real Zoom recording (the 1.2 GB 2026-10-01 file) into a scratch R2 bucket | Free-plan CPU and subrequests, time for a 3-hour class, the link's 60-minute window in practice |
+| M1 spike (done 2026-10-12) | Worker copies one real Zoom recording (the 1.2 GB 2026-10-01 file) into a scratch R2 bucket | Workers Free is enough with one streamed put; results under "The Worker" |
 | M2 | `MediaStore` on R2 + SeaweedFS in all three test harnesses; `s3-conformance.mjs` against both; playback signs from R2; `seed-demo-prod.mjs` and `wipe-demo-prod.mjs` write and delete media in R2 | Real signed playback locally; expiry is asserted |
 | M3 | Staff upload: single PUT and multipart, probe, write-once, failure cleanup | Browser and Android uploads (Android on the AVD: native seam) |
 | M4 | Zoom import through the Worker, async with task queue | Copy of a 3-hour class end to end; retry after the link has expired |
@@ -367,8 +396,8 @@ hard limit is the app's own:
   URL is issued and before a Zoom copy is enqueued (counting what is already
   uploading or copying). Over the ceiling, staff see "Media storage is full.
   Remove old recordings or ask an admin to raise the limit." Starting value
-  500 GB: about $7.35/month on R2 after the free 10 GB, leaving room for
-  Workers Paid inside $10.
+  500 GB: about $7.35/month on R2 after the free 10 GB, inside the $10
+  alert.
 - **Downloads cannot run up a bill on R2,** which is the reason for the move.
   Read operations are 10 M/month free; a student session issues tens of range
   requests, so that is not a practical exposure.
@@ -385,7 +414,8 @@ hard limit is the app's own:
 
 ## Risks and open points
 
-- **Workers plan:** expected Paid ($5/month) after M1.
+- **Workers plan:** Free, settled by M1. Paid ($5/month) becomes necessary
+  only if Free's 100,000 requests a day or 10 ms CPU stop being enough.
 - **Two vendors:** a Cloudflare outage stops playback while Firebase is up.
   There is no fallback copy; at this size one is not worth paying for.
 - **R2 keys are long-lived credentials.** Mitigated as above; rotation is in

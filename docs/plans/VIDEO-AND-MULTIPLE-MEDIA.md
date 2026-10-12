@@ -334,7 +334,7 @@ the view, and for video only the sound continues until they return.
 | Recording deleted while a copy is running | The task finds no recording and deletes what it wrote; the sweep catches anything left |
 | Upload abandoned | Multipart aborted by the bucket's 1-day rule; item removed by the sweep |
 | Unplayable upload (HEVC, ProRes, odd audio) | Probe fails it with a plain message; file deleted |
-| Very long video (> 5 GiB) | Multipart, both for uploads and for the Worker's copy |
+| Very long video (> 4.9 GiB) | Multipart for staff uploads. A Zoom import that large is refused with a reason (the Worker copies in one put; spike M1 in MEDIA-ON-CLOUDFLARE.md); the largest Zoom file so far is 1.2 GB |
 | Part added to a published recording | Visible when ready; no new notification; completion unaffected |
 | Part hidden after students started it | Resume falls back to the first visible part; history kept |
 | Due date passes mid-playback | The current URL plays to its expiry; switching version or part needs a new URL and is refused, with the usual "listening closed" message |
