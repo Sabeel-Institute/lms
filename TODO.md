@@ -36,6 +36,16 @@ with the rest of the Phase 0 docs ([docs/plans/SWITCHOVER.md](docs/plans/SWITCHO
       `oursabeel-lms` → APIs & Services → OAuth consent screen. Check the app
       name reads "Sabeel Institute LMS" and the support email is an
       institute address.
+- [ ] **Google sign-in on the new website**: Google Cloud console →
+      `oursabeel-lms` → APIs & Services → Credentials → "Web client (auto
+      created by Google Service)": add `https://oursabeel-lms.web.app` to
+      Authorized JavaScript origins and
+      `https://oursabeel-lms.web.app/__/auth/handler` to Authorized redirect
+      URIs. The site keeps the sign-in redirect on its own address (in-app
+      browsers need that), and Google refuses it until it is registered.
+- [ ] **DNS**: `firebase1._domainkey` CNAME is shown in NameSilo but was not
+      published after two hours, while the other three records were. Delete
+      and re-add it there.
 - Notifications go to staff only until switchover day (`NOTIFY_AUDIENCE=staff`
   in `functions/.env.oursabeel-lms`). Done: the Web Push key and the Android
   app registration (debug SHA-1, `google-services.json` in place).

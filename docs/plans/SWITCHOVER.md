@@ -134,7 +134,12 @@ Still to do (steps in `TODO.md`):
    there is no `roles/iam.serviceAccountTokenCreator` grant to make, since
    URLs are signed with R2 keys.
 6. First deploy of rules, indexes, functions and hosting to `oursabeel-lms`,
-   then `npm run smoke:prod` against the new address.
+   then `npm run smoke:prod` against the new address. Done 2026-10-12, after
+   the first copy of the legacy data: the copier Worker, then indexes, rules,
+   33 functions and hosting. `smoke:prod` passed (13 checks), and a temporary
+   admin then played a copied recording through an R2 URL and imported a
+   53.7 MB Zoom file through the Worker (5.7 s), all removed afterwards. The
+   organization-project traps it hit are in `docs/DEPLOY.md`.
 
 ## Seeding from the legacy project
 

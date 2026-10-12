@@ -1,10 +1,11 @@
 # Deploy
 
-**Nothing has been deployed to `oursabeel-lms` yet.** `.firebaserc` and
-`firebase-config.ts` point at it, but the first deploy waits for the rest of
-Phase 0 in [plans/SWITCHOVER.md](plans/SWITCHOVER.md), and this file is
-rewritten for the new accounts in that batch; until then the commands and
-history below describe the legacy project. It records the order, the traps, and
+**`oursabeel-lms` was first deployed on 2026-10-12** (Worker, rules,
+indexes, functions, hosting) after a copy of the legacy data
+([plans/SWITCHOVER.md](plans/SWITCHOVER.md)); `npm run smoke:prod` passed and
+a real playback and Zoom import were checked against it. Sections below that
+still name Firebase Storage or the legacy project are rewritten with the R2
+docs (M6 in [plans/MEDIA-ON-CLOUDFLARE.md](plans/MEDIA-ON-CLOUDFLARE.md)). It records the order, the traps, and
 the versioned release cycle so a deploy is never improvised. (The Android build
 ships separately — see "Cutting a release".)
 
@@ -302,6 +303,39 @@ warning. Rules before functions so a new function never runs against permissions
 that have not landed.
 
 ## First-deploy traps
+
+Three that come from the project living in a Google Cloud **organization**
+created after mid-2024, which the legacy personal project was not. All were
+hit on 2026-10-12 and all apply to any new project here (a test project too):
+
+- **Every function fails to BUILD** ("missing permission on the build service
+  account"; for the one gen-1 function, "Access to bucket gcf-sources-… denied").
+  The org's default policy stops the Compute Engine default service account,
+  which both builds and runs gen-2 functions, getting the Editor role it used to
+  get automatically. Grant it only what the code needs:
+  `roles/cloudbuild.builds.builder`, `roles/logging.logWriter`,
+  `roles/datastore.user`, `roles/firebaseauth.admin`,
+  `roles/firebasecloudmessaging.admin`; and the App Engine default account
+  (`<project>@appspot.gserviceaccount.com`, which runs the gen-1
+  `onUserCreate`) `roles/datastore.user`, `roles/firebaseauth.admin`,
+  `roles/logging.logWriter`. A failed first create leaves every function as a
+  `FAILED` stub: delete them all (`gcloud functions list`, then
+  `firebase functions:delete … --force`) before redeploying.
+- **Callables cannot be made public** ("Failed to set invoker function …": an
+  organization policy restricts IAM members to the institute's own domain, and
+  a callable needs `allUsers` as invoker; the code checks the caller). Fix for
+  THIS project only: `iam.allowedPolicyMemberDomains` set to allow all on
+  `projects/<number>` (`gcloud org-policies set-policy`; needs
+  `roles/orgpolicy.policyAdmin` on the organization, which an organization
+  admin can grant themselves). Done for `oursabeel-lms`; every other project
+  in the organization keeps the restriction.
+- **A redeploy does not set the invoker on unchanged functions**, so after
+  fixing the policy grant it directly, once:
+  `gcloud run services add-iam-policy-binding <service> --member=allUsers --role=roles/run.invoker --region=us-central1`
+  for every callable (every function whose name does not start with `on`).
+  It takes a few minutes to spread: until then a call carrying a Firebase ID
+  token gets an HTML 401, "The access token could not be verified", from Cloud
+  Run's front end rather than JSON from the function.
 
 - **Cloud Build 404 on `@sabeel/shared`.** `firebase deploy` ships only
   `functions/` to Cloud Build, so a private workspace package in its
