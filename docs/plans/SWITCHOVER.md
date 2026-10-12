@@ -21,7 +21,8 @@ the assignments proposal, [../proposals/lms-assignments-proposal.html](../propos
 | Local checkout | `~/repos/faisal-shah/sabeel-recording-app` | `~/repos/Sabeel-Institute/lms` |
 | Google account | faisal.shah@gmail.com | faisal.shah@oursabeel.com |
 | Firebase / GCP project | `sabeel-class-recordings` | `oursabeel-lms` (number 226338267845) |
-| Web address | `sabeel-class-recordings.web.app` | `oursabeel-lms.web.app` (custom domain to decide) |
+| Web address | `sabeel-class-recordings.web.app` | `oursabeel-lms.web.app` (no custom domain for now) |
+| App name | Class Recordings | Sabeel Institute LMS |
 | Android package | `com.sabeelinstitute.classrecordings` | `com.sabeelinstitute.lms` |
 | Media storage | Firebase Cloud Storage | Cloudflare R2 (no Firebase Storage bucket at all) |
 | Billing | personal | `My Billing Account` (`014B85-39659A-255E25`), shared with `oursabeel-website` |
@@ -70,22 +71,24 @@ Done on 2026-10-12: both oursabeel.com logins renewed; GCP project
 `oursabeel-lms` (number 226338267845) created under the oursabeel.com
 organization with Firebase added; billing linked; Firestore Native in
 **`nam5`**, matching the legacy database; web app "Sabeel LMS web"
-(`1:226338267845:web:2e285dbdf341e54bcac6ac`) registered.
+(`1:226338267845:web:2e285dbdf341e54bcac6ac`) registered; Email/Password and
+Google sign-in enabled (authorized domains `localhost`,
+`oursabeel-lms.firebaseapp.com`, `oursabeel-lms.web.app`); `ZOOM_ACCOUNT_ID`,
+`ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET` and `SENTRY_DSN` copied into the new
+Secret Manager from the legacy one, at Faisal's direction, by piping
+`gcloud secrets versions access` into `gcloud secrets create` so no value was
+displayed or written to disk (checked by comparing SHA-256 prefixes).
 
 Still to do:
 
-1. Authentication: enable Email/Password and Google. Add the hosting domain
-   and any custom domain to the authorized domains. Configure the OAuth
-   consent screen for internal (oursabeel.com) plus the student population.
-2. Secrets in Secret Manager, set by Faisal: `ZOOM_ACCOUNT_ID`,
-   `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `SENTRY_DSN`, then the R2 and
-   Worker secrets in [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md).
-   The agent prints the exact `firebase functions:secrets:set` commands and
-   never handles a value.
-3. Register the Android app (`com.sabeelinstitute.lms`) with the new
+1. The R2 secrets in [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md), set
+   by Faisal; the agent prints the exact `firebase functions:secrets:set`
+   commands and never handles a value.
+2. Register the Android app (`com.sabeelinstitute.lms`) with the new
    release key's SHA-1.
-4. Cloudflare account for the institute (card on file, R2 enabled), and a
-   `wrangler login`.
+3. Cloudflare account under faisal.shah@oursabeel.com, signed up with
+   Google (card on file, R2 enabled), and a `wrangler login`. Workers starts
+   on the Free plan; the M1 copy spike decides whether Paid is needed.
 
 ### Agent (code)
 
@@ -155,7 +158,6 @@ step 4 the new project is the record.
 
 ## Open questions
 
-- Custom domain for the app (for example `app.oursabeel.com`), which would
-  also become the auth domain.
-- The app's display name now that it is more than recordings.
+- A custom domain later (for example `app.oursabeel.com`); it would also
+  become the auth domain, and the OAuth redirect URIs change with it.
 - When to move Sentry to institute-owned projects.
