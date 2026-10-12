@@ -462,6 +462,76 @@ describe('recordingReady', () => {
   });
 });
 
+/*
+ * BEFORE SWITCHOVER, ONLY TESTERS HEAR ANYTHING.
+ *
+ * The institute's project holds a copy of every real account while the live
+ * app still notifies them, so a real student must hear nothing from this one
+ * until the audience opens — and must not have the one delivery a notification
+ * gets used up while they are outside it.
+ */
+describe('the notify audience', () => {
+  const saved = process.env.NOTIFY_AUDIENCE;
+  afterEach(() => {
+    process.env.NOTIFY_AUDIENCE = saved;
+  });
+
+  async function readyFor(uid: string) {
+    await seedStudentAccount(uid);
+    await withDevice(uid);
+    await seedRecording('r1', 'sess1', 'published');
+    return seedGrant(uid, 'r1');
+  }
+
+  it('tells a tester on the list', async () => {
+    process.env.NOTIFY_AUDIENCE = 'someone@oursabeel.com, S1@Example.com';
+    expect(await notifyRecordingReady(db(), await readyFor('s1'), TODAY)).toBe(true);
+    expect(outbox.map((o) => o.tokens)).toEqual([['tok-s1']]);
+  });
+
+  it('tells a student who is not on it nothing, and keeps the delivery for later', async () => {
+    process.env.NOTIFY_AUDIENCE = 'someone@oursabeel.com';
+    const edge = await readyFor('s1');
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(false);
+    expect(outbox).toHaveLength(0);
+
+    // Switchover day: the same notification now reaches them.
+    process.env.NOTIFY_AUDIENCE = 'everyone';
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(true);
+    expect(outbox.map((o) => o.tokens)).toEqual([['tok-s1']]);
+  });
+
+  it('tells nobody when the list is empty or missing', async () => {
+    const edge = await readyFor('s1');
+    process.env.NOTIFY_AUDIENCE = '';
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(false);
+    delete process.env.NOTIFY_AUDIENCE;
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(false);
+    expect(outbox).toHaveLength(0);
+  });
+
+  it('refuses a list that is not email addresses, rather than guess', async () => {
+    const edge = await readyFor('s1');
+    for (const value of ['Everyone', 's1']) {
+      process.env.NOTIFY_AUDIENCE = value;
+      await expect(notifyRecordingReady(db(), edge, TODAY)).rejects.toThrow(/NOTIFY_AUDIENCE/);
+    }
+    expect(outbox).toHaveLength(0);
+  });
+
+  it('holds back the morning reminders too, and only for those outside it', async () => {
+    process.env.NOTIFY_AUDIENCE = 's2@example.com';
+    for (const uid of ['s1', 's2']) {
+      await seedStudentAccount(uid);
+      await withDevice(uid);
+      await seedGrant(uid, 'r1', TODAY);
+    }
+    await seedRecording('r1', 'sess1', 'published');
+    expect(await notifyLastDay(db(), TODAY)).toBe(1);
+    expect(outbox.map((o) => o.tokens)).toEqual([['tok-s2']]);
+  });
+});
+
 describe('lastDay', () => {
   const TODAY = '2026-08-20';
 

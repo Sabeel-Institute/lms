@@ -10,13 +10,18 @@ import {
   type SentNotificationDoc,
 } from '@sabeel/shared';
 import { send } from './messaging';
+import { inNotifyAudience } from './notifyAudience';
 
 /**
  * Deliver one message to one person, once.
  *
- * The one path every notification takes, so the three rules that make push
- * bearable live in one place rather than three:
+ * The one path every notification takes, so the rules that make push bearable
+ * live in one place rather than several:
  *
+ *  0. **Only the people this deployment may notify** (`notifyAudience.ts`):
+ *     testers until switchover day, everyone after it. Checked before the
+ *     "sent" marker is claimed, so a delivery is never used up on someone
+ *     outside it.
  *  1. **Their switch decides.** A missing preferences document means ON — a
  *     person who has never opened the settings screen should still hear about a
  *     recording, and defaulting the absent document to OFF would mean nobody is
@@ -49,6 +54,8 @@ export async function notifyOnce(
   targetId: string,
   message: PushMessage,
 ): Promise<boolean> {
+  if (!(await inNotifyAudience(uid))) return false;
+
   const person = db.collection(COLLECTIONS.notifications).doc(uid);
 
   const prefs = (await person.get()).data() as NotificationPrefsDoc | undefined;
