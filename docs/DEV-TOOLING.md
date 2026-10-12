@@ -29,6 +29,7 @@ emulator — not your diff.
 | `npm run seed:emulators` | Seeds the sweep's world into an already-running emulator suite and leaves it there, for a device pass (needs the web dev server up: see `docs/DEPLOY.md`) |
 | `node scripts/repro-stale-scope.mjs delete\|remove\|none` | The WEB-4 regression: a manager's cold load with a stale cached course list must render the work queue and report no listener refusal. Needs emulators + the e2e dev server; resets the emulators; exit 1 on a refusal |
 | `node scripts/set-min-version.mjs <versionCode>` | **Against the REAL project** (or the emulator with `CHECK_PROJECT` + `FIRESTORE_EMULATOR_HOST`). Sets the oldest Android build allowed to run |
+| `node scripts/set-auth-email.mjs [--yes]` | **Against the REAL project**, as the active gcloud account. Applies the password email's sender, reply-to, subject and body from the script; dry run without `--yes`. Fails if Google refuses a field |
 | `node scripts/send-test-push.mjs <fcm-token> [title] [body]` | **Against the REAL project's FCM.** One real push to one device token, in the shape `fcmSender` sends; writes nothing. The device check for "a push is shown" with the app open and then closed — no emulator delivers a push. The token is in the `devices` collection of whichever Firestore the device registered with |
 
 The last two are **pre-release checks, not part of the loop**: both authenticate

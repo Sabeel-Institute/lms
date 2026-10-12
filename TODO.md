@@ -17,12 +17,21 @@ The institute's project. The sections after this one record the setup of the
 legacy project, `sabeel-class-recordings`, and are rewritten for the new one
 with the rest of the Phase 0 docs ([docs/plans/SWITCHOVER.md](docs/plans/SWITCHOVER.md)).
 
-- [ ] **Decide the release signing key** for the new app: where the keystore
-      file and its password live (a password manager, with the file backed
-      up; losing it means no update path ever). Its SHA-1 then goes on the
-      same Android app registration.
-- [ ] **Password-reset email** (Authentication → Templates → Password reset):
-      the same rewording as item 3 below, naming "Sabeel Institute LMS".
+- [ ] **Back up the release signing key.** Created 2026-10-12 in
+      `~/.config/sabeel-lms/` on this machine; its SHA-1 is registered.
+      Copy the password from `keystore.properties` into your password
+      manager, and keep a copy of `release.keystore` there too (as an
+      attachment) or on other storage. Losing it means the Android app can
+      never be updated again. `docs/SECRETS.md` has the details and the
+      list of everything else on this machine worth backing up.
+- [ ] **Password email subject and body.** `scripts/set-auth-email.mjs`
+      holds the wording and applied the sender name ("Sabeel Institute") and
+      reply-to (admin@oursabeel.com); Google refuses the subject and body
+      for this project through the API (`EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`).
+      Try the console: Authentication → Templates → Password reset → the
+      pencil. If the subject and message are editable there, tell me and I
+      will give you the text to paste; if they are greyed out too, the
+      remaining route is sending from our own domain, which is a decision.
 - [ ] **Google sign-in consent screen**: Google Cloud console →
       `oursabeel-lms` → APIs & Services → OAuth consent screen. Check the app
       name reads "Sabeel Institute LMS" and the support email is an
