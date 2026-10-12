@@ -371,6 +371,11 @@ Manager, never in the app bundle.**
 
 ## Conventions
 
+- **`main` takes changes by pull request only**, approved by the code owner
+  (`.github/CODEOWNERS`: Faisal); force-push and deletion are blocked. The
+  GitHub ruleset "main: pull requests only" lets admins (only Faisal) push
+  directly, which is how the agent's commits, made with his account, land.
+  Other collaborators branch and open a PR.
 - **Commit at phase boundaries** (see `docs/PHASE_STATUS.md`); work autonomously
   within a phase. Before ANY significant install (global/system/major framework),
   ask first; routine project-local npm deps of the locked stack are fine.
