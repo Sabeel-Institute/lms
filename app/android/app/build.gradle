@@ -98,12 +98,38 @@ android {
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
+    /**
+     * Release builds sign with the app's own key, never the debug one.
+     *
+     * The debug keystore is public — it is committed here and ships with every
+     * Android SDK — so a release signed with it could be rebuilt by anyone and
+     * installed OVER the real app as an update. The release key lives outside
+     * the repo, in `~/.config/sabeel-lms/` (or wherever
+     * SABEEL_LMS_KEYSTORE_PROPERTIES points), and docs/SECRETS.md says what it
+     * is and how it is backed up. Without that file the release signing config
+     * stays empty and Gradle refuses to package a release: fail closed, never
+     * fall back to the debug key. Debug builds are unaffected.
+     */
+    def releaseKeyProps = new Properties()
+    def releaseKeyFile = file(System.getenv('SABEEL_LMS_KEYSTORE_PROPERTIES')
+        ?: "${System.getProperty('user.home')}/.config/sabeel-lms/keystore.properties")
+    if (releaseKeyFile.exists()) {
+        releaseKeyFile.withInputStream { releaseKeyProps.load(it) }
+    }
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'
+        }
+        release {
+            if (releaseKeyProps['storeFile']) {
+                storeFile file(releaseKeyProps['storeFile'])
+                storePassword releaseKeyProps['storePassword']
+                keyAlias releaseKeyProps['keyAlias']
+                keyPassword releaseKeyProps['keyPassword']
+            }
         }
     }
     /**
@@ -136,9 +162,7 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds

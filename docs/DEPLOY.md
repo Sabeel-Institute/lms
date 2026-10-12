@@ -360,7 +360,8 @@ SPA `** → /index.html` rewrite catching a missing file, not a served map. Veri
 the *content-type*, not the status, to confirm maps are not leaked.
 
 **Native source maps are not uploaded.** Release APKs ship (`assembleRelease`,
-signed with the debug key until a release keystore exists — see `TODO.md`), but
+signed with the release key in `~/.config/sabeel-lms/` — see
+[SECRETS.md](SECRETS.md#android-release-signing-key)), but
 the `@sentry/react-native` Gradle plugin is not active, and activating it means
 a `prebuild` in this bare workflow. The token is already in place for when that
 happens; Sentry reporting itself works on native today, with minified release

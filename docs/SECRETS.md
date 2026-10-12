@@ -13,6 +13,8 @@
 | Sentry **auth token** (source-map upload) | **Yes** | Gitignored `app/android/sentry.properties` (`auth.token=`). An **org** token (org `devnull-ke`), shared across all the Sabeel Sentry projects; the web pipeline reads it via `SENTRY_PROPERTIES`, overriding the project to `sabeel-recording-web` |
 | Zoom account id / client id / client secret | **Yes** | Secret Manager, via `firebase functions:secrets:set` |
 | Service account keys | **Yes** | Should not exist — see below |
+| Android **release signing key** and its password | **Yes** | `~/.config/sabeel-lms/release.keystore` and `keystore.properties`, outside the repo, mode 600 — see below |
+| R2 API keys (`R2_READ_*`, `R2_WRITE_*`) | **Yes** | Secret Manager |
 
 The Firebase "apiKey" is not a credential. It identifies the project; access is
 controlled by security rules and App Check. Treating it as a secret leads people
@@ -48,6 +50,50 @@ variable is a permanent credential with no rotation story.
 
 This grant is a first-deploy blocker that the emulator cannot reproduce: signing
 appears to work locally and 403s in production. It is tracked in `TODO.md`.
+
+## Android release signing key
+
+Every release APK of `com.sabeelinstitute.lms` is signed with one key, created
+2026-10-12:
+
+| | |
+|---|---|
+| Keystore | `~/.config/sabeel-lms/release.keystore` (PKCS12, RSA 4096, valid to 2054) |
+| Alias | `sabeel-lms` |
+| Password | in `~/.config/sabeel-lms/keystore.properties` (store and key share it) |
+| SHA-1 | `F6:F1:F1:17:15:2C:32:BF:4D:B0:B5:16:F8:8C:3F:AB:E2:AB:C4:D2` |
+| SHA-256 | `E8:C3:7E:B6:5E:BA:D0:C9:DF:57:D4:58:68:58:D4:59:F9:7F:A4:7E:FB:5D:28:D3:06:0A:79:E9:11:00:FF:D5` |
+
+The fingerprints are public (they are in every APK); the keystore and its
+password are not. `app/android/app/build.gradle` reads `keystore.properties`
+from that path, or from the path in `SABEEL_LMS_KEYSTORE_PROPERTIES`. Without
+it a release build fails; it never falls back to the debug key, which is public
+and would let anyone build an APK that installs over the real app.
+
+Both SHA-1s, this one and the debug key's, are registered on the Firebase
+Android app, which is what Google sign-in on the phone checks.
+
+**Losing the key means the app can never be updated again**: Android refuses an
+update signed with a different key, so every phone would have to uninstall and
+reinstall. Keep two copies off this machine: the password in a password
+manager, and the keystore file in that password manager as an attachment or on
+other storage.
+
+## What on this machine has no other copy
+
+Everything else here can be cloned, reinstalled or regenerated. These cannot,
+or only with effort:
+
+| File | Holds | If lost |
+|---|---|---|
+| `~/.config/sabeel-lms/release.keystore` + `keystore.properties` | Android release key and password | **No updates to the app, ever.** Back up both. |
+| `app/.env.local` | Sentry client DSNs | Copy again from Sentry project settings |
+| `app/android/sentry.properties` | Sentry org auth token | Create a new token in Sentry |
+| `functions/.secret.local` | `SENTRY_DSN=disabled` for the emulator | Recreate from this file |
+| `app/google-services.json`, `app/android/app/google-services.json` | Firebase Android config | `firebase apps:sdkconfig ANDROID 1:226338267845:android:a85d5935fb8f4555cac6ac` |
+| `~/.config/.wrangler/config/default.toml` | Cloudflare login | Log in again (`docs/DEV-TOOLING.md`) |
+
+Server secrets live in Secret Manager and are not on this machine.
 
 ## Zoom credentials
 
