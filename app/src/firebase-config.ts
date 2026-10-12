@@ -47,8 +47,9 @@ export { GOOGLE_WEB_CLIENT_ID as WEB_CLIENT_ID } from '@sabeel/shared';
  * the pair, and shipping it in every client bundle is precisely its job — the
  * browser needs it to subscribe. The private half never leaves Google.
  *
- * Empty until the key pair is generated for this project (TODO.md). An empty
- * value is handled: `push.web.ts` returns no token and the settings screen says
- * the device cannot receive push, rather than throwing on load.
+ * An empty value is still handled: `push.web.ts` returns no token and the
+ * settings screen says the device cannot receive push, rather than throwing on
+ * load. That is the state a fresh clone of a different project would be in.
  */
-export const VAPID_PUBLIC_KEY = '';
+export const VAPID_PUBLIC_KEY =
+  'BOpTic6Jgp0JHp363pNy5Bv21P1lYJYbDdIPiIfjfraBU--b-1YQ1cEZJQVWnDDEpAMS1LUcJfOVT9RCZZ2HEj0';

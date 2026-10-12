@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { PRIVACY_URL } from '@sabeel/shared';
+import { DOWNLOAD_PAGE_URL, PRIVACY_URL } from '@sabeel/shared';
 
 /**
  * The three pages a store reviewer reads, and the two ways they break silently.
@@ -97,6 +97,14 @@ describe('the static pages the stores need', () => {
     // state this app was in until 2026-09-07, pointing at a host attached to
     // nothing.
     expect(new URL(PRIVACY_URL).pathname).toBe('/privacy');
+  });
+
+  it('sends /get-app to the same download page the update screen opens', () => {
+    // Two copies of one address: the update gate imports the constant, the
+    // static page cannot. A stale one sends a person to the retired app.
+    const getApp = readFileSync(resolve(ROOT, 'app', 'public', 'get-app.html'), 'utf8');
+    const links = [...getApp.matchAll(/href="(https:\/\/[^"]*github\.io[^"]*)"/g)].map((m) => m[1]);
+    expect(links).toEqual([DOWNLOAD_PAGE_URL]);
   });
 
   it('keeps the app from naming a way to get an account', () => {
