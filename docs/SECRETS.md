@@ -38,18 +38,35 @@ the auth trigger, the two assignment triggers, and the notification trigger and
 its daily schedule. So once it is set, the next functions deploy turns on server
 error reporting. Until then the binding is inert
 and the functions run normally. Locally, `functions/.secret.local` (gitignored)
-holds `SENTRY_DSN=disabled` so the emulator does not probe Secret Manager and
-reporting stays off in tests.
+holds `SENTRY_DSN=disabled` and placeholder `R2_*` values so the emulator does
+not probe Secret Manager; reporting stays off in tests, and the media store uses
+the local SeaweedFS keys instead (`docs/DEV-TOOLING.md`).
 
 ## No service account key files
 
-URL signing uses the Functions runtime service account through the IAM
-Credentials API, which needs `roles/iam.serviceAccountTokenCreator` granted to
-that account — **not** a downloaded JSON key. A key file in a repo or a CI
-variable is a permanent credential with no rotation story.
+A key file in a repo or a CI variable is a permanent credential with no
+rotation story, and nothing here needs one.
 
-This grant is a first-deploy blocker that the emulator cannot reproduce: signing
-appears to work locally and 403s in production. It is tracked in `TODO.md`.
+## The R2 keys
+
+Media URLs are signed with R2 API keys, not a Google identity: R2 has no
+equivalent of signing as a service account. Two Cloudflare account API tokens,
+each scoped to the `oursabeel-lms-media` bucket, are the deliberate exception
+to "no long-lived keys":
+
+| Secrets | Permission | Bound to |
+|---|---|---|
+| `R2_READ_KEY_ID`, `R2_READ_SECRET` | Object Read | `getPlaybackUrl` |
+| `R2_WRITE_KEY_ID`, `R2_WRITE_SECRET` | Object Read & Write | upload, finalize, remove-audio, delete and Zoom import callables |
+
+Each pair is bound only to the functions that need it
+(`MEDIA_READ_SECRETS` / `MEDIA_WRITE_SECRETS` in `functions/src/mediaStore.ts`).
+Pre-signed URLs are bearer tokens: one cannot be revoked by itself, but
+**rotating a key invalidates every URL it signed**. To rotate: create a new
+token in the Cloudflare dashboard (R2 → Manage API tokens, scoped to the
+bucket), `firebase functions:secrets:set R2_READ_KEY_ID` and `R2_READ_SECRET`
+(or the write pair), redeploy the functions bound to them, then delete the old
+token.
 
 ## Android release signing key
 
@@ -89,7 +106,7 @@ or only with effort:
 | `~/.config/sabeel-lms/release.keystore` + `keystore.properties` | Android release key and password | **No updates to the app, ever.** Back up both. |
 | `app/.env.local` | Sentry client DSNs | Copy again from Sentry project settings |
 | `app/android/sentry.properties` | Sentry org auth token | Create a new token in Sentry |
-| `functions/.secret.local` | `SENTRY_DSN=disabled` for the emulator | Recreate from this file |
+| `functions/.secret.local` | `SENTRY_DSN=disabled` and `R2_*` placeholders for the emulator | Recreate from this file |
 | `app/google-services.json`, `app/android/app/google-services.json` | Firebase Android config | `firebase apps:sdkconfig ANDROID 1:226338267845:android:a85d5935fb8f4555cac6ac` |
 | `~/.config/.wrangler/config/default.toml` | Cloudflare login | Log in again (`docs/DEV-TOOLING.md`) |
 
@@ -98,12 +115,12 @@ Server secrets live in Secret Manager and are not on this machine.
 ## Zoom credentials
 
 Never reach the mobile or web bundle. The backend fetches from Zoom and copies
-only the audio file into Storage; students never see a Zoom token, a Zoom
+only the audio file into the media bucket; students never see a Zoom token, a Zoom
 download URL, or a `play_url`.
 
 ## If a secret leaks
 
 Rotate first, investigate second. For Zoom, regenerate the client secret in the
 Marketplace developer portal and re-set it. For signed URLs, note that individual
-URLs cannot be revoked — rotating the signing key invalidates **all** outstanding
-URLs at once, which is the blunt instrument available.
+URLs cannot be revoked — rotating the R2 read key (above) invalidates **all**
+outstanding playback URLs at once, which is the blunt instrument available.

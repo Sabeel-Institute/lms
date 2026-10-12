@@ -5,7 +5,7 @@ import { createAudioPlayer } from 'expo-audio';
  * Native side of the audio-picker seam (web sibling: filePicker.web.ts).
  *
  * Uploading from a phone is supported: expo-document-picker opens the system file
- * browser, the file is read into a Blob for the same Storage upload the web uses,
+ * browser, the file is read into a Blob for the same signed upload the web uses,
  * and its duration is read with expo-audio so a phone upload stores the SAME
  * `durationSec` a computer upload does. That matters: the player's scrubber,
  * remaining time and listened-% bar all read the stored duration, so a null one
@@ -33,7 +33,7 @@ export async function pickAudioFile(): Promise<PickedAudio | null> {
   const durationSec = await readDuration(asset.uri);
   const blob = await (await fetch(asset.uri)).blob();
   // Some pickers hand back a typeless blob; carry the picker's mime type so the
-  // Storage upload records the right contentType instead of octet-stream.
+  // upload signs the right contentType instead of octet-stream.
   const typed =
     asset.mimeType && (!blob.type || blob.type === 'application/octet-stream')
       ? blob.slice(0, blob.size, asset.mimeType)

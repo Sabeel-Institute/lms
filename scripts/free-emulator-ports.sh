@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Free the Firebase emulator ports, killing whatever still holds them.
+# Free the Firebase emulator and local media store ports, killing whatever
+# still holds them.
 #
 # Why this exists: a killed or crashed run leaves emulators squatting on these
 # ports. The next run then talks to a HALF-DEAD emulator — one that answers on
@@ -13,7 +14,7 @@
 # so the "cleanup" kills the caller — observed as a shell exiting with 144.
 set -uo pipefail
 
-PORTS=(61300 61301 61302 61303 61304 61305 61306 61307)
+PORTS=(61300 61301 61302 61303 61304 61305 61306 61307 61320 61321 61322 61323 61324 61325 61326)
 CALLER_PIDS=" $$ $PPID "
 
 pids_on_port() {

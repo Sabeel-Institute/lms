@@ -46,10 +46,6 @@ beforeAll(async () => {
       ...hostPort('FIRESTORE_EMULATOR_HOST'),
       rules: readFileSync(new URL('../../../firestore.rules', import.meta.url), 'utf8'),
     },
-    storage: {
-      ...hostPort('FIREBASE_STORAGE_EMULATOR_HOST'),
-      rules: readFileSync(new URL('../../../storage.rules', import.meta.url), 'utf8'),
-    },
   });
 });
 

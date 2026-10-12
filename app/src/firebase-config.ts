@@ -16,14 +16,12 @@ import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 // (docs/DEPLOY.md). Both domains are authorized for sign-in, so it can be
 // switched back without console work if it ever needs to be.
 //
-// `storageBucket` names a bucket that does not exist: this project has no
-// Firebase Storage bucket, and media moves to Cloudflare R2 before the first
-// deploy (docs/plans/MEDIA-ON-CLOUDFLARE.md). The field goes with that move.
+// No `storageBucket`: media is not in Firebase. It lives in Cloudflare R2 and
+// the app only ever sees URLs the server signed (docs/plans/MEDIA-ON-CLOUDFLARE.md).
 export const firebaseConfig = {
   apiKey: 'AIzaSyC6N2JTrBAwLQ9zpwLdoAbQNt0nrOunwQQ',
   authDomain: `${FIREBASE_PROJECT_ID}.web.app`,
   projectId: FIREBASE_PROJECT_ID,
-  storageBucket: `${FIREBASE_PROJECT_ID}.firebasestorage.app`,
   messagingSenderId: '226338267845',
   appId: '1:226338267845:web:2e285dbdf341e54bcac6ac',
 };

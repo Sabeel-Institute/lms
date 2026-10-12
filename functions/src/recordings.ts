@@ -1,7 +1,7 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { auditedCall } from './audited';
+import { reportedCall } from './reported';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getStorage } from 'firebase-admin/storage';
 import {
   COLLECTIONS,
   INSTITUTE_TIMEZONE,
@@ -16,10 +16,15 @@ import {
   type SessionDoc,
 } from '@sabeel/shared';
 import { requireAdmin, requireCourseScope } from './guards';
+import { MEDIA_WRITE_SECRETS, deleteObject, head, signPut } from './mediaStore';
 
-/** Max upload size, mirrored in storage.rules. A 2-hour 128 kbps M4A is ~115 MB;
- *  300 MB leaves room without letting a video file through by accident. */
+/** Max upload size. A 2-hour 128 kbps M4A is ~115 MB; 300 MB leaves room
+ *  without letting a video file through by accident. */
 export const MAX_AUDIO_BYTES = 300 * 1024 * 1024;
+
+/** How long an upload URL lasts: long enough for a slow connection to send
+ *  300 MB, short enough that a leaked one is soon useless. */
+const UPLOAD_URL_TTL_MS = 60 * 60 * 1000;
 
 // ---------------------------------------------------------------- create --
 
@@ -123,6 +128,78 @@ export const createRecording = auditedCall('createRecording', async (req, audit)
   return createRecordingDraft(uid, input);
 });
 
+// ---------------------------------------------------------------- upload --
+
+export interface StartUploadInput {
+  recordingId: string;
+  contentType: string;
+  sizeBytes: number;
+}
+
+export function validateStartUpload(data: unknown): StartUploadInput {
+  const d = data as Partial<StartUploadInput> | null;
+  if (typeof d?.recordingId !== 'string' || !d.recordingId) {
+    throw new HttpsError('invalid-argument', 'recordingId is required.');
+  }
+  if (typeof d.contentType !== 'string' || !/^audio\/[a-z0-9.+-]+$/.test(d.contentType)) {
+    throw new HttpsError('invalid-argument', 'Only audio files can be uploaded.');
+  }
+  if (typeof d.sizeBytes !== 'number' || !Number.isInteger(d.sizeBytes) || d.sizeBytes <= 0) {
+    throw new HttpsError('invalid-argument', 'sizeBytes must be a positive whole number.');
+  }
+  if (d.sizeBytes > MAX_AUDIO_BYTES) {
+    throw new HttpsError('invalid-argument', 'That audio file is too large (300 MB at most).');
+  }
+  return { recordingId: d.recordingId, contentType: d.contentType, sizeBytes: d.sizeBytes };
+}
+
+/**
+ * Hand the client a URL it may PUT this recording's audio to, once.
+ *
+ * The bytes go straight from the browser or phone to the bucket, never through
+ * a Function: a two-hour recording would meet the 60-minute timeout, and the
+ * bytes would be paid for twice. So everything the bucket cannot check is
+ * checked here, before a URL exists: course scope, a recording that is still a
+ * draft with no audio, an audio content type, a declared size under the cap.
+ * The URL itself signs the content type and `If-None-Match: *`, so it creates
+ * the object once or not at all (`mediaStore.signPut`); the real size is
+ * checked by `finalizeRecording` once the bytes have landed.
+ */
+export async function startUpload(input: StartUploadInput) {
+  const snap = await getFirestore().collection(COLLECTIONS.recordings).doc(input.recordingId).get();
+  if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
+  const rec = snap.data() as RecordingDoc;
+  if (rec.status !== 'draft' && rec.status !== 'needsAttention') {
+    throw new HttpsError(
+      'failed-precondition',
+      'Audio can only be added while a recording is a draft. Unpublish it first.',
+    );
+  }
+  if (rec.audioPath) {
+    throw new HttpsError('failed-precondition', 'This recording already has audio. Remove it first.');
+  }
+  const audioPath = audioStoragePath(input.recordingId);
+  // An earlier upload that landed but was never finalized (the tab closed, the
+  // finalize call failed) is in the way of a write-once URL. Nothing refers to
+  // it — `audioPath` is still null on a draft — so it goes.
+  await deleteObject(audioPath);
+  const put = await signPut(audioPath, input.contentType, UPLOAD_URL_TTL_MS);
+  return { audioPath, url: put.url, headers: put.headers, expiresAt: put.expiresAt };
+}
+
+/**
+ * Not audited: it changes nothing anyone reads. The audit row is written when
+ * the upload is confirmed (`finalizeRecordingUpload`), which is the moment
+ * audio actually arrives on the recording.
+ */
+export const startRecordingUpload = reportedCall(async (req) => {
+  const input = validateStartUpload(req.data);
+  const rec = await getFirestore().collection(COLLECTIONS.recordings).doc(input.recordingId).get();
+  if (!rec.exists) throw new HttpsError('not-found', 'No such recording.');
+  await requireCourseScope(req, (rec.data() as RecordingDoc).courseId);
+  return startUpload(input);
+}, MEDIA_WRITE_SECRETS);
+
 // -------------------------------------------------------------- finalize --
 
 export interface FinalizeInput {
@@ -147,10 +224,15 @@ export function validateFinalize(data: unknown): FinalizeInput {
  * Confirm the upload landed, and record what actually arrived.
  *
  * The client reports duration (it has the decoded media; the server would need
- * ffmpeg to find out) but the server reads SIZE from Storage rather than
+ * ffmpeg to find out) but the server reads SIZE from the bucket rather than
  * trusting it — size is the one field a wrong value could be used to argue
- * about, and it costs one metadata call to get right. Duration is advisory: a
- * wrong value mis-draws a progress bar and nothing more.
+ * about, and it costs one HEAD to get right. Duration is advisory: a wrong
+ * value mis-draws a progress bar and nothing more.
+ *
+ * An object over the cap is DELETED, not just refused: the upload URL cannot
+ * sign a size, so this is where an oversized file is caught, and leaving it
+ * would both cost storage and block a corrected re-upload (the URL is
+ * write-once).
  *
  * Marking `audioPath` only after the object is confirmed present is what stops a
  * failed upload leaving a publishable-looking draft behind.
@@ -162,15 +244,14 @@ export async function finalizeRecording(input: FinalizeInput) {
   if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
 
   const path = audioStoragePath(input.recordingId);
-  const file = getStorage().bucket().file(path);
-  const [exists] = await file.exists();
-  if (!exists) {
+  const object = await head(path);
+  if (!object) {
     throw new HttpsError('failed-precondition', 'No audio found for that recording.');
   }
-  const [meta] = await file.getMetadata();
-  const sizeBytes = Number(meta.size ?? 0);
+  const { sizeBytes } = object;
   if (sizeBytes > MAX_AUDIO_BYTES) {
-    throw new HttpsError('failed-precondition', 'That audio file is too large.');
+    await deleteObject(path);
+    throw new HttpsError('failed-precondition', 'That audio file is too large (300 MB at most).');
   }
 
   await ref.update({
@@ -190,7 +271,7 @@ export const finalizeRecordingUpload = auditedCall('finalizeRecordingUpload', as
   await requireCourseScope(req, courseId);
   audit.courseId = courseId;
   return finalizeRecording(input);
-});
+}, MEDIA_WRITE_SECRETS);
 
 // ---------------------------------------------------------------- status --
 
@@ -287,10 +368,10 @@ export const setRecordingStatus = auditedCall('setRecordingStatus', async (req, 
 /**
  * Delete a recording's audio so it can be re-uploaded.
  *
- * The Storage rule makes the object write-once, which is what stops a published
- * recording's audio being swapped underneath students who have already listened
- * to it. Replacing bad audio therefore has to come through here, and only while
- * the recording is not live.
+ * The upload URL is write-once (`mediaStore.signPut`), which is what stops a
+ * published recording's audio being swapped underneath students who have
+ * already listened to it. Replacing bad audio therefore has to come through
+ * here, and only while the recording is not live.
  */
 export async function clearAudio(recordingId: string) {
   const db = getFirestore();
@@ -306,10 +387,7 @@ export async function clearAudio(recordingId: string) {
     );
   }
 
-  await getStorage()
-    .bucket()
-    .file(audioStoragePath(recordingId))
-    .delete({ ignoreNotFound: true });
+  await deleteObject(audioStoragePath(recordingId));
   await ref.update({ audioPath: null, sizeBytes: null, durationSec: null, updatedAt: Date.now() });
   return { recordingId };
 }
@@ -325,7 +403,7 @@ export const clearRecordingAudio = auditedCall('clearRecordingAudio', async (req
   await requireCourseScope(req, courseId);
   audit.courseId = courseId;
   return clearAudio(d.recordingId);
-});
+}, MEDIA_WRITE_SECRETS);
 
 // Everything that references a recording by id, so a permanent delete leaves no
 // orphans. All are keyed on a `recordingId` field (single-field equality → no
@@ -433,14 +511,11 @@ export async function applyDeleteRecording(recordingId: string) {
   await Promise.all(commits);
 
   // 2. The audio object — at the CANONICAL path, not only when `audioPath` is
-  //    set. An upload that landed in Storage but never finalized leaves the
+  //    set. An upload that landed in the bucket but never finalized leaves the
   //    object there with the field still null; keying the delete off the field
   //    would orphan those bytes forever, and they are the one thing here that
   //    costs money. The path is derived from the id, so this is exact.
-  await getStorage()
-    .bucket()
-    .file(rec.audioPath ?? audioStoragePath(recordingId))
-    .delete({ ignoreNotFound: true });
+  await deleteObject(rec.audioPath ?? audioStoragePath(recordingId));
 
   // 3. The recording itself, and the session's pointer, IN ONE TRANSACTION:
   //    written one after the other, a failure between them left a session
@@ -487,4 +562,4 @@ export const deleteRecording = auditedCall('deleteRecording', async (req, audit)
   const res = await applyRecordingDelete(req, d.recordingId);
   audit.courseId = res.courseId; // recordingId target is auto-picked from req.data
   return { recordingId: res.recordingId };
-});
+}, MEDIA_WRITE_SECRETS);

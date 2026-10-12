@@ -8,13 +8,14 @@ import {
   canPlayFromCourse,
   hasRecordingAccess,
   isStaffRole,
+  SIGNED_URL_TTL_MS,
   todayInZone,
   type AssignmentDoc,
   type CourseDoc,
   type RecordingDoc,
   type TokenClaims,
 } from '@sabeel/shared';
-import { signedPlaybackUrl } from './mediaUrl';
+import { MEDIA_READ_SECRETS, signGet } from './mediaStore';
 
 export type PlaybackDenial =
   | 'not-published'
@@ -76,9 +77,10 @@ const MESSAGES: Record<PlaybackDenial, string> = {
 /**
  * Mint a playback URL for one recording.
  *
- * Authorization happens HERE, not in security rules, because the URL is signed
- * with the service account's own credentials and bypasses rules entirely. This
- * callable is the only thing standing between a signed-in user and the audio.
+ * Authorization happens HERE, not in security rules, because the media bucket
+ * has no rules: the URL is signed with the bucket's read key and is good for
+ * anyone holding it until it expires. This callable is the only thing standing
+ * between a signed-in user and the audio.
  */
 export const getPlaybackUrl = reportedCall(async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Sign in required.');
@@ -113,5 +115,5 @@ export const getPlaybackUrl = reportedCall(async (req) => {
     });
     if (denial) throw new HttpsError('permission-denied', MESSAGES[denial]);
 
-    return signedPlaybackUrl(recording.audioPath as string);
-  });
+    return signGet(recording.audioPath as string, SIGNED_URL_TTL_MS);
+  }, MEDIA_READ_SECRETS);

@@ -12,6 +12,7 @@ import {
 import { auditedCall, type AuditContext } from './audited';
 import { requireAdmin, requireCourseScope } from './guards';
 import { applyDeleteRecording } from './recordings';
+import { MEDIA_WRITE_SECRETS } from './mediaStore';
 import { reconcileAttendanceRecords } from './attendanceMirror';
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -446,4 +447,4 @@ export const deleteSession = auditedCall('deleteSession', async (req, audit) => 
   // still runs and finds nothing to do.
   await reconcileAttendanceRecords(db, d.sessionId, undefined);
   return { sessionId: d.sessionId };
-});
+}, MEDIA_WRITE_SECRETS);

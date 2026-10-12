@@ -14,10 +14,12 @@
     "serve": "npm run build && firebase emulators:start --only functions"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1141.0",
+    "@aws-sdk/s3-request-presigner": "3.1141.0",
     "@sentry/node": "^10.67.0",
     "firebase-admin": "^13.10.0",
-    "google-auth-library": "^10.9.0",
-    "firebase-functions": "^7.2.5"
+    "firebase-functions": "^7.2.5",
+    "google-auth-library": "^10.9.0"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",

@@ -1,17 +1,12 @@
 import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getStorage } from 'firebase-admin/storage';
 import type { CallableRequest } from 'firebase-functions/v2/https';
-import {
-  COLLECTIONS,
-  EMULATOR_PROJECT_ID,
-  EMULATOR_STORAGE_BUCKET,
-  assignmentId,
-  audioStoragePath,
-} from '@sabeel/shared';
+import { COLLECTIONS, EMULATOR_PROJECT_ID, assignmentId, audioStoragePath } from '@sabeel/shared';
 import { getPlaybackUrl } from '../../src/playback';
+import { signGet } from '../../src/mediaStore';
 import { idTokenFor } from './emulatorToken';
+import { putObject } from './mediaObjects';
 
 /**
  * The one callable that hands out audio, driven end to end.
@@ -24,17 +19,17 @@ import { idTokenFor } from './emulatorToken';
  * deliberately does not know about it — so this callable is the whole of the
  * lock on a closed recording, and the whole of the lock on a classmate's.
  *
- * The URL that comes back is the emulator's own object URL, not a signed one:
- * the Storage emulator has no signing service, and `signedPlaybackUrl` says so
- * at length. What is asserted here is therefore WHO gets a URL at all — the
- * signing itself is held by `signedUrlContract.test.ts` next door, which is
- * static because the production branch cannot run anywhere but production.
+ * The URL that comes back is SIGNED, by the same code production runs, against
+ * the local media store (SeaweedFS), which checks signatures and expiry the way
+ * R2 does. So "gets a URL" here means "gets a URL that plays": every allowed
+ * case fetches a byte range of the audio through it.
  */
 beforeAll(() => {
-  if (getApps().length === 0) {
-    initializeApp({ projectId: EMULATOR_PROJECT_ID, storageBucket: EMULATOR_STORAGE_BUCKET });
-  }
+  if (getApps().length === 0) initializeApp({ projectId: EMULATOR_PROJECT_ID });
 });
+
+/** The audio every allowed case must be able to read back through its URL. */
+const AUDIO = Uint8Array.from({ length: 4096 }, (_, i) => i % 251);
 
 const db = () => getFirestore();
 const COURSE = 'course-play';
@@ -99,21 +94,27 @@ beforeEach(async () => {
     createdBy: 'admin-uid',
     updatedAt: 1,
   });
-  // A real object: the emulator branch reads its metadata to mint a URL.
-  await getStorage()
-    .bucket()
-    .file(audioStoragePath(RECORDING))
-    .save(Buffer.alloc(16), { contentType: 'audio/mp4' });
+  await putObject(audioStoragePath(RECORDING), AUDIO);
 });
 
+/** Read bytes 100..199 through a URL, as a player seeking would. */
+async function rangeThrough(url: string): Promise<{ status: number; bytes: Uint8Array }> {
+  const res = await fetch(url, { headers: { Range: 'bytes=100-199' } });
+  return { status: res.status, bytes: new Uint8Array(await res.arrayBuffer()) };
+}
+
+/** null when the caller got a URL that plays; the refusal's message otherwise. */
 const denialOf = async (r: CallableRequest): Promise<string | null> => {
+  let res: { url: string };
   try {
-    const res = (await getPlaybackUrl.run(r)) as { url: string };
-    expect(res.url).toContain(RECORDING);
-    return null;
+    res = (await getPlaybackUrl.run(r)) as { url: string };
   } catch (e) {
     return (e as { message?: string }).message ?? 'unknown';
   }
+  const got = await rangeThrough(res.url);
+  expect(got.status, 'the URL handed out does not play').toBe(206);
+  expect(got.bytes).toEqual(AUDIO.slice(100, 200));
+  return null;
 };
 
 describe('getPlaybackUrl', () => {
@@ -186,5 +187,33 @@ describe('getPlaybackUrl', () => {
       .doc(COURSE)
       .update({ archived: true, effectiveActive: false, archivedAccess: false });
     expect(await denialOf(await req(STUDENT, 'student'))).toMatch(/archived/i);
+  });
+});
+
+/*
+ * THE URL ITSELF: what a leaked link is worth. These run the production signing
+ * path against a store that enforces signatures, which the Firebase Storage
+ * emulator never could.
+ */
+describe('a playback URL', () => {
+  it('stops working when it expires', async () => {
+    const { url } = await signGet(audioStoragePath(RECORDING), 1000);
+    expect((await rangeThrough(url)).status).toBe(206);
+    await new Promise((r) => setTimeout(r, 2500));
+    expect((await rangeThrough(url)).status).toBe(403);
+  });
+
+  it('opens only the recording it was signed for', async () => {
+    await putObject(audioStoragePath('recording-someone-else'), AUDIO);
+    const { url } = await signGet(audioStoragePath(RECORDING), 60_000);
+    const other = url.replace(RECORDING, 'recording-someone-else');
+    expect((await rangeThrough(other)).status).toBe(403);
+  });
+
+  it('cannot be used to write', async () => {
+    const { url } = await signGet(audioStoragePath(RECORDING), 60_000);
+    const res = await fetch(url, { method: 'PUT', body: new Uint8Array(8) });
+    expect(res.status).toBe(403);
+    expect((await rangeThrough(url)).bytes).toEqual(AUDIO.slice(100, 200));
   });
 });

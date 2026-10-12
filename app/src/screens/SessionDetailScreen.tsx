@@ -431,7 +431,7 @@ function RecordingSection({
    * isn't one.
    *
    * The upload SPANS the moment the recording doc starts existing: the server
-   * has to mint the id before the client may write to Storage (that ordering is
+   * has to mint the id before the client may upload the audio (that ordering is
    * what makes the upload authorized — see createRecordingDraft). The live
    * listener therefore flips `recording` from null to set mid-upload, which is
    * why nothing about this flow may live in a branch keyed on that: the progress
@@ -620,7 +620,7 @@ function RecordingCard({
    */
   const deadlinePassed = isOverdue(session.dueDate, todayInZone(INSTITUTE_TIMEZONE));
   const moves = allowedTransitions(r.status).filter((to) => to !== 'needsAttention');
-  // Removing audio DELETES the object from Storage — the file is gone, and a
+  // Removing audio DELETES the file from the media bucket — it is gone, and a
   // Zoom import has to be re-imported while a manual upload needs the original
   // again. It sat unguarded among the safe controls, reading like one of them.
   const [confirmClear, setConfirmClear] = useState(false);

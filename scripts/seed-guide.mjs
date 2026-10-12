@@ -4,11 +4,11 @@ import { readFileSync } from 'node:fs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 import { EMULATOR_PORTS } from './lib/ports.mjs';
-import { EMULATOR_PROJECT_ID, EMULATOR_STORAGE_BUCKET } from './lib/project.mjs';
+import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
+import { putLocalObject } from './lib/media-store.mjs';
 process.env.FIRESTORE_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.auth}`;
-process.env.FIREBASE_STORAGE_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.storage}`;
-admin.initializeApp({ projectId: EMULATOR_PROJECT_ID, storageBucket: EMULATOR_STORAGE_BUCKET });
+admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
 const auth=admin.auth(), db=admin.firestore();
 const now=Date.now(), day=86400000;
 const iso=(ms)=>new Date(ms).toISOString().slice(0,10);
@@ -82,7 +82,7 @@ async function mkSession(courseId, sid, rid, title, { status='published', dueOff
   const dueDate=iso(now+dueOffset*day);
   const hasAudio = status!=='draft';
   const path=`recordings/${rid}/audio.m4a`;
-  if (hasAudio) await admin.storage().bucket().file(path).save(audio,{contentType:'audio/mp4'});
+  if (hasAudio) await putLocalObject(path, audio, 'audio/mp4');
   const submitted = attendance ? now-daysAgo*day : null;
   await db.collection('sessions').doc(sid).set({
     courseId, cohortId, date, title, dueDate, notes,

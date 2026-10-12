@@ -96,7 +96,7 @@ import { join, resolve } from 'node:path';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
-import { EMULATOR_PROJECT_ID, EMULATOR_STORAGE_BUCKET } from './lib/project.mjs';
+import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { backButton, byId, byName, resetEmulators, seedWorld, tap } from './lib/seed-world.mjs';
 // The built workspace package — `screens-e2e.sh` builds it before this runs.
 import { PUSH_DEVICE_MESSAGE, addDays } from '@sabeel/shared';
@@ -105,12 +105,10 @@ const BASE = process.env.E2E_BASE ?? `http://127.0.0.1:${WEB_PORTS.sweep}/`;
 const ROOT = resolve(import.meta.dirname, '..');
 const SHOTS = resolve(ROOT, 'shots', 'screens');
 const PROJECT = EMULATOR_PROJECT_ID;
-const BUCKET = EMULATOR_STORAGE_BUCKET;
 const FULL = process.env.SWEEP_FULL === '1';
 
 process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.auth}`;
-process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.storage}`;
 process.env.GCLOUD_PROJECT = PROJECT;
 
 const results = [];
@@ -272,7 +270,7 @@ const PROFILES = FULL
   : [];
 
 await mkdir(SHOTS, { recursive: true });
-admin.initializeApp({ projectId: PROJECT, storageBucket: BUCKET });
+admin.initializeApp({ projectId: PROJECT });
 const db = admin.firestore();
 const auth = admin.auth();
 

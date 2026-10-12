@@ -28,7 +28,7 @@ import { createRequire } from 'node:module';
 import { chromium } from 'playwright';
 import { resetEmulators, seedWorld } from './lib/seed-world.mjs';
 import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
-import { EMULATOR_PROJECT_ID, EMULATOR_STORAGE_BUCKET } from './lib/project.mjs';
+import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 
 // Resolved from the functions workspace, which already depends on the Admin
 // SDK — the same arrangement as `check-query-shapes.mjs`.
@@ -37,8 +37,7 @@ const admin = require('firebase-admin');
 
 process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.auth}`;
-process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.storage}`;
-admin.initializeApp({ projectId: EMULATOR_PROJECT_ID, storageBucket: EMULATOR_STORAGE_BUCKET });
+admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
 const db = admin.firestore();
 const auth = admin.auth();
 const BASE = process.env.E2E_WEB ?? `http://127.0.0.1:${WEB_PORTS.e2e}/`;

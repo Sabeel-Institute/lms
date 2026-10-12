@@ -13,6 +13,7 @@ import {
   deleteRecording,
   finalizeRecordingUpload,
   setRecordingStatus,
+  startRecordingUpload,
 } from '../../src/recordings';
 import { createStudent } from '../../src/students';
 import { importZoomRecording, retryZoomImport } from '../../src/zoomImport';
@@ -32,7 +33,7 @@ import { importZoomRecording, retryZoomImport } from '../../src/zoomImport';
  * `functions/src`, driven through `onCall`'s `.run()` so the real handler runs —
  * validation, lookups, guard and all. Adding a course-scoped callable without
  * adding a row here is the gap this is built to make obvious; `functions/src`
- * has sixteen call sites and the table has sixteen rows, and the last test in
+ * has seventeen call sites and the table has seventeen rows, and the last test in
  * the file holds those two numbers together.
  *
  * TWO ASSERTIONS PER ROW, because one is not enough. "A manager of another class
@@ -130,7 +131,7 @@ async function seed() {
 
 beforeEach(seed);
 
-/** The sixteen `requireCourseScope` call sites, by the callable that reaches them. */
+/** The seventeen `requireCourseScope` call sites, by the callable that reaches them. */
 const SCOPED: Array<{
   name: string;
   /** `.run` is what `onCall` exposes for driving the real handler in a test. */
@@ -154,6 +155,7 @@ const SCOPED: Array<{
   { name: 'submitAttendance', call: (r) => submitAttendance.run(r), data: { sessionId: SESSION, attendance: { [STUDENT]: 'present' } } },
   { name: 'deleteSession', call: (r) => deleteSession.run(r), data: { sessionId: SESSION }, owner: 'admin' },
   { name: 'createRecording', call: (r) => createRecording.run(r), data: { sessionId: SESSION } },
+  { name: 'startRecordingUpload', call: (r) => startRecordingUpload.run(r), data: { recordingId: RECORDING, contentType: 'audio/mp4', sizeBytes: 1000 } },
   { name: 'finalizeRecordingUpload', call: (r) => finalizeRecordingUpload.run(r), data: { recordingId: RECORDING, durationSec: 60 } },
   { name: 'setRecordingStatus', call: (r) => setRecordingStatus.run(r), data: { recordingId: RECORDING, status: 'draft' } },
   { name: 'clearRecordingAudio', call: (r) => clearRecordingAudio.run(r), data: { recordingId: RECORDING } },

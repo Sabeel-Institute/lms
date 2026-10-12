@@ -17,7 +17,7 @@
  * is simply never in it (enrollment-onward).
  *
  * Prerequisites (see docs/DEV-TOOLING.md):
- *   firebase emulators:start --project demo-sabeel-recordings --only firestore,auth,storage,functions
+ *   npm run emulators          # the emulators and the local media store
  *   cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61311 --clear
  *
  * Then: npm run test:e2e

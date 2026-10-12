@@ -13,10 +13,7 @@
  * the functions read, and with the `--project` flags in the shell runners.
  * `functions/test/unit/emulatorPorts.test.ts` asserts all of them agree —
  * `isEmulatorProject()` compares `GCLOUD_PROJECT` against the shared constant,
- * and a mismatch there makes the playback path mint a *signed* URL against the
- * emulator, which fails without saying why.
+ * and a mismatch there makes the media store reach for the production R2 keys
+ * instead of the local SeaweedFS ones.
  */
 export const EMULATOR_PROJECT_ID = 'demo-sabeel-recordings';
-
-/** Derived exactly as `packages/shared/src/constants.ts` derives it. */
-export const EMULATOR_STORAGE_BUCKET = `${EMULATOR_PROJECT_ID}.appspot.com`;

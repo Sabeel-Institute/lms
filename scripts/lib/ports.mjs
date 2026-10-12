@@ -31,7 +31,23 @@ export const EMULATOR_PORTS = {
   ui: PORT_BASE + 4,
   hub: PORT_BASE + 5,
   logging: PORT_BASE + 6,
-  storage: PORT_BASE + 7,
+};
+
+/**
+ * The local media store: SeaweedFS standing in for Cloudflare R2
+ * (`scripts/lib/media-store.mjs`). `s3` is the only one anything talks to; the
+ * rest are SeaweedFS's own master, volume and filer servers, pinned so that it
+ * binds nothing outside this block, and all on 127.0.0.1.
+ */
+export const MEDIA_STORE_PORTS = {
+  s3: PORT_BASE + 7,
+  master: PORT_BASE + 20,
+  masterGrpc: PORT_BASE + 21,
+  volume: PORT_BASE + 22,
+  volumeGrpc: PORT_BASE + 23,
+  filer: PORT_BASE + 24,
+  filerGrpc: PORT_BASE + 25,
+  s3Grpc: PORT_BASE + 26,
 };
 
 /**

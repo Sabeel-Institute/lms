@@ -9,7 +9,8 @@
         "scripts/**/*.mjs"
       ],
       "ignoreDependencies": [
-        "firebase-admin"
+        "firebase-admin",
+        "@aws-sdk/client-s3"
       ]
     },
     "app": {

@@ -14,6 +14,7 @@ import { reportedCall } from './reported';
 import { reportError } from './sentry';
 import { requireCourseScope, requireStaff } from './guards';
 import { MAX_AUDIO_BYTES, createRecordingDraft, finalizeRecording } from './recordings';
+import { MEDIA_WRITE_SECRETS, deleteObject } from './mediaStore';
 import { ZOOM_SECRETS, zoomClient, type ZoomAudioRecording, type ZoomClient } from './zoom';
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -33,8 +34,13 @@ async function downloadIntoRecording(
   client: ZoomClient,
 ): Promise<void> {
   const ref = getFirestore().collection(COLLECTIONS.recordings).doc(recordingId);
+  const key = audioStoragePath(recordingId);
   try {
-    await client.streamToStorage(downloadUrl, audioStoragePath(recordingId));
+    // The copy is write-once, like every upload. Whatever an earlier attempt
+    // left is removed first: this only runs on a draft or needs-attention
+    // recording (the callers check), so nothing a student can hear is at stake.
+    await deleteObject(key);
+    await client.copyToMediaStore(downloadUrl, key);
     await finalizeRecording({ recordingId, durationSec });
     await ref.update({
       status: 'draft',
@@ -138,7 +144,7 @@ export async function applyRetryZoomImport(
 /**
  * Moving a class recording is not a normal callable.
  *
- * The whole audio file is streamed through the function (Zoom → Storage), and a
+ * The whole audio file is streamed through the function (Zoom → media store), and a
  * two-hour class is 100-250 MB. On the platform defaults — 60 s, 256 MiB — that
  * is a coin flip, and the failure surfaces to staff as an upload that "did not
  * work" the first time and worked the second. The client timeout is raised to
@@ -229,7 +235,7 @@ export const importZoomRecording = auditedCall(
     audit.targets = { recordingId: res.recordingId, sessionId: d.sessionId };
     return res;
   },
-  ZOOM_SECRETS,
+  [...ZOOM_SECRETS, ...MEDIA_WRITE_SECRETS],
   IMPORT_RUNTIME,
 );
 
@@ -247,6 +253,6 @@ export const retryZoomImport = auditedCall(
     audit.courseId = courseId;
     return applyRetryZoomImport(d.recordingId, zoomClient);
   },
-  ZOOM_SECRETS,
+  [...ZOOM_SECRETS, ...MEDIA_WRITE_SECRETS],
   IMPORT_RUNTIME,
 );

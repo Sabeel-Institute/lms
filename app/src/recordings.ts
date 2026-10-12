@@ -1,13 +1,7 @@
 import { collection, doc, orderBy, query, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { ref, uploadBytesResumable } from 'firebase/storage';
-import {
-  COLLECTIONS,
-  audioStoragePath,
-  type RecordingDoc,
-  type RecordingStatus,
-} from '@sabeel/shared';
-import { db, functions, storage } from './firebase';
+import { COLLECTIONS, type RecordingDoc, type RecordingStatus } from '@sabeel/shared';
+import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
 
 export interface RecordingRow extends RecordingDoc {
@@ -134,32 +128,45 @@ export const clearRecordingAudio = call<{ recordingId: string }, unknown>('clear
 /** Permanent, admin-only, cascading delete. Refused server-side while published. */
 export const deleteRecording = call<{ recordingId: string }, unknown>('deleteRecording');
 
+const startRecordingUpload = call<
+  { recordingId: string; contentType: string; sizeBytes: number },
+  { url: string; headers: Record<string, string>; expiresAt: number }
+>('startRecordingUpload');
+
 /**
  * Upload audio for a draft, reporting progress.
  *
- * Goes straight to Storage rather than through a Function: a 2-hour recording is
- * tens of megabytes, and the 60-minute function timeout makes proxying long
- * media unworkable — quite apart from paying for the bytes twice.
+ * Straight to the media bucket on a URL the server signed after checking who
+ * is asking (`startRecordingUpload`), never through a Function: a 2-hour
+ * recording is tens of megabytes, and the 60-minute function timeout makes
+ * proxying long media unworkable, quite apart from paying for the bytes twice.
+ *
+ * XMLHttpRequest rather than fetch: it is the one API that reports upload
+ * progress on both the web and React Native. The headers the server returns
+ * are part of the signature, so they are sent exactly as given.
  */
-export function uploadRecordingAudio(
+export async function uploadRecordingAudio(
   recordingId: string,
   file: Blob,
   onProgress: (fraction: number) => void,
 ): Promise<void> {
-  const task = uploadBytesResumable(ref(storage, audioStoragePath(recordingId)), file, {
-    contentType: file.type || 'audio/mp4',
-  });
-  return new Promise((resolve, reject) => {
-    task.on(
-      'state_changed',
-      // Clamp to 1: a React Native resumable upload can re-send a chunk on a
-      // network hiccup, so bytesTransferred can briefly exceed totalBytes and the
-      // raw ratio reads past 100% (seen at ~140%). The bar is advisory; never
-      // show more than done.
-      (s) => onProgress(s.totalBytes ? Math.min(1, s.bytesTransferred / s.totalBytes) : 0),
-      reject,
-      () => resolve(),
-    );
+  const contentType = file.type || 'audio/mp4';
+  const put = await startRecordingUpload({ recordingId, contentType, sizeBytes: file.size });
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', put.url);
+    for (const [name, value] of Object.entries(put.headers)) xhr.setRequestHeader(name, value);
+    // Clamp to 1: a retried chunk can briefly report more sent than the total.
+    // The bar is advisory; never show more than done.
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total) onProgress(Math.min(1, e.loaded / e.total));
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`The upload was refused (HTTP ${xhr.status}). Try again.`));
+    xhr.onerror = () => reject(new Error('The upload could not reach the server. Check the connection and try again.'));
+    xhr.send(file);
   });
 }
 

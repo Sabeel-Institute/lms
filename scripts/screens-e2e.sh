@@ -137,7 +137,7 @@ fi
 # straggler, which is what kept it invisible. `set -e` still propagates the exit
 # status, and now the trap actually fires. The reference implementation this was
 # modelled on has the same bug.
-firebase emulators:exec \
+node scripts/with-media-store.mjs firebase emulators:exec \
   --project demo-sabeel-recordings \
-  --only firestore,auth,storage,functions \
+  --only firestore,auth,functions \
   "node scripts/screens-e2e.mjs"

@@ -27,7 +27,9 @@ bash "$(dirname "$0")/free-emulator-ports.sh"
 npm run build -w @sabeel/shared
 npm run build -w functions
 
-exec firebase emulators:exec \
+# The media store (SeaweedFS, standing in for R2) runs around the emulators:
+# the functions sign real URLs against it and the tests read what landed.
+exec node scripts/with-media-store.mjs firebase emulators:exec \
   --project demo-sabeel-recordings \
-  --only firestore,auth,storage,functions \
+  --only firestore,auth,functions \
   "npm run test:integration -w functions"

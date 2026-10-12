@@ -1,11 +1,9 @@
 import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getStorage } from 'firebase-admin/storage';
 import {
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
-  EMULATOR_STORAGE_BUCKET,
   audioStoragePath,
   type RecordingDoc,
 } from '@sabeel/shared';
@@ -15,11 +13,10 @@ import { createSessionRecord } from '../../src/sessions';
 import { MAX_AUDIO_BYTES } from '../../src/recordings';
 import { annotateImported, applyImportZoomRecording, applyRetryZoomImport } from '../../src/zoomImport';
 import type { ZoomAudioRecording, ZoomClient } from '../../src/zoom';
+import { clearPrefix, objectExists, objectInfo, putObject } from './mediaObjects';
 
 beforeAll(() => {
-  if (getApps().length === 0) {
-    initializeApp({ projectId: EMULATOR_PROJECT_ID, storageBucket: EMULATOR_STORAGE_BUCKET });
-  }
+  if (getApps().length === 0) initializeApp({ projectId: EMULATOR_PROJECT_ID });
 });
 
 const ADMIN = 'admin-uid';
@@ -30,7 +27,7 @@ async function clearAll() {
     const snap = await db.collection(c).get();
     await Promise.all(snap.docs.map((d) => d.ref.delete()));
   }
-  await getStorage().bucket().deleteFiles({ prefix: 'recordings/' }).catch(() => undefined);
+  await clearPrefix('recordings/');
 }
 
 let courseId = '';
@@ -67,12 +64,11 @@ function fakeClient(rec: ZoomAudioRecording, opts: { fail?: boolean } = {}): Zoo
     async freshAudioFile(meetingUuid, fileId) {
       return { rec, downloadUrl: `fake://${meetingUuid}/${fileId}` };
     },
-    async streamToStorage(_downloadUrl, storagePath) {
+    async copyToMediaStore(_downloadUrl, key) {
       if (opts.fail) throw new Error('network boom');
-      await getStorage()
-        .bucket()
-        .file(storagePath)
-        .save(Buffer.alloc(rec.sizeBytes || 4096), { contentType: 'audio/mp4' });
+      // Write-once, like the real copy: an object already there is an error.
+      if (await objectExists(key)) throw new Error(`refusing to overwrite ${key}`);
+      await putObject(key, new Uint8Array(rec.sizeBytes || 4096));
     },
   };
 }
@@ -81,8 +77,7 @@ const rec = async (id: string) =>
   (await getFirestore().collection(COLLECTIONS.recordings).doc(id).get()).data() as RecordingDoc;
 const countRecordings = async () =>
   (await getFirestore().collection(COLLECTIONS.recordings).get()).size;
-const audioExists = async (id: string) =>
-  (await getStorage().bucket().file(audioStoragePath(id)).exists())[0];
+const audioExists = (id: string) => objectExists(audioStoragePath(id));
 
 describe('applyImportZoomRecording', () => {
   it('creates a ready draft: source zoom, dedupe key, metadata, audio finalized', async () => {
@@ -103,7 +98,7 @@ describe('applyImportZoomRecording', () => {
       durationSec: 300,
     });
     expect(d.audioPath).toBe(audioStoragePath(res.recordingId));
-    expect(d.sizeBytes).toBe(4096); // read from Storage, not trusted from Zoom
+    expect(d.sizeBytes).toBe(4096); // read from the media store, not trusted from Zoom
     expect(await audioExists(res.recordingId)).toBe(true);
   });
 
@@ -310,14 +305,13 @@ describe('applyRetryZoomImport', () => {
       await getFirestore().collection(COLLECTIONS.recordings).where('zoomUuid', '==', 'uuid-1').get()
     ).docs[0];
     await imported.ref.update({ status: 'published', publishedAt: Date.now() });
-    const [before] = await getStorage().bucket().file(audioStoragePath(imported.id)).getMetadata();
+    const before = await objectInfo(audioStoragePath(imported.id));
 
     await expect(applyRetryZoomImport(imported.id, fakeClient({ ...REC, sizeBytes: 8192 }))).rejects.toThrow(
       /already has its audio/i,
     );
     expect((await rec(imported.id)).status).toBe('published');
-    const [after] = await getStorage().bucket().file(audioStoragePath(imported.id)).getMetadata();
-    expect(after.size).toBe(before.size);
+    expect(await objectInfo(audioStoragePath(imported.id))).toEqual(before);
   });
 
   it('retries an import whose audio landed but whose status never settled', async () => {

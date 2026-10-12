@@ -20,9 +20,10 @@ until switchover day. Never point a command from this checkout at
   import it restate it, and `functions/test/unit/projectIdentity.test.ts` holds
   them to it and fails if the legacy project id, its project number or the old
   Android package appears in any code or config.
-- **Deploy nothing until Phase 0 of `docs/plans/SWITCHOVER.md` is done.** The
-  code still uses Firebase Storage, and this project has no bucket: media moves
-  to R2 first.
+- **Deploy nothing until Phase 0 of `docs/plans/SWITCHOVER.md` is done.** Media
+  is on R2, but Zoom imports still stream through a Function, which in
+  production would bill every byte as Google egress, until the Worker copier
+  replaces it.
 - **Push notifications reach only staff** (`NOTIFY_AUDIENCE=staff` in
   `functions/.env.oursabeel-lms`) until switchover day, when it becomes
   `everyone`. The project holds a copy of every real account while the live app
@@ -113,10 +114,13 @@ Do not silently change any of these.
 - **Completion is student-attested.** Playback progress is audit evidence, not the
   gate. There is no listened-percentage threshold; the app only blocks completion
   if the student has never played the recording.
-- **Playback URLs expire.** A 12-hour V4 signed URL minted by a callable that has
-  already checked the student's grant. Never `getDownloadURL()` — its download
-  token never expires, which is the one thing the threat model rules out. Never
-  proxy audio through a Function: the 60-minute timeout kills a 2-hour session.
+- **Playback URLs expire.** Media lives in a private Cloudflare R2 bucket; a
+  student plays it through a 12-hour pre-signed URL minted by a callable that has
+  already checked their grant (`functions/src/mediaStore.ts`). Never a public
+  bucket, an `r2.dev` URL or any link that does not expire, which is the one
+  thing the threat model rules out. Never proxy audio through a Function: the
+  60-minute timeout kills a 2-hour session. Uploads are pre-signed PUTs that
+  create the object once (`If-None-Match: *` is signed).
 - **Adult learner tone.** Required listening, listen by, missed, completed, pending
   sync. "Missed" rather than "overdue" once access has closed: overdue implies
   still doable. Never childish, punitive, or shaming language.
@@ -153,19 +157,22 @@ Do not silently change any of these.
   (`expo export --platform web` → Firebase Hosting). Platform seams as `.web.ts(x)`
   siblings. Architecture must not block a later iOS build.
 - Firebase **JS SDK on all surfaces** (not react-native-firebase — no web support).
-- Backend: Cloud Functions (TS, nodejs22, us-central1) + Firestore + **Cloud
-  Storage**. The bucket must be a modern `*.firebasestorage.app` bucket in
-  us-central1/us-west1/us-east1 — only those get the no-cost quotas.
+- Backend: Cloud Functions (TS, nodejs22, us-central1) + Firestore. Media in
+  **Cloudflare R2** (bucket `oursabeel-lms-media`), reached through the S3 API
+  with two bucket-scoped keys: read signs playback, write uploads and deletes.
+  No Firebase Storage bucket exists. Per-project settings (endpoint, bucket,
+  who gets notifications) are in `functions/.env.<projectId>`.
 - Monorepo (npm workspaces): `app`, `functions`, `packages/shared`. Shared types
   and constants live in `@sabeel/shared`.
-- Config-as-code: `firestore.rules`, `firestore.indexes.json`, `storage.rules`
-  deploy from the repo, never console-edited.
+- Config-as-code: `firestore.rules`, `firestore.indexes.json` and the R2 bucket's
+  settings deploy from the repo, never console-edited.
 
 ## Dev & test loops
 
 - Unit: `npm test` (Vitest: shared, functions **and app** — the app's node-only
   suite covers its pure logic, the playback session and the work queue).
-- **This checkout owns emulator ports 61300-61307** and web dev-server ports
+- **This checkout owns emulator ports 61300-61306**, the local media store's
+  61307 (S3) and 61320-61326 (its internals), and web dev-server ports
   61310 (sweep) / 61311 (`test:e2e`); the legacy `sabeel-recording-app` checkout
   owns 61100+, and the sibling repos own 61000+ and 61200+.
   Three projects share this machine and all three used to pin 8080/9099/5001/9199,
@@ -173,9 +180,12 @@ Do not silently change any of these.
   the ports and `functions/test/unit/emulatorPorts.test.ts` asserts they agree and
   that the kill list reaches no further. Never widen `free-emulator-ports.sh` past
   this block. Details in `docs/DEV-TOOLING.md`.
-- Rules/integration: `npm run test:emulator` — Firestore, Auth **and Storage**
-  rules. Needs JDK 21. Storage rules have no reference implementation in the
-  sibling repos, so this job is what keeps them honest.
+- Rules/integration: `npm run test:emulator` — Firestore and Auth emulators plus
+  the local media store (SeaweedFS standing in for R2, started by
+  `scripts/with-media-store.mjs`). Needs JDK 21 and SeaweedFS
+  (`docs/DEV-TOOLING.md`). The functions sign real URLs against SeaweedFS, which
+  checks signatures and expiry like R2, so the production signing path runs
+  locally.
 - Browser e2e: `npm run test:e2e`. Needs a live Metro dev server **and** the
   emulator suite already running, and it resets Firestore and Auth on every run —
   which is why it is a local pre-commit check and deliberately **not** in CI.
@@ -188,7 +198,9 @@ Do not silently change any of these.
 - Android: `scripts/emulator.sh headless` (AVD `tb_emu`), then `npx expo
   run:android` in `app/`. Firebase emulators from the AVD = `10.0.2.2`; from web =
   the literal `127.0.0.1`, never `localhost` (the emulators bind IPv4-only and
-  `localhost` can resolve to `::1` first).
+  `localhost` can resolve to `::1` first). Media is the exception on the AVD:
+  signed URLs name `127.0.0.1:61307` and the host is part of the signature, so
+  run `adb reverse tcp:61307 tcp:61307` rather than rewriting the URL.
 - Dead code: `npm run knip` (CI-enforced). It fails on unused files, exports and
   dependencies — which is why infrastructure is added **with its first consumer**,
   not ahead of it. Suppressing knip to keep unused scaffolding would make the audit

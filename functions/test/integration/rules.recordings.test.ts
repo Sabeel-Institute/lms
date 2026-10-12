@@ -7,7 +7,6 @@ import {
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
@@ -44,10 +43,6 @@ beforeAll(async () => {
     firestore: {
       ...hostPort('FIRESTORE_EMULATOR_HOST'),
       rules: readFileSync(new URL('../../../firestore.rules', import.meta.url), 'utf8'),
-    },
-    storage: {
-      ...hostPort('FIREBASE_STORAGE_EMULATOR_HOST'),
-      rules: readFileSync(new URL('../../../storage.rules', import.meta.url), 'utf8'),
     },
   });
 });
@@ -102,7 +97,6 @@ beforeEach(async () => {
   THEIR_REC = `recTheirs-run${run}`;
   CLOSED = `recClosed-run${run}`;
   await testEnv.clearFirestore();
-  await testEnv.clearStorage();
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     const cls = (id: string, managerUids: string[]) =>
@@ -391,67 +385,6 @@ describe('recordings: writes', () => {
     );
     await assertFails(
       updateDoc(doc(student().firestore(), COLLECTIONS.recordings, PUBLISHED), { title: 'x' }),
-    );
-  });
-});
-
-describe('storage: audio object', () => {
-  const bytes = () => new Uint8Array([0, 1, 2, 3]);
-  const audio = { contentType: 'audio/mp4' };
-
-  it('lets staff upload audio for a recording that has none', async () => {
-    await assertSucceeds(
-      uploadBytes(ref(mine().storage(), audioStoragePath('brandNew')), bytes(), audio),
-    );
-  });
-
-  it('is WRITE-ONCE — a second upload is refused', async () => {
-    // This is what stops a published recording's audio being swapped underneath
-    // students who already listened to it.
-    await assertSucceeds(
-      uploadBytes(ref(mine().storage(), audioStoragePath('once')), bytes(), audio),
-    );
-    await assertFails(
-      uploadBytes(ref(mine().storage(), audioStoragePath('once')), bytes(), audio),
-    );
-  });
-
-  it('refuses a non-audio content type', async () => {
-    await assertFails(
-      uploadBytes(ref(mine().storage(), audioStoragePath('vid')), bytes(), {
-        contentType: 'video/mp4',
-      }),
-    );
-  });
-
-  it('refuses students and anonymous callers', async () => {
-    await assertFails(
-      uploadBytes(ref(student().storage(), audioStoragePath('nope')), bytes(), audio),
-    );
-    await assertFails(
-      uploadBytes(
-        ref(testEnv.unauthenticatedContext().storage(), audioStoragePath('nope2')),
-        bytes(),
-        audio,
-      ),
-    );
-  });
-
-  it('denies READS to everyone — playback is signed URLs only', async () => {
-    await testEnv.withSecurityRulesDisabled(async (c) => {
-      await uploadBytes(ref(c.storage(), audioStoragePath(PUBLISHED)), bytes(), audio);
-    });
-    await assertFails(getDownloadURL(ref(admin().storage(), audioStoragePath(PUBLISHED))));
-    await assertFails(getDownloadURL(ref(mine().storage(), audioStoragePath(PUBLISHED))));
-    await assertFails(getDownloadURL(ref(student().storage(), audioStoragePath(PUBLISHED))));
-  });
-
-  it('refuses writes anywhere outside the recordings audio path', async () => {
-    await assertFails(uploadBytes(ref(mine().storage(), 'anything/else.m4a'), bytes(), audio));
-    await assertFails(
-      uploadBytes(ref(mine().storage(), 'recordings/x/notes.txt'), bytes(), {
-        contentType: 'text/plain',
-      }),
     );
   });
 });

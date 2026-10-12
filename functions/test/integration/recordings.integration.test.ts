@@ -1,11 +1,9 @@
 import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getStorage } from 'firebase-admin/storage';
 import {
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
-  EMULATOR_STORAGE_BUCKET,
   audioStoragePath,
   type RecordingDoc,
   type SessionDoc,
@@ -15,7 +13,7 @@ import { createCohortRecord } from '../../src/cohorts';
 import { createCourseRecord } from '../../src/courses';
 import { createSessionRecord, deleteSession, updateSession } from '../../src/sessions';
 import { idTokenFor } from './emulatorToken';
-import { readFileSync } from 'node:fs';
+import { clearPrefix, objectExists, objectInfo, putObject } from './mediaObjects';
 import {
   MAX_AUDIO_BYTES,
   applyDeleteRecording,
@@ -26,15 +24,16 @@ import {
   createRecordingDraft,
   finalizeRecording,
   requireDeleteRights,
+  startRecordingUpload,
+  startUpload,
+  validateStartUpload,
   validateCreateRecording,
   validateFinalize,
   validateSetStatus,
 } from '../../src/recordings';
 
 beforeAll(() => {
-  if (getApps().length === 0) {
-    initializeApp({ projectId: EMULATOR_PROJECT_ID, storageBucket: EMULATOR_STORAGE_BUCKET });
-  }
+  if (getApps().length === 0) initializeApp({ projectId: EMULATOR_PROJECT_ID });
 });
 
 const ADMIN = 'admin-uid';
@@ -45,7 +44,7 @@ async function clearAll() {
     const snap = await db.collection(c).get();
     await Promise.all(snap.docs.map((d) => d.ref.delete()));
   }
-  await getStorage().bucket().deleteFiles({ prefix: 'recordings/' }).catch(() => undefined);
+  await clearPrefix('recordings/');
 }
 
 let courseId = '';
@@ -85,10 +84,7 @@ async function newDraft(): Promise<{ id: string; sessionId: string }> {
 }
 
 async function putAudio(recordingId: string, bytes = 2048) {
-  await getStorage()
-    .bucket()
-    .file(audioStoragePath(recordingId))
-    .save(Buffer.alloc(bytes), { contentType: 'audio/mp4' });
+  await putObject(audioStoragePath(recordingId), new Uint8Array(bytes));
 }
 
 async function ready(): Promise<string> {
@@ -204,7 +200,7 @@ describe('createRecordingDraft', () => {
 });
 
 describe('finalizeRecording', () => {
-  it('reads size from Storage rather than trusting the client', async () => {
+  it('reads size from the media store rather than trusting the client', async () => {
     const { id } = await newDraft();
     await putAudio(id, 4096);
     const res = await finalizeRecording({ recordingId: id, durationSec: 720 });
@@ -271,8 +267,7 @@ describe('clearAudio', () => {
   it('deletes the object so a replacement can be uploaded', async () => {
     const id = await ready();
     await clearAudio(id);
-    const [exists] = await getStorage().bucket().file(audioStoragePath(id)).exists();
-    expect(exists).toBe(false);
+    expect(await objectExists(audioStoragePath(id))).toBe(false);
     const d = await rec(id);
     expect(d.audioPath).toBeNull();
     expect(d.sizeBytes).toBeNull();
@@ -282,8 +277,7 @@ describe('clearAudio', () => {
     const id = await ready();
     await applyRecordingStatus({ recordingId: id, status: 'published' });
     await expect(clearAudio(id)).rejects.toThrow(/draft/i);
-    const [exists] = await getStorage().bucket().file(audioStoragePath(id)).exists();
-    expect(exists).toBe(true);
+    expect(await objectExists(audioStoragePath(id))).toBe(true);
   });
 });
 
@@ -314,8 +308,7 @@ describe('applyDeleteRecording', () => {
   }
   const recExists = async (id: string) =>
     (await getFirestore().collection(COLLECTIONS.recordings).doc(id).get()).exists;
-  const audioExists = async (id: string) =>
-    (await getStorage().bucket().file(audioStoragePath(id)).exists())[0];
+  const audioExists = (id: string) => objectExists(audioStoragePath(id));
 
   it('deletes a session whose recording is already gone, rather than failing on the cascade', async () => {
     const sessionId = await newSession();
@@ -495,7 +488,7 @@ describe('applyDeleteRecording', () => {
   // failed silently before: the UI offered no way back from a recording with no
   // audio, so these are the invariants that keep it out of a dead-end.
   it('deletes audio that landed but never finalized (audioPath still null)', async () => {
-    // The real failure this guards: the bytes reach Storage, then finalize fails,
+    // The real failure this guards: the bytes land, then finalize fails,
     // so the doc's audioPath is still null. Deleting only what the field points at
     // would leave those bytes orphaned and billable forever.
     const { id } = await newDraft();
@@ -520,7 +513,7 @@ describe('applyDeleteRecording', () => {
   });
 
   it('audio removed from a draft can be re-uploaded onto the SAME recording', async () => {
-    // clearAudio exists "so it can be re-uploaded" — the storage object is
+    // clearAudio exists "so it can be re-uploaded" — the upload URL is
     // write-once, so this only works because clearAudio deletes it first.
     const { id } = await newDraft();
     await putAudio(id);
@@ -539,12 +532,110 @@ describe('applyDeleteRecording', () => {
   });
 });
 
-describe('the size limit is stated in two places and must not drift', () => {
-  it('matches the number enforced in storage.rules', () => {
-    const rules = readFileSync(new URL('../../../storage.rules', import.meta.url), 'utf8');
-    const m = rules.match(/request\.resource\.size\s*<\s*(\d+)\s*\*\s*1024\s*\*\s*1024/);
-    expect(m, 'no size limit found in storage.rules').toBeTruthy();
-    expect(Number(m![1]) * 1024 * 1024).toBe(MAX_AUDIO_BYTES);
+/*
+ * THE UPLOAD PATH: staff's browser or phone PUTs the audio straight into the
+ * bucket on a URL `startUpload` signed. The promises are the ones the bucket
+ * rule used to keep, now kept by the URL and the server together: audio lands
+ * on a draft once and only once, only as audio, and a file over the cap does
+ * not stay.
+ */
+describe('uploading audio', () => {
+  const AUDIO = Uint8Array.from({ length: 5000 }, (_, i) => i % 256);
+  const send = (
+    put: { url: string; headers: Record<string, string> },
+    body: Uint8Array,
+    headers = put.headers,
+  ) => fetch(put.url, { method: 'PUT', headers, body });
+
+  it('stores the audio a draft is given, and finalize records it', async () => {
+    const { id } = await newDraft();
+    const put = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: AUDIO.length });
+    expect((await send(put, AUDIO)).status).toBe(200);
+    await finalizeRecording({ recordingId: id, durationSec: 60 });
+    expect(await rec(id)).toMatchObject({ audioPath: audioStoragePath(id), sizeBytes: AUDIO.length });
+  });
+
+  it('writes once: the same URL cannot replace what it stored', async () => {
+    const { id } = await newDraft();
+    const put = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: AUDIO.length });
+    expect((await send(put, AUDIO)).status).toBe(200);
+    const before = await objectInfo(audioStoragePath(id));
+    expect((await send(put, new Uint8Array(10))).status).toBe(412);
+    expect(await objectInfo(audioStoragePath(id))).toEqual(before);
+  });
+
+  it('refuses a different content type, or a PUT that drops the write-once condition', async () => {
+    const { id } = await newDraft();
+    const put = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: AUDIO.length });
+    expect((await send(put, AUDIO, { ...put.headers, 'Content-Type': 'video/mp4' })).status).toBe(403);
+    expect((await send(put, AUDIO, { 'Content-Type': 'audio/mp4' })).status).toBe(403);
+    expect(await objectExists(audioStoragePath(id))).toBe(false);
+  });
+
+  it('gives no URL for a recording that has its audio, or one students can hear', async () => {
+    const id = await ready();
+    const stored = await objectInfo(audioStoragePath(id));
+    await expect(startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: 10 })).rejects.toThrow(
+      /already has audio/,
+    );
+    await applyRecordingStatus({ recordingId: id, status: 'published' });
+    await expect(startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: 10 })).rejects.toThrow(
+      /draft/,
+    );
+    expect(await objectInfo(audioStoragePath(id))).toEqual(stored);
+  });
+
+  it('clears an upload that landed but was never finalized, so a retry can land', async () => {
+    const { id } = await newDraft();
+    const first = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: AUDIO.length });
+    expect((await send(first, AUDIO)).status).toBe(200);
+    // Finalize never happened (the tab closed); the person tries again.
+    const second = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: 10 });
+    expect((await send(second, new Uint8Array(10))).status).toBe(200);
+    await finalizeRecording({ recordingId: id, durationSec: 1 });
+    expect((await rec(id)).sizeBytes).toBe(10);
+  });
+
+  it('deletes and refuses a file over the cap that the URL could not stop', async () => {
+    // The URL signs the type, not the size, so a client can send more than it
+    // declared. Finalize is where that is caught, and the file goes.
+    const { id } = await newDraft();
+    const put = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: 1000 });
+    expect((await send(put, new Uint8Array(MAX_AUDIO_BYTES + 1))).status).toBe(200);
+    await expect(finalizeRecording({ recordingId: id, durationSec: 1 })).rejects.toThrow(/too large/);
+    expect(await objectExists(audioStoragePath(id))).toBe(false);
+    expect((await rec(id)).audioPath).toBeNull();
+  });
+
+  it('gives a student no upload URL at all', async () => {
+    const { id } = await newDraft();
+    const asStudent = {
+      auth: { uid: 'stu-1', token: { role: 'student', status: 'active' }, rawToken: await idTokenFor('stu-1') },
+      data: { recordingId: id, contentType: 'audio/mp4', sizeBytes: 10 },
+    } as unknown as CallableRequest;
+    await expect(startRecordingUpload.run(asStudent)).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('is a private bucket: without a signed URL nothing reads or writes', async () => {
+    const id = await ready();
+    const direct = `${process.env.MEDIA_S3_ENDPOINT}/${process.env.MEDIA_BUCKET}/${audioStoragePath(id)}`;
+    expect((await fetch(direct)).status).toBe(403);
+    expect((await fetch(direct, { method: 'PUT', body: new Uint8Array(4) })).status).toBe(403);
+    expect((await objectInfo(audioStoragePath(id)))?.size).toBe(2048);
+  });
+
+  it('refuses anything but audio, and a declared size over the cap, before signing', () => {
+    expect(() => validateStartUpload({ recordingId: 'r', contentType: 'video/mp4', sizeBytes: 10 })).toThrow(
+      /audio/,
+    );
+    expect(() =>
+      validateStartUpload({ recordingId: 'r', contentType: 'audio/mp4', sizeBytes: MAX_AUDIO_BYTES + 1 }),
+    ).toThrow(/too large/);
+    expect(validateStartUpload({ recordingId: 'r', contentType: 'audio/x-m4a', sizeBytes: 10 })).toEqual({
+      recordingId: 'r',
+      contentType: 'audio/x-m4a',
+      sizeBytes: 10,
+    });
   });
 });
 

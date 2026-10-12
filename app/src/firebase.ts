@@ -2,8 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { connectAuthEmulator } from 'firebase/auth';
 import { connectFirestoreEmulator } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
-import { getStorage, connectStorageEmulator } from 'firebase/storage';
-import { EMULATOR_PROJECT_ID, EMULATOR_STORAGE_BUCKET, REGION } from '@sabeel/shared';
+import { EMULATOR_PROJECT_ID, REGION } from '@sabeel/shared';
 import { firebaseConfig } from './firebase-config';
 import { initAuth } from './authInit';
 import { initDb } from './firestoreInit';
@@ -11,21 +10,11 @@ import { USE_EMULATORS, EMULATOR_HOST, EMULATOR_PORTS } from './env';
 
 // Against the emulators, use the emulator's demo project id (what the emulator
 // suite and tests run as) so the app reads/writes the same namespace. The
-// Firestore and Storage emulators partition by project id, and a mismatch shows
-// up as writes that succeed while the client insists the document does not
-// exist. The real projectId in firebaseConfig is for production only.
+// Firestore emulator partitions by project id, and a mismatch shows up as
+// writes that succeed while the client insists the document does not exist.
+// The real projectId in firebaseConfig is for production only.
 const app = initializeApp(
-  USE_EMULATORS
-    ? {
-        ...firebaseConfig,
-        projectId: EMULATOR_PROJECT_ID,
-        // The bucket has to be overridden too, not just the project id. Leaving
-        // the placeholder here uploads to a bucket the server never looks in,
-        // and the only symptom is finalize reporting "no audio found" for a
-        // file that uploaded fine.
-        storageBucket: EMULATOR_STORAGE_BUCKET,
-      }
-    : firebaseConfig,
+  USE_EMULATORS ? { ...firebaseConfig, projectId: EMULATOR_PROJECT_ID } : firebaseConfig,
 );
 
 // Exported for the web push seam, which needs the app instance to construct a
@@ -42,7 +31,6 @@ export const auth = initAuth(app);
 // FIRST Firestore call on the app, before any getFirestore elsewhere.
 export const db = initDb(app);
 export const functions = getFunctions(app, REGION);
-export const storage = getStorage(app);
 
 if (USE_EMULATORS) {
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:${EMULATOR_PORTS.auth}`, {
@@ -50,5 +38,4 @@ if (USE_EMULATORS) {
   });
   connectFirestoreEmulator(db, EMULATOR_HOST, EMULATOR_PORTS.firestore);
   connectFunctionsEmulator(functions, EMULATOR_HOST, EMULATOR_PORTS.functions);
-  connectStorageEmulator(storage, EMULATOR_HOST, EMULATOR_PORTS.storage);
 }

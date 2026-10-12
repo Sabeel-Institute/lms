@@ -1,19 +1,12 @@
 import './setup';
 import { initializeApp } from 'firebase-admin/app';
-import { EMULATOR_PROJECT_ID, EMULATOR_STORAGE_BUCKET } from '@sabeel/shared';
 import { isEmulatorProject } from './env';
 import * as bootstrap from './bootstrap';
 
-// Once, before any handler runs. Credentials come from the environment on both
-// the emulator and Cloud Functions, but the STORAGE BUCKET does not: the Admin
-// SDK throws "Bucket name not specified" without one, and the functions
-// emulator does not supply it. Deployed, it arrives via FIREBASE_CONFIG.
-const projectId = process.env.GCLOUD_PROJECT ?? '';
-initializeApp(
-  projectId === EMULATOR_PROJECT_ID
-    ? { projectId, storageBucket: EMULATOR_STORAGE_BUCKET }
-    : undefined,
-);
+// Once, before any handler runs. Credentials and the project come from the
+// environment on both the emulator and Cloud Functions. Media is not in
+// Firebase at all (`mediaStore.ts`), so there is no bucket to name.
+initializeApp();
 
 export { onUserCreate } from './authTrigger';
 export { setStaffAccess } from './staff';
@@ -24,6 +17,7 @@ export { createEnrollment, setEnrollmentActive } from './enrollments';
 export { createSession, updateSession, submitAttendance, deleteSession } from './sessions';
 export {
   createRecording,
+  startRecordingUpload,
   finalizeRecordingUpload,
   setRecordingStatus,
   clearRecordingAudio,

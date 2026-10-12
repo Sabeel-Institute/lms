@@ -1,9 +1,6 @@
 import { defineSecret } from 'firebase-functions/params';
 import { addDays, zoomRecordingDate } from '@sabeel/shared';
-import { getStorage } from 'firebase-admin/storage';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import type { ReadableStream } from 'node:stream/web';
+import { putStream } from './mediaStore';
 
 /**
  * Zoom cloud-recording import — the Server-to-Server OAuth client.
@@ -43,8 +40,11 @@ export interface ZoomClient {
     meetingUuid: string,
     fileId: string,
   ): Promise<{ rec: ZoomAudioRecording; downloadUrl: string }>;
-  /** Stream the file straight into Storage (bounded copy — never buffered whole). */
-  streamToStorage(downloadUrl: string, storagePath: string): Promise<void>;
+  /**
+   * Copy the file into the media store at `key`, which must not exist yet
+   * (bounded copy — never buffered whole).
+   */
+  copyToMediaStore(downloadUrl: string, key: string): Promise<void>;
 }
 
 // ---- Zoom response shapes (only the fields we read) ----
@@ -218,7 +218,10 @@ export const zoomClient: ZoomClient = {
     return { rec: toRecording(m, f), downloadUrl: f.download_url };
   },
 
-  async streamToStorage(downloadUrl, storagePath) {
+  // INTERIM: streams through this Function, which in production bills every
+  // byte as Google egress. The Cloudflare Worker copier replaces it before the
+  // first deploy (docs/plans/MEDIA-ON-CLOUDFLARE.md, "Zoom import").
+  async copyToMediaStore(downloadUrl, key) {
     let res = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${await accessToken()}` } });
     if (res.status === 401) {
       const u = new URL(downloadUrl);
@@ -226,10 +229,8 @@ export const zoomClient: ZoomClient = {
       res = await fetch(u.toString());
     }
     if (!res.ok || !res.body) throw new Error(`Zoom download failed (HTTP ${res.status}).`);
-    const file = getStorage().bucket().file(storagePath);
-    await pipeline(
-      Readable.fromWeb(res.body as ReadableStream<Uint8Array>),
-      file.createWriteStream({ resumable: false, metadata: { contentType: 'audio/mp4' } }),
-    );
+    const size = Number(res.headers.get('content-length'));
+    if (!size) throw new Error('Zoom did not say how large the file is.');
+    await putStream(key, res.body, size, 'audio/mp4');
   },
 };

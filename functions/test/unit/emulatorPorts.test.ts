@@ -80,10 +80,16 @@ function projectsFromShell(): { file: string; value: string }[] {
 /** The scripts' copy. */
 async function portsFromScripts(): Promise<{
   emulator: Record<string, number>;
+  mediaStore: Record<string, number>;
   web: Record<string, number>;
 }> {
   const mod = await import(resolve(REPO, 'scripts/lib/ports.mjs'));
-  return { emulator: mod.EMULATOR_PORTS, web: mod.WEB_PORTS };
+  return { emulator: mod.EMULATOR_PORTS, mediaStore: mod.MEDIA_STORE_PORTS, web: mod.WEB_PORTS };
+}
+
+/** `{a: 1}` → `{'prefix.a': 1}`, so two maps can be merged without a clash. */
+function prefixed(prefix: string, ports: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(Object.entries(ports).map(([k, v]) => [`${prefix}.${k}`, v]));
 }
 
 /** The shell kill list — a flat set of numbers, not a service map. */
@@ -114,8 +120,8 @@ const BLOCK_END = BLOCK_START + 99;
 
 describe('emulator ports agree across every file that states them', () => {
   it('every port is inside this checkout\u2019s block', async () => {
-    const { emulator, web } = await portsFromScripts();
-    const all = { ...emulator, ...web };
+    const { emulator, mediaStore, web } = await portsFromScripts();
+    const all = { ...emulator, ...prefixed('mediaStore', mediaStore), ...web };
     expect(Object.keys(all).length).toBeGreaterThan(0);
 
     for (const [service, port] of Object.entries(all)) {
@@ -127,11 +133,12 @@ describe('emulator ports agree across every file that states them', () => {
   });
 
   it('no two services claim the same port', async () => {
-    const { emulator, web } = await portsFromScripts();
+    const { emulator, mediaStore, web } = await portsFromScripts();
     expect(Object.keys(emulator).length).toBeGreaterThan(0);
+    expect(Object.keys(mediaStore).length).toBeGreaterThan(0);
     expect(Object.keys(web).length).toBeGreaterThan(0);
 
-    const all = [...Object.values(emulator), ...Object.values(web)];
+    const all = [...Object.values(emulator), ...Object.values(mediaStore), ...Object.values(web)];
     expect(new Set(all).size, 'two services claim the same port').toBe(all.length);
   });
 
@@ -158,19 +165,20 @@ describe('emulator ports agree across every file that states them', () => {
     }
   });
 
-  it('free-emulator-ports.sh frees exactly the emulator ports this checkout uses', async () => {
-    const { emulator } = await portsFromScripts();
+  it('free-emulator-ports.sh frees exactly the emulator and media store ports', async () => {
+    const { emulator, mediaStore } = await portsFromScripts();
     const shell = portsFromShell();
     expect(shell.length).toBeGreaterThan(0);
+    const bound = { ...emulator, ...prefixed('mediaStore', mediaStore) };
 
     // Every port we bind must be swept…
-    for (const [service, port] of Object.entries(emulator)) {
+    for (const [service, port] of Object.entries(bound)) {
       expect(shell, `${service}=${port} is not in the PORTS array`).toContain(port);
     }
     // …and nothing else, or the sweep reaches into another checkout's block.
     // That is not hypothetical: on 2026-08-27 a port-based sweep killed a
     // sibling repo's running emulator.
-    const owned = new Set(Object.values(emulator));
+    const owned = new Set(Object.values(bound));
     for (const port of shell) {
       expect(owned.has(port), `PORTS contains ${port}, which this checkout does not own`).toBe(
         true,
@@ -194,15 +202,13 @@ describe('emulator ports agree across every file that states them', () => {
  *
  * It is also load-bearing: `isEmulatorProject()` in `functions/src/env.ts`
  * compares `GCLOUD_PROJECT` against the shared constant, and a mismatch makes
- * the playback path mint a signed URL against the emulator, which fails without
- * saying why. So the shell runners' `--project`, the shared constant and the
+ * the media store reach for the production R2 keys instead of the local ones. So the shell runners' `--project`, the shared constant and the
  * scripts' copy must agree.
  */
 describe('the emulator project id agrees everywhere it is stated', () => {
   it('scripts/lib/project.mjs matches the shared constant', async () => {
     const mod = await import(resolve(REPO, 'scripts/lib/project.mjs'));
     expect(mod.EMULATOR_PROJECT_ID).toBe(projectFromShared());
-    expect(mod.EMULATOR_STORAGE_BUCKET).toBe(`${projectFromShared()}.appspot.com`);
   });
 
   it('every shell --project flag matches the shared constant', () => {

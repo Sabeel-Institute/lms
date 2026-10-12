@@ -14,7 +14,9 @@ emulator — not your diff.
 | `npm run lint` | ESLint + `check:text` |
 | `npm run typecheck` | Builds `@sabeel/shared` first, then typechecks every workspace — **including the functions tests** (`functions/tsconfig.test.json`) |
 | `npm test` | Vitest unit tests (shared, functions and app), no emulators needed |
-| `npm run test:emulator` | Firestore + Auth + Storage emulators, then the rules suite |
+| `npm run test:emulator` | Firestore + Auth + Functions emulators and the local media store (SeaweedFS), then the rules and integration suites |
+| `npm run emulators` | The same emulators and media store, long-running, for `test:e2e`, `seed:emulators` and a device pass |
+| `node scripts/with-media-store.mjs <cmd…>` | Runs a command with SeaweedFS up on 127.0.0.1:61307 and stops it after; what the runners above wrap themselves in |
 | `npm run knip` | Dead-code audit — fails on unused files, exports and dependencies |
 | `npm run emulators:free` | Kills whatever is squatting on the emulator ports |
 | `npm run build` | Builds shared, then bundles functions with esbuild |
@@ -126,7 +128,9 @@ audit lie, and an audit that reports nothing is worse than no audit.
 - **JDK 21+ required.** `scripts/test-emulator.sh` resolves `SR_JDK21_HOME` →
   `~/opt/jdk-21` → whatever `java` is on PATH, so JDK 17 can stay the default for
   the Android/Gradle build.
-> **This checkout owns emulator ports 61300-61307** and web dev-server ports
+> **This checkout owns emulator ports 61300-61306**, the local media store's
+> **61307** (S3) and **61320-61326** (SeaweedFS's own master, volume and filer
+> servers, pinned so it binds nothing else), and web dev-server ports
 > 61310 (sweep) / 61311 (`test:e2e`). The legacy `sabeel-recording-app` checkout
 > owns 61100+, and the sibling Sabeel repos own 61000+ and 61200+. The repos
 > share this machine and all used to pin 8080/9099/5001/9199, so whichever
@@ -157,7 +161,7 @@ audit lie, and an audit that reports nothing is worse than no audit.
 > is fine and concurrent *native* work stays one session at a time.
 
 - **`free-emulator-ports.sh` runs first, every time.** A killed run leaves
-  emulators squatting on this checkout's ports, **61300-61307**. The
+  emulators squatting on this checkout's ports, **61300-61307 and 61320-61326**. The
   next run then talks to a half-dead emulator that answers on the port but has no
   functions registered, so every callable 404s — and a 404 carries no CORS
   headers, so the browser reports "blocked by CORS policy" while the callable
@@ -176,12 +180,49 @@ audit lie, and an audit that reports nothing is worse than no audit.
   accepts connections before it has registered anything. Poll a known callable
   until it stops 404ing.
 
+## The local media store (SeaweedFS)
+
+Media lives in Cloudflare R2 in production. Locally, every suite that runs the
+functions emulator also runs **SeaweedFS**, an S3-compatible server, through
+`scripts/with-media-store.mjs` (`scripts/lib/media-store.mjs` does the work).
+The functions sign URLs for it with the same code production uses
+(`functions/src/mediaStore.ts`), and SeaweedFS checks SigV4 signatures, expiry,
+`If-None-Match` and `Range` the way R2 does. Why SeaweedFS and not MinIO or a
+test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
+
+- **Install:** release 4.47, `linux_amd64.tar.gz` from GitHub, sha256
+  `31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d`, unpacked
+  to `~/opt/seaweedfs-4.47/weed`. `WEED_BIN` overrides the path; CI installs the
+  same release and checks the digest.
+- **`weed server`, not `weed mini`.** Mini also starts an admin server and a
+  plugin worker that bind ports outside this checkout's block, one of them on
+  every interface, and neither can be switched off. Every port is pinned from
+  `scripts/lib/ports.mjs` and bound to 127.0.0.1.
+- **Each run starts empty**, in a fresh temp directory removed on exit. The
+  bucket is created and its CORS set (the dev servers' origins) at start.
+- **Keys:** three identities. An admin used only to create the bucket, and the
+  read and write keys the functions use, with the same split as the two R2
+  tokens. Their values, the endpoint and the bucket are in
+  `functions/.env.demo-sabeel-recordings`, the file the functions emulator
+  reads, so the store and the code agree by construction.
+- **`functions/.secret.local`** must name every secret the functions bind, or
+  the emulator asks Secret Manager for the demo project's and logs a 403:
+  `SENTRY_DSN=disabled` and `R2_READ_KEY_ID`, `R2_READ_SECRET`,
+  `R2_WRITE_KEY_ID`, `R2_WRITE_SECRET` set to anything (they are unused under
+  the emulator). CI writes the same file.
+- **Android:** signed URLs name `127.0.0.1:61307`, and the host is signed, so
+  `10.0.2.2` cannot be substituted. `adb reverse tcp:61307 tcp:61307` lets the
+  AVD reach it at the address the URL names.
+- **Stopping it:** the wrapper stops SeaweedFS when its command exits or on
+  SIGINT, SIGTERM or SIGHUP (so `tmux kill-session` works). A leftover is freed
+  by `npm run emulators:free`, which covers its ports.
+
 ## The e2e harness
 
 `npm run test:e2e` needs TWO things already running:
 
 ```bash
-firebase emulators:start --project demo-sabeel-recordings --only firestore,auth,storage,functions
+npm run emulators      # Firestore, Auth, Functions and the local media store
 cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61311 --clear
 ```
 

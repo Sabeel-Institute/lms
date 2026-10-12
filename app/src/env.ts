@@ -43,5 +43,4 @@ export const EMULATOR_PORTS = {
   auth: 61302,
   firestore: 61300,
   functions: 61303,
-  storage: 61307,
 };

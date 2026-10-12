@@ -23,6 +23,7 @@
 import { createRequire } from 'node:module';
 
 import { EMULATOR_PROJECT_ID as PROJECT } from './project.mjs';
+import { putLocalObject } from './media-store.mjs';
 
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
@@ -416,7 +417,7 @@ export async function seedWorld({ db, auth, browser, base }) {
     const hasAudio = status !== 'draft' && status !== 'needsAttention';
     const audioPath = `recordings/${recId}/audio.wav`;
     if (hasAudio) {
-      await admin.storage().bucket().file(audioPath).save(AUDIO, { contentType: 'audio/wav' });
+      await putLocalObject(audioPath, AUDIO, 'audio/wav');
     }
 
     await db.collection('sessions').doc(id).set({

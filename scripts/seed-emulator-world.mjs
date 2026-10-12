@@ -20,7 +20,7 @@
 import { createRequire } from 'node:module';
 import { chromium } from 'playwright';
 import { EMULATOR_PORTS } from './lib/ports.mjs';
-import { EMULATOR_PROJECT_ID, EMULATOR_STORAGE_BUCKET } from './lib/project.mjs';
+import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { resetEmulators, seedWorld } from './lib/seed-world.mjs';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
@@ -29,10 +29,9 @@ const admin = require('firebase-admin');
 const BASE = process.env.E2E_BASE ?? 'http://127.0.0.1:8081/';
 process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.auth}`;
-process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.storage}`;
 process.env.GCLOUD_PROJECT = EMULATOR_PROJECT_ID;
 
-admin.initializeApp({ projectId: EMULATOR_PROJECT_ID, storageBucket: EMULATOR_STORAGE_BUCKET });
+admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
 const db = admin.firestore();
 const auth = admin.auth();
 

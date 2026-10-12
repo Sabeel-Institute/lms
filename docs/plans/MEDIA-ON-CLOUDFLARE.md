@@ -5,10 +5,26 @@ Cloudflare R2. A small Cloudflare Worker copies Zoom recordings straight into
 R2, so no media ever leaves Google and no media is ever downloaded from Google.
 Firestore, Auth, Functions and Hosting stay on Firebase.
 
-Status: plan. Nothing here is built. It assumes Phase 0 of
-[SWITCHOVER.md](SWITCHOVER.md) (the `oursabeel-lms` project and the code
-pointing at it) and is a prerequisite for
-[VIDEO-AND-MULTIPLE-MEDIA.md](VIDEO-AND-MULTIPLE-MEDIA.md).
+Status (2026-10-12): in progress, on **today's data model**: one audio
+file per recording at `recordings/{recordingId}/audio.m4a`. The media-items
+model (`mediaId`, parts and versions) comes with
+[VIDEO-AND-MULTIPLE-MEDIA.md](VIDEO-AND-MULTIPLE-MEDIA.md) after the first
+deploy; `mediaStore.ts` is keyed by object key, so that change touches what
+key is signed, not how. Built so far:
+
+- Spike M1 (below).
+- `functions/src/mediaStore.ts`: signed GET for playback, signed write-once
+  PUT for staff uploads (`startRecordingUpload`), HEAD at finalize (an object
+  over the cap is deleted), DELETE for remove-audio and delete. Firebase
+  Storage, `storage.rules` and its emulator are gone.
+- SeaweedFS in `test:emulator`, `test:screens` and `npm run emulators`, with
+  the read and write keys split as in production.
+
+Still to do before the first deploy: the Worker copier (Zoom import streams
+through the Function until then), bucket CORS and lifecycle applied from the
+repo, `s3-conformance.mjs` against SeaweedFS and R2 (which is also the first
+use of the real R2 keys), and `seed-demo-prod.mjs` / `wipe-demo-prod.mjs` on
+R2.
 
 ## Why
 

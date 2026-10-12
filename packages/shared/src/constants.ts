@@ -54,17 +54,6 @@ export const DEFAULT_DUE_DAYS = 7;
  */
 export const EMULATOR_PROJECT_ID = 'demo-sabeel-recordings';
 
-/**
- * The Storage bucket used against the emulator suite.
- *
- * Needed as an explicit constant because NEITHER side has a usable default:
- * the client's `firebaseConfig.storageBucket` is a placeholder until the real
- * project exists, and the Admin SDK throws "Bucket name not specified" unless
- * one is configured. Left unset, the client uploads to one bucket name while
- * the server looks in another, and the only symptom is a finalize step
- * reporting "no audio found" for a file that uploaded successfully.
- */
-export const EMULATOR_STORAGE_BUCKET = `${EMULATOR_PROJECT_ID}.appspot.com`;
 
 /**
  * How long a playback signed URL stays valid.

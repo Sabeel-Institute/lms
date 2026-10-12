@@ -72,8 +72,25 @@ jobs:
       - name: Unit tests
         run: npm test
 
-      # Firestore AND Storage rules. Storage rules have no reference
-      # implementation in the sibling repos — this job is what keeps them honest.
+      # The local media store the emulator suites run against (stand-in for
+      # Cloudflare R2). The pinned release, checked against GitHub's digest.
+      - name: Install SeaweedFS
+        run: |
+          curl -sSLo weed.tgz https://github.com/seaweedfs/seaweedfs/releases/download/4.47/linux_amd64.tar.gz
+          echo "31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d  weed.tgz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/seaweedfs" && tar -xzf weed.tgz -C "$RUNNER_TEMP/seaweedfs"
+          echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
+
+      # Secrets the functions bind, as the emulator wants them: present, and
+      # never fetched from Secret Manager. Sentry off; the media keys are unused
+      # under the emulator (mediaStore.ts reads the local SeaweedFS keys).
+      - name: Emulator secret placeholders
+        run: |
+          printf '%s\n' SENTRY_DSN=disabled R2_READ_KEY_ID=unused-in-emulator \
+            R2_READ_SECRET=unused-in-emulator R2_WRITE_KEY_ID=unused-in-emulator \
+            R2_WRITE_SECRET=unused-in-emulator > functions/.secret.local
+
+      # Firestore rules, the callables, and the media store's signed URLs.
       - name: Emulator integration tests
         run: npm run test:emulator
 

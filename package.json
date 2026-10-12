@@ -23,6 +23,7 @@
     "knip": "knip",
     "check:text": "node scripts/check-text-sources.mjs",
     "emulators:free": "bash scripts/free-emulator-ports.sh",
+    "emulators": "npm run build && node scripts/with-media-store.mjs firebase emulators:start --project demo-sabeel-recordings --only firestore,auth,functions",
     "test:e2e": "node scripts/web-e2e.mjs",
     "test:screens": "bash scripts/screens-e2e.sh",
     "seed:emulators": "node scripts/seed-emulator-world.mjs",
