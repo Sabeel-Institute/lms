@@ -245,14 +245,14 @@ interface MediaCopier {
 ```
 
 Production implementations talk to R2 and the Worker. Tests use the same
-`R2MediaStore` against MinIO (below) and a fake `MediaCopier` that copies from
-a local fixture server into MinIO.
+`R2MediaStore` against SeaweedFS (below) and a fake `MediaCopier` that copies
+from a local fixture server into it.
 
 Changes by file (paths as in the legacy repo today):
 
 | File | Change |
 |---|---|
-| `functions/src/mediaUrl.ts` | Deleted. Its emulator branch, which used a never-expiring download token, goes with it: MinIO signs real SigV4 URLs, so the production signing path is exercised locally for the first time. |
+| `functions/src/mediaUrl.ts` | Deleted. Its emulator branch, which used a never-expiring download token, goes with it: SeaweedFS checks real SigV4 URLs, so the production signing path is exercised locally for the first time. |
 | `functions/src/playback.ts` | Takes `mediaId`; signs `media.storageKey` via `MediaStore.signGet`. `playbackDenial` unchanged, plus "media item ready and not hidden". |
 | `functions/src/recordings.ts` | `finalizeRecording`, `clearAudio`, `applyDeleteRecording` work on media items and `MediaStore.delete`; size comes from `head`, duration from the probe. |
 | `functions/src/zoom.ts` | `streamToStorage` removed. New `resolveFileLink(meetingUuid, fileId)` returns the 302 target. Listing returns every file, not just audio (see the video plan). |
@@ -283,18 +283,45 @@ remuxing.
 
 ### Local development and tests
 
-The Firebase Storage emulator is replaced by **MinIO**, a single static
-binary that speaks the S3 API and verifies SigV4 signatures and expiry:
+The Firebase Storage emulator is replaced by **SeaweedFS** (`weed mini`), a
+maintained S3-compatible server in a single Go binary, run with signature
+checking on.
 
-- It takes over port **61107** (the Storage emulator's), so this checkout's
-  port block is unchanged; `emulatorPorts.test.ts` asserts it like the others.
-  MinIO's web console stays off.
-- `scripts/test-emulator.sh`, `screens-e2e.sh` and `web-e2e.mjs` start MinIO
-  with a throwaway data dir, create the bucket, apply the same CORS file, and
-  stop it after.
-- Installing the MinIO binary is a dev-machine install: asked before it is
-  done, and documented in `docs/DEV-TOOLING.md` and the shared skill's
-  bootstrap script.
+**Why SeaweedFS** (surveyed 2026-10-12, after MinIO, the previous default,
+stopped shipping binaries in October 2025 and archived its repo in April
+2026; its download URL now answers 410):
+
+| Option | Status | Fit |
+|---|---|---|
+| SeaweedFS | Since 2012, 35k stars, Apache-2.0, releases every 1–2 weeks | Single binary, no Docker; already adopted by other projects as their MinIO test-fixture replacement; passed every check below |
+| RustFS | 35k stars, Apache-2.0, 1.0 released September 2026 | Promising, too new to depend on |
+| Garage | AGPL-3.0, 4.7k stars | Built for small distributed production clusters |
+| LocalStack | Open-source repo archived March 2026; now needs an auth token, paid for commercial use | Docker-based; not installed here |
+| S3Mock, Moto, S3Proxy | Test doubles | Do not enforce SigV4 signatures and expiry, which the tests exist to assert |
+
+SeaweedFS 4.47 passed all fourteen behaviours the media code relies on, run
+from a throwaway script against `@aws-sdk/client-s3` and
+`@aws-sdk/s3-request-presigner`: anonymous and wrong-secret requests refused;
+pre-signed PUT with signed `Content-Type` and `If-None-Match: *` creates once,
+refuses a second write (412), refuses a different type or a dropped
+condition (403); pre-signed GET serves `Range` (206), refuses a tampered key
+and an expired URL (403); multipart via pre-signed part URLs returns readable
+ETags and completes with the right size and type; bucket CORS admits the
+configured dev origin and refuses others. That script becomes
+`scripts/s3-conformance.mjs` and is also run against R2 in M2, so local
+behaviour is checked against the real thing, not assumed.
+
+- Installed at `~/opt/seaweedfs-4.47/weed` (release asset checksum verified),
+  found the same way as `~/opt/jdk-21`; documented in `docs/DEV-TOOLING.md`
+  and the shared skill's bootstrap script when the harness first uses it.
+- The S3 API takes port **61307** (the Storage emulator's slot in this
+  checkout's block). SeaweedFS's internal master, volume, filer and gRPC
+  ports are pinned to **61320–61326**, bound to `127.0.0.1`, with the admin
+  UI, WebDAV, Iceberg and Lance servers and telemetry turned off.
+  `emulatorPorts.test.ts` asserts all of them like the others.
+- `scripts/test-emulator.sh`, `screens-e2e.sh` and `web-e2e.mjs` start it
+  with a throwaway data dir and a generated access key, create the bucket,
+  apply the same CORS file, and stop it after. It is ready in under a second.
 - The Worker has its own tests with `@cloudflare/vitest-pool-workers`
   (Miniflare's local R2): token verification (forged, expired, wrong
   audience, wrong service account), host allowlist, key pattern, size
@@ -304,10 +331,10 @@ Tests rewritten, following "test the promise, not the mechanism":
 
 | Today | After |
 |---|---|
-| `rules.recordings.test.ts` storage block (write-once, audio-only, staff-only, no reads) | Callable tests that a student or out-of-scope manager gets no upload URL; that a second PUT to the same key fails at R2 (MinIO honours `If-None-Match`); that a wrong `Content-Type` fails the signature; that an oversize upload ends `failed` with no object left. |
-| `playback.integration.test.ts` against the emulator URL | The same allow/deny matrix, and now **the URL actually plays**: a GET with `Range` returns 206 from MinIO, and the same URL after `expiresAt` returns 403. That is the promise the old test could not reach. |
-| `zoom.integration.test.ts` fake client writing to Storage | Fake copier from a fixture server into MinIO; plus the 60-minute link re-resolve on retry. |
-| `web-e2e.mjs` "audio actually advances" | Unchanged promise, now through MinIO. |
+| `rules.recordings.test.ts` storage block (write-once, audio-only, staff-only, no reads) | Callable tests that a student or out-of-scope manager gets no upload URL; that a second PUT to the same key fails (SeaweedFS honours `If-None-Match`, as R2 does); that a wrong `Content-Type` fails the signature; that an oversize upload ends `failed` with no object left. |
+| `playback.integration.test.ts` against the emulator URL | The same allow/deny matrix, and now **the URL actually plays**: a GET with `Range` returns 206 from SeaweedFS, and the same URL after `expiresAt` returns 403. That is the promise the old test could not reach. |
+| `zoom.integration.test.ts` fake client writing to Storage | Fake copier from a fixture server into SeaweedFS; plus the 60-minute link re-resolve on retry. |
+| `web-e2e.mjs` "audio actually advances" | Unchanged promise, now through SeaweedFS. |
 
 ## Moving existing media
 
@@ -322,7 +349,7 @@ Slurper can copy straight from a GCS bucket for free if that ever matters.
 | Step | What | Proves |
 |---|---|---|
 | M1 spike | Worker copies one real Zoom recording (the 1.2 GB 2026-10-01 file) into a scratch R2 bucket | Free-plan CPU and subrequests, time for a 3-hour class, the link's 60-minute window in practice |
-| M2 | `MediaStore` on R2 + MinIO in all three test harnesses; playback signs from R2 | Real signed playback locally; expiry is asserted |
+| M2 | `MediaStore` on R2 + SeaweedFS in all three test harnesses; `s3-conformance.mjs` against both; playback signs from R2 | Real signed playback locally; expiry is asserted |
 | M3 | Staff upload: single PUT and multipart, probe, write-once, failure cleanup | Browser and Android uploads (Android on the AVD: native seam) |
 | M4 | Zoom import through the Worker, async with task queue | Copy of a 3-hour class end to end; retry after the link has expired |
 | M5 | Migration in the seed script; deletion cascade; sweep | Count and byte checks between legacy and R2 |
