@@ -22,7 +22,7 @@ the assignments proposal, [../proposals/lms-assignments-proposal.html](../propos
 | Google account | faisal.shah@gmail.com | faisal.shah@oursabeel.com |
 | Firebase / GCP project | `sabeel-class-recordings` | `oursabeel-lms` (number 226338267845) |
 | Web address | `sabeel-class-recordings.web.app` | `oursabeel-lms.web.app` (no custom domain for now) |
-| App name | Class Recordings | Sabeel Institute LMS |
+| App name | Class Recordings | Sabeel Institute LMS; Android home-screen label "Sabeel LMS" (launchers cut names at about 12 characters) |
 | Android package | `com.sabeelinstitute.classrecordings` | `com.sabeelinstitute.lms` |
 | Media storage | Firebase Cloud Storage | Cloudflare R2 (no Firebase Storage bucket at all) |
 | Billing | personal | `My Billing Account` (`014B85-39659A-255E25`), shared with `oursabeel-website` |
@@ -78,17 +78,32 @@ Google sign-in enabled (authorized domains `localhost`,
 Secret Manager from the legacy one, at Faisal's direction, by piping
 `gcloud secrets versions access` into `gcloud secrets create` so no value was
 displayed or written to disk (checked by comparing SHA-256 prefixes).
+A $10/month Google Cloud budget, "oursabeel-lms monthly", alerts the billing
+admins at 50%, 90% and 100% of actual spend and at 100% of forecast; it does
+not stop anything.
+
+Cloudflare, done the same day: account "Faisal.shah@oursabeel.com's Account"
+(id `2695af9675357bbe44e188b0414b850f`), signed up with Google, card on file,
+R2 enabled. `wrangler` is logged in here as faisal.shah@oursabeel.com. Bucket
+`oursabeel-lms-media` created: location ENAM, Standard class, `r2.dev` access
+disabled, no custom domain. Its CORS and lifecycle rules are applied from the
+repo during the media work.
 
 Still to do:
 
-1. The R2 secrets in [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md), set
-   by Faisal; the agent prints the exact `firebase functions:secrets:set`
-   commands and never handles a value.
-2. Register the Android app (`com.sabeelinstitute.lms`) with the new
+1. The two bucket-scoped R2 API tokens from
+   [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md), created in the Cloudflare
+   dashboard (R2 → Manage API tokens; wrangler's login cannot create them),
+   and their key id and secret pasted by Faisal straight into Secret Manager
+   (`firebase functions:secrets:set`, or the Secret Manager page in the
+   console). Never through chat.
+2. A Cloudflare budget alert at $10/month (Billing → Billable Usage → Create
+   budget alert). Dashboard only; like Google's, it alerts and never stops
+   anything.
+3. Register the Android app (`com.sabeelinstitute.lms`) with the new
    release key's SHA-1.
-3. Cloudflare account under faisal.shah@oursabeel.com, signed up with
-   Google (card on file, R2 enabled), and a `wrangler login`. Workers starts
-   on the Free plan; the M1 copy spike decides whether Paid is needed.
+4. Workers starts on the Free plan; the M1 copy spike decides whether Paid
+   ($5/month) is needed.
 
 ### Agent (code)
 

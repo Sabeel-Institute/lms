@@ -328,6 +328,25 @@ Slurper can copy straight from a GCS bucket for free if that ever matters.
 | M5 | Migration in the seed script; deletion cascade; sweep | Count and byte checks between legacy and R2 |
 | M6 | Docs: `CLAUDE.md` invariants, `PRODUCT_BRIEF.md`, `SECRETS.md`, `DEPLOY.md` (Worker before Functions), `DEV-TOOLING.md`, user manual | |
 
+## Spending
+
+Neither Cloudflare nor Google can cap spend: both offer alerts only, and the
+only hard stop Google has is switching billing off, which takes the app down.
+Both alerts are set at $10/month (see [SWITCHOVER.md](SWITCHOVER.md)). The
+hard limit is the app's own:
+
+- **Storage ceiling** `MEDIA_STORAGE_CEILING_BYTES` in `@sabeel/shared`,
+  checked against the sum of `sizeBytes` of every media item before an upload
+  URL is issued and before a Zoom copy is enqueued (counting what is already
+  uploading or copying). Over the ceiling, staff see "Media storage is full.
+  Remove old recordings or ask an admin to raise the limit." Starting value
+  500 GB: about $7.35/month on R2 after the free 10 GB, leaving room for
+  Workers Paid inside $10.
+- **Downloads cannot run up a bill on R2,** which is the reason for the move.
+  Read operations are 10 M/month free; a student session issues tens of range
+  requests, so that is not a practical exposure.
+- The admin storage report shows usage against the ceiling.
+
 ## Housekeeping
 
 - **Sweep** (scheduled weekly): lists R2 keys and media items; deletes
