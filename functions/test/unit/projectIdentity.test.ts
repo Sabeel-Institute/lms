@@ -25,16 +25,23 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
  *  prefix) and the old Android package. */
 const LEGACY = ['sabeel-class-recordings', '977423479850', 'com.sabeelinstitute.classrecordings'];
 
+/** This file, which has to name the ids it looks for. */
+const SELF = 'functions/test/unit/projectIdentity.test.ts';
+
 function trackedCodeAndConfig(): string[] {
   return execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
     .split('\0')
-    .filter((p) => p && !p.startsWith('docs/') && !p.endsWith('.md'));
+    .filter((p) => p && p !== SELF && !p.startsWith('docs/') && !p.endsWith('.md'));
 }
 
 describe('the retired project', () => {
   it('is named by no code or config in this checkout', () => {
+    const files = trackedCodeAndConfig();
+    // A guard on the scan: it reads the tree, and skips only itself.
+    expect(files).toContain('.firebaserc');
+    expect(files).not.toContain(SELF);
     const offenders: string[] = [];
-    for (const path of trackedCodeAndConfig()) {
+    for (const path of files) {
       const buf = readFileSync(resolve(ROOT, path));
       if (buf.includes(0)) continue; // binary
       const text = buf.toString('utf8');
