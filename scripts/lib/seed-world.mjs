@@ -611,15 +611,24 @@ export async function seedWorld({ db, auth, browser, base }) {
     instructions: 'Memorize the first hikma and record yourself reciting it.\n\nمِنْ عَلامَةِ الاعْتِمادِ عَلى العَمَلِ نُقْصانُ الرَّجاءِ عِنْدَ وُجودِ الزَّلَلِ\n\n- Recite slowly, with the vowels as written.\n- One take is fine. A quiet room helps.\n\nIn your answer, explain its meaning in **two or three sentences** of your own.',
     files: { f1: await file('coursework/sw-cw1/f1', 'f1', 'First hikma, vowelled.pdf', 'application/pdf', PDF) },
   });
+  /** The recitation the assignment asks for, with its length read as the
+   *  upload probe reads it: the attachment player, on the student's own work
+   *  and on what a teacher grades, is toured at every width. */
+  const recitation = async (uid) => ({
+    ...(await file(`work/${uid}/sw-cw1/r1`, 'r1', 'Recitation.wav', 'audio/wav', AUDIO)),
+    durationSec: AUDIO_SECONDS,
+  });
   await db.collection('drafts').doc(`${STUDENT.uid}_sw-cw1`).set({
     studentUid: STUDENT.uid, courseworkId: 'sw-cw1', courseId: COURSE,
-    note: 'It means that losing hope after a slip shows I was relying on my own deeds.', files: {}, updatedAt: now - DAY,
+    note: 'It means that losing hope after a slip shows I was relying on my own deeds.',
+    files: { r1: await recitation(STUDENT.uid) }, updatedAt: now - DAY,
   });
   /** Three classmates handed it in early, one already graded: the course's
    *  teachers then have work to grade on Today and in the assignment's page. */
   for (const [i, st] of students.slice(1, 4).entries()) {
     await db.collection('submissions').doc(`${st.uid}_sw-cw1`).update({
       state: 'handedIn', handedInAt: now - (i + 1) * DAY, note: 'Recited this morning, twice through without stopping.',
+      files: { r1: await recitation(st.uid) },
     });
   }
   await db.collection('grades').doc(`${students[1].uid}_sw-cw1`).set({

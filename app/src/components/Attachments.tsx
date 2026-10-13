@@ -13,13 +13,13 @@ import { readPart, sendPart } from '../mediaFiles';
 import type { PickedFile } from '../mediaFileTypes';
 import { finalizeAttachment, getAttachmentUrl, removeAttachment, startAttachmentUpload } from '../coursework';
 import { errorText } from '../errors';
+import { formatClock } from '../playback';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
 
 const size = (bytes: number) =>
   bytes >= 2 ** 20 ? `${(bytes / 2 ** 20).toFixed(1)}\u00a0MB` : `${Math.max(1, Math.round(bytes / 1024))}\u00a0KB`;
-const length = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
 
 const KIND_WORD = { document: 'Document', image: 'Picture', audio: 'Audio' } as const;
 
@@ -27,6 +27,8 @@ const KIND_WORD = { document: 'Document', image: 'Picture', audio: 'Audio' } as 
 interface Pending {
   key: string;
   name: string;
+  /** Chosen, and waiting for the files chosen before it. */
+  waiting: boolean;
   error: string | null;
 }
 
@@ -62,11 +64,35 @@ export function Attachments({
   const inFlight = pending.some((p) => p.error === null);
   useEffect(() => onBusyChange?.(inFlight), [inFlight, onBusyChange]);
 
-  const send = async (file: PickedFile) => {
-    const key = `${Date.now()}-${file.name}`;
-    const problem = attachmentProblem(file.name, file.sizeBytes);
-    setPending((p) => [...p, { key, name: file.name, error: problem }]);
-    if (problem) return;
+  /*
+   * ONE UPLOAD AT A TIME, in the order the files were chosen, across picks
+   * too. Each file is dated from the start of its upload and the list is in
+   * that order; sent all at once, a small file chosen second could start
+   * first, and the rows changed places as they arrived. Every chosen file is
+   * listed the moment it is chosen, so "Hand in" waits for the last of them
+   * and not only the one on its way.
+   */
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const made = useRef(0);
+  const enqueue = (chosen: PickedFile[]) => {
+    const rows = chosen.map((file) => ({
+      file,
+      key: `f${(made.current += 1)}`,
+      problem: attachmentProblem(file.name, file.sizeBytes),
+    }));
+    setPending((p) => [
+      ...p,
+      ...rows.map(({ key, file, problem }) => ({ key, name: file.name, waiting: problem === null, error: problem })),
+    ]);
+    for (const row of rows) {
+      if (row.problem === null) queue.current = queue.current.then(() => send(row.key, row.file));
+    }
+  };
+
+  const send = async (key: string, file: PickedFile) => {
+    // The screen has gone: the files after the one cut short are not started.
+    if (abort.current.signal.aborted) return;
+    setPending((p) => p.map((x) => (x.key === key ? { ...x, waiting: false } : x)));
     try {
       const start = await startAttachmentUpload({ target, courseworkId, name: file.name, sizeBytes: file.sizeBytes });
       await sendPart(start.url, await readPart(file, 0, file.sizeBytes), abort.current.signal, start.headers);
@@ -95,7 +121,7 @@ export function Attachments({
       const picked = await pick();
       picking.current = false;
       if (!picked) return;
-      await Promise.all((Array.isArray(picked) ? picked : [picked]).map(send));
+      enqueue(Array.isArray(picked) ? picked : [picked]);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -133,7 +159,9 @@ export function Attachments({
       {pending.map((p) => (
         <View key={p.key} style={styles.file}>
           <Text style={styles.name}>{p.name}</Text>
-          <Text style={[styles.meta, p.error ? styles.failed : null]}>{p.error ?? 'Uploading…'}</Text>
+          <Text style={[styles.meta, p.error ? styles.failed : null]}>
+            {p.error ?? (p.waiting ? 'Waiting to upload…' : 'Uploading…')}
+          </Text>
           {p.error ? (
             <Button
               label="Dismiss"
@@ -177,6 +205,7 @@ function FileRow({
 }) {
   const kind = attachmentKind(file.contentType);
   const [url, setUrl] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const link = () => getAttachmentUrl({ courseworkId, fileId: file.id, studentUid }).then((r) => r.url);
   // Pictures and audio are shown in place, so their link is fetched at once.
@@ -189,6 +218,25 @@ function FileRow({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one link per file
   }, [file.id]);
+
+  // One new link at a time, however often "Try again" is pressed.
+  const retrying = useRef(false);
+  const retry = () => {
+    if (retrying.current) return;
+    retrying.current = true;
+    setError(null);
+    void link()
+      .then(
+        (u) => {
+          setUrl(u);
+          setAttempt((n) => n + 1);
+        },
+        (e) => setError(errorText(e)),
+      )
+      .finally(() => {
+        retrying.current = false;
+      });
+  };
 
   const open = async () => {
     try {
@@ -204,12 +252,20 @@ function FileRow({
     <View testID={`attachment-${file.name}`} style={styles.file}>
       <Text style={styles.name}>{file.name}</Text>
       <Text style={styles.meta}>
-        {[KIND_WORD[kind], file.durationSec ? length(file.durationSec) : null, size(file.sizeBytes)].filter(Boolean).join(' · ')}
+        {[KIND_WORD[kind], file.durationSec ? formatClock(file.durationSec * 1000) : null, size(file.sizeBytes)].filter(Boolean).join(' · ')}
       </Text>
       {kind === 'image' && url ? (
         <Image source={{ uri: url }} style={styles.picture} resizeMode="contain" accessibilityLabel={file.name} />
       ) : null}
-      {kind === 'audio' && url ? <AttachmentAudio url={url} /> : null}
+      {kind === 'audio' && url ? (
+        <AttachmentAudio
+          url={url}
+          attempt={attempt}
+          name={file.name}
+          durationMs={(file.durationSec ?? 0) * 1000}
+          onRetry={retry}
+        />
+      ) : null}
       {error ? <Text style={[styles.meta, styles.failed]}>{error}</Text> : null}
       <Row>
         {kind === 'document' ? <Button label="Open" variant="secondary" hug onPress={() => void open()} /> : null}

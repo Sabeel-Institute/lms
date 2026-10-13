@@ -120,6 +120,11 @@ export interface AttachmentFile {
   /** An audio file's length, read from the file; null for anything else. */
   durationSec: number | null;
   storageKey: string;
+  /**
+   * When its upload began, which is the order it was chosen in, and the order
+   * lists show. Not when it arrived: a small file chosen after a large one
+   * arrives first.
+   */
   addedAt: number;
 }
 

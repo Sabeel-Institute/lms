@@ -770,6 +770,9 @@ export function closePlayback(): Promise<void> {
 export const SKIP_BACK_MS = 15_000;
 export const SKIP_FORWARD_MS = 30_000;
 
+/** The speeds offered: the player's chips, and an attachment's speed button, which steps through the same ones. */
+export const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const;
+
 /**
  * `h:mm:ss` (or `m:ss` under an hour) for a position in a recording.
  *

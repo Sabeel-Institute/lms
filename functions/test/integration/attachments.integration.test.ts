@@ -171,6 +171,31 @@ describe('a student’s files', () => {
     for (let i = 0; i < 10; i++) await attach(AMINAH, 'student', `page ${i}.txt`, TEXT);
     await expect(attach(AMINAH, 'student', 'eleven.txt', TEXT)).rejects.toThrow(/10 files at most/);
   });
+
+  it('are listed in the order they were chosen, whatever order they arrive in', async () => {
+    // A recitation chosen first and a page second; the page, being small,
+    // arrives first.
+    const begin = async (name: string, bytes: Uint8Array) => {
+      const start = await startAttachmentUpload.run(
+        await as(AMINAH, 'student', { target: 'work', courseworkId: cwId, name, sizeBytes: bytes.length }),
+      );
+      expect((await fetch(start.url, { method: 'PUT', headers: start.headers, body: bytes })).status).toBe(200);
+      return start.fileId;
+    };
+    const finish = async (fileId: string) =>
+      finalizeAttachment.run(await as(AMINAH, 'student', { courseworkId: cwId, fileId }));
+    const recitation = await begin('Recitation.m4a', sample('m4a'));
+    // Two starts inside one millisecond would tie, and a tie proves nothing.
+    await new Promise((r) => setTimeout(r, 5));
+    const page = await begin('Page 1.png', sample('png'));
+    await finish(page);
+    await new Promise((r) => setTimeout(r, 5));
+    await finish(recitation);
+
+    // Sorted as the list on screen sorts them.
+    const files = Object.values((await draft(AMINAH))?.files ?? {}).sort((a, b) => a.addedAt - b.addedAt);
+    expect(files.map((f) => f.name)).toEqual(['Recitation.m4a', 'Page 1.png']);
+  });
 });
 
 describe('cleaning up', () => {

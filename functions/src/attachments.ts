@@ -274,7 +274,8 @@ async function finalizeAttachmentRecord(input: FinalizeInput, callerUid: string)
     sizeBytes: object.sizeBytes,
     durationSec: verdict.durationSec,
     storageKey: up.storageKey,
-    addedAt: Date.now(),
+    // Chosen-order, not arrival-order (AttachmentFile.addedAt).
+    addedAt: up.startedAt,
   };
   try {
     await db().runTransaction(async (tx) => {

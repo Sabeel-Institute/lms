@@ -414,6 +414,11 @@ Manager, never in the app bundle.**
   built by `pushPaths` in `@sabeel/shared`, and `app/src/linkPaths.test.ts` holds
   every one to the route tables. Never name an FCM data key `body`: expo-
   notifications reads it as the whole payload.
+- **One sound at a time.** Every player reports its starts to
+  `app/src/oneSound.ts`, which pauses whatever was playing: the class player's
+  two seams (`player.ts`, `player.web.ts`) and an attachment's (`clip.ts`,
+  `clip.web.ts`). The OS shares audio focus between apps, not between players
+  in one, so a player added without it plays over the docked bar.
 - Never `git add` a binary. The APK ships as a GitHub Release asset; committing
   per-release APKs bloated the sibling pages repo's history and had to be
   rewritten out. `*.apk` is gitignored as the backstop.

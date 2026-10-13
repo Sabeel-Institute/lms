@@ -2,6 +2,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { fetch } from 'expo/fetch';
 import type { PickedFile } from './mediaFileTypes';
+import { opening } from './pickerOpening';
+import { partSent } from './partSent';
 
 /**
  * Native side of the media-file seam (web sibling: mediaFiles.web.ts).
@@ -14,11 +16,13 @@ import type { PickedFile } from './mediaFileTypes';
  * which takes a Uint8Array body natively.
  */
 export async function pickMediaFiles(): Promise<PickedFile[] | null> {
-  const res = await DocumentPicker.getDocumentAsync({
-    type: ['audio/*', 'video/mp4'],
-    copyToCacheDirectory: false,
-    multiple: true,
-  });
+  const res = await opening('file browser', () =>
+    DocumentPicker.getDocumentAsync({
+      type: ['audio/*', 'video/mp4'],
+      copyToCacheDirectory: false,
+      multiple: true,
+    }),
+  );
   if (res.canceled || !res.assets?.length) return null;
   return res.assets.map((a) => ({ name: a.name, sizeBytes: a.size ?? new File(a.uri).size ?? 0, source: a.uri }));
 }
@@ -43,9 +47,5 @@ export async function sendPart(
   signal: AbortSignal,
   headers: Record<string, string> = {},
 ): Promise<string> {
-  const res = await fetch(url, { method: 'PUT', body: body as Uint8Array<ArrayBuffer>, signal, headers });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const etag = res.headers.get('etag');
-  if (!etag) throw new Error('The storage service gave no ETag.');
-  return etag;
+  return partSent(signal, () => fetch(url, { method: 'PUT', body: body as Uint8Array<ArrayBuffer>, signal, headers }));
 }

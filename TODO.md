@@ -36,13 +36,17 @@ with the rest of the Phase 0 docs ([docs/plans/SWITCHOVER.md](docs/plans/SWITCHO
       `oursabeel-lms` → APIs & Services → OAuth consent screen. Check the app
       name reads "Sabeel Institute LMS" and the support email is an
       institute address.
-- [ ] **Google sign-in on the new website**: Google Cloud console →
-      `oursabeel-lms` → APIs & Services → Credentials → "Web client (auto
-      created by Google Service)": add `https://oursabeel-lms.web.app` to
-      Authorized JavaScript origins and
-      `https://oursabeel-lms.web.app/__/auth/handler` to Authorized redirect
-      URIs. The site keeps the sign-in redirect on its own address (in-app
-      browsers need that), and Google refuses it until it is registered.
+- [ ] **Google sign-in on the new website: sign in once to confirm.**
+      Google already accepts the site's sign-in address
+      (`https://oursabeel-lms.web.app/__/auth/handler`): on 2026-10-13 the
+      live site's "Sign in with Google" reached Google's account page, where
+      an unregistered address stops with `redirect_uri_mismatch`. Sign in at
+      <https://oursabeel-lms.web.app> with your oursabeel.com account and
+      land on the staff home. If Google shows an error instead: Google Cloud
+      console → `oursabeel-lms` → APIs & Services → Credentials → "Web client
+      (auto created by Google Service)", with `https://oursabeel-lms.web.app`
+      under Authorized JavaScript origins and the address above under
+      Authorized redirect URIs.
 - [ ] **DNS**: `firebase1._domainkey` CNAME is shown in NameSilo but was not
       published after two hours, while the other three records were. Delete
       and re-add it there.

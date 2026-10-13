@@ -16,7 +16,7 @@ import { Chips, Notice } from '../components/ui';
 import { VideoSurface } from '../components/VideoSurface';
 import { Scrubber } from '../components/Scrubber';
 import { Transport } from '../components/Transport';
-import { IDLE, closePlayback, formatClock, openPlayback, playback, usePlayback } from '../playback';
+import { IDLE, PLAYBACK_RATES, closePlayback, formatClock, openPlayback, playback, usePlayback } from '../playback';
 import { useCompletion, useMyListening, setCompleted } from '../completion';
 import { useListenerError } from '../liveQuery';
 import { useCohortName, type CourseRow } from '../structure';
@@ -24,7 +24,6 @@ import type { RecordingRow } from '../recordings';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
-const RATES = [1, 1.25, 1.5, 2];
 
 /**
  * Listening to one recording.
@@ -241,7 +240,7 @@ export function PlayerScreen({
       />
 
       <View style={styles.speedRow}>
-        {RATES.map((r) => {
+        {PLAYBACK_RATES.map((r) => {
           const on = state.rate === r;
           return (
             <Pressable

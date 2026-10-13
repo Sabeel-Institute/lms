@@ -1,4 +1,5 @@
 import type { PickedFile } from './mediaFileTypes';
+import { partSent } from './partSent';
 
 /**
  * Web side of the media-file seam (native sibling: mediaFiles.ts): choose
@@ -38,9 +39,5 @@ export async function sendPart(
   signal: AbortSignal,
   headers: Record<string, string> = {},
 ): Promise<string> {
-  const res = await fetch(url, { method: 'PUT', body: body as BodyInit, signal, headers });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const etag = res.headers.get('etag');
-  if (!etag) throw new Error('The storage service gave no ETag.');
-  return etag;
+  return partSent(signal, () => fetch(url, { method: 'PUT', body: body as BodyInit, signal, headers }));
 }

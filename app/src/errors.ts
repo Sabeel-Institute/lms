@@ -9,13 +9,16 @@
  * band whose entire text was `INTERNAL`, on a screen that then also offered
  * "widen your filters" as if the request had merely found nothing.
  *
- * Two shapes are turned away:
+ * Three shapes are turned away:
  *
  *  - a bare code, which has no spaces in it (`internal`, `unauthenticated`);
  *  - the Firebase SDK's own assembled string, `Firebase: <something>
  *    (service/code).`, which has spaces but is a library talking to a developer.
  *    Staff resending a password link were reading `Firebase: Error
- *    (auth/user-not-found).` off the screen.
+ *    (auth/user-not-found).` off the screen;
+ *  - an Expo native module's rejection, `Call to function '<Module.fn>' has
+ *    been rejected. → Caused by: java.lang.…`. A student pressing "Take a
+ *    photo" read a Java exception, class names and all.
  *
  * The raw value is logged either way, because it is the thing worth having in
  * Sentry.
@@ -27,7 +30,7 @@ export function errorText(e: unknown): string {
   // "Firebase Storage: User does not have permission to access
   // 'recordings/<id>/audio.m4a'. (storage/unauthorized)", which a manager whose
   // upload was refused was reading off the screen, object path and all.
-  if (raw && /\s/.test(raw) && !/^Firebase(\s\w+)?:/.test(raw)) return raw;
+  if (raw && /\s/.test(raw) && !/^(Firebase(\s\w+)?:|Call to function ')/.test(raw)) return raw;
   console.warn('request failed', err?.code || raw || 'unknown');
   return 'Something went wrong. Try again in a moment.';
 }

@@ -37,6 +37,16 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **One sound at a time, and an attachment player of the app's
+  own.** On the device pass a recitation attached to an assignment and the
+  class recording in the docked bar played over each other: Android shares
+  audio focus between apps, not between the players inside one, and a browser
+  plays two media elements the same way. Every player now reports its start
+  to `app/src/oneSound.ts`, which pauses whatever was playing, exactly as its
+  own pause would. Android's own controls, at the height of an attachment row,
+  folded to play and full screen — no place, no time, no speed, for a
+  teacher's example of up to fifteen minutes — so attachments get a small
+  player of the app's own, the same on a phone and on the website.
 - 2026-10-13 — **This app's releases start at v0.1.0.** Faisal: it is a new
   app, so its numbering starts again, and any earlier release of it on GitHub
   goes. The Android `versionCode` keeps counting up, which is what Android
@@ -1667,6 +1677,45 @@ and commit messages, and renaming them would strand every one of those.
   reports nothing is worse than none.
 
 ## Verification log
+
+- 2026-10-13 — **Device pass for assignments (A7), debug build on tb_emu.**
+  Checked: a notification tap opens its subject from the background and from
+  a process Android killed (a force-stopped app receives no FCM at all — that
+  is Android's rule, not a fault); Arabic in the answer editor (right to left,
+  vowels, bold, mixed-direction bullets) and in the reader; choosing several
+  files at once; the camera (capture, and the re-encode to JPEG — the
+  emulator's camera shoots 1392×1856, under the 1600 px cap, so the resize
+  branch did not run); the assignment form's leave prompt from Android's Back
+  and the header's Back, with Back while the prompt is open keeping the form;
+  the docked bar above To do; the assignment screens at 320 dp.
+  Found and fixed:
+  - a recitation and a class recording playing at once, and Android's
+    attachment controls without place, time or speed (decision log, above);
+  - once Android rebuilds the screen (display size or language changed) the
+    camera will not open until the app is opened again: expo-image-picker's
+    launcher is not registered again (`Attempting to launch an unregistered
+    ActivityResultLauncher`). The student now reads what to do instead of the
+    Java exception, and `errorText` turns away every Expo native rejection;
+  - a connection dropped mid-upload showed `fetch failed:
+    java.net.ConnectException…`; both platforms' `sendPart` now say the
+    connection dropped;
+  - files chosen together changed places as they arrived. They are dated
+    from the start of their upload and sent one at a time, in the order
+    chosen;
+  - a debug-build crash: Expo's dev client reloads a lazily loaded chunk
+    through `window.location` once Metro's connection has dropped. Native
+    bundles the editor with the app, as a release build always did.
+  The browser suite's new checks then caught one more: "Try again" on an
+  attachment that failed to load did nothing when pressed within the second
+  its link was minted, because the new link was the same string. Each attempt
+  now loads afresh.
+  Tried and rejected: declaring `fontScale` in `configChanges`, to spare a
+  font-size change its screen rebuild. React Native redrew text at the new
+  size without measuring it again — clipped lines, and a tab bar garbled until
+  the app restarted. A font-size change rebuilds the screen and returns to the
+  tab's first screen; nothing typed is lost.
+  Not covered: a photo taken while Android kills the app behind the camera is
+  lost (expo-image-picker's `getPendingResultAsync` is not used).
 
 - 2026-10-07 — **Set-password links, measured against production after a
   teacher's report.** A student kept landing on Firebase's hosted "Try

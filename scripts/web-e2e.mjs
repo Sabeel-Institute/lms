@@ -1629,6 +1629,127 @@ await student.getByTestId(`attachment-${PAGE}`).waitFor({ timeout: 30000 });
 await student.unroute(mediaStore);
 check('Stay lets the upload finish', await shows(student, `attachment-${PAGE}`));
 
+/*
+ * A RECITATION ATTACHED, AND ONE SOUND AT A TIME.
+ *
+ * A recitation and a note chosen together, the large one first, are listed in
+ * the order chosen — not the order they arrive, which put the small one first
+ * and swapped the rows as they landed. The class recording plays on in the
+ * docked bar; playing the recitation pauses it, and playing the recording
+ * again pauses the recitation. Nothing else makes the two agree: a browser
+ * plays two media elements over each other without a word.
+ */
+const RECITATION = 'Recitation.m4a';
+const NOTE_FILE = 'Notes.txt';
+await goHome(student);
+await tap(student, 'task-Session 1');
+await student.getByTestId('player-play').waitFor({ timeout: 25000 });
+await tap(student, 'player-play');
+await student.waitForTimeout(1500);
+// By the tab, not by address: loading a page ends what is playing.
+await tap(student, 'tab-todo');
+await cwCard.click();
+await student.getByTestId('work-note').waitFor({ timeout: 20000 });
+const twoChooser = student.waitForEvent('filechooser');
+await tap(student, 'attachments-add-work');
+await (await twoChooser).setFiles([
+  { name: RECITATION, mimeType: 'audio/mp4', buffer: readFileSync(AUDIO_FIXTURE) },
+  { name: NOTE_FILE, mimeType: 'text/plain', buffer: Buffer.from('Two takes; the second is the one to hear.\n') },
+]);
+await student.getByTestId(`attachment-${NOTE_FILE}`).waitFor({ timeout: 60000 });
+await student.getByTestId(`attachment-${RECITATION}`).waitFor({ timeout: 60000 });
+const attachedOrder = await student.evaluate(() =>
+  [...document.querySelectorAll('[data-testid^="attachment-"]')]
+    .filter((e) => e.checkVisibility())
+    .map((e) => e.getAttribute('data-testid'))
+    .filter((id) => !id.startsWith('attachment-remove-')),
+);
+check(
+  'files chosen together are listed in the order chosen, the large one first',
+  attachedOrder.indexOf(`attachment-${RECITATION}`) >= 0 &&
+    attachedOrder.indexOf(`attachment-${RECITATION}`) < attachedOrder.indexOf(`attachment-${NOTE_FILE}`),
+  attachedOrder.join(', '),
+);
+const labelsAre = (clip, dock) =>
+  student
+    .waitForFunction(
+      ([name, clipWant, dockWant]) => {
+        const visible = (id) => [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.checkVisibility());
+        return (
+          visible(`clip-play-${name}`)?.getAttribute('aria-label') === `${clipWant} ${name}` &&
+          visible('mini-player-toggle')?.getAttribute('aria-label') === dockWant
+        );
+      },
+      [RECITATION, clip, dock],
+      { timeout: 15000 },
+    )
+    .then(() => true, () => false);
+check('the class recording is playing in the docked bar', await labelsAre('Play', 'Pause'));
+await tap(student, `clip-play-${RECITATION}`);
+check('playing the recitation pauses the class recording', await labelsAre('Pause', 'Play'));
+/*
+ * AT THE SPEED CHOSEN: the place moves about twice as far in the same time
+ * at 2× as at 1×. The audio element is never on the page, so its own rate
+ * cannot be read; how far the place moves is what a listener hears.
+ */
+const clipSeconds = async () => {
+  const text = await student.getByTestId(`clip-time-${RECITATION}`).filter({ visible: true }).first().innerText();
+  const [m, s] = text.split(' / ')[0].split(':').map(Number);
+  return m * 60 + s;
+};
+// Four seconds a side: the element reports its time about four times a
+// second and the reading is whole seconds, so three left a second's slack.
+const atOneFrom = await clipSeconds();
+await student.waitForTimeout(4000);
+const atOne = (await clipSeconds()) - atOneFrom;
+for (let i = 0; i < 3; i++) await tap(student, `clip-speed-${RECITATION}`);
+const speedShown = await student.getByTestId(`clip-speed-${RECITATION}`).filter({ visible: true }).first().innerText();
+const atTwoFrom = await clipSeconds();
+await student.waitForTimeout(4000);
+const atTwo = (await clipSeconds()) - atTwoFrom;
+check(
+  'the recitation plays at the speed chosen',
+  speedShown === '2×' && atOne >= 3 && atTwo >= atOne + 3,
+  `${atOne}s at 1× and ${atTwo}s at ${speedShown} in 4s each`,
+);
+await tap(student, 'mini-player-toggle');
+check('playing the class recording again pauses the recitation', await labelsAre('Play', 'Pause'));
+await tap(student, 'mini-player-toggle');
+
+/*
+ * A LINK THAT HAS RUN OUT. An attachment's link lasts an hour, so a page left
+ * open and played later is refused by the store. The row says the audio
+ * stopped loading, and Try again fetches a new link, which plays.
+ */
+const draftFiles = Object.values(
+  (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.files?.mapValue?.fields ?? {},
+).map((f) => f.mapValue.fields);
+const recitationKey = draftFiles.find((f) => f.name.stringValue === RECITATION)?.storageKey.stringValue;
+const expiredLink = (url) => url.port === String(MEDIA_STORE_PORTS.s3) && url.pathname.endsWith(`/${recitationKey}`);
+await student.route(expiredLink, (route) =>
+  route.fulfill({ status: 403, contentType: 'application/xml', body: '<Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>' }),
+);
+await goHome(student);
+await cwCard.click();
+await student.getByTestId(`clip-failed-${RECITATION}`).waitFor({ timeout: 20000 }).catch(() => {});
+check('a link that has run out says the audio stopped loading', await showsText(student, 'The audio stopped loading.'));
+await student.unroute(expiredLink);
+await tap(student, `clip-retry-${RECITATION}`);
+await tap(student, `clip-play-${RECITATION}`);
+const playsAgain = await student
+  .waitForFunction(
+    (id) => {
+      const el = [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.checkVisibility());
+      const [m, s] = (el?.textContent ?? '0:00').split(' / ')[0].split(':').map(Number);
+      return m * 60 + s >= 2;
+    },
+    `clip-time-${RECITATION}`,
+    { timeout: 20000 },
+  )
+  .then(() => true, () => false);
+check('Try again fetches a new link, and the audio plays', playsAgain && recitationKey !== undefined);
+await tap(student, `clip-play-${RECITATION}`);
+
 // DOUBLE-CLICKED: handed in once, and no refusal shown over work that went in.
 await student.getByTestId('work-hand-in').filter({ visible: true }).first().dblclick();
 await student.getByTestId('work-handed-in').waitFor({ timeout: 20000 });

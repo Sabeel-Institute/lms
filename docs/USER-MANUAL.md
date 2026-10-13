@@ -229,6 +229,11 @@ worksheet to print, a reading, a recording to listen to.
   recording, or, on a phone, **Take a photo** of a page you wrote out by hand.
   Up to ten files, 25 MB each; no video.
 
+An audio file plays right on the page: drag the bar to move through it, and tap
+**1×** to step through the speeds. Playing it pauses a class recording you were
+listening to, and going back to the recording pauses it. If it stops loading,
+tap **Try again**.
+
 Everything is saved as you go, on the server — start on your phone and finish on
 the website, or leave and come back later — and nobody sees it until you hand it
 in. If you try to leave while a file is still uploading, the app asks first,

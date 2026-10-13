@@ -48,6 +48,14 @@ describe('errorText', () => {
     expect(errorText(e)).toBe(GENERIC);
   });
 
+  it('turns away a native module talking to a developer', () => {
+    const e = new Error(
+      "Call to function 'ExponentImagePicker.launchCameraAsync' has been rejected.\n" +
+        '→ Caused by: java.lang.IllegalStateException: Attempting to launch an unregistered ActivityResultLauncher',
+    );
+    expect(errorText(e)).toBe(GENERIC);
+  });
+
   it('gives a listener a sentence for an audio failure, and logs the code', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     for (const raw of ['audio error 2', 'Source error', 'Response code: 400']) {

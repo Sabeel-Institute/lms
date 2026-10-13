@@ -4,6 +4,7 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { File } from 'expo-file-system';
 import type { PickedFile } from './mediaFileTypes';
 import { PHOTO_QUALITY, PHOTO_WIDTH, photoName } from './photos';
+import { opening } from './pickerOpening';
 
 /**
  * Native side of the attachment-file seam (web sibling: attachmentFiles.web.ts):
@@ -16,7 +17,9 @@ import { PHOTO_QUALITY, PHOTO_WIDTH, photoName } from './photos';
 export const canTakePhoto = true;
 
 export async function pickAttachmentFiles(): Promise<PickedFile[] | null> {
-  const res = await DocumentPicker.getDocumentAsync({ type: '*/*', multiple: true, copyToCacheDirectory: false });
+  const res = await opening('file browser', () =>
+    DocumentPicker.getDocumentAsync({ type: '*/*', multiple: true, copyToCacheDirectory: false }),
+  );
   if (res.canceled || !res.assets?.length) return null;
   return res.assets.map((a) => ({ name: a.name, sizeBytes: a.size ?? new File(a.uri).size ?? 0, source: a.uri }));
 }
@@ -28,7 +31,7 @@ export async function takePhoto(): Promise<PickedFile | null> {
   if (!permission.granted) {
     throw new Error('The camera is not allowed for this app. Allow it in the phone’s settings, then try again.');
   }
-  const res = await ImagePicker.launchCameraAsync({ quality: 1 });
+  const res = await opening('camera', () => ImagePicker.launchCameraAsync({ quality: 1 }));
   const asset = res.canceled ? null : res.assets?.[0];
   if (!asset) return null;
   const context = ImageManipulator.manipulate(asset.uri);

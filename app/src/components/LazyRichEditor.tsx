@@ -1,45 +1,10 @@
-import { lazy, Suspense, type ComponentProps } from 'react';
-import { ActivityIndicator, Platform, StyleSheet } from 'react-native';
-
 /*
- * THE FORMATTING EDITOR, LOADED WHEN A BOX THAT USES IT OPENS, not with the
- * app. On the web it is Lexical, 127 KB gzipped; a split chunk keeps it out
- * of the first load, which every page of the app pays for.
- *
- * A deploy replaces the chunk's hashed file, so a tab opened before it asks
- * for one that is gone and gets the app's HTML back. That tab is simply out of
- * date: reload it, once — a second failure inside a minute is a real fault and
- * is thrown.
+ * THE FORMATTING EDITOR, WITH THE APP. Only the web loads it on demand
+ * (LazyRichEditor.web.tsx): an installed app is one bundle — a release build
+ * never splits it — so a lazy load here would buy nothing but a frame of
+ * spinner. In a debug build it costs more: the chunk comes from Metro, and
+ * once Metro's connection has dropped (the app sat in the background) Expo's
+ * dev client answers a chunk load by reloading through `window.location`,
+ * which native does not have, and the screen crashes.
  */
-const RELOADED_AT = 'lms-editor-reloaded-at';
-const RichEditor = lazy(() =>
-  import('./RichEditor').then(
-    (m) => ({ default: m.RichEditor }),
-    (e: unknown) => {
-      if (Platform.OS !== 'web') throw e;
-      let last = 0;
-      try {
-        last = Number(sessionStorage.getItem(RELOADED_AT) ?? 0);
-        sessionStorage.setItem(RELOADED_AT, String(Date.now()));
-      } catch {
-        throw e;
-      }
-      if (Date.now() - last < 60_000) throw e;
-      window.location.reload();
-      return new Promise<never>(() => {});
-    },
-  ),
-);
-
-export function LazyRichEditor(props: ComponentProps<typeof RichEditor>) {
-  return (
-    <Suspense fallback={<ActivityIndicator style={styles.loading} />}>
-      <RichEditor {...props} />
-    </Suspense>
-  );
-}
-
-const styles = StyleSheet.create({
-  // The toolbar and a four-line box, so the form does not jump when it lands.
-  loading: { minHeight: 184 },
-});
+export { RichEditor as LazyRichEditor } from './RichEditor';
