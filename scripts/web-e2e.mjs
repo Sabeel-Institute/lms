@@ -594,9 +594,9 @@ const student = await newSession('student');
 await student.getByTestId('signin-email').fill('fatima@example.com');
 await student.getByTestId('signin-password').fill('StudentPass123!');
 await tap(student, 'signin-student');
-// The student lands on their task home ("Your recordings"), not a staff greeting.
-await sawText(student, 'Your recordings', 25000);
-check('the student signs in with their own password', await showsText(student, 'Your recordings'));
+// The student lands on their task home ("To do"), not a staff greeting.
+await sawText(student, 'Recordings and assignments, soonest first', 25000);
+check('the student signs in with their own password', await showsText(student, 'Recordings and assignments, soonest first'));
 await shot(student, '09-home-student');
 
 // ------------------------------------------------ session, attendance, publish --
@@ -1269,7 +1269,7 @@ const overridden = await newSession('overridden');
 await overridden.getByTestId('signin-email').fill('bilal@example.com');
 await overridden.getByTestId('signin-password').fill('BilalPass123!');
 await tap(overridden, 'signin-student');
-await sawText(overridden, 'Your recordings', 25000);
+await sawText(overridden, 'Recordings and assignments, soonest first', 25000);
 /*
  * THE GROUP, not the word — same reasoning as Fatima's completion above. The
  * claim is that the row sits under Completed, which is what the student reads;
@@ -1700,7 +1700,7 @@ check(
   // open task — so the check passed on the accident that this student's one
   // grant was already complete, and any open assignment added above here would
   // have failed it for a reason unrelated to routing.
-  stuOnStaffUrl.includes('your recordings') && !stuOnStaffUrl.includes('excused students have until'),
+  stuOnStaffUrl.includes('recordings and assignments, soonest first') && !stuOnStaffUrl.includes('excused students have until'),
 );
 check('…so nothing on it is denied', !stuOnStaffUrl.includes('live data error'));
 

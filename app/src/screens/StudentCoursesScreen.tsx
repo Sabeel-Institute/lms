@@ -5,6 +5,9 @@ import { useMyAttendanceState, type AttendanceRecordRow } from '../attendance';
 
 const NO_MARKS: AttendanceRecordRow[] = [];
 import { useCourse, useStudentEnrollmentsState } from '../structure';
+import { useMySubmissions, type SubmissionRow } from '../coursework';
+import { workTally } from './ClassAssignments';
+import { INSTITUTE_TIMEZONE, todayInZone } from '@sabeel/shared';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
@@ -31,13 +34,15 @@ export function StudentCoursesScreen({
     () => (enrollments ?? []).filter((e) => e.active).map((e) => e.courseId),
     [enrollments],
   );
+  // One listener for every class's work, split per card.
+  const work = useMySubmissions(uid);
 
   return (
     <Screen
       // LIST, like every other collection — see `StudentHomeScreen`.
       width="list"
       title="Your classes"
-      subtitle="Your attendance and required recordings, class by class"
+      subtitle="Your attendance, recordings and assignments, class by class"
     >
       {/* IN A GRID, like every other collection. Asking for the list width and
           then stacking full-width rows is the worst of both: a card holding a
@@ -50,7 +55,13 @@ export function StudentCoursesScreen({
       ) : (
         <Grid min={330}>
           {courseIds.map((courseId) => (
-            <CourseCard key={courseId} uid={uid} courseId={courseId} onOpen={onOpen} />
+            <CourseCard
+              key={courseId}
+              uid={uid}
+              courseId={courseId}
+              work={(work ?? []).filter((s) => s.courseId === courseId)}
+              onOpen={onOpen}
+            />
           ))}
         </Grid>
       )}
@@ -61,10 +72,12 @@ export function StudentCoursesScreen({
 function CourseCard({
   uid,
   courseId,
+  work,
   onOpen,
 }: {
   uid: string;
   courseId: string;
+  work: SubmissionRow[];
   onOpen: (courseId: string) => void;
 }) {
   const cls = useCourse(courseId);
@@ -94,10 +107,22 @@ function CourseCard({
             {present} present · {excused} excused{absent > 0 ? ` · ${absent} absent` : ''}
           </Text>
         )}
+        {work.length > 0 ? <AssignmentsLine work={work} cls={cls} /> : null}
         {!cls.effectiveActive ? <Text style={styles.sub}>Finished</Text> : null}
       </View>
     </Pressable>
   );
+}
+
+/** "Assignments: 2 handed in · 1 to hand in · 1 missed", leaving out what is zero. */
+function AssignmentsLine({ work, cls }: { work: SubmissionRow[]; cls: Parameters<typeof workTally>[1] }) {
+  const tally = workTally(work, cls, todayInZone(INSTITUTE_TIMEZONE));
+  const parts = [
+    tally.handedIn ? `${tally.handedIn} handed in` : null,
+    tally.toDo ? `${tally.toDo} to hand in` : null,
+    tally.missed ? `${tally.missed} missed` : null,
+  ].filter(Boolean);
+  return parts.length ? <Text style={styles.sub}>Assignments: {parts.join(' · ')}</Text> : null;
 }
 
 const styles = StyleSheet.create({

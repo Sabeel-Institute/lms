@@ -34,6 +34,8 @@ export interface CompletionState {
    * still sat under Due soon, and still got the last-day reminder.
    */
   override?: { completed: boolean; reason: string };
+  /** When it was marked complete; null when unknown (a teacher's mark). */
+  completedAt: number | null;
 }
 
 /**
@@ -88,6 +90,7 @@ export function useMyCompletions(uid: string | null): Map<string, CompletionStat
           map.set(data.recordingId, {
             completed: data.completed,
             pending: d.metadata.hasPendingWrites,
+            completedAt: data.completed ? (data.completedAt ?? data.updatedAt) : null,
           });
         }
         return map;
@@ -123,6 +126,7 @@ export function useMyCompletions(uid: string | null): Map<string, CompletionStat
          */
         pending: false,
         override,
+        completedAt: own.get(recordingId)?.completedAt ?? null,
       });
     }
     return merged;
@@ -253,13 +257,15 @@ export function useCompletion(uid: string | null, recordingId: string): Completi
       label: 'completion',
       map: (snap) => {
         const d = snap.docs[0];
-        if (!d) return { completed: false, pending: false };
+        if (!d) return { completed: false, pending: false, completedAt: null };
+        const data = d.data() as CompletionDoc;
         return {
-          completed: (d.data() as CompletionDoc).completed,
+          completed: data.completed,
           pending: d.metadata.hasPendingWrites,
+          completedAt: data.completed ? (data.completedAt ?? data.updatedAt) : null,
         };
       },
-      empty: { completed: false, pending: false },
+      empty: { completed: false, pending: false, completedAt: null },
       includeMetadataChanges: true,
     },
   );
@@ -268,7 +274,7 @@ export function useCompletion(uid: string | null, recordingId: string): Completi
   const overrides = useMyOverrides(uid);
   const override = overrides.get(recordingId);
   return useMemo(
-    () => (override ? { completed: override.completed, pending: false, override } : own),
+    () => (override ? { completed: override.completed, pending: false, override, completedAt: own.completedAt } : own),
     [own, override],
   );
 }

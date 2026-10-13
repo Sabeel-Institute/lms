@@ -143,7 +143,7 @@ await pair(stu, '01-signin', { cutAbove: 'dev-signin-first-admin' });
 await stu.getByTestId('signin-email').fill('fatima.ahmed@example.com');
 await stu.getByTestId('signin-password').fill('HikamStudent1');
 await tap(stu, 'signin-student');
-await sawText(stu, 'Your recordings', 25000);
+await sawText(stu, 'Recordings and assignments, soonest first', 25000);
 await pair(stu, '02-student-home');
 // The hero card: the home screen promotes the most urgent recording still open
 // and drops it from the grouped list, so this is the handle it has.

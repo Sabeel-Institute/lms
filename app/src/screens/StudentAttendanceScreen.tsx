@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   INSTITUTE_TIMEZONE,
@@ -17,7 +17,10 @@ import {
   Notice,
   Screen,
   SectionTitle,
+  Segmented,
 } from "../components/ui";
+import { ClassAssignments, workTally } from "./ClassAssignments";
+import { useMySubmissions } from "../coursework";
 import { useMyAttendanceState, type AttendanceRecordRow } from "../attendance";
 
 const NO_MARKS: AttendanceRecordRow[] = [];
@@ -50,10 +53,15 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
 export function StudentAttendanceScreen({
   uid,
   cls,
+  onOpenWork,
 }: {
   uid: string;
   cls: CourseRow;
+  onOpenWork: (courseworkId: string) => void;
 }) {
+  const [tab, setTab] = useState<"sessions" | "assignments">("sessions");
+  const allWork = useMySubmissions(uid);
+  const work = useMemo(() => (allWork ?? []).filter((s) => s.courseId === cls.id), [allWork, cls.id]);
   const today = todayInZone(INSTITUTE_TIMEZONE);
   // `null` until the listener answers: the tally and "no attendance taken"
   // are the student's record, not a placeholder for one.
@@ -114,19 +122,34 @@ export function StudentAttendanceScreen({
        reading cap made this the one screen in the app that LOST a column as the
        window grew: 680px of phone layout fits two cards, and crossing the 900px
        breakpoint capped the column at 656 and dropped it to one. */
-    <Screen title={cls.name} subtitle="Your attendance" width="list">
+    <Screen title={cls.name} subtitle="Your attendance, listening and assignments" width="list">
       {/* WHAT THEY STILL OWE COMES FIRST, and in their words. Three attendance
           counts are the register a teacher keeps; the number an adult student
           opens this screen for is how much listening is still outstanding — and
           "excused" is the word that MEANS "you must listen to this", which is
           not something the count says on its own. */}
-      {outstanding > 0 ? (
-        <Notice tone="info">
-          {outstanding === 1
-            ? "1 recording still to complete for this class."
-            : `${outstanding} recordings still to complete for this class.`}
-        </Notice>
-      ) : null}
+      <Owed recordings={outstanding} assignments={workTally(work, cls, today).toDo} />
+
+      <View style={styles.tabs}>
+      <Segmented
+        value={tab}
+        testIdPrefix="class-tab"
+        options={[
+          { value: "sessions", label: `Sessions${marksState === null ? "" : ` (${marks.length})`}` },
+          { value: "assignments", label: `Assignments (${work.length})` },
+        ]}
+        onChange={setTab}
+      />
+      </View>
+
+      {tab === "assignments" ? (
+        allWork === null ? (
+          <Empty>Checking your assignments…</Empty>
+        ) : (
+          <ClassAssignments cls={cls} work={work} onOpenWork={onOpenWork} />
+        )
+      ) : (
+      <>
 
       {marksState === null ? (
         <Empty>Checking your attendance…</Empty>
@@ -172,8 +195,23 @@ export function StudentAttendanceScreen({
           })}
         </Grid>
       )}
+      </>
+      )}
     </Screen>
   );
+}
+
+/**
+ * WHAT THEY STILL OWE COMES FIRST, in their words: recordings still to
+ * complete and assignments still to hand in, for this class only.
+ */
+function Owed({ recordings, assignments }: { recordings: number; assignments: number }) {
+  if (recordings === 0 && assignments === 0) return null;
+  const parts = [
+    recordings ? `${recordings} ${recordings === 1 ? "recording" : "recordings"} still to complete` : null,
+    assignments ? `${assignments} ${assignments === 1 ? "assignment" : "assignments"} to hand in` : null,
+  ].filter(Boolean);
+  return <Notice tone="info">{`${parts.join(" and ")} for this class.`}</Notice>;
 }
 
 /**
@@ -259,6 +297,7 @@ function Tally({ label, value }: { label: string; value: number }) {
 }
 
 const styles = StyleSheet.create({
+  tabs: { marginTop: spacing(3), marginBottom: spacing(3) },
   tally: { flexDirection: "row", justifyContent: "space-around" },
   tallyItem: { alignItems: "center" },
   tallyNum: { fontSize: 24, fontWeight: "700", color: t.text.primary },

@@ -571,6 +571,82 @@ export async function seedWorld({ db, auth, browser, base }) {
   const archived = await seedSession('sw-p1', 'sw-p1r', 'Week 12 — The Farewell Pilgrimage',
     { courseId: 'sw-past-course', cohortId: 'sw-past', daysAgo: 12, dueOffset: 10, roster: [STUDENT] });
 
+  /**
+   * ASSIGNMENTS IN EVERY STATE the student's screens draw: due soon with a
+   * draft saved, past due, handed in, returned with a grade, missed,
+   * upcoming, not required, and one in the archived course. Every open one is
+   * due AFTER the Session 2 recording, so the hero stays that recording and
+   * the tour's anchor holds. Each goes to everyone in its course, as posting
+   * does, so staff screens have a class's worth of work.
+   */
+  const PDF = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n');
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+  const day = (offset) => new Date(now + offset * DAY).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  const file = async (key, id, name, contentType, body) => {
+    await putLocalObject(key, body, contentType);
+    return { id, name, contentType, sizeBytes: body.length, durationSec: null, storageKey: key, addedAt: now - 5 * DAY };
+  };
+  async function seedCoursework(id, title, { courseId = COURSE, cohortId = COHORT, dueOffset, lateOffset = null,
+    grading = { kind: 'points', outOf: 10 }, instructions = '', files = {}, roster, mine = {} }) {
+    await db.collection('coursework').doc(id).set({
+      courseId, cohortId, title, instructions, files,
+      dueDate: day(dueOffset), lateUntil: lateOffset === null ? null : day(lateOffset), grading,
+      status: 'posted', closedAt: null, postedAt: now - 10 * DAY, postedBy: adminUid,
+      createdAt: now - 11 * DAY, createdBy: adminUid, updatedAt: now - 10 * DAY, editedAt: null,
+    });
+    for (const st of roster) {
+      await db.collection('submissions').doc(`${st.uid}_${id}`).set({
+        studentUid: st.uid, courseworkId: id, courseId, cohortId, active: true,
+        dueDate: day(dueOffset), lateUntil: lateOffset === null ? null : day(lateOffset), closedEarly: false,
+        state: 'open', attempt: 1, handedInAt: null, note: '', files: {}, returned: null, attempts: [],
+        notRequired: null, moreTime: null, assignedAt: now - 10 * DAY,
+        ...(st.uid === STUDENT.uid ? mine : {}),
+      });
+    }
+    return { id, title };
+  }
+  const longRoster = students.slice(0, 4);
+  await seedCoursework('sw-cw1', 'Memorize the first hikma', {
+    dueOffset: 4, lateOffset: 11, roster: students,
+    instructions: 'Memorize the first hikma and record yourself reciting it.\n\nمِنْ عَلامَةِ الاعْتِمادِ عَلى العَمَلِ نُقْصانُ الرَّجاءِ عِنْدَ وُجودِ الزَّلَلِ\n\n- Recite slowly, with the vowels as written.\n- One take is fine. A quiet room helps.\n\nIn your note, explain its meaning in **two or three sentences** of your own.',
+    files: { f1: await file('coursework/sw-cw1/f1', 'f1', 'First hikma, vowelled.pdf', 'application/pdf', PDF) },
+  });
+  await db.collection('drafts').doc(`${STUDENT.uid}_sw-cw1`).set({
+    studentUid: STUDENT.uid, courseworkId: 'sw-cw1', courseId: COURSE,
+    note: 'It means that losing hope after a slip shows I was relying on my own deeds.', files: {}, updatedAt: now - DAY,
+  });
+  await seedCoursework('sw-cw2', 'Letter forms, week 3', {
+    courseId: LONG_COURSE, dueOffset: -3, lateOffset: 5, grading: { kind: 'scale' }, roster: longRoster,
+    instructions: 'Write each letter in its four forms, in pencil, then photograph the page flat in good light.',
+  });
+  await seedCoursework('sw-cw3', 'Reflection on the first hikma', {
+    dueOffset: -4, lateOffset: 3, roster: students,
+    instructions: 'Write a short reflection, under 300 words, on the first hikma and one moment in your own week it describes.',
+    mine: {
+      state: 'returned', handedInAt: now - 6 * DAY,
+      note: 'The first hikma says that when we slip, our hope should not collapse, because hope was never in our deeds.',
+      returned: { grade: { points: 9 }, feedback: 'A thoughtful reflection, and your example from work is a good one. Next time, connect it to what the commentary says about hope and fear being two wings.', at: now - 2 * DAY, seq: 1, retry: false },
+    },
+  });
+  const workPage = await file(`work/${STUDENT.uid}/sw-cw4/p1`, 'p1', 'Page 1.png', 'image/png', PNG);
+  await seedCoursework('sw-cw4', 'Joining letters worksheet', {
+    courseId: LONG_COURSE, dueOffset: 6, grading: { kind: 'scale' }, roster: longRoster,
+    mine: { state: 'handedIn', handedInAt: now - DAY, note: 'Pages 1 and 2. I was not sure about the final kāf on line 4.', files: { p1: workPage } },
+  });
+  await seedCoursework('sw-cw5', 'Letter forms, week 1', {
+    courseId: LONG_COURSE, dueOffset: -12, lateOffset: -5, grading: { kind: 'scale' }, roster: longRoster,
+  });
+  await seedCoursework('sw-cw6', 'Read pages 25–48 of the commentary', {
+    dueOffset: 12, lateOffset: 19, grading: { kind: 'scale' }, roster: students,
+  });
+  await seedCoursework('sw-cw7', 'Map of the hijra route', {
+    dueOffset: 8, roster: students,
+    mine: { notRequired: { reason: 'Joined after the class visit it is based on.', by: adminUid, at: now - 3 * DAY } },
+  });
+  await seedCoursework('sw-cw8', 'Week 12 essay', {
+    courseId: 'sw-past-course', cohortId: 'sw-past', dueOffset: 9, roster: [STUDENT],
+  });
+
   /** The demo student completed one and part-listened two more, so both the
    *  ledger and their own home have every row type on them. */
   await db.collection('completions').doc(`${STUDENT.uid}_${done.recId}`).set({

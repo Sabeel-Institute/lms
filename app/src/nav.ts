@@ -42,6 +42,8 @@ export type RootStackParamList = {
   /** A student's own classes, and one class's attendance record. */
   MyClasses: undefined;
   MyClassRecord: { courseId: string };
+  /** One assignment, as the student it was given to sees it. */
+  Work: { courseworkId: string };
   /** dueDate is passed by the caller: the session's for staff, the student's own
    *  grant for students. For a student it is the day access CLOSES, so the
    *  player states it; omitted only when staff open a recording with no session

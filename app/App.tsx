@@ -38,6 +38,8 @@ import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { StudentAttendanceScreen } from './src/screens/StudentAttendanceScreen';
 import { StudentCoursesScreen } from './src/screens/StudentCoursesScreen';
 import { StudentHomeScreen } from './src/screens/StudentHomeScreen';
+import { WorkScreen } from './src/screens/WorkScreen';
+import { useCourseworkState, useSubmissionState } from './src/coursework';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { MyCoursesScreen } from './src/screens/MyCoursesScreen';
 import { TokensScreen } from './src/screens/TokensScreen';
@@ -120,6 +122,7 @@ const STUDENT_PATHS = {
   ...SHARED_PATHS,
   MyClasses: 'my-classes',
   MyClassRecord: 'my-classes/:courseId',
+  Work: 'work/:courseworkId',
 } as const;
 
 /**
@@ -285,8 +288,11 @@ export default function App() {
                   <Stack.Screen name="MyClasses" options={screenOptions('MyClasses', 'Your classes')}>
                     {() => <MyClasses uid={user.uid} />}
                   </Stack.Screen>
-                  <Stack.Screen name="MyClassRecord" options={screenOptions('MyClassRecord', 'Attendance')}>
+                  <Stack.Screen name="MyClassRecord" options={screenOptions('MyClassRecord', 'Class')}>
                     {() => <MyClassRecord uid={user.uid} />}
+                  </Stack.Screen>
+                  <Stack.Screen name="Work" options={screenOptions('Work', 'Assignment')}>
+                    {() => <Work uid={user.uid} />}
                   </Stack.Screen>
                 </>
               ) : (
@@ -661,9 +667,10 @@ function Landing({ role, uid, isAdmin }: { role: Role; uid: string; isAdmin: boo
         uid={uid}
         // The student's OWN deadline, not the session's: it is the day their
         // access closes, so the player has to be able to say so.
-        onOpen={(recording, _cls, dueDate) =>
+        onOpenRecording={(recording, _cls, dueDate) =>
           navigation.navigate('Player', { recordingId: recording.id, dueDate })
         }
+        onOpenWork={(courseworkId) => navigation.navigate('Work', { courseworkId })}
       />
     );
   }
@@ -838,10 +845,40 @@ function MyClasses({ uid }: { uid: string }) {
 
 function MyClassRecord({ uid }: { uid: string }) {
   const { courseId } = useRoute<RouteProp<RootStackParamList, 'MyClassRecord'>>().params;
+  const navigation = useNavigation<Nav>();
   const cls = useCourseState(courseId);
   const gate = resolve(cls, 'course');
   if (gate || !cls.value) return gate;
-  return <StudentAttendanceScreen uid={uid} cls={cls.value} />;
+  return (
+    <StudentAttendanceScreen
+      uid={uid}
+      cls={cls.value}
+      onOpenWork={(courseworkId) => navigation.navigate('Work', { courseworkId })}
+    />
+  );
+}
+
+/**
+ * One assignment for the student it was given to. The assignment, their work
+ * on it and the course are all live: a returned grade lands on screen as it
+ * is sent, and losing the assignment (left the class, deleted) shows as gone.
+ */
+function Work({ uid }: { uid: string }) {
+  const { courseworkId } = useRoute<RouteProp<RootStackParamList, 'Work'>>().params;
+  const coursework = useCourseworkState(courseworkId, true);
+  const submission = useSubmissionState(uid, courseworkId);
+  const cls = useCourseState(coursework.value?.courseId ?? null);
+  const gate = resolve(coursework, 'assignment') ?? resolve(submission, 'assignment') ?? resolve(cls, 'course');
+  if (gate || !coursework.value || !submission.value || !cls.value) return gate;
+  return (
+    <WorkScreen
+      key={courseworkId}
+      uid={uid}
+      coursework={coursework.value}
+      submission={submission.value}
+      cls={cls.value}
+    />
+  );
 }
 
 function Play({ studentUid }: { studentUid: string | null }) {

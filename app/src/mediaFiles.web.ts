@@ -28,9 +28,17 @@ export function readPart(file: PickedFile, start: number, end: number): Promise<
   return Promise.resolve((file.source as File).slice(start, end));
 }
 
-/** PUT one part; resolves with the ETag the bucket gave it. */
-export async function sendPart(url: string, body: Blob | Uint8Array, signal: AbortSignal): Promise<string> {
-  const res = await fetch(url, { method: 'PUT', body: body as BodyInit, signal });
+/**
+ * PUT one part, or a whole small file; resolves with the ETag the bucket gave
+ * it. `headers` are the ones a signed URL was signed with, sent exactly.
+ */
+export async function sendPart(
+  url: string,
+  body: Blob | Uint8Array,
+  signal: AbortSignal,
+  headers: Record<string, string> = {},
+): Promise<string> {
+  const res = await fetch(url, { method: 'PUT', body: body as BodyInit, signal, headers });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const etag = res.headers.get('etag');
   if (!etag) throw new Error('The storage service gave no ETag.');

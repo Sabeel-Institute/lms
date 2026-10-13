@@ -433,14 +433,14 @@ const layoutFaults = (page, readOnly = false) =>
       /(^|,\s*)(go\s+)?back$/i.test(
         (e.getAttribute('aria-label') || e.textContent || '').trim(),
       );
-    if (readOnly) {
+    if (readOnly === true) {
       // A screen DECLARED as read-only must not quietly grow a control the
       // checks below would then be the only thing watching. The guard runs in
       // both directions, so the declaration cannot rot.
       if (els.filter((e) => !chrome(e)).length > 0) {
         faults.push('declared read-only but rendered a control of its own');
       }
-    } else if (els.filter((e) => !chrome(e)).length === 0) {
+    } else if (readOnly === false && els.filter((e) => !chrome(e)).length === 0) {
       faults.push(
         'examined NO controls of its own — the overlap and right-edge checks are inert here, not passing',
       );
@@ -481,6 +481,34 @@ const layoutFaults = (page, readOnly = false) =>
       const raw = e.getBoundingClientRect();
       if (raw.right > vw + 1 && area(visibleRect(e)) > 4) {
         faults.push(`"${name(e)}" is clipped by the right edge (${Math.round(raw.right - vw)}px past)`);
+      }
+    }
+
+    /*
+     * NO TEXT RUNS OFF ITS CARD. The check above watches controls; a sentence
+     * that does not wrap is the same defect in prose. "Was due 2026-10-10 ·
+     * accepted until 2026-10-17" ran past a 320px card's edge with every
+     * control-based check green. Text inside a SCROLLING ancestor (a chip row
+     * that scrolls sideways) is meant to go past the edge, so only the viewport
+     * and ancestors that hide overflow without scrolling count.
+     */
+    const textClip = (el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return 0;
+      let limit = vw;
+      for (let n = el.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+        const cs = getComputedStyle(n);
+        if (/auto|scroll/.test(cs.overflowX)) return 0;
+        if (/hidden|clip/.test(cs.overflowX)) limit = Math.min(limit, n.getBoundingClientRect().right);
+      }
+      return r.right - limit;
+    };
+    for (const el of document.querySelectorAll('body *')) {
+      const own = [...el.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim());
+      if (!own || getComputedStyle(el).textOverflow === 'ellipsis') continue;
+      const past = textClip(el);
+      if (past > 1) {
+        faults.push(`text "${el.textContent.trim().slice(0, 30)}" runs ${Math.round(past)}px past its edge`);
       }
     }
 
@@ -963,7 +991,15 @@ function visitor(page, tag, homeMarker, counter) {
 
     if (await scrollToBottom(page)) {
       await page.waitForTimeout(250);
-      const below = await layoutFaults(page, readOnly);
+      /*
+       * THE BOTTOM MAY BE ALL RECORD. A class page's tab switch, or a handed-in
+       * assignment's Take back, sits at the top; scrolled to the end there is
+       * only what the student did. The top view has already been required to
+       * have controls of its own, so this view is checked for what it does
+       * show and not failed for having none — while a read-only screen is
+       * still failed for growing one.
+       */
+      const below = await layoutFaults(page, readOnly ? true : 'either');
       fixedFormatSeen += below.fixedFormat;
       controlsSeen += below.controls;
       check(
@@ -1012,7 +1048,9 @@ const READ_ONLY_SCREENS = new Set([
   'audit-scoped',
   'my-audit',
   'tokens',
-  'class-record',
+  // Returned work is the record: the grade, the feedback, what was handed in.
+  // Nothing on it is the student's to change.
+  'work-returned',
   // An admin who manages no class has no switches — the one staff message goes
   // to a course's managers, so the screen names who gets it instead of offering
   // a control that could do nothing. A MANAGER's `notifications` is deliberately
@@ -1417,18 +1455,19 @@ async function tourManager(page, tag) {
     `${counter.seen}/${MANAGER_SCREENS}`);
 }
 
-const STUDENT_SCREENS = 7;
+const STUDENT_SCREENS = 12;
 
 async function tourStudent(page, tag) {
   const counter = { seen: 0 };
-  const visit = visitor(page, tag, 'tab-recordings', counter);
+  const visit = visitor(page, tag, 'tab-todo', counter);
 
-  // The task list, with all five buckets on it — Missed, Archived, Due soon,
-  // Upcoming, Completed. Those group headings ARE the layout, and the anchor
-  // alone says only that the hero arrived: a group whose seed stopped producing
-  // it would leave the screen a fifth untested with every geometric check green.
+  // To do, with all six groups on it — Past due, Due soon, Upcoming, Missed,
+  // Archived, Done — and both kinds of work in them. Those group headings ARE
+  // the layout, and the anchor alone says only that the hero arrived: a group
+  // whose seed stopped producing it would leave the screen untested with every
+  // geometric check green.
   await visit('home', async () => {}, `next-up-${dueSoon.title}`);
-  for (const group of ['missed', 'archived', 'dueSoon', 'upcoming', 'done']) {
+  for (const group of ['pastDue', 'dueSoon', 'upcoming', 'missed', 'archived', 'done']) {
     check(`${tag} home lists the ${group} group`,
       await byId(page, `group-${group}`).isVisible().catch(() => false));
   }
@@ -1470,6 +1509,20 @@ async function tourStudent(page, tag) {
     // to `my-classes` if the bar stops rendering, every geometric check passes,
     // and the tour still reports having toured it.
   }, 'mini-player');
+  // An assignment in each state its screen has: open with a draft saved,
+  // past due (the late-work sentence), handed in (Take back), and returned
+  // (the grade). Reached from To do, as a student reaches them.
+  const openWork = (title) => tap(byId(page, `task-${title}`));
+  await visit('work-to-do', () => openWork('Memorize the first hikma'), 'work-hand-in');
+  await visit('work-past-due', () => openWork('Letter forms, week 3'), 'work-hand-in');
+  await visit('work-handed-in', () => openWork('Joining letters worksheet'), 'work-take-back');
+  await visit('work-returned', () => openWork('Reflection on the first hikma'), 'work-returned');
+  // The class page's other tab: the whole term's assignments, each opening.
+  await visit('class-assignments', async () => {
+    await tap(byId(page, 'tab-classes'));
+    await tap(byId(page, 'myclass-Hikam Foundations'));
+    await tap(byId(page, 'class-tab-assignments'));
+  }, 'class-work-Memorize the first hikma');
   // A student's More is a different sheet: no audit row, and a password reset
   // staff do not get.
   await visit('more', () => tap(byId(page, 'tab-more')), 'more-password');
@@ -1506,7 +1559,7 @@ async function signInStudent(page) {
   await byId(page, 'signin-email').fill(STUDENT.email);
   await byId(page, 'signin-password').fill(STUDENT_PASSWORD);
   await tap(byId(page, 'signin-student'));
-  await byId(page, 'tab-recordings').waitFor({ timeout: 60_000 });
+  await byId(page, 'tab-todo').waitFor({ timeout: 60_000 });
 }
 
 const TOURS = [

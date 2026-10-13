@@ -37,14 +37,14 @@ type Tab = {
  */
 const STUDENT_TABS: Tab[] = [
   {
-    key: 'recordings',
-    label: 'Recordings',
-    icon: 'play-circle-outline',
+    key: 'todo',
+    label: 'To do',
+    icon: 'checklist',
     route: 'Home',
-    // The player is under Recordings for a student: it is the only place their
-    // recordings are opened from, and a screen where no tab is lit reads as
-    // having fallen out of the app.
-    activeFor: ['Home', 'Player'],
+    // The player and an assignment are under To do for a student: it is the
+    // only place they are opened from, and a screen where no tab is lit reads
+    // as having fallen out of the app.
+    activeFor: ['Home', 'Player', 'Work'],
   },
   {
     key: 'classes',

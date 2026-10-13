@@ -7,6 +7,7 @@ export * from './recordings';
 export * from './media';
 export * from './assignments';
 export * from './coursework';
+export * from './richtext';
 export * from './audit';
 export * from './ledger';
 export * from './notifications';

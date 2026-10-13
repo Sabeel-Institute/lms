@@ -1,75 +1,102 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { doc, getDoc } from 'firebase/firestore';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
   COLLECTIONS,
   INSTITUTE_TIMEZONE,
-  bucketRank,
   canPlayFromCourse,
+  closesOn,
   dueBucket,
+  gradeText,
+  nextDeadline,
   playVerb,
   todayInZone,
   unbreakableDate,
-  type CourseDoc,
-  type DueBucket,
+  workBucket,
+  workState,
+  type CourseworkDoc,
   type RecordingDoc,
+  type TodoBucket,
+  type WorkState,
 } from '@sabeel/shared';
 import { Empty, Grid, Screen } from '../components/ui';
 import { PushNudge } from '../components/PushNudge';
-import { db } from '../firebase';
-import { captureError } from '../sentry';
 import { useMyAssignments, useMyCompletions } from '../completion';
+import { useMyDraftIds, useMySubmissions, type CourseworkRow, type SubmissionRow } from '../coursework';
 import { useListenerFailed } from '../liveQuery';
 import { drainCompletionOutbox } from '../completionOutbox';
 import { drainProgressJournal } from '../playback';
+import { useResolvedDocs } from '../resolveDocs';
+import { arrangeTodo, type TodoEntry } from '../todo';
 import type { CourseRow } from '../structure';
 import type { RecordingRow } from '../recordings';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
 
+/** A required recording on the list. */
+interface RecordingItem extends TodoEntry {
+  kind: 'recording';
+  recording: RecordingRow;
+  cls: CourseRow;
+  dueDate: string;
+  pending: boolean;
+  /** Set by a teacher, and not the student's to change — see the note on the card. */
+  override: { completed: boolean; reason: string } | null;
+}
+
+/** An assignment on the list. */
+interface WorkItem extends TodoEntry {
+  kind: 'work';
+  coursework: CourseworkRow;
+  submission: SubmissionRow;
+  cls: CourseRow;
+  state: WorkState;
+  draftSaved: boolean;
+}
+
+type Item = RecordingItem | WorkItem;
+
 /**
- * The student's task-ordered home.
+ * The student's To do: everything they owe, in one list
+ * (docs/proposals/lms-assignments-proposal.html, section 2).
  *
- * Every recording a student can reach is here, because a recording is granted by
- * being excused and that grant is exactly what makes it required. So this is at
- * once the to-do list and the whole of what they may listen to — there is no
- * separate browsable archive, and nothing to show that is "available but not
- * required".
+ * Two kinds of work, each by its own rules. A recording is here because the
+ * student was marked excused — the grant is both the access and the
+ * obligation — and nothing else puts one here. An assignment is here because
+ * the student is in the class; the register plays no part.
  *
- * Grouped Missed → Due soon → Upcoming → Completed. A missed row is kept rather
- * than hidden: access closed, and a student is owed the record of what closed
- * and when. The grant's OWN due date is authoritative, so bucketing reads the
- * assignment, not the recording.
+ * Open work first, the record after: the nearest deadline drawn large, then
+ * Past due, Due soon, Upcoming; then Missed and Archived, quiet and
+ * unopenable, as a student is owed the record of what closed and when; then
+ * two weeks of Done. The order is `arrangeTodo`'s, tested on its own.
  */
 export function StudentHomeScreen({
   uid,
-  onOpen,
+  onOpenRecording,
+  onOpenWork,
 }: {
   uid: string;
-  onOpen: (recording: RecordingRow, cls: CourseRow, dueDate: string) => void;
+  onOpenRecording: (recording: RecordingRow, cls: CourseRow, dueDate: string) => void;
+  onOpenWork: (courseworkId: string) => void;
 }) {
   const granted = useMyAssignments(uid);
+  const submissions = useMySubmissions(uid);
   // Memoised, not a bare `?? []`: a fresh array literal every render would make
-  // every `useMemo` below it recompute on every render, which is what
-  // `exhaustive-deps` objects to — and the objection is right.
-  const assignments = useMemo(() => granted ?? [], [granted]);
+  // every `useMemo` below it recompute on every render.
+  const grants = useMemo(() => granted ?? [], [granted]);
+  const work = useMemo(() => submissions ?? [], [submissions]);
   // A REFUSAL IS NOT A LOAD: `useLiveQuery` resets to `empty` on a listener
   // error too, so without this a denial would sit on "Checking…" for ever.
-  // `Screen` renders the error banner itself; this only stops the screen
-  // claiming to still be looking.
-  const failed = useListenerFailed(['myAssignments']);
+  const failed = useListenerFailed(['myAssignments', 'mySubmissions']);
   const completions = useMyCompletions(uid);
-  const { resolved, resolving } = useResolvedRecordings(assignments.map((a) => a.recordingId));
-  // BOTH LEGS. The grants arriving is not the same as the screen having
-  // something to show: every row is looked up one at a time afterwards, and
-  // until those land the list is empty for a reason that is not "nothing to
-  // listen to".
-  //
+  const drafts = useMyDraftIds(uid);
+  const recordings = useResolvedDocs<RecordingDoc>(COLLECTIONS.recordings, useMemo(() => grants.map((a) => a.recordingId), [grants]));
+  const coursework = useResolvedDocs<CourseworkDoc>(COLLECTIONS.coursework, useMemo(() => work.map((s) => s.courseworkId), [work]));
+
   // On launch, replay what this device saved and then lost to an app kill
   // before it synced: a completion marked offline, and listening done with the
-  // screen locked (native only; both are no-ops on web). Runs once the student
-  // is signed in, so the replayed writes carry their auth.
+  // screen locked (native only; both are no-ops on web).
   useEffect(() => {
     void drainCompletionOutbox(uid);
     void drainProgressJournal(uid);
@@ -77,379 +104,243 @@ export function StudentHomeScreen({
 
   const today = todayInZone(INSTITUTE_TIMEZONE);
 
-  const rows = useMemo(() => {
-    return assignments
-      .map((a) => {
-        const r = resolved.get(a.recordingId);
-        if (!r) return null;
-        const state = completions.get(a.recordingId);
-        const bucket = dueBucket({ dueDate: a.dueDate, completed: state?.completed ?? false }, today);
-        return {
-          key: a.id,
-          recording: r.recording,
-          cls: r.cls,
-          dueDate: a.dueDate,
-          bucket,
-          /*
-           * THE COURSE IS CLOSED. Archived with listening off, the server
-           * refuses the audio (`class-listening-off`), so a row like this is
-           * not required listening any more, whatever its date says: it is
-           * neither the hero nor a thing still to do, and the brief has
-           * archived courses out of the default student views. A row already
-           * completed stays Completed — the record is the student's.
-           */
-          archived: !canPlayFromCourse(r.cls) && bucket !== 'done',
-          pending: state?.pending ?? false,
-          override: state?.override ?? null,
-        };
-      })
-      .filter((x): x is TaskRow => x !== null)
-      .sort(
-        (a, b) =>
-          bucketRank(a.bucket) - bucketRank(b.bucket) ||
-          a.dueDate.localeCompare(b.dueDate) ||
-          a.recording.title.localeCompare(b.recording.title),
-      );
-  }, [assignments, resolved, completions, today]);
+  const items = useMemo((): Item[] => {
+    const out: Item[] = [];
+    for (const a of grants) {
+      const r = recordings.resolved.get(a.recordingId);
+      if (!r) continue;
+      const state = completions.get(a.recordingId);
+      const bucket = dueBucket({ dueDate: a.dueDate, completed: state?.completed ?? false }, today);
+      /*
+       * THE COURSE IS CLOSED. Archived with its recordings closed, the server
+       * refuses the audio (`class-listening-off`), so a row like this is not
+       * required any more, whatever its date says. A row already completed
+       * stays done — the record is the student's.
+       */
+      const archived = !canPlayFromCourse(r.cls) && bucket !== 'done';
+      const todo: TodoBucket = archived ? 'archived' : bucket;
+      out.push({
+        kind: 'recording',
+        key: `rec-${a.id}`,
+        title: r.doc.title,
+        bucket: todo,
+        deadline: todo === 'dueSoon' || todo === 'upcoming' ? a.dueDate : null,
+        doneAt: state?.completedAt ?? null,
+        recording: r.doc,
+        cls: r.cls,
+        dueDate: a.dueDate,
+        pending: state?.pending ?? false,
+        override: state?.override ?? null,
+      });
+    }
+    for (const s of work) {
+      const c = coursework.resolved.get(s.courseworkId);
+      if (!c) continue;
+      const state = workState(s, today, c.cls.effectiveActive);
+      const bucket = workBucket(state, s.dueDate, today);
+      if (!bucket) continue;
+      out.push({
+        kind: 'work',
+        key: `work-${s.id}`,
+        title: c.doc.title,
+        bucket,
+        deadline: nextDeadline(state, s),
+        doneAt: s.returned && s.state === 'returned' ? s.returned.at : s.handedInAt,
+        coursework: c.doc,
+        submission: s,
+        cls: c.cls,
+        state,
+        draftSaved: drafts.has(s.courseworkId),
+      });
+    }
+    return out;
+  }, [grants, work, recordings.resolved, coursework.resolved, completions, drafts, today]);
 
-  /**
-   * The hero: the most urgent recording that can actually be OPENED.
-   *
-   * Not simply the first incomplete row. A missed recording sorts above
-   * everything and is deliberately not a play target — the server refuses to
-   * mint a URL past the deadline, so a big tappable card for one would look
-   * like the app's most important action and then fail. It stays in the Missed
-   * group, where the student is owed the record of what closed and when, and
-   * the hero falls through to the first thing still open.
-   */
+  const { next, groups } = useMemo(() => arrangeTodo(items, Date.now()), [items]);
+
   /*
-   * BOTH LEGS, AND ONLY WHEN THERE IS NOTHING TO SHOW.
-   *
-   * The grants arriving is not the same as the screen having something to show:
-   * every row is looked up one at a time afterwards, and until those land the
-   * list is empty for a reason that is not "nothing to listen to".
-   *
-   * `resolving` also turns true again on every change to the assignment set —
-   * being excused from one more session re-resolves the lot — so without the
-   * `rows.length` leg a fully rendered screen was replaced by "Checking…" for
-   * ten round trips each time a grant arrived, with the hero card still sitting
-   * above it. A warm update replaces the rows in place; only a cold one has
-   * nothing to replace.
+   * BOTH LEGS, AND ONLY WHEN THERE IS NOTHING TO SHOW. The lists arriving is
+   * not the same as the screen having something to show: every row is looked
+   * up one at a time afterwards. And a warm update replaces the rows in place;
+   * only a cold one has nothing to replace.
    */
-  const checking = ((granted === null && !failed) || resolving) && rows.length === 0;
+  const loading = (granted === null || submissions === null) && !failed;
+  const checking = (loading || recordings.resolving || coursework.resolving) && items.length === 0;
 
-  const next =
-    rows.find((r) => !r.archived && (r.bucket === 'dueSoon' || r.bucket === 'upcoming')) ?? null;
-  const listed = next ? rows.filter((r) => r.key !== next.key) : rows;
-
-  const groups: { bucket: DueBucket | 'archived'; label: string; rows: TaskRow[] }[] = [
-    { bucket: 'missed', label: 'Missed', rows: [] },
-    // Quiet, like Missed, and right below it: closed, not owed, not tappable.
-    { bucket: 'archived', label: 'Archived', rows: [] },
-    { bucket: 'dueSoon', label: 'Due soon', rows: [] },
-    { bucket: 'upcoming', label: 'Upcoming', rows: [] },
-    { bucket: 'done', label: 'Completed', rows: [] },
-  ];
-  for (const row of listed) {
-    groups.find((g) => g.bucket === (row.archived ? 'archived' : row.bucket))?.rows.push(row);
-  }
+  const open = (item: Item) =>
+    item.kind === 'recording' ? onOpenRecording(item.recording, item.cls, item.dueDate) : onOpenWork(item.coursework.id);
 
   return (
     <Screen
       /*
-       * LIST, AND A GRID INSIDE IT, like every other collection in the app.
-       *
-       * The reading width was tried first, on the argument that a short ordered
-       * task list is read top to bottom. It is — but at 1440 it put a student's
-       * whole app in a 656px ribbon down the middle of a 1364px pane while every
-       * staff list beside it used the room, and the full-width rows it left
-       * behind set the title and the date 700px apart. Grouped card lists are
-       * what `Grid` is for; the grouping is what keeps the order legible.
+       * LIST, AND A GRID INSIDE IT, like every other collection in the app:
+       * grouped card lists are what `Grid` is for, and the grouping is what
+       * keeps the order legible at 1440.
        */
       width="list"
-      title="Your recordings"
+      title="To do"
       /*
-       * NOT "recordings you were excused from". Being excused is what grants
-       * these — but read plainly it says "recordings you do not have to listen
-       * to", which is the opposite of what this list is, and it borrows a
-       * staff-side attendance word into the student's vocabulary.
-       *
-       * AND NOT "classes to catch up on", which was wrong twice over. Every row
-       * is one session's recording, not a class — the class name is the line
-       * under it. And "catch up" is what STAFF do about a latecomer (re-take the
-       * register, mark them excused, move the listen-by date), so the student's
-       * own standing list of required listening was borrowing the word for the
-       * exception. It also does not describe the Upcoming or Completed groups,
-       * which are two of the four this list has.
-       *
-       * AND NOT "listening": a recording may be video, and its card says
-       * "Watch by". The list's own words name neither.
+       * Two kinds of work, named plainly. A recording may be video, and its
+       * card says "Watch by"; an assignment's says "Hand in by". The list's
+       * own words name both and neither verb.
        */
-      subtitle="Required, soonest first"
+      subtitle="Recordings and assignments, soonest first"
     >
-
-      {/* Top of the content, below the listener error only. Same place in all
-          three apps: first thing after anything that needs acting on today. */}
       <PushNudge uid={uid} />
 
-      {/*
-        The one recording to listen to next, at full size, above the grouped
-        list of everything else.
+      {next ? <Hero item={next} onOpen={() => open(next)} /> : null}
 
-        This list is usually one item long — a student is excused from a class
-        now and then, not every week — so the common case is a single card under
-        a heading with three empty groups implied around it, and the tap that
-        matters is always the first one. The grouping below still carries the
-        week somebody returns from a fortnight away with five to catch up on.
-      */}
-      {next ? (
-        <Pressable
-          testID={`next-up-${next.recording.title}`}
-          accessibilityRole="button"
-          accessibilityLabel={`Play ${next.recording.title}`}
-          onPress={() => onOpen(next.recording, next.cls, next.dueDate)}
-          style={({ pressed }) => [styles.hero, pressed ? styles.heroPressed : null]}
-        >
-          <Text style={styles.heroLabel}>NEXT TO {playVerb(next.recording.media).toUpperCase()}</Text>
-          <Text style={styles.heroTitle}>{next.recording.title}</Text>
-          <Text style={styles.heroCourse}>{next.cls.name}</Text>
-          <Text style={styles.heroDue}>
-            {playVerb(next.recording.media)} by {unbreakableDate(next.dueDate)}
-          </Text>
-          {/* THE CARD IS THE BUTTON, so it has to say so. Without this line the
-              app's single most important action was a date in bold ivory — it
-              looked like a button label and was not one, and nothing on the
-              student's landing screen named the thing to do. */}
-          <Text style={styles.heroAction}>Play ›</Text>
-        </Pressable>
-      ) : null}
-
-      {/* "Nothing required" is an ANSWER, and the wrong one shown to a
-          student with three recordings due — on the screen that is the whole of
-          this app for them. So it waits for the grants to arrive. */}
+      {/* "Nothing to do" is an ANSWER, and the wrong one shown to a student
+          with three things due — so it waits for everything to arrive. */}
       {checking ? (
-        <Empty>Checking your recordings…</Empty>
-      ) : granted === null ? (
-        // Refused, not empty — and the banner above already says why. Saying
-        // "nothing required" underneath it would contradict it.
-        <Empty>Your recordings could not be loaded. The message above says why.</Empty>
-      ) : rows.length === 0 ? (
-        <Empty>Nothing required right now. New recordings will appear here.</Empty>
+        <Empty>Checking what you have to do…</Empty>
+      ) : granted === null || submissions === null ? (
+        // Refused, not empty — and the banner above already says why.
+        <Empty>Your list could not be loaded. The message above says why.</Empty>
+      ) : items.length === 0 ? (
+        <Empty>Nothing to do right now. New recordings and assignments will appear here.</Empty>
       ) : (
-        groups
-          .filter((g) => g.rows.length > 0)
-          .map((g) => (
-            <View key={g.bucket} testID={`group-${g.bucket}`} style={styles.group}>
-              {/* No special treatment. Alarm red on the one group a student
-                  can do nothing about — sitting over cards deliberately quieted
-                  for the same reason — made one of four peer headings read as an
-                  error state. "Missed" is already the word. */}
-              <Text style={styles.groupLabel}>{g.label}</Text>
-              {/* A grid per group, like every other collection. The rows are
-                  cards, and stacking them full-width at the list cap left the
-                  title and the date 700px apart. */}
-              <Grid min={330}>
-                {g.rows.map((row) => (
-                  <TaskCard
-                    key={row.key}
-                    row={row}
-                    onOpen={() => onOpen(row.recording, row.cls, row.dueDate)}
-                  />
-                ))}
-              </Grid>
-            </View>
-          ))
+        groups.map((g) => (
+          <View key={g.bucket} testID={`group-${g.bucket}`} style={styles.group}>
+            <Text style={styles.groupLabel}>{g.label}</Text>
+            <Grid min={330}>
+              {g.items.map((item) => (
+                <Card key={item.key} item={item} onOpen={() => open(item)} />
+              ))}
+            </Grid>
+          </View>
+        ))
       )}
-
     </Screen>
   );
 }
 
-interface TaskRow {
-  key: string;
-  recording: RecordingRow;
-  cls: CourseRow;
-  dueDate: string;
-  bucket: DueBucket;
-  /** The course is archived with listening off — see the note where it is set. */
-  archived: boolean;
-  pending: boolean;
-  /** Set by a teacher, and not the student's to change — see the note on the card. */
-  override: { completed: boolean; reason: string } | null;
+/**
+ * What the next thing is, and when, in the words of its kind. Late work has
+ * two dates, one per line: drawn as one, it ran off a 320px card.
+ */
+function dueLines(item: Item): string[] {
+  return [dueLine(item), ...(item.kind === 'work' && item.state === 'pastDue' ? [`Accepted until ${unbreakableDate(closesOn(item.submission))}`] : [])];
+}
+
+function dueLine(item: Item): string {
+  if (item.kind === 'recording') {
+    if (item.bucket === 'archived') return 'Course archived';
+    if (item.bucket === 'missed') return `Closed ${unbreakableDate(item.dueDate)}`;
+    if (item.bucket === 'done') return 'Completed';
+    return `${playVerb(item.recording.media)} by ${unbreakableDate(item.dueDate)}`;
+  }
+  const s = item.submission;
+  switch (item.state) {
+    case 'toDo':
+      return `Hand in by ${unbreakableDate(s.dueDate)}${item.draftSaved ? ' · draft saved' : ''}`;
+    case 'pastDue':
+      return `Was due ${unbreakableDate(s.dueDate)}`;
+    case 'missed':
+      return s.closedEarly ? 'Closed' : `Closed ${unbreakableDate(closesOn(s))}`;
+    case 'closed':
+      return 'Course archived';
+    case 'handedIn':
+      return s.handedInAt ? `Handed in ${unbreakableDate(todayInZone(INSTITUTE_TIMEZONE, s.handedInAt))}` : 'Handed in';
+    case 'returned':
+      return s.returned?.grade ? `Returned · ${gradeText(s.returned.grade, item.coursework.grading)}` : 'Returned';
+    case 'notRequired':
+      return 'Not required';
+  }
+}
+
+const action = (item: Item) =>
+  item.kind === 'recording' ? 'Play ›' : item.draftSaved || item.submission.attempt > 1 ? 'Continue ›' : 'Start ›';
+
+/**
+ * The one thing to do next, at full size. THE CARD IS THE BUTTON, so it says
+ * so: its last line names the action, or the most important thing on the
+ * screen is a date in bold that looks like a button label and is not one.
+ */
+function Hero({ item, onOpen }: { item: Item; onOpen: () => void }) {
+  return (
+    <Pressable
+      testID={`next-up-${item.title}`}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.kind === 'recording' ? 'Play' : 'Open'} ${item.title}`}
+      onPress={onOpen}
+      style={({ pressed }) => [styles.hero, pressed ? styles.heroPressed : null]}
+    >
+      <Text style={styles.heroLabel}>NEXT UP</Text>
+      <Text style={styles.heroTitle}>{item.title}</Text>
+      <Text style={styles.heroCourse}>{item.cls.name}</Text>
+      <Text style={styles.heroDue}>{dueLines(item).join(' · ')}</Text>
+      <Text style={styles.heroAction}>{action(item)}</Text>
+    </Pressable>
+  );
 }
 
 /**
- * A missed card is deliberately not a button. The server refuses to mint a URL
- * past the due date, so opening it could only produce an error — and a card that
- * looks tappable and then refuses reads as a fault in the app rather than a
- * deadline the student missed.
+ * One row. Missed and archived rows are deliberately not buttons: the server
+ * refuses a closed recording's audio and a closed assignment's hand-in, and a
+ * card that looks tappable and then refuses reads as a fault in the app
+ * rather than a deadline. An assignment that has closed still opens, though —
+ * its instructions and the student's record stay readable.
  */
-function TaskCard({ row, onOpen }: { row: TaskRow; onOpen: () => void }) {
-  const done = row.bucket === 'done';
-  // An archived course's row is closed the way a missed one is: not a button,
-  // since the server refuses the audio, and quiet.
-  const missed = row.bucket === 'missed' || row.archived;
+function Card({ item, onOpen }: { item: Item; onOpen: () => void }) {
+  const done = item.bucket === 'done';
+  const closed = item.bucket === 'missed' || item.bucket === 'archived';
+  const tappable = item.kind === 'work' || !closed;
   const body = (
     <>
+      <MaterialIcons
+        name={item.kind === 'recording' ? 'play-circle-outline' : 'assignment'}
+        size={22}
+        color={t.text.secondary}
+        style={styles.icon}
+        accessibilityLabel={item.kind === 'recording' ? 'Recording' : 'Assignment'}
+      />
       <View style={styles.cardMain}>
-        <Text style={[styles.title, done || missed ? styles.titleDone : null]}>
-          {row.recording.title}
-        </Text>
-        <Text style={styles.course}>{row.cls.name}</Text>
+        <Text style={[styles.title, done || closed ? styles.titleDone : null]}>{item.title}</Text>
+        <Text style={styles.course}>{item.cls.name}</Text>
         {/*
-          WHY THIS ROW IS WHERE IT IS, when a teacher put it there.
-
-          An override of `completed: false` sends a recording the student had
-          already finished back to the top of this list, and the player offers
-          them no Mark complete underneath it — correctly, since the override
-          wins whatever they write. Without this line the card is
-          indistinguishable from an ordinary outstanding task, so the student
-          sees an obligation reappear, taps it, and finds nothing they can do.
-          The reason is the teacher's own words and belongs on the card that
-          raised the question.
+          WHY THIS ROW IS WHERE IT IS, when a teacher put it there: an
+          override of `completed: false` sends a finished recording back to
+          the top with no Mark complete under it, and without the teacher's
+          own words the student taps it and finds nothing they can do.
         */}
-        {row.override ? (
+        {item.kind === 'recording' && item.override ? (
           <Text style={styles.overrideNote}>
-            {row.override.completed
-              ? `Marked complete by your teacher — ${row.override.reason}`
-              : `Your teacher marked this not complete — ${row.override.reason}`}
+            {item.override.completed
+              ? `Marked complete by your teacher — ${item.override.reason}`
+              : `Your teacher marked this not complete — ${item.override.reason}`}
           </Text>
         ) : null}
       </View>
       <View style={styles.cardMeta}>
-        {row.pending ? <Text style={styles.pending}>Pending sync</Text> : null}
-        {done ? (
-          <Text style={styles.doneChip}>Completed</Text>
-        ) : (
-          <Text style={[styles.due, missed ? styles.missed : null]}>
-            {row.archived
-              ? 'Course archived'
-              : missed
-                ? `Closed ${unbreakableDate(row.dueDate)}`
-                : `${playVerb(row.recording.media)} by ${unbreakableDate(row.dueDate)}`}
+        {item.kind === 'recording' && item.pending ? <Text style={styles.pending}>Pending sync</Text> : null}
+        {dueLines(item).map((line) => (
+          <Text key={line} style={[styles.due, done ? styles.doneText : closed ? styles.closed : null]}>
+            {line}
           </Text>
-        )}
+        ))}
       </View>
     </>
   );
 
-  if (missed) {
+  if (!tappable) {
     return (
-      <View testID={`task-${row.recording.title}`} style={[styles.card, styles.cardMissed]}>
+      <View testID={`task-${item.title}`} style={[styles.card, styles.cardClosed]}>
         {body}
       </View>
     );
   }
   return (
     <Pressable
-      testID={`task-${row.recording.title}`}
+      testID={`task-${item.title}`}
       accessibilityRole="button"
-      accessibilityLabel={`Play ${row.recording.title}`}
+      accessibilityLabel={`${item.kind === 'recording' ? 'Play' : 'Open'} ${item.title}`}
       onPress={onOpen}
-      style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [styles.card, closed ? styles.cardClosed : null, pressed ? styles.pressed : null]}
     >
       {body}
     </Pressable>
   );
-}
-
-/**
- * Read one document, treating a refusal as an answer.
- *
- * `permission-denied` is not a failure here: a student may read a recording only
- * while it is PUBLISHED, so an assignment pointing at one staff have just
- * unpublished comes back refused rather than absent. That is the same "it is not
- * available to you" the missing-document branch already handles, so it skips the
- * row the same way.
- *
- * Anything else rethrows on purpose. An offline or failed read must never be
- * mistaken for an empty syllabus — the caller keeps its last good list instead
- * of publishing a short one.
- */
-async function readIfPermitted(collectionPath: string, id: string) {
-  try {
-    const snap = await getDoc(doc(db, collectionPath, id));
-    return snap.exists() ? snap : null;
-  } catch (e) {
-    if ((e as { code?: string }).code === 'permission-denied') return null;
-    throw e;
-  }
-}
-
-/**
- * Resolve each assignment's recording and course for display and navigation.
- *
- * A plain get per id (not a live subscription): titles and course names change
- * rarely, and the accountability state that DOES change — assignment and
- * completion — is already live. Deduplicated and cached across renders.
- *
- * Every read is individually survivable. When one throw could abandon the loop,
- * a single unpublished recording emptied the ENTIRE screen: the rejection escaped
- * before setResolved ran, so no assignment resolved and the student read
- * "Nothing required right now". The fan-out deactivates those assignments a few
- * seconds later, which cleared the screen up again and made the whole thing look
- * like nothing had happened.
- */
-function useResolvedRecordings(recordingIds: string[]): {
-  resolved: Map<string, { recording: RecordingRow; cls: CourseRow }>;
-  /**
-   * Whether the reads for the CURRENT set of ids are still in flight.
-   *
-   * The map is empty until the whole loop finishes, and the loop is sequential —
-   * one get per recording plus one per uncached course. For a student with eight
-   * assignments across two courses that is ten serial round trips, and for all
-   * of them every row mapped to null and the screen said "Nothing to listen to
-   * right now. New recordings will appear here." The grants having arrived is
-   * not the same as the screen having something to show.
-   */
-  resolving: boolean;
-} {
-  // KEYED BY THE IDS IT ANSWERS FOR. A bare map cannot say whether it describes
-  // the current request or the previous one.
-  const [state, setState] = useState<{
-    key: string;
-    map: Map<string, { recording: RecordingRow; cls: CourseRow }>;
-  }>({ key: '', map: new Map() });
-  const key = useMemo(() => [...new Set(recordingIds)].sort().join(','), [recordingIds]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const ids = key ? key.split(',') : [];
-    void (async () => {
-      const courseCache = new Map<string, CourseRow | null>();
-      const out = new Map<string, { recording: RecordingRow; cls: CourseRow }>();
-      try {
-        for (const id of ids) {
-          const recSnap = await readIfPermitted(COLLECTIONS.recordings, id);
-          if (!recSnap) continue;
-          const recording = { id: recSnap.id, ...(recSnap.data() as RecordingDoc) };
-          if (!courseCache.has(recording.courseId)) {
-            const cSnap = await readIfPermitted(COLLECTIONS.courses, recording.courseId);
-            courseCache.set(
-              recording.courseId,
-              cSnap ? { id: cSnap.id, ...(cSnap.data() as CourseDoc) } : null,
-            );
-          }
-          const cls = courseCache.get(recording.courseId);
-          if (cls) out.set(id, { recording, cls });
-        }
-      } catch (e) {
-        // Keep the last good list rather than showing a short one, and say so
-        // off-device — this used to be an unhandled rejection nobody could see.
-        // STILL SETTLED, though: leaving `key` behind would leave the screen on
-        // "Checking…" for ever, which is the other half of the same mistake.
-        captureError(e, { source: 'resolveAssignedRecordings' });
-        if (!cancelled) setState((prev) => ({ key, map: prev.map }));
-        return;
-      }
-      if (!cancelled) setState({ key, map: out });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [key]);
-
-  return { resolved: state.map, resolving: state.key !== key };
 }
 
 const styles = StyleSheet.create({
@@ -460,12 +351,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing(5),
   },
   heroPressed: { opacity: 0.9 },
-  heroLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    color: t.accent.onAccentMuted,
-  },
+  heroLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, color: t.accent.onAccentMuted },
   heroTitle: { fontSize: 22, fontWeight: '700', color: t.accent.onAccent, marginTop: spacing(2) },
   heroCourse: { fontSize: 14, color: t.accent.onAccentMuted, marginTop: 2 },
   heroDue: { fontSize: 14, color: t.accent.onAccentMuted, marginTop: spacing(3) },
@@ -482,10 +368,8 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    // WRAPS AT 320. Side by side, a title of any length gets 117px beside a
-    // one-line date — this app's real titles then break into seven lines
-    // against 140px of empty card. Wrapping drops the date under the title,
-    // where it has the whole width.
+    // WRAPS AT 320: side by side, a title of any length got 117px beside a
+    // one-line date. Wrapping drops the date under the title.
     flexWrap: 'wrap',
     rowGap: spacing(2),
     backgroundColor: t.bg.surface,
@@ -496,29 +380,23 @@ const styles = StyleSheet.create({
     borderColor: t.border.subtle,
   },
   pressed: { opacity: 0.85 },
-  cardMissed: { backgroundColor: t.bg.inset },
+  cardClosed: { backgroundColor: t.bg.inset },
+  icon: { marginRight: spacing(3) },
   // `minWidth` is what makes the wrap happen: below it the two blocks cannot
   // share a line, so the date moves to its own.
-  cardMain: { flexGrow: 1, flexShrink: 1, flexBasis: 220, minWidth: 220, paddingRight: spacing(3) },
+  cardMain: { flexGrow: 1, flexShrink: 1, flexBasis: 200, minWidth: 200, paddingRight: spacing(3) },
   title: { fontSize: 16, fontWeight: '600', color: t.text.primary },
   titleDone: { color: t.text.secondary },
   course: { fontSize: 13, color: t.text.secondary, marginTop: spacing(1) },
-  // `flexGrow: 0`. Growing BOTH halves split the spare width evenly, so a
-  // one-line date was handed 490px it could not use while the title wrapped —
-  // the row's slack belongs to the only part of it that can spend slack.
-  cardMeta: { alignItems: 'flex-end' },
+  cardMeta: { alignItems: 'flex-end', flexShrink: 1, maxWidth: '100%' },
   /*
-   * THE LIVE DATE IS THE LOUD ONE.
-   *
-   * It was the other way round: "Closed 2026-08-28" came out danger-red and
-   * bold while "Listen by 2026-09-11" was quiet secondary — the app shouting
-   * about the one thing the student can no longer do anything about, and
-   * whispering the three they can. A closed grant is information; the tone the
-   * brief asks for is "missed", not a reprimand.
+   * THE LIVE DATE IS THE LOUD ONE: the app whispering the three things a
+   * student can do and shouting the one they no longer can was the tone the
+   * brief rules out. A closed date is information.
    */
   due: { fontSize: 13, fontWeight: '600', color: t.text.primary, fontVariant: ['tabular-nums'] },
-  missed: { color: t.text.secondary, fontWeight: '400' },
-  doneChip: { fontSize: 13, color: t.feedback.success, fontWeight: '600' },
+  closed: { color: t.text.secondary, fontWeight: '400' },
+  doneText: { color: t.feedback.success },
   pending: { fontSize: 12, color: t.feedback.warning, fontWeight: '600', marginBottom: spacing(1) },
   overrideNote: { fontSize: 12, color: t.text.secondary, marginTop: spacing(1), fontStyle: 'italic' },
 });
