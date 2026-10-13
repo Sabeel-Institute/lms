@@ -380,7 +380,8 @@ Two consequences to expect rather than treat as bugs:
 the `kvm` group was empty, and the AVD refused hardware mode until a reboot
 re-applied it. Make it not depend on the session:
 
-- [ ] `sudo gpasswd -a $USER kvm` — then log out and in once.
+- [x] `sudo gpasswd -a $USER kvm` (2026-10-12) — takes effect at the next
+  login; until then the `setfacl` grant run the same day covers it.
 
 ### 6. The three static pages the stores need — BUILT (2026-09-07)
 
