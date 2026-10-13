@@ -51,6 +51,20 @@ export function ensureVideoFixture() {
 }
 
 /**
+ * An iPhone's kind of video: HEVC in MP4, which phones and browsers outside
+ * Apple's cannot all play, so the server refuses it. Needs an ffmpeg built
+ * with libx265.
+ */
+export const HEVC_FIXTURE = 'e2e-shots/test-hevc.mp4';
+export function ensureHevcFixture() {
+  if (existsSync(HEVC_FIXTURE)) return;
+  ffmpeg([
+    '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=5', '-f', 'lavfi', '-i', 'sine=duration=5',
+    '-c:v', 'libx265', '-tag:v', 'hvc1', '-c:a', 'aac', '-shortest', HEVC_FIXTURE,
+  ]);
+}
+
+/**
  * A class's shared screen for the manual's figures: a dark presentation slide
  * carrying `title` and three bullet points and a speaker's box in the corner,
  * over the audio fixture's sound. It has to read as VIDEO at

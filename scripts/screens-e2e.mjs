@@ -1021,7 +1021,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 35;
+const STAFF_SCREENS = 36;
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
@@ -1242,6 +1242,29 @@ async function tourStaff(page, tag) {
   );
   // Files CHOSEN: the running total and the Import button's count exist in no
   // other state, and the total is the longest line the screen carries.
+  // Files chosen for upload, before any is sent: the placement chips exist
+  // only in this state. A video that may be Part 1's version, and a file the
+  // app does not take, which says so in its row.
+  await visit('upload-chosen', async () => {
+    await openCourse();
+    await tap(byId(page, 'nav-sessions'));
+    await tap(byId(page, 'session-open-Session 8 — The Signs of Sincerity'));
+    const chooser = page.waitForEvent('filechooser');
+    await tap(byId(page, 'recording-upload'));
+    await (await chooser).setFiles([
+      { name: 'Whiteboard, second half of the class.mp4', mimeType: 'video/mp4', buffer: Buffer.alloc(2048) },
+      { name: 'Handout.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(16) },
+    ]);
+  }, 'upload-panel');
+  check(
+    `${tag} / a chosen file can be a new part or Part 1's video, and a file the app does not take says so`,
+    (await byId(page, 'upload-place-0-part').count()) === 1 &&
+      (await byId(page, 'upload-place-0-v1').count()) === 1 &&
+      (await byId(page, 'upload-row-1').innerText().catch(() => '')).includes('M4A, MP3, WAV or MP4') &&
+      (await byId(page, 'upload-start').innerText().catch(() => '')).includes('Upload 1 file'),
+  );
+  await tap(byId(page, 'upload-dismiss'));
+
   await visit('zoom-import-chosen', async () => {
     await openZoomImport();
     await tap(byId(page, 'zoom-pick-videoAndAudio-zoom-day'));

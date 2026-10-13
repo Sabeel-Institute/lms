@@ -135,6 +135,7 @@ used, if it still exists.
 | Rename, reorder parts, change default version | yes | yes, audited | yes |
 | Hide a part or version | yes | yes, audited; students stop seeing it, history is kept | yes |
 | Remove a file (deletes from R2) | manager or admin, audited | no; hide it, or unpublish first | admin |
+| Remove a file no student saw (uploading, copying, failed) | manager or admin, audited | manager or admin, audited | manager or admin, audited |
 | Publish | needs at least one ready, visible item and nothing still uploading or copying; failed items must be retried or removed first | | |
 
 "Published media is never silently swapped" still holds: a ready item's file
@@ -422,7 +423,7 @@ as recordings being open or closed, not listening being on or off.
 | A session has zero or one recording, and a recording is one audio file | Still 0..1 recording per session; a recording has parts and versions |
 | Zoom picker takes one audio file per meeting | Picker takes any audio or video files, across meetings |
 | Publish requires audio | Publish requires one ready, visible media item and nothing pending |
-| A manager may remove the audio from an unpublished draft | A manager may remove any file from a draft; published files are hidden, not removed |
+| A manager may remove the audio from an unpublished draft | A manager may remove any file from a draft, and a file no student saw from any recording; published files students can play are hidden, not removed |
 | Admin stats: total audio storage and duration | Storage and duration by kind (audio, video) and by course |
 
 ## Delivery steps
@@ -432,7 +433,7 @@ as recordings being open or closed, not listening being on or off.
 | V0 | Spike: `expo-video` playing M4A and a 3-hour MP4 from R2 on the AVD and web | The list under Engine — **passed 2026-10-12** |
 | V1 | Data model: media map, derived duration, `zoomImports` index; migration of existing recordings to one audio item each | Unit tests on the derivation; seed count check — **done 2026-10-12**, deployed and migrated |
 | V2 | Zoom listing of all files, segments, processing state; picker with formats, quick picks, totals; async import | Integration tests with a fake Zoom of multi-segment, multi-meeting fixtures; screens sweep at 320 px with expanded meetings — **built 2026-10-12**; the course's default pick is deferred: the picker starts with nothing chosen and a quick pick is one tap per meeting |
-| V3 | Upload of several files, part or version choice, probe | Browser e2e with a small MP4 and an M4A; AVD upload |
+| V3 | Upload of several files, part or version choice, probe | Browser e2e with a small MP4 and an M4A; AVD upload — **built 2026-10-13**: parts are 16 MiB rather than 100 (a phone holds three in memory), bare `.aac` is not taken (ADTS has no length without reading the whole file), WAV is, and QuickTime `.mov` is refused like HEVC |
 | V4 | Staff media list, hide, reorder, publish blockers | Integration tests per lifecycle row above — **built 2026-10-13**; renaming a file is deferred (labels are generated) |
 | V5 | Player: versions, parts, auto-advance, listen only, resume, docked bar | `playback.test.ts` extended; web e2e plays video and switches version keeping position; AVD for background, lock screen, fullscreen, PiP — **built 2026-10-13**; "Audio only" is the version chip rather than a separate button, and starting on audio over a metered connection is deferred |
 | V6 | Wording, manual, workbook and admin stats | Text-source checks; workbook tests — **built 2026-10-13** for wording, manual and workbook; the admin stats wait for Phase 8, which has not started, and are built there by kind and course |

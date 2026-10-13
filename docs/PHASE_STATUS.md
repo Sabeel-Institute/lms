@@ -36,6 +36,21 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **Staff upload several files, video included** (video plan
+  V3). Every upload is multipart in 16 MiB pieces, signed a batch at a time
+  and sent straight to the bucket, each piece retried alone; the server joins
+  them and then PROBES what arrived, reading the file's own headers in a few
+  range requests (music-metadata 11.16.1 over `@tokenizer/range`, about 0.4
+  MiB for a 184 MiB MP4 with its index at the end). Anything but AAC, MP3 or
+  PCM audio, or H.264 in MP4, is deleted with how to export it instead, and
+  the stored length is the file's own. Each file is a new part or a version
+  of one, on a recording in any state. Write-once now rests on the upload id:
+  a client holds part URLs only, and a completed upload takes no more parts —
+  checked against production R2 in `s3-conformance.mjs`. Remove aborts an
+  upload in flight, and may take a file students never saw off a published
+  recording; a daily sweep clears what is left. On tb_emu a 45 MB video went
+  up in three parts from the system picker, read through expo-file-system's
+  FileHandle and sent with `expo/fetch`, and landed byte-exact.
 - 2026-10-13 — **The words follow the recording** (video plan V6). A card,
   a ledger row and the player say "Watch by" when the student can play any
   video of the recording and "Listen by" when it is audio only; buttons say

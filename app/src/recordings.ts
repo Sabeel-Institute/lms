@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { COLLECTIONS, type MediaEdit, type RecordingDoc, type RecordingStatus } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
+import type { UploadApi } from './upload';
 
 export interface RecordingRow extends RecordingDoc {
   id: string;
@@ -113,11 +114,6 @@ export function useRecordingState(
   );
 }
 
-export const finalizeRecordingUpload = call<
-  { recordingId: string; itemId: string; durationSec: number | null },
-  { recordingId: string; itemId: string; sizeBytes: number }
->('finalizeRecordingUpload');
-
 export const setRecordingStatus = call<
   { recordingId: string; status: RecordingStatus },
   unknown
@@ -126,7 +122,7 @@ export const setRecordingStatus = call<
 /** Hide or show a file, move a part, or set the version students start on. */
 export const editRecordingMedia = call<{ recordingId: string } & MediaEdit, unknown>('editRecordingMedia');
 
-/** Remove one file from a draft, so a bad one can be replaced. */
+/** Remove one file: a bad one from a draft, or one still on its way in. */
 export const removeRecordingMedia = call<{ recordingId: string; itemId: string }, unknown>(
   'removeRecordingMedia',
 );
@@ -134,49 +130,14 @@ export const removeRecordingMedia = call<{ recordingId: string; itemId: string }
 /** Permanent, admin-only, cascading delete. Refused server-side while published. */
 export const deleteRecording = call<{ recordingId: string }, unknown>('deleteRecording');
 
-const startRecordingUpload = call<
-  { recordingId: string; contentType: string; sizeBytes: number },
-  { itemId: string; url: string; headers: Record<string, string>; expiresAt: number }
->('startRecordingUpload');
-
 /**
- * Upload audio for a draft, reporting progress.
- *
- * Straight to the media bucket on a URL the server signed after checking who
- * is asking (`startRecordingUpload`), never through a Function: a 2-hour
- * recording is tens of megabytes, and the 60-minute function timeout makes
- * proxying long media unworkable, quite apart from paying for the bytes twice.
- *
- * XMLHttpRequest rather than fetch: it is the one API that reports upload
- * progress on both the web and React Native. The headers the server returns
- * are part of the signature, so they are sent exactly as given.
- *
- * Resolves with the id of the media item the file landed in, which is what
- * `finalizeRecordingUpload` confirms.
+ * The upload callables, in the shape `uploadMedia` drives (upload.ts). The
+ * bytes never pass through them: they hand out URLs for parts and confirm
+ * what arrived.
  */
-export async function uploadRecordingAudio(
-  recordingId: string,
-  file: Blob,
-  onProgress: (fraction: number) => void,
-): Promise<string> {
-  const contentType = file.type || 'audio/mp4';
-  const put = await startRecordingUpload({ recordingId, contentType, sizeBytes: file.size });
-  await new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', put.url);
-    for (const [name, value] of Object.entries(put.headers)) xhr.setRequestHeader(name, value);
-    // Clamp to 1: a retried chunk can briefly report more sent than the total.
-    // The bar is advisory; never show more than done.
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && e.total) onProgress(Math.min(1, e.loaded / e.total));
-    };
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`The upload was refused (HTTP ${xhr.status}). Try again.`));
-    xhr.onerror = () => reject(new Error('The upload could not reach the server. Check the connection and try again.'));
-    xhr.send(file);
-  });
-  return put.itemId;
-}
-
+export const uploadApi: UploadApi = {
+  start: call<Parameters<UploadApi['start']>[0], Awaited<ReturnType<UploadApi['start']>>>('startRecordingUpload'),
+  sign: call<Parameters<UploadApi['sign']>[0], Awaited<ReturnType<UploadApi['sign']>>>('signRecordingUploadParts'),
+  finalize: call<Parameters<UploadApi['finalize']>[0], unknown>('finalizeRecordingUpload'),
+  cancel: (input) => removeRecordingMedia(input),
+};

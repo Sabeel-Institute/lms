@@ -13,10 +13,9 @@ import {
   removeRecordingMedia,
   createRecording,
   deleteRecording,
-  finalizeRecordingUpload,
   setRecordingStatus,
-  startRecordingUpload,
 } from '../../src/recordings';
+import { finalizeRecordingUpload, signRecordingUploadParts, startRecordingUpload } from '../../src/uploads';
 import { createStudent } from '../../src/students';
 import { importZoomFiles, retryZoomImport } from '../../src/zoomImport';
 
@@ -155,8 +154,9 @@ const SCOPED: Array<{
   { name: 'submitAttendance', call: (r) => submitAttendance.run(r), data: { sessionId: SESSION, attendance: { [STUDENT]: 'present' } } },
   { name: 'deleteSession', call: (r) => deleteSession.run(r), data: { sessionId: SESSION }, owner: 'admin' },
   { name: 'createRecording', call: (r) => createRecording.run(r), data: { sessionId: SESSION } },
-  { name: 'startRecordingUpload', call: (r) => startRecordingUpload.run(r), data: { recordingId: RECORDING, contentType: 'audio/mp4', sizeBytes: 1000 } },
-  { name: 'finalizeRecordingUpload', call: (r) => finalizeRecordingUpload.run(r), data: { recordingId: RECORDING, itemId: 'item1', durationSec: 60 } },
+  { name: 'startRecordingUpload', call: (r) => startRecordingUpload.run(r), data: { recordingId: RECORDING, contentType: 'audio/mp4', sizeBytes: 1000, placement: { as: 'part' } } },
+  { name: 'signRecordingUploadParts', call: (r) => signRecordingUploadParts.run(r), data: { recordingId: RECORDING, itemId: 'item1', partNumbers: [1] } },
+  { name: 'finalizeRecordingUpload', call: (r) => finalizeRecordingUpload.run(r), data: { recordingId: RECORDING, itemId: 'item1', parts: [{ partNumber: 1, etag: 'e' }] } },
   { name: 'setRecordingStatus', call: (r) => setRecordingStatus.run(r), data: { recordingId: RECORDING, status: 'draft' } },
   { name: 'editRecordingMedia', call: (r) => editRecordingMedia.run(r), data: { recordingId: RECORDING, op: 'hide', itemId: 'item1' } },
   { name: 'removeRecordingMedia', call: (r) => removeRecordingMedia.run(r), data: { recordingId: RECORDING, itemId: 'item1' } },

@@ -140,6 +140,16 @@ try {
   await write.send(new CompleteMultipartUploadCommand({ Bucket: B, Key: mp, UploadId, MultipartUpload: { Parts: parts } }));
   const whole = await write.send(new HeadObjectCommand({ Bucket: B, Key: mp }));
   check('the completed object has the right size and type', whole.ContentLength === first.length + 1000 && whole.ContentType === 'video/mp4');
+  // WRITE-ONCE FOR UPLOADS: the part URLs a client held must not reach the
+  // finished object. Replaying one after completion has to fail, and leave it.
+  const replayUrl = await getSignedUrl(write, new UploadPartCommand({ Bucket: B, Key: mp, UploadId, PartNumber: 2 }), { expiresIn: 600 });
+  const replay = await fetch(replayUrl, { method: 'PUT', body: Buffer.alloc(10, 9), headers: { Origin: origin } });
+  const after = await write.send(new HeadObjectCommand({ Bucket: B, Key: mp }));
+  check(
+    'a completed upload takes no more parts',
+    !replay.ok && after.ContentLength === whole.ContentLength && after.ETag === whole.ETag,
+    `replay ${replay.status}`,
+  );
 
   // 5. CORS: the app's origin may upload from a browser; others may not.
   r = await fetch(putUrl, {

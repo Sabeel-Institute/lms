@@ -126,8 +126,10 @@ Do not silently change any of these.
   already checked their grant (`functions/src/mediaStore.ts`). Never a public
   bucket, an `r2.dev` URL or any link that does not expire, which is the one
   thing the threat model rules out. Never proxy audio through a Function: the
-  60-minute timeout kills a 2-hour session. Uploads are pre-signed PUTs that
-  create the object once (`If-None-Match: *` is signed).
+  60-minute timeout kills a 2-hour session. Uploads are multipart: the client
+  gets pre-signed URLs for the PARTS of one upload, the server joins them, and a
+  finished upload takes no more parts, so no URL a client holds can replace a
+  file (`functions/src/uploads.ts`).
 - **Adult learner tone.** Required, listen by / watch by, missed, completed, pending
   sync. "Missed" rather than "overdue" once access has closed: overdue implies
   still doable. Never childish, punitive, or shaming language.
@@ -149,7 +151,9 @@ Do not silently change any of these.
   carrying **listening history** is admin-only, needs strong confirmation, and is
   audited. Two deletions are deliberately a manager's: removing a completion
   override they set, and removing a file from an unpublished draft so a bad one
-  can be replaced. A published recording's files are hidden, never removed. Neither destroys history, both are audited with a
+  can be replaced. A published recording's playable files are hidden, never
+  removed; a file no student ever saw (still arriving, or failed) can be removed
+  from any recording. Neither destroys history, both are audited with a
   required reason, and both are ordinary corrections to their own class — see
   `docs/PRODUCT_BRIEF.md`.
 - **BRAND COLORS ARE FIXED.** `docs/BRAND.md` and the shared `sabeel-brand`

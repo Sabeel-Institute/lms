@@ -5,7 +5,11 @@ import {
   mediaParts,
   mediaStorageKey,
   mediaSummary,
+  maxUploadBytes,
   playVerb,
+  uploadContentType,
+  uploadPartCount,
+  UPLOAD_PART_BYTES,
   startingItem,
   type MediaItem,
   type MediaMap,
@@ -166,5 +170,28 @@ describe('playVerb', () => {
     expect(playVerb(mediaOf(item('a'), item('v', { kind: 'video', version: 'video', hidden: true })))).toBe('Listen');
     expect(playVerb(mediaOf(item('a'), item('v', { kind: 'video', version: 'video', status: 'copying' })))).toBe('Listen');
     expect(playVerb({})).toBe('Listen');
+  });
+});
+
+describe('what staff may upload', () => {
+  it('takes M4A, MP3, WAV and MP4 by name, whatever the case', () => {
+    expect(uploadContentType('Class 3.M4A')).toBe('audio/mp4');
+    expect(uploadContentType('class.mp3')).toBe('audio/mpeg');
+    expect(uploadContentType('class.wav')).toBe('audio/wav');
+    expect(uploadContentType('whiteboard.mp4')).toBe('video/mp4');
+    // An iPhone video, raw AAC (no length without reading the whole file), and no extension at all.
+    for (const name of ['IMG_0001.MOV', 'class.aac', 'notes.pdf', 'class']) expect(uploadContentType(name)).toBeNull();
+  });
+
+  it('caps audio at 300 MB and video at 8 GB', () => {
+    expect(maxUploadBytes('audio/mp4')).toBe(300 * 2 ** 20);
+    expect(maxUploadBytes('video/mp4')).toBe(8 * 2 ** 30);
+  });
+
+  it('cuts a file into parts that cover it, and the largest video into fewer than 10,000', () => {
+    expect(uploadPartCount(1)).toBe(1);
+    expect(uploadPartCount(UPLOAD_PART_BYTES)).toBe(1);
+    expect(uploadPartCount(UPLOAD_PART_BYTES + 1)).toBe(2);
+    expect(uploadPartCount(8 * 2 ** 30)).toBeLessThan(10_000);
   });
 });

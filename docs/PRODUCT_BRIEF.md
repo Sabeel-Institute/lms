@@ -114,12 +114,13 @@ and grants access, is course-scoped as everything else is.
 
 ### Manual upload
 
-Manual audio upload exists for exceptions, not the normal path. It must still work well.
+Manual upload exists for exceptions — a class Zoom did not record, a phone video of the whiteboard — not the normal path. It must still work well.
 
-- Staff can upload an audio file directly.
-- Uploaded files become draft recordings.
-- Staff must still review and complete app metadata before publishing.
-- Manual upload should support clear validation for accepted file types, size limits, upload errors, duration extraction, and retry behavior.
+- Staff upload one or more files from a computer or a phone: audio as M4A, MP3 or WAV (300 MB each), video as MP4 (8 GB each). Each becomes a new part, or another version of a part already on the recording; a part takes one uploaded video and one audio file.
+- The first file on a session creates its draft recording. Files can be added to a recording in any state; students see one only once it is ready.
+- Every upload goes in 16 MiB pieces straight to the bucket, each retried on its own, so a dropped connection costs a piece rather than the file.
+- On arrival the server reads the file's own headers: anything but AAC, MP3 or PCM audio, or an MP4 of H.264 video, is deleted with a sentence saying how to export it instead. The length stored is the file's own, not the uploader's device's.
+- Leaving the page, or stopping, removes the unfinished file; anything still unfinished a day later is swept.
 
 ## Recording lifecycle
 
@@ -166,7 +167,7 @@ Accountability follows the session's attendance, so it is corrected by re-taking
 
 Permanent deletion of anything carrying **listening history** — a recording with grants, completions or progress behind it, a student, a course, a session — is Admin-only, requires strong confirmation, and is recorded in the audit log. Normal operations should use disable, archive, or unpublish.
 
-Two deletions are deliberately left to a manager, because neither destroys listening history and both are ordinary corrections to their own class: **removing a completion override** they set (the override is a staff judgement, and the audit log keeps the record of setting and removing it, each with its required reason), and **removing a file from an unpublished draft** so a bad one can be replaced. A published recording's files are hidden from students rather than removed, and staff may hide, show, reorder and add files in any state. A draft that has ever been published is not one of these — the server checks the collections, not the status.
+Two deletions are deliberately left to a manager, because neither destroys listening history and both are ordinary corrections to their own class: **removing a completion override** they set (the override is a staff judgement, and the audit log keeps the record of setting and removing it, each with its required reason), and **removing a file from an unpublished draft** so a bad one can be replaced. A published recording's playable files are hidden from students rather than removed, and staff may hide, show, reorder and add files in any state. A file no student ever saw — still uploading or copying, or failed — may be removed from a recording in any state: that is cancelling an upload or clearing a failed import. A draft that has ever been published is not one of these — the server checks the collections, not the status.
 
 ## Assignment, access, and accountability
 

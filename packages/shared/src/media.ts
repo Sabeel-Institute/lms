@@ -197,6 +197,59 @@ export function playVerb(media: MediaMap): 'Watch' | 'Listen' {
   return Object.values(media).some((i) => isPlayable(i) && i.kind === 'video') ? 'Watch' : 'Listen';
 }
 
+// ---------------------------------------------------------------- upload --
+
+/**
+ * What staff may upload, by extension, and the content type each is stored
+ * under. The probe after upload decides whether the file inside is playable;
+ * this only decides what the picker offers and what the server will start.
+ */
+export const UPLOAD_TYPES = {
+  m4a: 'audio/mp4',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  mp4: 'video/mp4',
+} as const;
+
+export type UploadContentType = (typeof UPLOAD_TYPES)[keyof typeof UPLOAD_TYPES];
+
+/** The content type a file is stored under, from its name; null if it is not one staff may upload. */
+export function uploadContentType(fileName: string): UploadContentType | null {
+  const ext = fileName.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  return ext && ext in UPLOAD_TYPES ? UPLOAD_TYPES[ext as keyof typeof UPLOAD_TYPES] : null;
+}
+
+/** Whether a stored content type is a video's. */
+export function isVideoContentType(contentType: string): boolean {
+  return contentType.startsWith('video/');
+}
+
+/** Largest audio file: a 2-hour 128 kbps M4A is ~115 MB, so 300 MiB leaves room. */
+export const MAX_AUDIO_BYTES = 300 * 2 ** 20;
+/** Largest uploaded video: 3.5 hours at Zoom's 1.75 GB/h ceiling, with headroom. */
+export const MAX_VIDEO_UPLOAD_BYTES = 8 * 2 ** 30;
+
+/** The cap on one uploaded file of this type. */
+export function maxUploadBytes(contentType: string): number {
+  return isVideoContentType(contentType) ? MAX_VIDEO_UPLOAD_BYTES : MAX_AUDIO_BYTES;
+}
+
+/**
+ * The size of each piece an upload is sent in. Every upload is multipart, so
+ * a dropped connection costs one piece, not the file. 16 MiB: small enough
+ * that a phone holds three in memory at once, large enough that an 8 GiB
+ * video is 512 pieces, well under the bucket's 10,000.
+ */
+export const UPLOAD_PART_BYTES = 16 * 2 ** 20;
+
+/** How many pieces a file of this size is sent in. */
+export function uploadPartCount(sizeBytes: number): number {
+  return Math.max(1, Math.ceil(sizeBytes / UPLOAD_PART_BYTES));
+}
+
+/** Where an uploaded file goes: a new part at the end, or another version of a part. */
+export type UploadPlacement = { as: 'part' } | { as: 'version'; part: number };
+
 /** Nothing at all: no item in any state. */
 export function hasNoMedia(media: MediaMap): boolean {
   return Object.keys(media).length === 0;

@@ -60,7 +60,8 @@ export function MediaList({
   recording: RecordingDoc & { id: string };
   /** True while anything on the card is in flight. */
   disabled: boolean;
-  canRemove: boolean;
+  /** Whether this file may be removed, as the server decides it. */
+  canRemove: (item: MediaItem) => boolean;
   onPlay: (itemId: string) => void;
   onEdit: (edit: MediaEdit) => void;
   onRemove: (itemId: string) => void;
@@ -115,7 +116,7 @@ export function MediaList({
                       onPress={() => onEdit({ op: item.hidden ? 'show' : 'hide', itemId: item.id })}
                     />
                   ) : null}
-                  {canRemove ? (
+                  {canRemove(item) ? (
                     <Button
                       testID={`media-remove-${item.id}`}
                       label="Remove"

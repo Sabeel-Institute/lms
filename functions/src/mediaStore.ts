@@ -1,9 +1,12 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
-  PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { defineSecret, defineString } from 'firebase-functions/params';
@@ -20,8 +23,8 @@ import { isEmulatorProject } from './env';
  * project's own configuration (`functions/.env.<projectId>`), never from a
  * fallback.
  *
- * Nothing here moves media bytes through a Function. Playback and uploads are
- * pre-signed URLs the client uses directly, and Zoom imports are copied by the
+ * Nothing here moves media bytes through a Function. Playback and upload parts
+ * are pre-signed URLs the client uses directly, and Zoom imports are copied by the
  * Cloudflare Worker (`mediaCopier.ts`), so the 60-minute function timeout never
  * meets a two-hour recording and no byte is billed as Google egress.
  *
@@ -119,30 +122,63 @@ export async function signGet(key: string, ttlMs: number): Promise<SignedUrl> {
   return { url, expiresAt };
 }
 
-export interface SignedPut extends SignedUrl {
-  /** Headers the PUT must carry exactly, or the signature does not match. */
-  headers: Record<string, string>;
+// ------------------------------------------------------------- multipart --
+//
+// Every staff upload is multipart (uploads.ts). The client is given URLs for
+// PARTS of one upload id, never for the object: the object exists only once
+// the server completes the upload, and a completed or aborted upload id takes
+// no more parts. So no URL a client holds can replace a finished file — a
+// published recording's file is never swapped underneath students who have
+// already played it. Replacing a bad file goes through `removeRecordingMedia`.
+
+/** Begin a multipart upload of one object; returns its upload id. */
+export async function startMultipart(key: string, contentType: string): Promise<string> {
+  const res = await client('write').send(
+    new CreateMultipartUploadCommand({ Bucket: bucket(), Key: key, ContentType: contentType }),
+  );
+  return required('UploadId', res.UploadId);
 }
 
-/**
- * A URL that creates one object, once, with one content type.
- *
- * WRITE-ONCE: `If-None-Match: *` is part of the signature, so the PUT fails
- * with 412 when the object already exists and with 403 if the header is
- * dropped. A published recording's file can therefore never be swapped
- * underneath students who have listened to it; replacing a bad file goes
- * through `removeRecordingMedia`, which only works on a draft. The content type
- * is signed too. Size cannot be signed reliably on R2, so the caller checks it
- * with `head` afterwards and deletes what is too large.
- */
-export async function signPut(key: string, contentType: string, ttlMs: number): Promise<SignedPut> {
-  const expiresAt = Date.now() + ttlMs;
-  const url = await getSignedUrl(
+/** A URL that uploads one part of one multipart upload, until it expires. */
+export async function signPartPut(key: string, uploadId: string, partNumber: number, ttlMs: number): Promise<string> {
+  return getSignedUrl(
     client('write'),
-    new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType, IfNoneMatch: '*' }),
-    { expiresIn: Math.floor(ttlMs / 1000), signableHeaders: new Set(['content-type', 'if-none-match']) },
+    new UploadPartCommand({ Bucket: bucket(), Key: key, UploadId: uploadId, PartNumber: partNumber }),
+    { expiresIn: Math.floor(ttlMs / 1000) },
   );
-  return { url, expiresAt, headers: { 'Content-Type': contentType, 'If-None-Match': '*' } };
+}
+
+/** Join the uploaded parts into the object. */
+export async function completeMultipart(
+  key: string,
+  uploadId: string,
+  parts: { partNumber: number; etag: string }[],
+): Promise<void> {
+  await client('write').send(
+    new CompleteMultipartUploadCommand({
+      Bucket: bucket(),
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: { Parts: parts.map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })) },
+    }),
+  );
+}
+
+/** Throw away an unfinished upload and its parts. One already gone is not an error. */
+export async function abortMultipart(key: string, uploadId: string): Promise<void> {
+  try {
+    await client('write').send(new AbortMultipartUploadCommand({ Bucket: bucket(), Key: key, UploadId: uploadId }));
+  } catch (e) {
+    if ((e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode !== 404) throw e;
+  }
+}
+
+/** Bytes `first` to `last` (inclusive) of an object. */
+export async function readRange(key: string, first: number, last: number): Promise<Uint8Array> {
+  const res = await client('write').send(
+    new GetObjectCommand({ Bucket: bucket(), Key: key, Range: `bytes=${first}-${last}` }),
+  );
+  return res.Body ? res.Body.transformToByteArray() : new Uint8Array();
 }
 
 /** Size and type of an object, or null if there is none. */

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   INSTITUTE_TIMEZONE,
@@ -12,6 +12,7 @@ import {
   todayInZone,
   unbreakableDate,
   type AttendanceStatus,
+  type MediaItem,
   type RecordingStatus,
 } from '@sabeel/shared';
 import {
@@ -35,21 +36,18 @@ import {
   type SessionRow,
 } from '../sessions';
 import {
-  createRecording,
   deleteRecording,
   editRecordingMedia,
   removeRecordingMedia,
-  finalizeRecordingUpload,
   setRecordingStatus,
-  uploadRecordingAudio,
   useRecording,
   type RecordingRow,
 } from '../recordings';
+import { UploadPanel, useUploads } from '../components/UploadPanel';
 import { MediaList } from '../components/MediaList';
 import { retryZoomImport } from '../zoom';
 import { sortByName, useRosterState, type EnrollmentRow } from '../structure';
 import { useStudents } from '../students';
-import { canPickAudio, pickAudioFile } from '../filePicker';
 import { useWide } from '../useWidth';
 import { getTheme, spacing } from '../theme';
 import { errorText } from '../errors';
@@ -413,9 +411,9 @@ function RecordingSection({
   onPlay: (recording: RecordingRow, session: SessionRow, itemId?: string) => void;
   onImportZoom: (session: SessionRow) => void;
 }) {
-  const [progress, setProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const uploads = useUploads(session.id, recording);
 
   const run = (key: string, fn: () => Promise<unknown>) =>
     void (async () => {
@@ -430,71 +428,15 @@ function RecordingSection({
       }
     })();
 
-  /**
-   * Put audio on this session's recording, creating the recording first if there
-   * isn't one.
-   *
-   * The upload SPANS the moment the recording doc starts existing: the server
-   * has to mint the id before the client may upload the audio (that ordering is
-   * what makes the upload authorized — see createRecordingDraft). The live
-   * listener therefore flips `recording` from null to set mid-upload, which is
-   * why nothing about this flow may live in a branch keyed on that: the progress
-   * state is owned here, above the branch, and `uploading` drives the card.
-   *
-   * Passing an existing id is the retry path — a draft whose audio failed to
-   * land, or whose audio was removed for replacement.
-   */
-  const upload = (existingId?: string) =>
-    void (async () => {
-      const picked = await pickAudioFile();
-      if (!picked) return;
-      setBusy('upload');
-      setError(null);
-      let createdId: string | null = null;
-      try {
-        if (!existingId) createdId = (await createRecording({ sessionId: session.id })).id;
-        const id = existingId ?? createdId!;
-        setProgress(0);
-        const itemId = await uploadRecordingAudio(id, picked.blob, setProgress);
-        await finalizeRecordingUpload({ recordingId: id, itemId, durationSec: picked.durationSec });
-      } catch (e) {
-        setError(errorText(e));
-        // Roll back a draft this attempt created: it holds nothing, and leaving
-        // it parked on the session would block the next attempt (a session takes
-        // 0..1 recordings) behind a delete. A draft we were only retrying is left
-        // alone — the caller can try again or discard it deliberately.
-        if (createdId) await deleteRecording({ recordingId: createdId }).catch(() => undefined);
-      } finally {
-        setProgress(null);
-        setBusy(null);
-      }
-    })();
-
-  const uploading = busy === 'upload';
+  const uploading = uploads.busy;
+  // While files are chosen or going, the panel is the card's one task.
+  const choosing = uploads.phase !== null;
 
   return (
     <>
       <SectionTitle>Recording</SectionTitle>
       <Card>
         {error ? <Notice tone="error">{error}</Notice> : null}
-
-        {/* Rendered outside the recording/no-recording branch on purpose: the
-            upload crosses that boundary, and this is the only feedback the
-            person has while it does. */}
-        {uploading ? (
-          <View style={styles.progressWrap}>
-            <View
-              style={[styles.progressBar, { width: `${Math.round((progress ?? 0) * 100)}%` }]}
-            />
-            <Text style={styles.progressText}>
-              {progress === null
-                ? 'Preparing…'
-                : progress < 1
-                  ? `Uploading ${Math.round(progress * 100)}%`
-                  : 'Finishing…'}
-            </Text>
-          </View>
-        ) : null}
 
         {!recording ? (
           session.notRecorded ? (
@@ -524,24 +466,25 @@ function RecordingSection({
           ) : (
             <>
               <Text style={styles.meta}>
-                No recording yet. Upload the audio or import it from Zoom; the session&apos;s title
-                and date are used automatically.
+                No recording yet. Upload the files or import them from Zoom; the session&apos;s
+                title and date are used automatically.
               </Text>
-              {canPickAudio ? (
-                <Button
-                  testID="recording-upload"
-                  label="Upload audio…"
-                  busy={uploading}
-                  onPress={() => upload()}
-                />
-              ) : (
-                <Notice tone="info">Uploading is done from the web app on a computer.</Notice>
-              )}
+              {/* WHERE THE BUTTON IS, so the files appear under the thumb that
+                  chose them. The state is this section's, so the panel moves
+                  into the card below, unbroken, once the first file has
+                  created the recording. */}
+              <UploadPanel uploads={uploads} recording={recording} />
+              <Button
+                testID="recording-upload"
+                label="Upload files…"
+                disabled={choosing}
+                onPress={() => void uploads.pick()}
+              />
               <Button
                 testID="recording-import-zoom"
                 label="Import from Zoom"
                 variant="secondary"
-                disabled={uploading}
+                disabled={choosing}
                 onPress={() => onImportZoom(session)}
               />
               {/*
@@ -559,7 +502,7 @@ function RecordingSection({
                 testID="session-not-recorded"
                 label="This class was not recorded"
                 variant="secondary"
-                disabled={uploading}
+                disabled={choosing}
                 busy={busy === 'notRecorded'}
                 onPress={() =>
                   run('notRecorded', () =>
@@ -576,7 +519,9 @@ function RecordingSection({
             isAdmin={isAdmin}
             busy={busy}
             uploading={uploading}
-            onUpload={() => upload(recording.id)}
+            choosing={choosing}
+            onUpload={() => void uploads.pick()}
+            uploadPanel={<UploadPanel uploads={uploads} recording={recording} />}
             onRun={run}
             onOpenLedger={onOpenLedger}
             onPlay={onPlay}
@@ -594,7 +539,9 @@ function RecordingCard({
   isAdmin,
   busy,
   uploading,
+  choosing,
   onUpload,
+  uploadPanel,
   onRun,
   onOpenLedger,
   onPlay,
@@ -605,7 +552,11 @@ function RecordingCard({
   isAdmin: boolean;
   busy: string | null;
   uploading: boolean;
+  /** Files are being chosen or sent: the upload panel is the card's task. */
+  choosing: boolean;
   onUpload: () => void;
+  /** The files being chosen or sent, drawn beside the button that chose them. */
+  uploadPanel: ReactNode;
   onRun: (key: string, fn: () => Promise<unknown>) => void;
   onOpenLedger: (recording: RecordingRow) => void;
   onPlay: (recording: RecordingRow, session: SessionRow, itemId?: string) => void;
@@ -631,20 +582,19 @@ function RecordingCard({
   const playable = startingItem(r.media, r.defaultVersion);
   const arriving = items.some((i) => i.status === 'uploading' || i.status === 'copying');
   const failedZoom = items.some((i) => i.status === 'failed' && i.zoom);
-  // ONE UPLOADED FILE PER RECORDING until uploads take several
-  // (docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md, V3); the server holds the same
-  // line. A file that never arrived is replaced by the next upload.
-  const canUpload = !items.some((i) => i.status === 'ready' || i.status === 'copying');
   /*
    * WHO MAY REMOVE A FILE, as the server decides it: from a draft, whoever
    * manages the class; from a recording taken down, an admin, for storage;
    * from a live one, nobody — it is hidden instead, so nothing a student is
    * part-way through vanishes.
    */
-  const canRemove =
+  const canRemoveReady =
     r.status === 'draft' ||
     r.status === 'needsAttention' ||
     ((r.status === 'archived' || r.status === 'unpublished') && isAdmin);
+  // A file students never saw — still arriving, or failed — can go in any
+  // state: that is cancelling an upload or clearing a failed import.
+  const canRemove = (item: MediaItem) => item.status !== 'ready' || canRemoveReady;
   // Removing a file DELETES it from the media bucket — it is gone, and a Zoom
   // import has to be re-imported while an upload needs the original again.
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -653,8 +603,8 @@ function RecordingCard({
   // the same guard ConfirmDanger applies, so the open panel can never outlive
   // its precondition and offer a button that could only fail.
   useEffect(() => {
-    if (confirmRemove && (!removing || !canRemove)) setConfirmRemove(null);
-  }, [confirmRemove, removing, canRemove]);
+    if (confirmRemove && (!removing || (removing.status === 'ready' && !canRemoveReady))) setConfirmRemove(null);
+  }, [confirmRemove, removing, canRemoveReady]);
   // No media is a NORMAL state here, not a failure: mid-upload, after a failed
   // one, or after a removal. Only say something is wrong once nothing is in
   // flight — otherwise a healthy upload reads as broken for its whole duration.
@@ -670,7 +620,7 @@ function RecordingCard({
 
   // Takes over the card for the same reason ConfirmDanger does: a confirmation
   // that leaves Publish and Delete tappable underneath it is not a confirmation.
-  if (removing && canRemove) {
+  if (removing && canRemove(removing)) {
     return (
       <Card>
         <Notice tone="error">
@@ -759,10 +709,12 @@ function RecordingCard({
           onEdit={(edit) => onRun(`edit-${r.id}`, () => editRecordingMedia({ recordingId: r.id, ...edit }))}
           onRemove={setConfirmRemove}
         />
+        {uploadPanel}
         <Row>
-          {canUpload && canPickAudio ? (
-            <Button testID="recording-upload" label="Upload audio…" variant="secondary" disabled={uploading} onPress={onUpload} />
-          ) : null}
+          {/* MORE FILES, in any state, like more from Zoom: each is a new
+              part or another version of one, and students see it once it has
+              arrived. */}
+          <Button testID="recording-upload" label="Upload files…" variant="secondary" disabled={choosing} onPress={onUpload} />
           {failedZoom ? (
             <Button
               testID="recording-retry-import"

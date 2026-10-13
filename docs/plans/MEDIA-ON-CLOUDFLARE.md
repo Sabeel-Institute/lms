@@ -13,9 +13,10 @@ app keep `recordings/{recordingId}/audio.m4a`. `mediaStore.ts` is keyed by
 object key, so the layout is the items' business, not the store's. Built so far:
 
 - Spike M1 (below).
-- `functions/src/mediaStore.ts`: signed GET for playback, signed write-once
-  PUT for staff uploads (`startRecordingUpload`), HEAD at finalize (an object
-  over the cap is deleted), DELETE for removing a file and for delete. Firebase
+- `functions/src/mediaStore.ts`: signed GET for playback; multipart uploads
+  for staff (start, signed part URLs, complete, abort — `uploads.ts`); HEAD and
+  ranged reads at finalize, where an object over the cap or one phones cannot
+  play is deleted; DELETE for removing a file and for delete. Firebase
   Storage, `storage.rules` and its emulator are gone.
 - SeaweedFS in `test:emulator`, `test:screens` and `npm run emulators`, with
   the read and write keys split as in production.
@@ -88,8 +89,9 @@ code.
 - **Media never passes through a Function.** Playback is a URL to R2. Uploads
   go from the browser or phone straight to R2. Zoom imports go from Zoom
   straight to R2 through the Worker.
-- **Published media is never silently swapped.** Uploads are write-once
-  (`If-None-Match: *` is part of the signature).
+- **Published media is never silently swapped.** Staff uploads are multipart:
+  the client holds URLs for parts of one upload id, the server completes it,
+  and a completed upload id takes no more parts (`functions/src/uploads.ts`).
 - **Config as code.** The bucket's CORS and lifecycle rules, and the Worker,
   deploy from this repo.
 

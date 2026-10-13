@@ -17,13 +17,17 @@ export { createEnrollment, setEnrollmentActive } from './enrollments';
 export { createSession, updateSession, submitAttendance, deleteSession } from './sessions';
 export {
   createRecording,
-  startRecordingUpload,
-  finalizeRecordingUpload,
   setRecordingStatus,
   removeRecordingMedia,
   editRecordingMedia,
   deleteRecording,
 } from './recordings';
+export {
+  startRecordingUpload,
+  signRecordingUploadParts,
+  finalizeRecordingUpload,
+  sweepAbandonedUploads,
+} from './uploads';
 export { listZoomRecordings, importZoomFiles, retryZoomImport, copyZoomFile } from './zoomImport';
 export { getPlaybackUrl } from './playback';
 export { accountExists } from './accountExists';

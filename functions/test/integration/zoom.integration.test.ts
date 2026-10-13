@@ -3,6 +3,7 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
+  MAX_AUDIO_BYTES,
   EMULATOR_PROJECT_ID,
   type MediaItem,
   type RecordingDoc,
@@ -11,14 +12,9 @@ import {
 import { createCohortRecord } from '../../src/cohorts';
 import { createCourseRecord } from '../../src/courses';
 import { createSessionRecord } from '../../src/sessions';
-import {
-  MAX_AUDIO_BYTES,
-  applyDeleteRecording,
-  applyRecordingStatus,
-  finalizeRecording,
-  removeMedia,
-  startUpload,
-} from '../../src/recordings';
+import { applyDeleteRecording, applyRecordingStatus, removeMedia } from '../../src/recordings';
+import { uploadFile } from './uploadVia';
+import { sample } from '../mediaSamples';
 import {
   annotateImported,
   applyImportZoomFiles,
@@ -386,18 +382,19 @@ describe('releasing a Zoom file', () => {
     expect(again.recordingId).not.toBe(recordingId);
   });
 
-  it('uploading the file by hand over a failed import replaces it and releases the claim', async () => {
+  it('a failed import removed releases its claim, and a file uploaded in its place plays', async () => {
     // The session page's way out of a failed import: "Retry the Zoom import,
-    // or upload the file".
+    // or remove it and upload the file".
     const q = queue();
     const failing = fakeZoom(ALL, { failCopy: new Set(['m1-aud']) });
     const res = await applyImportZoomFiles(ADMIN, { sessionId, files: pick(M1_AUDIO) }, failing, q.enqueue);
     await runAll(q.tasks, failing);
-    const { itemId } = await startUpload(ADMIN, { recordingId: res.recordingId, contentType: 'audio/mp4', sizeBytes: 10 });
-    await putObject((await rec(res.recordingId)).media[itemId].storageKey, new Uint8Array(10));
-    await finalizeRecording({ recordingId: res.recordingId, itemId, durationSec: 30 });
-    expect(await items(res.recordingId)).toEqual([expect.objectContaining({ id: itemId, source: 'upload', status: 'ready' })]);
+    const [failed] = await items(res.recordingId);
+    expect(failed.status).toBe('failed');
+    await removeMedia(res.recordingId, failed.id);
     expect(await claimOf('m1-aud')).toBeUndefined();
+    const { itemId } = await uploadFile(ADMIN, res.recordingId, sample('m4a'), 'audio/mp4');
+    expect(await items(res.recordingId)).toEqual([expect.objectContaining({ id: itemId, source: 'upload', status: 'ready' })]);
   });
 });
 

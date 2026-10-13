@@ -4,6 +4,7 @@ import { getFunctions } from 'firebase-admin/functions';
 import { FieldValue, getFirestore, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
+  MAX_AUDIO_BYTES,
   ZOOM_RECORDING_TYPES,
   deriveDurationSec,
   mediaStorageKey,
@@ -20,8 +21,9 @@ import { auditedCall } from './audited';
 import { SENTRY_DSN, reportedCall } from './reported';
 import { reportError } from './sentry';
 import { requireCourseScope, requireStaff } from './guards';
-import { MAX_AUDIO_BYTES, draftInTransaction, finalizeRecording } from './recordings';
-import { MEDIA_WRITE_SECRETS, deleteObject } from './mediaStore';
+import { draftInTransaction } from './recordings';
+import { writeItem } from './mediaWrite';
+import { MEDIA_WRITE_SECRETS, deleteObject, head } from './mediaStore';
 import { MAX_COPY_BYTES } from './mediaCopier';
 import {
   ZOOM_SECRETS,
@@ -383,10 +385,7 @@ export async function runCopyTask(task: CopyTask, finalAttempt: boolean, client:
     // Write-once, like every upload: whatever an earlier attempt left goes first.
     await deleteObject(item.storageKey);
     await client.copyToMediaStore(found.downloadUrl, item.storageKey, found.file.sizeBytes, item.contentType);
-    await finalizeRecording(
-      { recordingId: task.recordingId, itemId: task.itemId, durationSec: found.file.durationSec },
-      capFor(found.file),
-    );
+    await settleCopy(task.recordingId, task.itemId, found.file.durationSec, capFor(found.file));
     await db.runTransaction(async (tx) => {
       const now = (await tx.get(ref)).data() as RecordingDoc | undefined;
       if (now) settleStatus(tx, ref, now, now.media);
@@ -399,6 +398,32 @@ export async function runCopyTask(task: CopyTask, finalAttempt: boolean, client:
     // on the recording itself.
     await reportError(e, { source: 'copyZoomFile', recordingId: task.recordingId });
   }
+}
+
+/**
+ * Record what a copy actually put in the bucket: the item becomes `ready` with
+ * the size read from the bucket and the length Zoom reported. An object over
+ * the cap is deleted and its item removed rather than kept. Only an item still
+ * `copying` is settled, so a task replayed later cannot rewrite a ready one.
+ */
+async function settleCopy(recordingId: string, itemId: string, durationSec: number | null, maxBytes: number) {
+  const db = getFirestore();
+  const ref = db.collection(COLLECTIONS.recordings).doc(recordingId);
+  const item = ((await ref.get()).data() as RecordingDoc | undefined)?.media[itemId];
+  if (item?.status !== 'copying') throw new Error('That file is not waiting to be confirmed.');
+  const object = await head(item.storageKey);
+  if (!object) throw new Error('No file found for that copy.');
+  const tooLarge = object.sizeBytes > maxBytes;
+  if (tooLarge) await deleteObject(item.storageKey);
+  await db.runTransaction(async (tx) => {
+    const fresh = (await tx.get(ref)).data() as RecordingDoc | undefined;
+    const current = fresh?.media[itemId];
+    if (!fresh || !current) throw new Error('That file was removed.');
+    writeItem(tx, ref, fresh, itemId, tooLarge
+      ? null
+      : { ...current, status: 'ready', failReason: null, sizeBytes: object.sizeBytes, durationSec });
+  });
+  if (tooLarge) throw new Error(`That file is too large (${Math.round(maxBytes / 2 ** 20)} MB at most).`);
 }
 
 /** The attempts a copy gets before its item is marked failed. */

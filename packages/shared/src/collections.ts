@@ -29,6 +29,10 @@ export const COLLECTIONS = {
    *  the picker marks every imported file in one read, and a file is claimed
    *  exactly once, in a transaction. Server-only. */
   zoomImports: 'zoomImports',
+  /** Uploads in flight, keyed by media item id: the bucket's multipart
+   *  upload id and how the file is cut into parts. Server-only; gone once the
+   *  upload is finished, cancelled or swept. */
+  mediaUploads: 'mediaUploads',
   /** Required-listening obligations, and the ONLY thing granting a student
    *  access to a recording (the excused of a session, until the due date). */
   assignments: 'assignments',

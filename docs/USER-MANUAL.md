@@ -443,9 +443,8 @@ every other way still works, including changing someone from excused to present
 or absent, so the attendance record never becomes uncorrectable.
 
 **Add the recording.** In the same screen, **Import from Zoom**, or **Upload
-audio…** from your own device (audio only, up to 300 MB — a two-hour class is
-normally well under 30 MB). The recording takes its title, date, and notes from
-the session, so you don't retype them.
+files…** from your own computer or phone. The recording takes its title, date,
+and notes from the session, so you don't retype them.
 
 **Importing from Zoom.** Every class in a cohort is held in the same recurring
 Zoom meeting, so every recording in the list has the same title. What tells them
@@ -483,13 +482,34 @@ order and, under each part, its versions, with their size or state:
 - **Hide** keeps a file from students without deleting it, and **Show** puts it
   back — for example a slides-only version nobody needs. A published recording
   must keep at least one file students can play.
-- **Remove** deletes a file, so a bad one can be replaced. Only on a draft;
-  once a recording has been published its files are hidden, not removed.
+- **Remove** deletes a file, so a bad one can be replaced. A file students can
+  play is removed only from a draft; once a recording has been published its
+  files are hidden, not removed.
 - **Move part up / down** fixes the order if the parts came in wrong.
 - **Students start on** chooses which version the player opens on when there
   is more than one — students can switch at any time.
 
 If a copy from Zoom fails, the file says why and **Retry import** tries again.
+
+**Uploading files.** **Upload files…** takes one file or several at once:
+audio as M4A, MP3 or WAV (up to 300 MB each), and video as MP4 (up to 8 GB
+each). The chosen files are listed before anything is sent. Each one becomes
+a new part, in the order listed, unless you tap **Version of Part N** to make
+it another version of a part already there — for example a phone video of the
+whiteboard beside the Zoom audio. A part takes one uploaded video and one
+audio file. Then tap **Upload N files**.
+
+Each file shows how far it has got. Big files go up in pieces, so a dropped
+connection costs a few seconds, not the whole upload. When a file has arrived
+the app checks that phones can play it. A video in another format — an
+iPhone's HEVC video is the usual one — is refused with what to do instead:
+export it as MP4 (H.264) and upload that. Files can be added to a published
+recording too; students see a new one only once it has arrived.
+
+**Stay on the page until the files say Added.** Leaving it, or tapping **Stop
+uploading**, stops the upload and keeps nothing of the unfinished file. A file
+that is still uploading, or that failed, can be taken off with **Remove** at
+any time, even on a published recording, since no student ever saw it.
 
 **Or say it wasn't recorded.** Some classes aren't, and until you say so the app
 keeps asking: **Today** shows the session as waiting for its recording, and you
@@ -944,7 +964,7 @@ confirmation, and is audited. Reach for disable, unpublish, or archive first.
 | **Set my student password** | Open the emailed link, or tap **Email me a password link** on sign-in. |
 | **Add a session** *(staff)* | Course → **Sessions** → **Add a session** → title + date → **Create session**. |
 | **Take attendance** *(staff)* | Session → mark Present / Absent / Excused → **Submit attendance**. |
-| **Add a recording** *(staff)* | Open the session → **Import from Zoom** → tick files or a quick pick → **Import**. (Or **Upload audio…**.) |
+| **Add a recording** *(staff)* | Open the session → **Import from Zoom** → tick files or a quick pick → **Import**. Or **Upload files…** → choose → **Upload N files**. |
 | **Hide a version from students** *(staff)* | Session → the recording's file → **Hide**. |
 | **Open a recording to students** *(staff)* | Mark them **Excused**, then **Publish** — that is the whole of it. |
 | **Change the closing date** *(staff)* | Session → **Edit session** → **Due by**. Moving it forward reopens a closed recording. |

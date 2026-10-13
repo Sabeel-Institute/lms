@@ -35,12 +35,13 @@ import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { readXlsx } from '@sabeel/shared';
 import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
-import { putLocalObject } from './lib/media-store.mjs';
 import {
   AUDIO_FIXTURE,
   AUDIO_SECONDS,
+  HEVC_FIXTURE,
   VIDEO_FIXTURE,
   ensureAudioFixture,
+  ensureHevcFixture,
   ensureVideoFixture,
 } from './lib/media-fixtures.mjs';
 
@@ -51,14 +52,6 @@ const FS_READ = `${FS}/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/do
 const FS_WIPE = `${FS}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents`;
 const AUTH = `http://127.0.0.1:${EMULATOR_PORTS.auth}`;
 const SHOTS = 'e2e-shots';
-/** A plain value as a Firestore REST value, for the out-of-band writes below. */
-const restValue = (v) =>
-  v === null ? { nullValue: null }
-    : typeof v === 'string' ? { stringValue: v }
-      : typeof v === 'boolean' ? { booleanValue: v }
-        : typeof v === 'number' ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v })
-          : { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, restValue(x)])) } };
-
 const failures = [];
 /**
  * Assert the thing the step above waited for is ON SCREEN.
@@ -276,6 +269,7 @@ rmSync(SHOTS, { recursive: true, force: true });
 mkdirSync(SHOTS, { recursive: true });
 ensureAudioFixture();
 ensureVideoFixture();
+ensureHevcFixture();
 await reset();
 
 // ---------------------------------------------------------------- identity --
@@ -719,14 +713,19 @@ await tap(admin, 'nav-sessions');
 await tap(admin, 'session-open-Session 1');
 await shot(admin, '10-attendance');
 
-// Upload the recording to the session.
+// Upload the recording to the session: choose the file, see it listed, send it.
 const chooser = admin.waitForEvent('filechooser');
 await tap(admin, 'recording-upload');
 await (await chooser).setFiles(AUDIO_FIXTURE);
-// Listen appears only once `finalizeRecordingUpload` has recorded the audio
-// path — the one signal on screen that the upload is complete. (This used to
-// wait, with the failure swallowed, for a word the screen never shows.)
+await admin.getByTestId('upload-start').waitFor({ timeout: 10000 });
+check('the chosen file is listed before anything is sent', /audio · \d+\.\d\u00a0MB/.test(await admin.getByTestId('upload-row-0').innerText()));
+await shot(admin, '10b-upload-chosen');
+await tap(admin, 'upload-start');
+// Play appears only once `finalizeRecordingUpload` has confirmed the file —
+// the one signal on screen that the upload is complete.
 await admin.getByTestId('recording-play').waitFor({ timeout: 90000 });
+await admin.getByTestId('upload-done').waitFor({ timeout: 20000 });
+await tap(admin, 'upload-done');
 const recs = await readCollection('recordings');
 const rf = recs[0]?.fields ?? {};
 /*
@@ -836,39 +835,49 @@ check(
 await tap(student, 'player-play'); // pause, so the saved position settles
 
 /*
- * A VIDEO OF THE SAME STRETCH OF CLASS — a version, as a Zoom import of the
- * meeting's slides and speaker would add it. Switching to it must keep the
- * student's place, show the picture, and play; switching back must keep it
- * again. Written out of band (the import itself is the integration suite's),
- * and the open player picks it up from the live recording, as it would a file
- * staff added while a student listened.
+ * A VIDEO OF THE SAME STRETCH OF CLASS, uploaded by staff onto the PUBLISHED
+ * recording as another version of Part 1 — with an iPhone's HEVC video
+ * beside it, which the server must refuse with how to export it instead. The
+ * student's open player picks the new version up from the live recording.
+ * Switching to it must keep their place, show the picture, and play;
+ * switching back must keep it again.
  */
+const moreFiles = admin.waitForEvent('filechooser');
+await tap(admin, 'recording-upload');
+await (await moreFiles).setFiles([VIDEO_FIXTURE, HEVC_FIXTURE]);
+await admin.getByTestId('upload-place-0-v1').waitFor({ timeout: 10000 });
+await tap(admin, 'upload-place-0-v1');
+await tap(admin, 'upload-start');
+await admin.getByTestId('upload-done').waitFor({ timeout: 120000 });
+const videoRow = await admin.getByTestId('upload-row-0').innerText();
+const hevcRow = await admin.getByTestId('upload-row-1').innerText();
+check('staff add a video version to a published recording', /Added/.test(videoRow), videoRow.replace(/\n/g, ' | '));
+check(
+  'an iPhone HEVC video is refused with how to export it instead',
+  /Export it as MP4 \(H\.264\)/.test(hevcRow),
+  hevcRow.replace(/\n/g, ' | '),
+);
+await shot(admin, '11b-upload-results');
+await tap(admin, 'upload-done');
 const playedDoc = (await readCollection('recordings'))[0];
-const playedId = playedDoc.name.split('/').pop();
-const audioItemId = Object.keys(playedDoc.fields.media.mapValue.fields)[0];
-await putLocalObject(`media/${playedId}/e2evideo`, readFileSync(VIDEO_FIXTURE), 'video/mp4');
-const videoItem = {
-  id: 'e2evideo', part: 1, version: 'speaker', kind: 'video', label: null, status: 'ready',
-  failReason: null, hidden: false, storageKey: `media/${playedId}/e2evideo`, contentType: 'video/mp4',
-  sizeBytes: statSync(VIDEO_FIXTURE).size, durationSec: AUDIO_SECONDS, width: null, height: null,
-  source: 'zoom', zoom: null, addedAt: Date.now(), addedBy: 'e2e',
-};
-const patched = await fetch(`${FS_READ}/recordings/${playedId}?updateMask.fieldPaths=media.e2evideo`, {
-  method: 'PATCH',
-  headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
-  body: JSON.stringify({ fields: { media: { mapValue: { fields: { e2evideo: restValue(videoItem) } } } } }),
-});
-if (!patched.ok) throw new Error(`adding the video version failed: ${patched.status} ${await patched.text()}`);
-await student.getByTestId('player-version-e2evideo').waitFor({ timeout: 15000 });
+const playedItems = Object.entries(playedDoc.fields.media.mapValue.fields).map(([id, v]) => ({ id, f: v.mapValue.fields }));
+check(
+  'the refused file left nothing on the recording',
+  playedItems.length === 2 && playedItems.every(({ f }) => f.status.stringValue === 'ready'),
+  playedItems.map(({ f }) => `${f.version.stringValue}:${f.status.stringValue}`).join(', '),
+);
+const audioItemId = playedItems.find(({ f }) => f.version.stringValue === 'audio')?.id;
+const videoItemId = playedItems.find(({ f }) => f.version.stringValue === 'video')?.id;
+await student.getByTestId(`player-version-${videoItemId}`).waitFor({ timeout: 15000 });
 const beforeSwitch = await elapsedSeconds(student);
-await tap(student, 'player-version-e2evideo');
+await tap(student, `player-version-${videoItemId}`);
 await student.getByTestId('player-video').waitFor({ timeout: 15000 });
 await student.waitForTimeout(2500);
 const afterSwitch = await elapsedSeconds(student);
-const picture = await student.evaluate(() => {
+const picture = await student.evaluate((id) => {
   const v = document.querySelector('[data-testid="player-video"] video');
-  return v ? { w: v.videoWidth, src: v.currentSrc.includes('e2evideo') } : null;
-});
+  return v ? { w: v.videoWidth, src: v.currentSrc.includes(id) } : null;
+}, videoItemId);
 check(
   'switching to the video keeps the place and shows the picture',
   Math.abs(afterSwitch - beforeSwitch) <= 2 && picture?.w === 160 && picture?.src === true,

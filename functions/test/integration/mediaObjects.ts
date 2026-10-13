@@ -2,6 +2,7 @@ import {
   DeleteObjectsCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
+  ListPartsCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -50,4 +51,15 @@ export async function clearPrefix(prefix: string) {
   const listed = await s3.send(new ListObjectsV2Command({ Bucket, Prefix: prefix }));
   const keys = (listed.Contents ?? []).map((o) => ({ Key: o.Key as string }));
   if (keys.length > 0) await s3.send(new DeleteObjectsCommand({ Bucket, Delete: { Objects: keys } }));
+}
+
+/** Whether a multipart upload is still open, holding parts that cost storage. */
+export async function uploadIsOpen(key: string, uploadId: string): Promise<boolean> {
+  try {
+    await s3.send(new ListPartsCommand({ Bucket, Key: key, UploadId: uploadId }));
+    return true;
+  } catch (e) {
+    if ((e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return false;
+    throw e;
+  }
 }

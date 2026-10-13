@@ -1,7 +1,6 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { auditedCall } from './audited';
-import { reportedCall } from './reported';
-import { FieldValue, getFirestore, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
+import { getFirestore, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
   INSTITUTE_TIMEZONE,
@@ -9,10 +8,8 @@ import {
   deriveDurationSec,
   isDiscardable,
   isPlayable,
-  mediaStorageKey,
   publishBlockers,
   todayInZone,
-  type MediaItem,
   type MediaEdit,
   type MediaMap,
   type MediaVersion,
@@ -22,15 +19,9 @@ import {
   type SessionDoc,
 } from '@sabeel/shared';
 import { isAdminCaller, requireAdmin, requireCourseScope } from './guards';
-import { MEDIA_WRITE_SECRETS, deleteObject, head, signPut } from './mediaStore';
-
-/** Max upload size. A 2-hour 128 kbps M4A is ~115 MB; 300 MB leaves room
- *  without letting a video file through by accident. */
-export const MAX_AUDIO_BYTES = 300 * 1024 * 1024;
-
-/** How long an upload URL lasts: long enough for a slow connection to send
- *  300 MB, short enough that a leaked one is soon useless. */
-const UPLOAD_URL_TTL_MS = 60 * 60 * 1000;
+import { MEDIA_WRITE_SECRETS, deleteObject } from './mediaStore';
+import { abortUpload } from './uploads';
+import { writeItem } from './mediaWrite';
 
 // ---------------------------------------------------------------- create --
 
@@ -142,230 +133,6 @@ export const createRecording = auditedCall('createRecording', async (req, audit)
 
 // ---------------------------------------------------------------- media --
 
-/** A recording takes media only while it is not live. */
-function requireEditableMedia(rec: RecordingDoc, what: string): void {
-  if (rec.status !== 'draft' && rec.status !== 'needsAttention') {
-    throw new HttpsError(
-      'failed-precondition',
-      `${what} only while a recording is a draft. Unpublish it first.`,
-    );
-  }
-}
-
-/**
- * Write one item and the derived duration in a transaction that has already
- * read the recording. `null` removes the item.
- */
-function writeItem(
-  tx: Transaction,
-  ref: DocumentReference,
-  rec: RecordingDoc,
-  itemId: string,
-  item: MediaItem | null,
-): void {
-  const media: MediaMap = { ...rec.media };
-  if (item) media[itemId] = item;
-  else delete media[itemId];
-  tx.update(ref, {
-    [`media.${itemId}`]: item ?? FieldValue.delete(),
-    durationSec: deriveDurationSec(media),
-    updatedAt: Date.now(),
-  });
-}
-
-// ---------------------------------------------------------------- upload --
-
-export interface StartUploadInput {
-  recordingId: string;
-  contentType: string;
-  sizeBytes: number;
-}
-
-export function validateStartUpload(data: unknown): StartUploadInput {
-  const d = data as Partial<StartUploadInput> | null;
-  if (typeof d?.recordingId !== 'string' || !d.recordingId) {
-    throw new HttpsError('invalid-argument', 'recordingId is required.');
-  }
-  if (typeof d.contentType !== 'string' || !/^audio\/[a-z0-9.+-]+$/.test(d.contentType)) {
-    throw new HttpsError('invalid-argument', 'Only audio files can be uploaded.');
-  }
-  if (typeof d.sizeBytes !== 'number' || !Number.isInteger(d.sizeBytes) || d.sizeBytes <= 0) {
-    throw new HttpsError('invalid-argument', 'sizeBytes must be a positive whole number.');
-  }
-  if (d.sizeBytes > MAX_AUDIO_BYTES) {
-    throw new HttpsError('invalid-argument', 'That audio file is too large (300 MB at most).');
-  }
-  return { recordingId: d.recordingId, contentType: d.contentType, sizeBytes: d.sizeBytes };
-}
-
-/**
- * Add an `uploading` item to a recording and hand the client a URL it may PUT
- * the file to, once.
- *
- * The bytes go straight from the browser or phone to the bucket, never through
- * a Function: a two-hour recording would meet the 60-minute timeout, and the
- * bytes would be paid for twice. So everything the bucket cannot check is
- * checked here, before a URL exists: course scope, a recording that is still a
- * draft, an audio content type, a declared size under the cap. The URL itself
- * signs the content type and `If-None-Match: *`, so it creates the object once
- * or not at all (`mediaStore.signPut`); the real size is checked by
- * `finalizeRecording` once the bytes have landed.
- *
- * ONE FILE PER RECORDING until the session page can show several
- * (docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md, V3): a recording holding a file that
- * is ready, or still copying from Zoom, is refused. A file that never arrived
- * is replaced, its object deleted and any Zoom claim released: an upload
- * abandoned before it was finalized (the tab closed, the finalize call
- * failed), and a Zoom import that failed, where the session page offers
- * "upload the file" as the way out.
- */
-export async function startUpload(callerUid: string, input: StartUploadInput) {
-  const db = getFirestore();
-  const ref = db.collection(COLLECTIONS.recordings).doc(input.recordingId);
-  const itemId = db.collection(COLLECTIONS.recordings).doc().id;
-  const storageKey = mediaStorageKey(input.recordingId, itemId);
-  const abandoned = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
-    const rec = snap.data() as RecordingDoc;
-    requireEditableMedia(rec, 'Audio can be added');
-    const items = Object.values(rec.media);
-    if (items.some((i) => i.status === 'ready' || i.status === 'copying')) {
-      throw new HttpsError('failed-precondition', 'This recording already has audio. Remove it first.');
-    }
-    for (const i of items) {
-      if (i.zoom) tx.delete(db.collection(COLLECTIONS.zoomImports).doc(i.zoom.fileId));
-    }
-    const media: MediaMap = {
-      [itemId]: {
-        id: itemId,
-        part: 1,
-        version: 'audio',
-        kind: 'audio',
-        label: null,
-        status: 'uploading',
-        failReason: null,
-        hidden: false,
-        storageKey,
-        contentType: input.contentType,
-        sizeBytes: null,
-        durationSec: null,
-        width: null,
-        height: null,
-        source: 'upload',
-        zoom: null,
-        addedAt: Date.now(),
-        addedBy: callerUid,
-      },
-    };
-    tx.update(ref, { media, durationSec: deriveDurationSec(media), updatedAt: Date.now() });
-    return items;
-  });
-  await Promise.all(abandoned.map((i) => deleteObject(i.storageKey)));
-  const put = await signPut(storageKey, input.contentType, UPLOAD_URL_TTL_MS);
-  return { itemId, url: put.url, headers: put.headers, expiresAt: put.expiresAt };
-}
-
-/**
- * Not audited: it changes nothing anyone reads. The audit row is written when
- * the upload is confirmed (`finalizeRecordingUpload`), which is the moment the
- * file actually arrives on the recording.
- */
-export const startRecordingUpload = reportedCall(async (req) => {
-  const input = validateStartUpload(req.data);
-  const rec = await getFirestore().collection(COLLECTIONS.recordings).doc(input.recordingId).get();
-  if (!rec.exists) throw new HttpsError('not-found', 'No such recording.');
-  const uid = await requireCourseScope(req, (rec.data() as RecordingDoc).courseId);
-  return startUpload(uid, input);
-}, MEDIA_WRITE_SECRETS);
-
-// -------------------------------------------------------------- finalize --
-
-export interface FinalizeInput {
-  recordingId: string;
-  itemId: string;
-  durationSec: number | null;
-}
-
-export function validateFinalize(data: unknown): FinalizeInput {
-  const d = data as Partial<FinalizeInput> | null;
-  if (typeof d?.recordingId !== 'string' || !d.recordingId) {
-    throw new HttpsError('invalid-argument', 'recordingId is required.');
-  }
-  if (typeof d.itemId !== 'string' || !d.itemId) {
-    throw new HttpsError('invalid-argument', 'itemId is required.');
-  }
-  if (d.durationSec !== null && d.durationSec !== undefined) {
-    if (typeof d.durationSec !== 'number' || !Number.isFinite(d.durationSec) || d.durationSec <= 0) {
-      throw new HttpsError('invalid-argument', 'durationSec must be a positive number or null.');
-    }
-  }
-  return { recordingId: d.recordingId, itemId: d.itemId, durationSec: d.durationSec ?? null };
-}
-
-/**
- * Confirm a file landed, and record what actually arrived: the item becomes
- * `ready` with its size, and the recording's length is derived again.
- *
- * The client reports duration (it has the decoded media; the server would need
- * ffmpeg to find out) but the server reads SIZE from the bucket rather than
- * trusting it — size is the one field a wrong value could be used to argue
- * about, and it costs one HEAD to get right. Duration is advisory: a wrong
- * value mis-draws a progress bar and nothing more.
- *
- * An object over the cap is DELETED and its item removed, not just refused:
- * the upload URL cannot sign a size, so this is where an oversized file is
- * caught, and leaving it would both cost storage and keep a dead item in the
- * way of a corrected upload.
- *
- * Only an item on its way in (`uploading`, or `copying` from Zoom) can be
- * settled, so a finalize replayed later cannot rewrite one that is ready.
- */
-export async function finalizeRecording(input: FinalizeInput, maxBytes = MAX_AUDIO_BYTES) {
-  const db = getFirestore();
-  const ref = db.collection(COLLECTIONS.recordings).doc(input.recordingId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
-  const item = (snap.data() as RecordingDoc).media[input.itemId];
-  if (!item || (item.status !== 'uploading' && item.status !== 'copying')) {
-    throw new HttpsError('failed-precondition', 'That file is not waiting to be confirmed.');
-  }
-  const object = await head(item.storageKey);
-  if (!object) throw new HttpsError('failed-precondition', 'No file found for that upload.');
-  const tooLarge = object.sizeBytes > maxBytes;
-  if (tooLarge) await deleteObject(item.storageKey);
-
-  await db.runTransaction(async (tx) => {
-    const fresh = (await tx.get(ref)).data() as RecordingDoc | undefined;
-    const current = fresh?.media[input.itemId];
-    if (!fresh || !current) throw new HttpsError('not-found', 'That file was removed.');
-    writeItem(
-      tx,
-      ref,
-      fresh,
-      input.itemId,
-      tooLarge
-        ? null
-        : { ...current, status: 'ready', failReason: null, sizeBytes: object.sizeBytes, durationSec: input.durationSec },
-    );
-  });
-  if (tooLarge) {
-    const mb = Math.round(maxBytes / 1024 / 1024);
-    throw new HttpsError('failed-precondition', `That file is too large (${mb} MB at most).`);
-  }
-  return { recordingId: input.recordingId, itemId: input.itemId, sizeBytes: object.sizeBytes };
-}
-
-export const finalizeRecordingUpload = auditedCall('finalizeRecordingUpload', async (req, audit) => {
-  const input = validateFinalize(req.data);
-  const rec = await getFirestore().collection(COLLECTIONS.recordings).doc(input.recordingId).get();
-  if (!rec.exists) throw new HttpsError('not-found', 'No such recording.');
-  const courseId = (rec.data() as RecordingDoc).courseId;
-  await requireCourseScope(req, courseId);
-  audit.courseId = courseId;
-  return finalizeRecording(input);
-}, MEDIA_WRITE_SECRETS);
-
 // ---------------------------------------------------------------- status --
 
 export interface SetStatusInput {
@@ -459,13 +226,18 @@ export const setRecordingStatus = auditedCall('setRecordingStatus', async (req, 
 // ---------------------------------------------------------- remove media --
 
 /**
- * Remove one file from a recording, so a bad one can be replaced.
+ * Remove one file from a recording.
  *
- * The upload URL is write-once (`mediaStore.signPut`), which is what stops a
- * published recording's file being swapped underneath students who have
- * already listened to it. Replacing a bad file therefore comes through here,
- * and only while the recording is not live. The object goes, the item goes,
- * and a Zoom file's claim goes, so it can be imported again.
+ * A FILE STUDENTS NEVER SAW — still uploading, still copying, or failed — can
+ * go from a recording in any state: that is an upload being cancelled or a
+ * failed import being cleared, and nothing anyone played disappears. An upload
+ * in flight is aborted with it.
+ *
+ * A READY file follows the recording. A draft's are its makers' to correct. A
+ * live recording's are never removed — hidden instead, so nothing a student
+ * is part-way through vanishes. One taken down (archived, unpublished) is an
+ * admin's to clear out, for storage. The object goes, the item goes, and a
+ * Zoom file's claim goes, so it can be imported again.
  */
 export async function removeMedia(recordingId: string, itemId: string, asAdmin = false) {
   const db = getFirestore();
@@ -474,22 +246,21 @@ export async function removeMedia(recordingId: string, itemId: string, asAdmin =
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
     const rec = snap.data() as RecordingDoc;
-    // WHO MAY, BY STATE. A draft's files are its makers' to correct. A live
-    // recording's are never removed — hidden instead, so nothing a student is
-    // part-way through vanishes. One taken down (archived, unpublished) is an
-    // admin's to clear out, for storage.
-    if (rec.status === 'published') {
-      throw new HttpsError('failed-precondition', 'A published recording’s files are hidden, not removed. Hide it, or unpublish first.');
-    }
-    if ((rec.status === 'archived' || rec.status === 'unpublished') && !asAdmin) {
-      throw new HttpsError('permission-denied', 'Only an admin can remove a file from a recording that has been published.');
-    }
     const item = rec.media[itemId];
     if (!item) throw new HttpsError('not-found', 'No such file on that recording.');
+    if (item.status === 'ready') {
+      if (rec.status === 'published') {
+        throw new HttpsError('failed-precondition', 'A published recording’s files are hidden, not removed. Hide it, or unpublish first.');
+      }
+      if ((rec.status === 'archived' || rec.status === 'unpublished') && !asAdmin) {
+        throw new HttpsError('permission-denied', 'Only an admin can remove a file from a recording that has been published.');
+      }
+    }
     writeItem(tx, ref, rec, itemId, null);
     if (item.zoom) tx.delete(db.collection(COLLECTIONS.zoomImports).doc(item.zoom.fileId));
     return item;
   });
+  await abortUpload(itemId);
   await deleteObject(removed.storageKey);
   return { recordingId, itemId };
 }
@@ -705,8 +476,11 @@ export async function applyDeleteRecording(recordingId: string) {
   // 2. Every item's object, whatever state it is in — an `uploading` item
   //    whose bytes landed but were never confirmed is still bytes in the
   //    bucket, and they are the one thing here that costs money — and every
-  //    Zoom file's claim, so the file can be imported again.
+  //    Zoom file's claim, so the file can be imported again. An upload still
+  //    in flight is aborted first, or its parts would sit in the bucket until
+  //    its own one-day rule.
   const items = Object.values(rec.media);
+  await Promise.all(items.map((i) => abortUpload(i.id)));
   await Promise.all(items.map((i) => deleteObject(i.storageKey)));
   await Promise.all(
     items
