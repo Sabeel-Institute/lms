@@ -36,6 +36,17 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **The assignments proposal is approved as drafted**
+  (`docs/proposals/lms-assignments-proposal.html`). Faisal said yes to all
+  three changes it asks for: the app's scope widens to attendance, required
+  recordings and assignments with grades; the students' first tab becomes
+  **To do**, one list of recordings and assignments (it is "Recordings" until
+  then); and three written rules change — enrolment gives a student the
+  class's assignments (never a recording), a teacher may delete an assignment
+  no student has started, and students gain three notification switches (New
+  assignments, Last day to hand in, Work returned), six in all. The proposal's
+  student-facing examples predate the video wording ("listen to"); they take
+  the recording's verb when built.
 - 2026-10-13 — **Staff upload several files, video included** (video plan
   V3). Every upload is multipart in 16 MiB pieces, signed a batch at a time
   and sent straight to the bucket, each piece retried alone; the server joins
