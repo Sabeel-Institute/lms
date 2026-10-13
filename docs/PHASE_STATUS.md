@@ -36,6 +36,19 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-12 — **Recordings hold media items** (video plan V1, commit
+  `7a34552`). A recording's one `audioPath` became a `media` map of items
+  (part, version, status, storage key), with `durationSec` derived from the
+  playable ones and Zoom files claimed in `zoomImports/{fileId}`. The UI still
+  takes one audio file per recording; V3 and V4 lift that. Worker, functions
+  and hosting deployed in that order; the 10 recordings already here were
+  converted in place (8 files, all present in R2 at their recorded size, 8
+  claims) and the switchover seed now converts as it copies. Proven on
+  production: a converted recording plays from R2, and a real Zoom file
+  imported through the Worker landed at `media/{recording}/{item}`, claimed,
+  played, and was released on delete. Local loop green, including
+  `test:e2e` (155 checks, upload and playback through the item path).
+
 - 2026-10-12 — **Listening on the lock screen keeps its place across an app
   kill.** Found in the release device pass on `oursabeel-lms`: progress saved
   while the app was in the background did not reach the server until the app

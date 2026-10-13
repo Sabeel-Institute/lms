@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { resolve } from 'node:path';
 
 /**
- * The conversion the switchover seed applies to every recording it copies, and
- * the migration to what this project holds: one audio file becomes Part 1,
+ * The conversion the switchover seed applies to every recording it copies from
+ * the live app: one audio file becomes Part 1,
  * "Audio only", in REST-encoded Firestore fields.
  *
  * What it promises a person: the recording still plays the same file, for the

@@ -1,12 +1,12 @@
 /**
  * A recording stored before parts existed, converted to media items — on
- * Firestore REST documents, which is how the switchover seed copies them and
- * how the migration reads this project.
+ * Firestore REST documents, which is how the switchover seed copies them from
+ * the live app.
  *
  * The conversion itself is `mediaFromSingleAudio` in @sabeel/shared; this file
- * only moves values between the REST encoding and plain JavaScript. Both
- * callers go through `convertRecording`, so the copy made on switchover day and
- * the migration of what is here already cannot disagree.
+ * only moves values between the REST encoding and plain JavaScript. The same
+ * function converted this project's own copy in place on 2026-10-12, before
+ * the seed learned to convert, so both hold the same shape.
  */
 import { COLLECTIONS, mediaFromSingleAudio } from '@sabeel/shared';
 

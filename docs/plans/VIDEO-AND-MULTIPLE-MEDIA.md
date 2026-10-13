@@ -4,7 +4,7 @@ A session's recording can hold several media files, audio and video, from
 Zoom or uploaded by staff. Students who are excused from that session play
 them in the app and move between them.
 
-Status: plan. Depends on [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md)
+Status: in progress — V0 and V1 done (see Delivery steps). Depends on [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md)
 (all media in R2) and Phase 0 of [SWITCHOVER.md](SWITCHOVER.md). Evidence for
 the sizes and Zoom behaviour quoted here is in
 [../research/zoom-recordings-2026-10.md](../research/zoom-recordings-2026-10.md).
@@ -414,7 +414,7 @@ manual, the release notes and `PRODUCT_BRIEF.md` change in the same batch.
 | Step | What | Checked by |
 |---|---|---|
 | V0 | Spike: `expo-video` playing M4A and a 3-hour MP4 from R2 on the AVD and web | The list under Engine — **passed 2026-10-12** |
-| V1 | Data model: media map, derived duration, `zoomImports` index; migration of existing recordings to one audio item each | Unit tests on the derivation; seed count check |
+| V1 | Data model: media map, derived duration, `zoomImports` index; migration of existing recordings to one audio item each | Unit tests on the derivation; seed count check — **done 2026-10-12**, deployed and migrated |
 | V2 | Zoom listing of all files, segments, processing state; picker with formats, quick picks, totals; async import | Integration tests with a fake Zoom of multi-segment, multi-meeting fixtures; screens sweep at 320 px with expanded meetings |
 | V3 | Upload of several files, part or version choice, probe | Browser e2e with a small MP4 and an M4A; AVD upload |
 | V4 | Staff media list, hide, reorder, publish blockers | Integration tests per lifecycle row above |
