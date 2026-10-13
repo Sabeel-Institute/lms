@@ -57,7 +57,18 @@ export function RichEditor({
    * characters lost, the cursor snapping back.
    */
   const initialHtml = useRef<string | null>(null);
-  if (initialHtml.current === null) initialHtml.current = markdownToHtml(initialMarkdown);
+  /*
+   * In `<html>`, the library's own envelope, or the box is born the wrong
+   * height. Only an enveloped value goes to the library's parser everywhere;
+   * a bare one is shown through its HTML normaliser, but its FIRST height
+   * measurement (MeasurementStore.getInitialText) skips the normaliser and
+   * measures the tags as plain text. The library measures again once the
+   * view has parsed the value, and that correction did not reach layout:
+   * on the AVD, from a cold start, the box came up one line short every time
+   * (495 px for 542 px of text) with the last line of the instructions
+   * hidden. Enveloped, it fits.
+   */
+  if (initialHtml.current === null) initialHtml.current = `<html>${markdownToHtml(initialMarkdown)}</html>`;
   const [marks, setMarks] = useState<RichMarks>(NO_MARKS);
   /*
    * The selection the link sheet was opened ON. `setLink` takes an explicit
