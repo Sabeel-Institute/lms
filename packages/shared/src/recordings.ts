@@ -6,6 +6,8 @@
  * be tested without an emulator, and so the client and the callables cannot
  * disagree about what is allowed.
  */
+import { hasNoMedia, isPlayable, type MediaMap, type MediaVersion } from './media';
+
 export type RecordingStatus =
   | 'draft'
   | 'published'
@@ -13,11 +15,12 @@ export type RecordingStatus =
   | 'unpublished'
   | 'needsAttention';
 
-/** Where the audio came from. Zoom import arrives in Phase 6. */
+/** How the recording was started: an upload, or a Zoom import. Each media item
+ *  carries its own source as well, since a recording can hold both. */
 export type RecordingSource = 'manual' | 'zoom';
 
 /**
- * The audio artifact of a session — media, lifecycle, and the student-facing
+ * The media of a session — its files, lifecycle, and the student-facing
  * display copy of its session.
  *
  * The `SessionDoc` is the source of truth for the meeting metadata (and owns the
@@ -40,20 +43,16 @@ export interface RecordingDoc {
   date: string;
   status: RecordingStatus;
   source: RecordingSource;
-  /** Set by finalizeRecordingUpload once audio is actually in Storage. */
-  audioPath: string | null;
+  /** The recording's media, by item id (`media.ts`). Empty until something
+   *  has been uploaded or imported. */
+  media: MediaMap;
+  /** The version a student starts on the first time. */
+  defaultVersion: MediaVersion;
+  /** DERIVED by the server whenever media changes (`deriveDurationSec`), so
+   *  the ledger's listened percent and the workbook keep one number. */
   durationSec: number | null;
-  sizeBytes: number | null;
   /** Why it needs attention. Present only while status is needsAttention. */
   attentionReason?: string;
-  /**
-   * Zoom source refs, present only when `source === 'zoom'`. `zoomUuid` (the Zoom
-   * meeting UUID) is the dedupe key — one Zoom recording maps to at most one app
-   * recording. `zoomFileId` identifies the audio-only file so a failed import can
-   * be retried without re-listing.
-   */
-  zoomUuid?: string;
-  zoomFileId?: string;
   createdAt: number;
   createdBy: string;
   updatedAt: number;
@@ -90,54 +89,52 @@ export function allowedTransitions(from: RecordingStatus): readonly RecordingSta
   return TRANSITIONS[from] ?? [];
 }
 
-export type PublishBlocker = 'audio' | 'status';
+export type PublishBlocker = 'media' | 'pending' | 'failed' | 'status';
 
 /**
  * What still stands between a recording and being published.
  *
  * Returns the reasons rather than a boolean so the UI can say which is missing
- * instead of leaving a disabled button unexplained. The title now lives on the
- * session (which always has one), so only audio + a legal transition are checked.
+ * instead of leaving a disabled button unexplained. Publishing needs something
+ * a student can play — a row in every student's list that plays nothing is the
+ * one failure a student cannot work around — and nothing still on its way into
+ * the bucket or failed there, so nothing is published that staff have not seen
+ * settle. The title lives on the session, which always has one.
  */
 export function publishBlockers(recording: {
-  audioPath: string | null;
+  media: MediaMap;
   status: RecordingStatus;
 }): PublishBlocker[] {
+  const items = Object.values(recording.media);
   const blockers: PublishBlocker[] = [];
-  // Publishing without audio would put a row in every student's list that plays
-  // nothing — the one failure a student cannot work around.
-  if (!recording.audioPath) blockers.push('audio');
+  if (!items.some(isPlayable)) blockers.push('media');
+  if (items.some((i) => i.status === 'uploading' || i.status === 'copying')) blockers.push('pending');
+  if (items.some((i) => i.status === 'failed')) blockers.push('failed');
   if (!canTransition(recording.status, 'published')) blockers.push('status');
   return blockers;
 }
 
-export function canPublish(recording: {
-  audioPath: string | null;
-  status: RecordingStatus;
-}): boolean {
+export function canPublish(recording: { media: MediaMap; status: RecordingStatus }): boolean {
   return publishBlockers(recording).length === 0;
 }
 
 /**
- * A recording that holds nothing right now: no audio, and not live.
+ * A recording that holds nothing right now: no media, and not live.
  *
  * NOT A PROOF THAT IT NEVER HELD ANYTHING, and it used to be read as one. A
  * recording that was published and then walked back — `published →
- * unpublished → draft`, then `clearAudio` — arrives at exactly this shape with
+ * unpublished → draft`, then its media removed — arrives at exactly this shape with
  * a full term of assignments, completions and progress still pointing at it. So
- * this says "needs audio", which is what the UI keys off: a normal, recoverable
- * state (a just-created draft mid-upload, an upload that failed, audio removed
+ * this says "needs media", which is what the UI keys off: a normal, recoverable
+ * state (a just-created draft mid-upload, an upload that failed, media removed
  * for replacement), not an error.
  *
  * The delete gate asks `hasRecordingHistory` as well, because only the
  * collections can answer whether there is anything to destroy.
  */
-export function isEmptyDraft(recording: {
-  audioPath: string | null;
-  status: RecordingStatus;
-}): boolean {
+export function isEmptyDraft(recording: { media: MediaMap; status: RecordingStatus }): boolean {
   return (
-    recording.audioPath === null &&
+    hasNoMedia(recording.media) &&
     (recording.status === 'draft' || recording.status === 'needsAttention')
   );
 }
@@ -145,11 +142,11 @@ export function isEmptyDraft(recording: {
 /**
  * A recording that can be thrown away rather than permanently deleted.
  *
- * `isEmptyDraft` says "needs audio" — a state a recording can arrive in from
+ * `isEmptyDraft` says "needs media" — a state a recording can arrive in from
  * either direction. This says "and it never held anything", which is the
  * question the delete gate is actually asking, and `publishedAt` is what answers
  * it: set on the first publish and never cleared, so a recording walked back
- * (`published → unpublished → draft`, then `clearAudio`) is excluded even though
+ * (`published → unpublished → draft`, then its media removed) is excluded even though
  * its shape is identical to a fresh draft's.
  *
  * The SERVER does not trust this — `requireDeleteRights` asks the collections,
@@ -160,7 +157,7 @@ export function isEmptyDraft(recording: {
  * Discard that could only ever return permission-denied.
  */
 export function isDiscardable(recording: {
-  audioPath: string | null;
+  media: MediaMap;
   status: RecordingStatus;
   publishedAt?: number;
 }): boolean {
@@ -189,12 +186,6 @@ export function hasLedger(recording: { status: RecordingStatus; publishedAt?: nu
     recording.status === 'unpublished' ||
     !!recording.publishedAt
   );
-}
-
-/** Storage object path for a recording's audio. One definition, used by the
- *  upload client, the rules tests and the signing callable. */
-export function audioStoragePath(recordingId: string): string {
-  return `recordings/${recordingId}/audio.m4a`;
 }
 
 /**

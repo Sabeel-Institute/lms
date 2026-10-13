@@ -12,7 +12,7 @@ import { handle, type Deps } from '../src/index';
  * caller must not be able to make the Worker download anything.
  */
 
-const KEY = 'recordings/rec1/audio.m4a';
+const KEY = 'media/rec1/item1';
 const SOURCE = 'https://ssrweb.zoom.us/file/abc?Policy=x&Signature=y';
 const AUDIO = Uint8Array.from({ length: 3000 }, (_, i) => i % 256);
 
@@ -164,8 +164,8 @@ describe('what it may be asked to do', () => {
     'not a url',
   ])('fetches nothing but https on zoom.us: %s', (sourceUrl) => badRequest({ sourceUrl }));
 
-  it.each(['media/x/y.mp4', 'recordings/../secret', 'recordings/rec1/audio.mp3', 'recordings/a/b/audio.m4a'])(
-    'writes nowhere but a recording’s audio: %s',
+  it.each(['recordings/rec1/audio.m4a', 'media/../secret', 'media/rec1/item1.mp4', 'media/a/b/c', 'media/rec1/'])(
+    'writes nowhere but a media item’s object: %s',
     (key) => badRequest({ key }),
   );
 

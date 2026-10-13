@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { hasLedger, isVisibleToStudents, type RecordingStatus } from '@sabeel/shared';
+import { hasLedger, isVisibleToStudents, startingItem, type RecordingStatus } from '@sabeel/shared';
 import {
   Button,
   Card,
@@ -312,6 +312,7 @@ function RecordingLine({
   onPlay: () => void;
   onOpenProgress: () => void;
 }) {
+  const playable = startingItem(r.media, r.defaultVersion) !== null;
   return (
     <Card>
       <Text style={styles.title}>{r.title}</Text>
@@ -326,7 +327,7 @@ function RecordingLine({
       <View style={styles.meta}>
         <StatusChip status={r.status} />
         <Text style={styles.sub}>
-          {r.durationSec ? `${Math.round(r.durationSec / 60)} min` : 'no audio'}
+          {r.durationSec ? `${Math.round(r.durationSec / 60)} min` : playable ? 'length unknown' : 'no audio'}
           {r.date ? ` · ${r.date}` : ''}
         </Text>
       </View>
@@ -336,14 +337,14 @@ function RecordingLine({
           RENDERED WHEN THERE IS NOTHING IN IT, because the same `marginTop:
           'auto'` made an empty row reserve 76px of blank card under a recording
           with no audio, half the height of the card beside it. */}
-      {r.audioPath || hasLedger(r) ? (
+      {playable || hasLedger(r) ? (
         <View style={styles.actions}>
           <Row>
             {/* PRIMARY, and the only one on the card. Two identical sage bars
                 six times down a page gave the library no answer to "what do I do
                 here", and listening is what the library is for — the ledger
                 beside it is the follow-up. */}
-            {r.audioPath ? (
+            {playable ? (
               <Button testID={`library-listen-${r.title}`} label="Listen" onPress={onPlay} />
             ) : null}
             {hasLedger(r) ? (

@@ -1,15 +1,18 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { auditedCall } from './audited';
 import { reportedCall } from './reported';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
   INSTITUTE_TIMEZONE,
-  audioStoragePath,
   canTransition,
+  deriveDurationSec,
   isDiscardable,
+  mediaStorageKey,
   publishBlockers,
   todayInZone,
+  type MediaItem,
+  type MediaMap,
   type RecordingDoc,
   type RecordingSource,
   type RecordingStatus,
@@ -49,71 +52,77 @@ export function validateCreateRecording(data: unknown): CreateRecordingInput {
  * pure media. Refuses a session that already has a recording (0..1), and links
  * both directions (recording.sessionId + session.recordingId).
  */
-export async function createRecordingDraft(
-  callerUid: string,
-  input: CreateRecordingInput,
-  // Zoom import reuses this exact path but stamps its source + dedupe refs.
-  origin: { source?: RecordingSource; zoomUuid?: string; zoomFileId?: string } = {},
-) {
+export async function createRecordingDraft(callerUid: string, input: CreateRecordingInput) {
   const db = getFirestore();
   const sessionRef = db.collection(COLLECTIONS.sessions).doc(input.sessionId);
-  /*
-   * ONE SESSION, ONE RECORDING — held by a transaction, not by the read above
-   * the write. Two calls in the same window (a double tap on Upload, a Zoom
-   * import racing a manual one) both read "no recording yet", both created a
-   * draft, and the session pointed at whichever link landed last: the other
-   * draft sat orphaned in the library, publishable, never cascaded by a
-   * session delete, and its fan-out reconciled the session's OTHER recording.
-   */
   const ref = db.collection(COLLECTIONS.recordings).doc();
-  await db.runTransaction(async (tx) => {
-    const sessionSnap = await tx.get(sessionRef);
-    if (!sessionSnap.exists) throw new HttpsError('not-found', 'No such session.');
-    const session = sessionSnap.data() as SessionDoc;
-    // A pointer to a recording that no longer exists is no recording: a
-    // delete that cleared the document but not the pointer wedged the session
-    // behind this refusal. Read inside the transaction, so a recording being
-    // created for this session at the same moment is still seen.
-    if (
-      session.recordingId &&
-      (await tx.get(db.collection(COLLECTIONS.recordings).doc(session.recordingId))).exists
-    ) {
-      throw new HttpsError('failed-precondition', 'This session already has a recording.');
-    }
-    // "This class was not recorded" and a recording cannot both be true: the
-    // flag takes the session off the work queue and out of the morning
-    // "attendance still not taken" message, so a draft under it would sit
-    // where neither reader looks. The session page says as much — putting
-    // audio here is un-marking it — and `updateSession` refuses the flag on a
-    // session with a recording, so the two never disagree in a stored document.
-    if (session.notRecorded) {
-      throw new HttpsError(
-        'failed-precondition',
-        'This session is marked as not recorded. Un-mark it first.',
-      );
-    }
-    const doc: RecordingDoc = {
-      sessionId: input.sessionId,
-      courseId: session.courseId,
-      cohortId: session.cohortId,
-      title: session.title,
-      notes: session.notes,
-      date: session.date,
-      status: 'draft',
-      source: origin.source ?? 'manual',
-      audioPath: null,
-      durationSec: null,
-      sizeBytes: null,
-      createdAt: Date.now(),
-      createdBy: callerUid,
-      updatedAt: Date.now(),
-      ...(origin.zoomUuid ? { zoomUuid: origin.zoomUuid } : {}),
-      ...(origin.zoomFileId ? { zoomFileId: origin.zoomFileId } : {}),
-    };
-    tx.set(ref, doc);
-    tx.update(sessionRef, { recordingId: ref.id, updatedAt: Date.now() });
-  });
-  return { id: ref.id, audioPath: audioStoragePath(ref.id) };
+  await db.runTransaction((tx) => draftInTransaction(tx, sessionRef, ref, callerUid, 'manual'));
+  return { id: ref.id };
+}
+
+/**
+ * Create the session's draft recording inside a caller's transaction, after
+ * the reads every creator needs. Shared by the upload path and the Zoom import,
+ * which has to claim its file in the same transaction.
+ *
+ * ONE SESSION, ONE RECORDING — held by the transaction, not by a read above
+ * the write. Two calls in the same window (a double tap on Upload, a Zoom
+ * import racing a manual one) both read "no recording yet", both created a
+ * draft, and the session pointed at whichever link landed last: the other
+ * draft sat orphaned in the library, publishable, never cascaded by a session
+ * delete, and its fan-out reconciled the session's OTHER recording.
+ */
+export async function draftInTransaction(
+  tx: Transaction,
+  sessionRef: DocumentReference,
+  ref: DocumentReference,
+  callerUid: string,
+  source: RecordingSource,
+): Promise<RecordingDoc> {
+  const db = getFirestore();
+  const sessionSnap = await tx.get(sessionRef);
+  if (!sessionSnap.exists) throw new HttpsError('not-found', 'No such session.');
+  const session = sessionSnap.data() as SessionDoc;
+  // A pointer to a recording that no longer exists is no recording: a delete
+  // that cleared the document but not the pointer wedged the session behind
+  // this refusal. Read inside the transaction, so a recording being created for
+  // this session at the same moment is still seen.
+  if (
+    session.recordingId &&
+    (await tx.get(db.collection(COLLECTIONS.recordings).doc(session.recordingId))).exists
+  ) {
+    throw new HttpsError('failed-precondition', 'This session already has a recording.');
+  }
+  // "This class was not recorded" and a recording cannot both be true: the
+  // flag takes the session off the work queue and out of the morning
+  // "attendance still not taken" message, so a draft under it would sit where
+  // neither reader looks. `updateSession` refuses the flag on a session with a
+  // recording, so the two never disagree in a stored document.
+  if (session.notRecorded) {
+    throw new HttpsError(
+      'failed-precondition',
+      'This session is marked as not recorded. Un-mark it first.',
+    );
+  }
+  const doc: RecordingDoc = {
+    sessionId: sessionRef.id,
+    courseId: session.courseId,
+    cohortId: session.cohortId,
+    title: session.title,
+    notes: session.notes,
+    date: session.date,
+    status: 'draft',
+    source,
+    media: {},
+    defaultVersion: 'audio',
+    durationSec: null,
+    createdAt: Date.now(),
+    createdBy: callerUid,
+    updatedAt: Date.now(),
+  };
+  tx.set(ref, doc);
+  tx.update(sessionRef, { recordingId: ref.id, updatedAt: Date.now() });
+  return doc;
 }
 
 export const createRecording = auditedCall('createRecording', async (req, audit) => {
@@ -127,6 +136,39 @@ export const createRecording = auditedCall('createRecording', async (req, audit)
   audit.targets = { sessionId: input.sessionId };
   return createRecordingDraft(uid, input);
 });
+
+// ---------------------------------------------------------------- media --
+
+/** A recording takes media only while it is not live. */
+function requireEditableMedia(rec: RecordingDoc, what: string): void {
+  if (rec.status !== 'draft' && rec.status !== 'needsAttention') {
+    throw new HttpsError(
+      'failed-precondition',
+      `${what} only while a recording is a draft. Unpublish it first.`,
+    );
+  }
+}
+
+/**
+ * Write one item and the derived duration in a transaction that has already
+ * read the recording. `null` removes the item.
+ */
+function writeItem(
+  tx: Transaction,
+  ref: DocumentReference,
+  rec: RecordingDoc,
+  itemId: string,
+  item: MediaItem | null,
+): void {
+  const media: MediaMap = { ...rec.media };
+  if (item) media[itemId] = item;
+  else delete media[itemId];
+  tx.update(ref, {
+    [`media.${itemId}`]: item ?? FieldValue.delete(),
+    durationSec: deriveDurationSec(media),
+    updatedAt: Date.now(),
+  });
+}
 
 // ---------------------------------------------------------------- upload --
 
@@ -154,56 +196,91 @@ export function validateStartUpload(data: unknown): StartUploadInput {
 }
 
 /**
- * Hand the client a URL it may PUT this recording's audio to, once.
+ * Add an `uploading` item to a recording and hand the client a URL it may PUT
+ * the file to, once.
  *
  * The bytes go straight from the browser or phone to the bucket, never through
  * a Function: a two-hour recording would meet the 60-minute timeout, and the
  * bytes would be paid for twice. So everything the bucket cannot check is
  * checked here, before a URL exists: course scope, a recording that is still a
- * draft with no audio, an audio content type, a declared size under the cap.
- * The URL itself signs the content type and `If-None-Match: *`, so it creates
- * the object once or not at all (`mediaStore.signPut`); the real size is
- * checked by `finalizeRecording` once the bytes have landed.
+ * draft, an audio content type, a declared size under the cap. The URL itself
+ * signs the content type and `If-None-Match: *`, so it creates the object once
+ * or not at all (`mediaStore.signPut`); the real size is checked by
+ * `finalizeRecording` once the bytes have landed.
+ *
+ * ONE FILE PER RECORDING until the session page can show several
+ * (docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md, V3): a recording holding a file that
+ * is ready, or still copying from Zoom, is refused. A file that never arrived
+ * is replaced, its object deleted and any Zoom claim released: an upload
+ * abandoned before it was finalized (the tab closed, the finalize call
+ * failed), and a Zoom import that failed, where the session page offers
+ * "upload the file" as the way out.
  */
-export async function startUpload(input: StartUploadInput) {
-  const snap = await getFirestore().collection(COLLECTIONS.recordings).doc(input.recordingId).get();
-  if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
-  const rec = snap.data() as RecordingDoc;
-  if (rec.status !== 'draft' && rec.status !== 'needsAttention') {
-    throw new HttpsError(
-      'failed-precondition',
-      'Audio can only be added while a recording is a draft. Unpublish it first.',
-    );
-  }
-  if (rec.audioPath) {
-    throw new HttpsError('failed-precondition', 'This recording already has audio. Remove it first.');
-  }
-  const audioPath = audioStoragePath(input.recordingId);
-  // An earlier upload that landed but was never finalized (the tab closed, the
-  // finalize call failed) is in the way of a write-once URL. Nothing refers to
-  // it — `audioPath` is still null on a draft — so it goes.
-  await deleteObject(audioPath);
-  const put = await signPut(audioPath, input.contentType, UPLOAD_URL_TTL_MS);
-  return { audioPath, url: put.url, headers: put.headers, expiresAt: put.expiresAt };
+export async function startUpload(callerUid: string, input: StartUploadInput) {
+  const db = getFirestore();
+  const ref = db.collection(COLLECTIONS.recordings).doc(input.recordingId);
+  const itemId = db.collection(COLLECTIONS.recordings).doc().id;
+  const storageKey = mediaStorageKey(input.recordingId, itemId);
+  const abandoned = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
+    const rec = snap.data() as RecordingDoc;
+    requireEditableMedia(rec, 'Audio can be added');
+    const items = Object.values(rec.media);
+    if (items.some((i) => i.status === 'ready' || i.status === 'copying')) {
+      throw new HttpsError('failed-precondition', 'This recording already has audio. Remove it first.');
+    }
+    for (const i of items) {
+      if (i.zoom) tx.delete(db.collection(COLLECTIONS.zoomImports).doc(i.zoom.fileId));
+    }
+    const media: MediaMap = {
+      [itemId]: {
+        id: itemId,
+        part: 1,
+        version: 'audio',
+        kind: 'audio',
+        label: null,
+        status: 'uploading',
+        failReason: null,
+        hidden: false,
+        storageKey,
+        contentType: input.contentType,
+        sizeBytes: null,
+        durationSec: null,
+        width: null,
+        height: null,
+        source: 'upload',
+        zoom: null,
+        addedAt: Date.now(),
+        addedBy: callerUid,
+      },
+    };
+    tx.update(ref, { media, durationSec: deriveDurationSec(media), updatedAt: Date.now() });
+    return items;
+  });
+  await Promise.all(abandoned.map((i) => deleteObject(i.storageKey)));
+  const put = await signPut(storageKey, input.contentType, UPLOAD_URL_TTL_MS);
+  return { itemId, url: put.url, headers: put.headers, expiresAt: put.expiresAt };
 }
 
 /**
  * Not audited: it changes nothing anyone reads. The audit row is written when
- * the upload is confirmed (`finalizeRecordingUpload`), which is the moment
- * audio actually arrives on the recording.
+ * the upload is confirmed (`finalizeRecordingUpload`), which is the moment the
+ * file actually arrives on the recording.
  */
 export const startRecordingUpload = reportedCall(async (req) => {
   const input = validateStartUpload(req.data);
   const rec = await getFirestore().collection(COLLECTIONS.recordings).doc(input.recordingId).get();
   if (!rec.exists) throw new HttpsError('not-found', 'No such recording.');
-  await requireCourseScope(req, (rec.data() as RecordingDoc).courseId);
-  return startUpload(input);
+  const uid = await requireCourseScope(req, (rec.data() as RecordingDoc).courseId);
+  return startUpload(uid, input);
 }, MEDIA_WRITE_SECRETS);
 
 // -------------------------------------------------------------- finalize --
 
 export interface FinalizeInput {
   recordingId: string;
+  itemId: string;
   durationSec: number | null;
 }
 
@@ -212,16 +289,20 @@ export function validateFinalize(data: unknown): FinalizeInput {
   if (typeof d?.recordingId !== 'string' || !d.recordingId) {
     throw new HttpsError('invalid-argument', 'recordingId is required.');
   }
+  if (typeof d.itemId !== 'string' || !d.itemId) {
+    throw new HttpsError('invalid-argument', 'itemId is required.');
+  }
   if (d.durationSec !== null && d.durationSec !== undefined) {
     if (typeof d.durationSec !== 'number' || !Number.isFinite(d.durationSec) || d.durationSec <= 0) {
       throw new HttpsError('invalid-argument', 'durationSec must be a positive number or null.');
     }
   }
-  return { recordingId: d.recordingId, durationSec: d.durationSec ?? null };
+  return { recordingId: d.recordingId, itemId: d.itemId, durationSec: d.durationSec ?? null };
 }
 
 /**
- * Confirm the upload landed, and record what actually arrived.
+ * Confirm a file landed, and record what actually arrived: the item becomes
+ * `ready` with its size, and the recording's length is derived again.
  *
  * The client reports duration (it has the decoded media; the server would need
  * ffmpeg to find out) but the server reads SIZE from the bucket rather than
@@ -229,38 +310,47 @@ export function validateFinalize(data: unknown): FinalizeInput {
  * about, and it costs one HEAD to get right. Duration is advisory: a wrong
  * value mis-draws a progress bar and nothing more.
  *
- * An object over the cap is DELETED, not just refused: the upload URL cannot
- * sign a size, so this is where an oversized file is caught, and leaving it
- * would both cost storage and block a corrected re-upload (the URL is
- * write-once).
+ * An object over the cap is DELETED and its item removed, not just refused:
+ * the upload URL cannot sign a size, so this is where an oversized file is
+ * caught, and leaving it would both cost storage and keep a dead item in the
+ * way of a corrected upload.
  *
- * Marking `audioPath` only after the object is confirmed present is what stops a
- * failed upload leaving a publishable-looking draft behind.
+ * Only an item on its way in (`uploading`, or `copying` from Zoom) can be
+ * settled, so a finalize replayed later cannot rewrite one that is ready.
  */
-export async function finalizeRecording(input: FinalizeInput) {
+export async function finalizeRecording(input: FinalizeInput, maxBytes = MAX_AUDIO_BYTES) {
   const db = getFirestore();
   const ref = db.collection(COLLECTIONS.recordings).doc(input.recordingId);
   const snap = await ref.get();
   if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
-
-  const path = audioStoragePath(input.recordingId);
-  const object = await head(path);
-  if (!object) {
-    throw new HttpsError('failed-precondition', 'No audio found for that recording.');
+  const item = (snap.data() as RecordingDoc).media[input.itemId];
+  if (!item || (item.status !== 'uploading' && item.status !== 'copying')) {
+    throw new HttpsError('failed-precondition', 'That file is not waiting to be confirmed.');
   }
-  const { sizeBytes } = object;
-  if (sizeBytes > MAX_AUDIO_BYTES) {
-    await deleteObject(path);
-    throw new HttpsError('failed-precondition', 'That audio file is too large (300 MB at most).');
-  }
+  const object = await head(item.storageKey);
+  if (!object) throw new HttpsError('failed-precondition', 'No file found for that upload.');
+  const tooLarge = object.sizeBytes > maxBytes;
+  if (tooLarge) await deleteObject(item.storageKey);
 
-  await ref.update({
-    audioPath: path,
-    sizeBytes,
-    durationSec: input.durationSec,
-    updatedAt: Date.now(),
+  await db.runTransaction(async (tx) => {
+    const fresh = (await tx.get(ref)).data() as RecordingDoc | undefined;
+    const current = fresh?.media[input.itemId];
+    if (!fresh || !current) throw new HttpsError('not-found', 'That file was removed.');
+    writeItem(
+      tx,
+      ref,
+      fresh,
+      input.itemId,
+      tooLarge
+        ? null
+        : { ...current, status: 'ready', failReason: null, sizeBytes: object.sizeBytes, durationSec: input.durationSec },
+    );
   });
-  return { recordingId: input.recordingId, audioPath: path, sizeBytes };
+  if (tooLarge) {
+    const mb = Math.round(maxBytes / 1024 / 1024);
+    throw new HttpsError('failed-precondition', `That file is too large (${mb} MB at most).`);
+  }
+  return { recordingId: input.recordingId, itemId: input.itemId, sizeBytes: object.sizeBytes };
 }
 
 export const finalizeRecordingUpload = auditedCall('finalizeRecordingUpload', async (req, audit) => {
@@ -363,46 +453,49 @@ export const setRecordingStatus = auditedCall('setRecordingStatus', async (req, 
   return applyRecordingStatus(input);
 });
 
-// ----------------------------------------------------------- clear audio --
+// ---------------------------------------------------------- remove media --
 
 /**
- * Delete a recording's audio so it can be re-uploaded.
+ * Remove one file from a recording, so a bad one can be replaced.
  *
  * The upload URL is write-once (`mediaStore.signPut`), which is what stops a
- * published recording's audio being swapped underneath students who have
- * already listened to it. Replacing bad audio therefore has to come through
- * here, and only while the recording is not live.
+ * published recording's file being swapped underneath students who have
+ * already listened to it. Replacing a bad file therefore comes through here,
+ * and only while the recording is not live. The object goes, the item goes,
+ * and a Zoom file's claim goes, so it can be imported again.
  */
-export async function clearAudio(recordingId: string) {
+export async function removeMedia(recordingId: string, itemId: string) {
   const db = getFirestore();
   const ref = db.collection(COLLECTIONS.recordings).doc(recordingId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
-  const current = snap.data() as RecordingDoc;
-
-  if (current.status !== 'draft' && current.status !== 'needsAttention') {
-    throw new HttpsError(
-      'failed-precondition',
-      'Audio can only be replaced while a recording is a draft. Unpublish it first.',
-    );
-  }
-
-  await deleteObject(audioStoragePath(recordingId));
-  await ref.update({ audioPath: null, sizeBytes: null, durationSec: null, updatedAt: Date.now() });
-  return { recordingId };
+  const removed = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
+    const rec = snap.data() as RecordingDoc;
+    requireEditableMedia(rec, 'Files can be removed');
+    const item = rec.media[itemId];
+    if (!item) throw new HttpsError('not-found', 'No such file on that recording.');
+    writeItem(tx, ref, rec, itemId, null);
+    if (item.zoom) tx.delete(db.collection(COLLECTIONS.zoomImports).doc(item.zoom.fileId));
+    return item;
+  });
+  await deleteObject(removed.storageKey);
+  return { recordingId, itemId };
 }
 
-export const clearRecordingAudio = auditedCall('clearRecordingAudio', async (req, audit) => {
-  const d = req.data as { recordingId?: unknown };
+export const removeRecordingMedia = auditedCall('removeRecordingMedia', async (req, audit) => {
+  const d = req.data as { recordingId?: unknown; itemId?: unknown };
   if (typeof d?.recordingId !== 'string' || !d.recordingId) {
     throw new HttpsError('invalid-argument', 'recordingId is required.');
+  }
+  if (typeof d.itemId !== 'string' || !d.itemId) {
+    throw new HttpsError('invalid-argument', 'itemId is required.');
   }
   const rec = await getFirestore().collection(COLLECTIONS.recordings).doc(d.recordingId).get();
   if (!rec.exists) throw new HttpsError('not-found', 'No such recording.');
   const courseId = (rec.data() as RecordingDoc).courseId;
   await requireCourseScope(req, courseId);
   audit.courseId = courseId;
-  return clearAudio(d.recordingId);
+  return removeMedia(d.recordingId, d.itemId);
 }, MEDIA_WRITE_SECRETS);
 
 // Everything that references a recording by id, so a permanent delete leaves no
@@ -422,7 +515,7 @@ export const RECORDING_DEPENDENTS = [
  * `isEmptyDraft` is a proxy for "there is nothing here to destroy", and the
  * proxy is only sound for a recording that was NEVER published. It is not sound
  * for one that was: `published → unpublished → draft` is a legal pair of
- * transitions, `clearAudio` accepts a draft and nulls `audioPath`, and the
+ * transitions, `removeMedia` accepts a draft and empties its media, and the
  * recording is then indistinguishable by shape from one created five minutes
  * ago — while every assignment, completion, listening-progress row and override
  * from its term is still sitting there. Four course-scoped calls in a row turned
@@ -510,12 +603,17 @@ export async function applyDeleteRecording(recordingId: string) {
   }
   await Promise.all(commits);
 
-  // 2. The audio object — at the CANONICAL path, not only when `audioPath` is
-  //    set. An upload that landed in the bucket but never finalized leaves the
-  //    object there with the field still null; keying the delete off the field
-  //    would orphan those bytes forever, and they are the one thing here that
-  //    costs money. The path is derived from the id, so this is exact.
-  await deleteObject(rec.audioPath ?? audioStoragePath(recordingId));
+  // 2. Every item's object, whatever state it is in — an `uploading` item
+  //    whose bytes landed but were never confirmed is still bytes in the
+  //    bucket, and they are the one thing here that costs money — and every
+  //    Zoom file's claim, so the file can be imported again.
+  const items = Object.values(rec.media);
+  await Promise.all(items.map((i) => deleteObject(i.storageKey)));
+  await Promise.all(
+    items
+      .filter((i) => i.zoom)
+      .map((i) => db.collection(COLLECTIONS.zoomImports).doc((i.zoom as { fileId: string }).fileId).delete()),
+  );
 
   // 3. The recording itself, and the session's pointer, IN ONE TRANSACTION:
   //    written one after the other, a failure between them left a session

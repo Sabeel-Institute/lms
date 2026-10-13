@@ -20,12 +20,14 @@ interface Minted {
   expiresAt: number;
 }
 
-const mintUrl = (recordingId: string) =>
-  httpsCallable<{ recordingId: string }, Minted>(functions, 'getPlaybackUrl')({ recordingId })
-    .then((r) => r.data);
+const mintUrl = (recordingId: string, itemId: string) =>
+  httpsCallable<{ recordingId: string; itemId: string }, Minted>(functions, 'getPlaybackUrl')({
+    recordingId,
+    itemId,
+  }).then((r) => r.data);
 
 /**
- * Cached playback URLs, refreshed BEFORE they expire.
+ * Cached playback URLs, by media item, refreshed BEFORE they expire.
  *
  * Re-minting only after a failure would mean a seek near the boundary fails
  * audibly first — and it would not even be catchable by status code: GCS
@@ -70,19 +72,21 @@ const UNKNOWN_DURATION_MS = 3 * 60 * 60 * 1000;
  * error band came up, on the one listen it was meant to spare. So the cache
  * answers only when what is left covers the whole recording plus the window.
  */
-async function playbackUrl(recordingId: string, durationMs: number): Promise<string> {
-  const hit = cache.get(recordingId);
+async function playbackUrl(recordingId: string, itemId: string, durationMs: number): Promise<string> {
+  const hit = cache.get(itemId);
   const need = (durationMs > 0 ? durationMs : UNKNOWN_DURATION_MS) + SIGNED_URL_REFRESH_MS;
   if (hit && hit.expiresAt - Date.now() > need) return hit.url;
   const epoch = cacheEpoch;
-  const fresh = await mintUrl(recordingId);
-  if (epoch === cacheEpoch) cache.set(recordingId, fresh);
+  const fresh = await mintUrl(recordingId, itemId);
+  if (epoch === cacheEpoch) cache.set(itemId, fresh);
   return fresh.url;
 }
 
 /** What is loaded, so any surface can name it without re-fetching. */
 export interface NowPlaying {
   recordingId: string;
+  /** The file being played: one media item of the recording. */
+  itemId: string;
   /** The course, so any surface can re-check that it may still be played. */
   courseId: string;
   title: string;
@@ -502,7 +506,7 @@ export function openPlayback(now: NowPlaying): void {
     try {
       const id = now.studentUid ? progressId(now.studentUid, now.recordingId) : null;
       const [url, saved, journaled] = await Promise.all([
-        playbackUrl(now.recordingId, now.durationMs),
+        playbackUrl(now.recordingId, now.itemId, now.durationMs),
         id ? getDoc(doc(db, COLLECTIONS.listeningProgress, id)) : Promise.resolve(null),
         id ? journaledProgress(id) : Promise.resolve(null),
       ]);

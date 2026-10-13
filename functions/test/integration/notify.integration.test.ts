@@ -1,4 +1,5 @@
 import { describe, it, beforeAll, beforeEach, afterEach, expect } from 'vitest';
+import { withAudio } from '../mediaFixtures';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import {
@@ -130,9 +131,7 @@ async function seedRecording(id: string, sessionId: string, status: RecordingDoc
     date: '2026-08-10',
     status,
     source: 'manual',
-    audioPath: `recordings/${id}/audio.m4a`,
-    durationSec: 720,
-    sizeBytes: 1,
+    ...withAudio(ns(id), { durationSec: 720 }),
     createdAt: 1,
     createdBy: ADMIN,
     updatedAt: 1,

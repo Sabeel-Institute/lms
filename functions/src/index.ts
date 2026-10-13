@@ -20,7 +20,7 @@ export {
   startRecordingUpload,
   finalizeRecordingUpload,
   setRecordingStatus,
-  clearRecordingAudio,
+  removeRecordingMedia,
   deleteRecording,
 } from './recordings';
 export { listZoomRecordings, importZoomRecording, retryZoomImport } from './zoomImport';

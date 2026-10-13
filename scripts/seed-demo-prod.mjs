@@ -25,7 +25,7 @@
  *    consistent with the real engine rather than a parallel invention of it.
  */
 import { createRequire } from 'node:module';
-import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
+import { FIREBASE_PROJECT_ID, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
 import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
@@ -291,19 +291,24 @@ for (const c of courses) {
         : roll < 0.04 ? 'needsAttention'
         : c.cohort.archived && roll > 0.9 ? 'archived'
         : 'published';
-      const audioPath = status === 'draft' && chance(0.4) ? null : `recordings/${recordingId}/audio.m4a`;
-      if (audioPath) audioCopies.push(recordingId);
+      const audioPath = status === 'draft' && chance(0.4) ? null : mediaStorageKey(recordingId, 'audio1');
+      if (audioPath) audioCopies.push(audioPath);
+      const source = chance(0.7) ? 'zoom' : 'manual';
+      const createdAt = start + i * 7 * day + 3600000;
       recordingWrites.push((b) => b.set(db.collection('recordings').doc(recordingId), {
         sessionId, courseId: c.courseId, cohortId: c.cohortId,
         title, notes: '', date,
-        status, source: chance(0.7) ? 'zoom' : 'manual',
-        audioPath,
+        status, source,
+        media: mediaFromSingleAudio(
+          { source, audioPath, sizeBytes: 1_450_000, durationSec: DURATION_SEC, createdAt, createdBy: 'demo-seed' },
+          'audio1',
+        ),
+        defaultVersion: 'audio',
         durationSec: audioPath ? DURATION_SEC : null,
-        sizeBytes: audioPath ? 1_450_000 : null,
         ...(status === 'needsAttention'
           ? { attentionReason: 'Audio looks truncated — re-import before publishing.' } : {}),
         ...(status === 'published' ? { publishedAt: start + i * 7 * day + 7200000 } : {}),
-        createdAt: start + i * 7 * day + 3600000, createdBy: 'demo-seed',
+        createdAt, createdBy: 'demo-seed',
         updatedAt: start + i * 7 * day + 3600000, ...DEMO }));
       recordingCount++;
     }
@@ -317,8 +322,8 @@ console.log(`     ${sessionCount} sessions (${attendanceCount} with attendance),
 
 console.log(`4/6  audio: server-side copy x${audioCopies.length} (no re-upload)`);
 for (let i = 0; i < audioCopies.length; i += 12) {
-  await Promise.all(audioCopies.slice(i, i + 12).map((id) =>
-    s3.send(new CopyObjectCommand({ Bucket: media.bucket, CopySource: `${media.bucket}/${MASTER}`, Key: `recordings/${id}/audio.m4a` }))));
+  await Promise.all(audioCopies.slice(i, i + 12).map((key) =>
+    s3.send(new CopyObjectCommand({ Bucket: media.bucket, CopySource: `${media.bucket}/${MASTER}`, Key: key }))));
 }
 await s3.send(new DeleteObjectCommand({ Bucket: media.bucket, Key: MASTER })).catch(() => {});
 

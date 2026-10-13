@@ -6,6 +6,7 @@ const admin = require('firebase-admin');
 import { EMULATOR_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { putLocalObject } from './lib/media-store.mjs';
+import { mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
 process.env.FIRESTORE_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.auth}`;
 admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
@@ -81,7 +82,7 @@ async function mkSession(courseId, sid, rid, title, { status='published', dueOff
   // without one.
   const dueDate=iso(now+dueOffset*day);
   const hasAudio = status!=='draft';
-  const path=`recordings/${rid}/audio.m4a`;
+  const path=mediaStorageKey(rid, 'audio1');
   if (hasAudio) await putLocalObject(path, audio, 'audio/mp4');
   const submitted = attendance ? now-daysAgo*day : null;
   await db.collection('sessions').doc(sid).set({
@@ -91,7 +92,9 @@ async function mkSession(courseId, sid, rid, title, { status='published', dueOff
   });
   await db.collection('recordings').doc(rid).set({
     sessionId:sid, courseId, cohortId, title, notes, date, status, source:'manual',
-    audioPath:hasAudio?path:null, durationSec:hasAudio?720:null, sizeBytes:hasAudio?audio.length:null,
+    media: mediaFromSingleAudio({ source:'manual', audioPath:hasAudio?path:null, sizeBytes:audio.length, durationSec:720,
+      createdAt:now-daysAgo*day, createdBy:ADMIN }, 'audio1'),
+    defaultVersion:'audio', durationSec:hasAudio?720:null,
     createdAt:now-daysAgo*day, createdBy:ADMIN, updatedAt:now-daysAgo*day,
     ...(status==='published'?{publishedAt:now-daysAgo*day}:{}),
     ...(attention?{attentionReason:attention}:{}),

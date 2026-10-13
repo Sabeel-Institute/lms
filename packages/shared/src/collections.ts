@@ -25,6 +25,10 @@ export const COLLECTIONS = {
   attendanceRecords: 'attendanceRecords',
   /** Recording asset, media + lifecycle, linked to a session. */
   recordings: 'recordings',
+  /** Which Zoom files are already in a recording, keyed by Zoom's file id:
+   *  the picker marks every imported file in one read, and a file is claimed
+   *  exactly once, in a transaction. Server-only. */
+  zoomImports: 'zoomImports',
   /** Required-listening obligations, and the ONLY thing granting a student
    *  access to a recording (the excused of a session, until the due date). */
   assignments: 'assignments',

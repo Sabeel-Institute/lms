@@ -129,9 +129,9 @@ export interface SignedPut extends SignedUrl {
  *
  * WRITE-ONCE: `If-None-Match: *` is part of the signature, so the PUT fails
  * with 412 when the object already exists and with 403 if the header is
- * dropped. A published recording's audio can therefore never be swapped
- * underneath students who have listened to it; replacing bad audio goes
- * through `clearRecordingAudio`, which only works on a draft. The content type
+ * dropped. A published recording's file can therefore never be swapped
+ * underneath students who have listened to it; replacing a bad file goes
+ * through `removeRecordingMedia`, which only works on a draft. The content type
  * is signed too. Size cannot be signed reliably on R2, so the caller checks it
  * with `head` afterwards and deletes what is too large.
  */

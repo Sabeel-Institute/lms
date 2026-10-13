@@ -23,6 +23,10 @@
  *    untouched (REST JSON keeps every type). EXCEPT push registrations
  *    (`notifications/{uid}/devices`): FCM tokens belong to the source's sender
  *    and cannot deliver from here; devices register again on first sign-in.
+ *    And EXCEPT recordings, which the live app stores as one audio file and
+ *    this project as media items: each is converted on the way
+ *    (`scripts/lib/legacy-media.mjs`), and a Zoom import gets its
+ *    `zoomImports` claim so the picker knows the file is here.
  *  - Every object under `recordings/` in the source's Storage bucket, into the
  *    R2 media bucket at the same key, with the R2 write key.
  *
@@ -33,6 +37,7 @@ import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
 import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 import { r2Config, s3For } from './lib/r2.mjs';
+import { ZOOM_IMPORTS, convertRecording, isLegacyRecording } from './lib/legacy-media.mjs';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -239,11 +244,22 @@ for (let i = 0; i < srcUsers.length; i += 1000) {
   if (r.error?.length) throw new Error(`account import: ${JSON.stringify(r.error.slice(0, 3))}`);
 }
 
-// 3. Firestore.
-console.log(`3/5  ${srcDocs.length} documents`);
-await batchWrite(
-  srcDocs.map((d) => ({ update: { name: `projects/${TARGET}/databases/(default)/documents/${relPath(d.name)}`, fields: d.fields ?? {} } })),
-);
+// 3. Firestore, recordings converted on the way.
+const docName = (rel) => `projects/${TARGET}/databases/(default)/documents/${rel}`;
+const writes = [];
+for (const d of srcDocs) {
+  const rel = relPath(d.name);
+  const fields = d.fields ?? {};
+  if (shape(rel) === 'recordings' && isLegacyRecording(fields)) {
+    const conv = convertRecording(rel.split('/')[1], fields);
+    writes.push({ update: { name: docName(rel), fields: conv.fields } });
+    if (conv.claim) writes.push({ update: { name: docName(`${ZOOM_IMPORTS}/${conv.claim.id}`), fields: conv.claim.fields } });
+  } else {
+    writes.push({ update: { name: docName(rel), fields } });
+  }
+}
+console.log(`3/5  ${srcDocs.length} documents, and ${writes.length - srcDocs.length} Zoom claims`);
+await batchWrite(writes);
 
 // 4. Media.
 console.log(`4/5  ${srcObjects.length} media objects (${mb(sum(srcObjects))})`);
@@ -268,7 +284,7 @@ const [afterDocs, afterUsers, afterObjects] = await Promise.all([
   targetObjects(),
 ]);
 const problems = [];
-const want = countByShape(srcDocs);
+const want = countByShape(writes.map((w) => w.update));
 const got = countByShape(afterDocs);
 for (const k of new Set([...want.keys(), ...got.keys()])) {
   if (want.get(k) !== got.get(k)) problems.push(`${k}: source ${want.get(k) ?? 0}, here ${got.get(k) ?? 0}`);

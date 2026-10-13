@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from 'vitest';
+import { NO_MEDIA } from '../mediaFixtures';
 import { readFileSync } from 'node:fs';
 import {
   initializeTestEnvironment,
@@ -214,9 +215,7 @@ describe('sessions rules', () => {
           date: '2026-07-06',
           status: 'published',
           source: 'manual',
-          audioPath: null,
-          durationSec: null,
-          sizeBytes: null,
+          ...NO_MEDIA,
           createdAt: 1,
           createdBy: ADMIN,
           updatedAt: 1,

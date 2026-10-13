@@ -163,7 +163,11 @@ const strayMarkers = (await db.collectionGroup('sent').get()).docs.filter(
 const removedRecordingIds = new Set(
   plan.filter((p) => p.label.startsWith('recordings')).flatMap((p) => p.docs.map((d) => d.id)),
 );
-const orphanFiles = (await listKeys('recordings/')).filter((k) => removedRecordingIds.has(k.split('/')[1]));
+// Both layouts: `media/{recordingId}/{itemId}`, and `recordings/{recordingId}/…`
+// for files stored before parts existed.
+const orphanFiles = [...(await listKeys('media/')), ...(await listKeys('recordings/'))].filter((k) =>
+  removedRecordingIds.has(k.split('/')[1]),
+);
 const seedTmp = await listKeys('demo-seed/');
 
 const demoUsers = [];

@@ -5,6 +5,7 @@ import {
   canPlayFromCourse,
   canPlayNow,
   listenedFraction,
+  startingItem,
   todayInZone,
 } from '@sabeel/shared';
 import { Notice } from '../components/ui';
@@ -55,6 +56,9 @@ export function PlayerScreen({
   // half that actually shuts the transport — and the disagreement would surface
   // as the wrong sentence under a correct lockout, which no test would catch.
   const closed = !allowed && canPlayFromCourse(cls);
+  // The file this recording starts on: its first part, in the version students
+  // start on. Publishing requires one, so a recording anyone reaches here has it.
+  const itemId = startingItem(recording.media, recording.defaultVersion)?.id ?? null;
   const session = usePlayback();
   // The session is app-wide, so on the first render after arriving it may still
   // describe the PREVIOUS recording. Read it only once it is about this one;
@@ -80,9 +84,10 @@ export function PlayerScreen({
   // playing must re-focus rather than restart. `openPlayback` is idempotent for
   // the loaded recording, so a re-render costs nothing.
   useEffect(() => {
-    if (!allowed) return;
+    if (!allowed || !itemId) return;
     openPlayback({
       recordingId: recording.id,
+      itemId,
       courseId: recording.courseId,
       title: recording.title,
       courseName: cls.name,
@@ -92,6 +97,7 @@ export function PlayerScreen({
     });
   }, [
     allowed,
+    itemId,
     recording.id,
     recording.title,
     recording.durationSec,

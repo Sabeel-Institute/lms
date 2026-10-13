@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   allowedTransitions,
-  audioStoragePath,
   canPublish,
   canTransition,
   isDiscardable,
@@ -12,8 +11,36 @@ import {
   mergeProgress,
   progressId,
   publishBlockers,
+  type MediaItem,
+  type MediaMap,
   type RecordingStatus,
 } from '../src';
+
+/** One media item in the given state; everything else as an upload would leave it. */
+const item = (id: string, over: Partial<MediaItem> = {}): MediaItem => ({
+  id,
+  part: 1,
+  version: 'audio',
+  kind: 'audio',
+  label: null,
+  status: 'ready',
+  failReason: null,
+  hidden: false,
+  storageKey: `media/r1/${id}`,
+  contentType: 'audio/mp4',
+  sizeBytes: 1000,
+  durationSec: 3600,
+  width: null,
+  height: null,
+  source: 'upload',
+  zoom: null,
+  addedAt: 1,
+  addedBy: 'adm',
+  ...over,
+});
+const mediaOf = (...items: MediaItem[]): MediaMap => Object.fromEntries(items.map((i) => [i.id, i]));
+const AUDIO = mediaOf(item('a1'));
+const NONE: MediaMap = {};
 
 const ALL: RecordingStatus[] = [
   'draft',
@@ -74,17 +101,31 @@ describe('canTransition', () => {
 });
 
 describe('publishBlockers', () => {
-  const ready = { audioPath: 'recordings/r1/audio.m4a', status: 'draft' as const };
+  const ready = { media: AUDIO, status: 'draft' as RecordingStatus };
 
   it('clears a complete draft', () => {
     expect(publishBlockers(ready)).toEqual([]);
     expect(canPublish(ready)).toBe(true);
   });
 
-  it('blocks publishing with no audio', () => {
-    // A published recording with no audio is a row in every student's list that
+  it('blocks publishing with nothing a student can play', () => {
+    // A published recording with no media is a row in every student's list that
     // plays nothing — the one failure they cannot work around.
-    expect(publishBlockers({ ...ready, audioPath: null })).toContain('audio');
+    expect(publishBlockers({ ...ready, media: NONE })).toContain('media');
+    // Hidden or not yet ready is the same as absent to a student.
+    expect(publishBlockers({ ...ready, media: mediaOf(item('a1', { hidden: true })) })).toContain('media');
+    expect(publishBlockers({ ...ready, media: mediaOf(item('a1', { status: 'copying' })) })).toContain('media');
+  });
+
+  it('blocks publishing while anything is still on its way in, or failed', () => {
+    const plus = (other: MediaItem) => ({ ...ready, media: mediaOf(item('a1'), other) });
+    expect(publishBlockers(plus(item('v1', { status: 'uploading' })))).toEqual(['pending']);
+    expect(publishBlockers(plus(item('v1', { status: 'copying' })))).toEqual(['pending']);
+    expect(publishBlockers(plus(item('v1', { status: 'failed', failReason: 'x' })))).toEqual(['failed']);
+  });
+
+  it('lets an archived recording go back to published', () => {
+    expect(publishBlockers({ ...ready, status: 'archived' })).toEqual([]);
   });
 
   it('blocks publishing from a state that cannot reach published', () => {
@@ -96,10 +137,7 @@ describe('publishBlockers', () => {
   it('reports every blocker at once, not just the first', () => {
     // The UI names what is missing; stopping at the first would make fixing them
     // a guessing game one round-trip at a time.
-    expect(publishBlockers({ audioPath: null, status: 'unpublished' })).toEqual([
-      'audio',
-      'status',
-    ]);
+    expect(publishBlockers({ media: NONE, status: 'unpublished' })).toEqual(['media', 'status']);
   });
 
   it('does not require a due date or notes', () => {
@@ -110,15 +148,16 @@ describe('publishBlockers', () => {
 });
 
 describe('isEmptyDraft', () => {
-  it('is true only when there is no audio AND the recording is not live', () => {
-    expect(isEmptyDraft({ audioPath: null, status: 'draft' })).toBe(true);
-    // A failed Zoom import is the same situation: nothing landed, nothing lost.
-    expect(isEmptyDraft({ audioPath: null, status: 'needsAttention' })).toBe(true);
+  it('is true only when there is no media AND the recording is not live', () => {
+    expect(isEmptyDraft({ media: NONE, status: 'draft' })).toBe(true);
+    expect(isEmptyDraft({ media: NONE, status: 'needsAttention' })).toBe(true);
   });
 
-  it('is false as soon as audio exists — that is a real artifact', () => {
+  it('is false as soon as any item exists, in any state — that is a real artifact', () => {
     for (const s of ALL) {
-      expect(isEmptyDraft({ audioPath: 'recordings/r1/audio.m4a', status: s })).toBe(false);
+      expect(isEmptyDraft({ media: AUDIO, status: s })).toBe(false);
+      // A failed Zoom copy is still an item staff must retry or remove.
+      expect(isEmptyDraft({ media: mediaOf(item('a1', { status: 'failed' })), status: s })).toBe(false);
     }
   });
 
@@ -126,23 +165,23 @@ describe('isEmptyDraft', () => {
     // published/archived/unpublished imply students could have listened, so these
     // are never "discard freely" — they keep the admin-only deletion guard.
     for (const s of ['published', 'archived', 'unpublished'] as RecordingStatus[]) {
-      expect(isEmptyDraft({ audioPath: null, status: s })).toBe(false);
+      expect(isEmptyDraft({ media: NONE, status: s })).toBe(false);
     }
   });
 
   /*
    * THE CLAIM THIS TEST USED TO MAKE WAS FALSE, and it is worth keeping the
-   * correction where the wrong version stood. `isEmptyDraft` is "needs audio",
-   * not "was never published": no audio blocks publishing NOW, and a recording
+   * correction where the wrong version stood. `isEmptyDraft` is "needs media",
+   * not "was never published": no media blocks publishing NOW, and a recording
    * that WAS published can be walked back into exactly this shape
-   * (`published → unpublished → draft`, then `clearAudio`) with a term of
+   * (`published → unpublished → draft`, then its media removed) with a term of
    * assignments and completions still pointing at it.
    */
   it('says nothing about what a recording used to be', () => {
-    const empty = { audioPath: null, status: 'draft' as RecordingStatus };
+    const empty = { media: NONE, status: 'draft' as RecordingStatus };
     expect(isEmptyDraft(empty)).toBe(true);
-    expect(publishBlockers(empty)).toContain('audio');
-    // The same shape, once published: still "needs audio", and no longer
+    expect(publishBlockers(empty)).toContain('media');
+    // The same shape, once published: still "needs media", and no longer
     // something anyone may discard.
     expect(isEmptyDraft({ ...empty, publishedAt: 1 })).toBe(true);
     expect(isDiscardable({ ...empty, publishedAt: 1 })).toBe(false);
@@ -159,22 +198,22 @@ describe('isEmptyDraft', () => {
  */
 describe('isDiscardable', () => {
   it('accepts a draft that has never been published', () => {
-    expect(isDiscardable({ audioPath: null, status: 'draft' })).toBe(true);
-    expect(isDiscardable({ audioPath: null, status: 'needsAttention' })).toBe(true);
+    expect(isDiscardable({ media: NONE, status: 'draft' })).toBe(true);
+    expect(isDiscardable({ media: NONE, status: 'needsAttention' })).toBe(true);
   });
 
   it('refuses one that was published and walked back', () => {
-    expect(isDiscardable({ audioPath: null, status: 'draft', publishedAt: 1 })).toBe(false);
+    expect(isDiscardable({ media: NONE, status: 'draft', publishedAt: 1 })).toBe(false);
   });
 
-  it('refuses one that still holds audio, published or not', () => {
-    expect(isDiscardable({ audioPath: 'recordings/r1/audio.m4a', status: 'draft' })).toBe(false);
+  it('refuses one that still holds media, published or not', () => {
+    expect(isDiscardable({ media: AUDIO, status: 'draft' })).toBe(false);
   });
 
   it.each(['published', 'unpublished', 'archived'] as RecordingStatus[])(
     'refuses a %s recording outright',
     (status) => {
-      expect(isDiscardable({ audioPath: null, status })).toBe(false);
+      expect(isDiscardable({ media: NONE, status })).toBe(false);
     },
   );
 });
@@ -182,12 +221,6 @@ describe('isDiscardable', () => {
 describe('isVisibleToStudents', () => {
   it('is true only for published', () => {
     for (const s of ALL) expect(isVisibleToStudents(s)).toBe(s === 'published');
-  });
-});
-
-describe('audioStoragePath', () => {
-  it('is derived from the id, so the client, rules tests and signer agree', () => {
-    expect(audioStoragePath('abc123')).toBe('recordings/abc123/audio.m4a');
   });
 });
 

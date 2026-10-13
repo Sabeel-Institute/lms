@@ -179,7 +179,7 @@ function AuditCard({ entry: e, people }: { entry: AuditRow; people: Map<string, 
   return (
     <View style={styles.row}>
       <View style={styles.head}>
-        <Text style={styles.action}>{ACTION_LABELS[e.action] ?? e.action}</Text>
+        <Text style={styles.action}>{ACTION_LABELS[e.action] ?? RETIRED_ACTION_LABELS[e.action] ?? e.action}</Text>
         {/* The institute's clock, not the reader's — see `stampInZone`. This
             log is the record of when something happened, and a manager abroad
             reading their own zone dates an override to the wrong day. */}
@@ -226,7 +226,7 @@ const ACTION_LABELS: Record<string, string> = {
   deleteRecording: 'Deleted recording',
   finalizeRecordingUpload: 'Uploaded audio',
   setRecordingStatus: 'Changed recording status',
-  clearRecordingAudio: 'Removed audio',
+  removeRecordingMedia: 'Removed a file',
   importZoomRecording: 'Imported from Zoom',
   retryZoomImport: 'Retried a Zoom import',
   setStaffAccess: 'Changed staff access',
@@ -234,6 +234,15 @@ const ACTION_LABELS: Record<string, string> = {
   clearCompletionOverride: 'Removed override',
   authProvision: 'Staff account created',
   authReject: 'Rejected sign-up',
+};
+
+/**
+ * Actions no callable writes any more, which the log still holds from before a
+ * rename. Kept apart from `ACTION_LABELS` so that map stays exactly the set the
+ * server writes today, which is what the test above checks.
+ */
+const RETIRED_ACTION_LABELS: Record<string, string> = {
+  clearRecordingAudio: 'Removed audio',
 };
 
 const styles = StyleSheet.create({

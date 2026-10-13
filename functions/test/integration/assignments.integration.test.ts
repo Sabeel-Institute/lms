@@ -1,4 +1,5 @@
 import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
+import { withAudio } from '../mediaFixtures';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -112,9 +113,7 @@ async function seedRecording(id: string, sessionId: string, status: RecordingDoc
     date: '2026-07-06',
     status,
     source: 'manual',
-    audioPath: `recordings/${id}/audio.m4a`,
-    durationSec: 60,
-    sizeBytes: 1,
+    ...withAudio(ns(id), { durationSec: 60 }),
     createdAt: 1,
     createdBy: ADMIN,
     updatedAt: 1,
@@ -428,7 +427,8 @@ describe('unenrolment', () => {
     const canPlay = async () =>
       playbackDenial({
         claims: { role: 'student', status: 'active' },
-        recording: { status: 'published', audioPath: `recordings/${ns('r1')}/audio.m4a` },
+        recording: { status: 'published' },
+        item: { status: 'ready', hidden: false },
         cls: { effectiveActive: true, archivedAccess: false, managerUids: [] },
         uid: 's1',
         assignment: (await getAssignment('s1', 'r1')) ?? null,
@@ -547,7 +547,8 @@ describe('unenrolment', () => {
     const canPlay = async () =>
       playbackDenial({
         claims: { role: 'student', status: 'active' },
-        recording: { status: 'published', audioPath: `recordings/${ns('r1')}/audio.m4a` },
+        recording: { status: 'published' },
+        item: { status: 'ready', hidden: false },
         cls: { effectiveActive: true, archivedAccess: false, managerUids: [] },
         uid: 's1',
         assignment: (await getAssignment('s1', 'r1')) ?? null,
@@ -595,7 +596,8 @@ describe('unenrolment', () => {
     const canPlay = async (uid: string) =>
       playbackDenial({
         claims: { role: 'student', status: 'active' },
-        recording: { status: 'published', audioPath: `recordings/${ns('r1')}/audio.m4a` },
+        recording: { status: 'published' },
+        item: { status: 'ready', hidden: false },
         cls: { effectiveActive: true, archivedAccess: false, managerUids: [] },
         uid,
         assignment: (await getAssignment(uid, 'r1')) ?? null,

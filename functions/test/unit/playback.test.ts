@@ -5,7 +5,8 @@ import { playbackDenial } from '../../src/playback';
 const activeCourse = { effectiveActive: true, archivedAccess: false, managerUids: ['mgr'] };
 const archivedClosed = { effectiveActive: false, archivedAccess: false, managerUids: ['mgr'] };
 const archivedOpen = { effectiveActive: false, archivedAccess: true, managerUids: ['mgr'] };
-const published = { status: 'published' as const, audioPath: 'recordings/r/audio.m4a' };
+const published = { status: 'published' as const };
+const ready = { status: 'ready' as const, hidden: false };
 const TODAY = '2026-07-25';
 /** Excused, deadline still ahead — the only shape that opens a recording. */
 const granted = { active: true, dueDate: '2026-07-30' };
@@ -14,6 +15,7 @@ const ask = (over: Partial<Parameters<typeof playbackDenial>[0]>) =>
   playbackDenial({
     claims: { role: 'student', status: 'active' } as TokenClaims,
     recording: published,
+    item: ready,
     cls: activeCourse,
     uid: 'stu',
     assignment: granted,
@@ -57,10 +59,17 @@ describe('students', () => {
     expect(ask({ cls: archivedOpen })).toBeNull();
   });
 
-  it('is refused before anything else when there is no audio', () => {
+  it('is refused before anything else when the file is missing or not ready', () => {
     // Checked first so a broken recording reports the real problem rather than
     // an access one, which would send staff looking in the wrong place.
-    expect(ask({ recording: { status: 'published', audioPath: null } })).toBe('no-audio');
+    expect(ask({ item: null })).toBe('no-media');
+    for (const status of ['uploading', 'copying', 'failed'] as const) {
+      expect(ask({ item: { status, hidden: false } })).toBe('no-media');
+    }
+  });
+
+  it('may NOT play a hidden file, even in a recording they may play', () => {
+    expect(ask({ item: { status: 'ready', hidden: true } })).toBe('no-media');
   });
 });
 
@@ -96,9 +105,11 @@ describe('staff', () => {
     expect(ask({ claims: manager, uid: 'mgr', cls: archivedClosed })).toBeNull();
   });
 
-  it('still refuses staff when there is no audio', () => {
-    expect(
-      ask({ claims: admin, uid: 'admin', recording: { status: 'draft', audioPath: null } }),
-    ).toBe('no-audio');
+  it('still refuses staff when the file is missing', () => {
+    expect(ask({ claims: admin, uid: 'admin', recording: { status: 'draft' }, item: null })).toBe('no-media');
+  });
+
+  it('lets staff hear a hidden file, to decide what to do with it', () => {
+    expect(ask({ claims: admin, uid: 'admin', item: { status: 'ready', hidden: true } })).toBeNull();
   });
 });

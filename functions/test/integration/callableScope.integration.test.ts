@@ -1,4 +1,5 @@
 import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
+import { NO_MEDIA } from '../mediaFixtures';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { CallableRequest } from 'firebase-functions/v2/https';
@@ -8,7 +9,7 @@ import { createEnrollment, setEnrollmentActive } from '../../src/enrollments';
 import { clearCompletionOverride, overrideCompletion } from '../../src/overrides';
 import { createSession, deleteSession, submitAttendance, updateSession } from '../../src/sessions';
 import {
-  clearRecordingAudio,
+  removeRecordingMedia,
   createRecording,
   deleteRecording,
   finalizeRecordingUpload,
@@ -107,10 +108,8 @@ async function seed() {
       sessionId: SESSION,
       title: 'Session',
       status: 'draft',
-      audioPath: null,
-      durationSec: null,
-      sizeBytes: null,
-      source: 'upload',
+      ...NO_MEDIA,
+      source: 'manual',
       createdBy: OWNER,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -156,9 +155,9 @@ const SCOPED: Array<{
   { name: 'deleteSession', call: (r) => deleteSession.run(r), data: { sessionId: SESSION }, owner: 'admin' },
   { name: 'createRecording', call: (r) => createRecording.run(r), data: { sessionId: SESSION } },
   { name: 'startRecordingUpload', call: (r) => startRecordingUpload.run(r), data: { recordingId: RECORDING, contentType: 'audio/mp4', sizeBytes: 1000 } },
-  { name: 'finalizeRecordingUpload', call: (r) => finalizeRecordingUpload.run(r), data: { recordingId: RECORDING, durationSec: 60 } },
+  { name: 'finalizeRecordingUpload', call: (r) => finalizeRecordingUpload.run(r), data: { recordingId: RECORDING, itemId: 'item1', durationSec: 60 } },
   { name: 'setRecordingStatus', call: (r) => setRecordingStatus.run(r), data: { recordingId: RECORDING, status: 'draft' } },
-  { name: 'clearRecordingAudio', call: (r) => clearRecordingAudio.run(r), data: { recordingId: RECORDING } },
+  { name: 'removeRecordingMedia', call: (r) => removeRecordingMedia.run(r), data: { recordingId: RECORDING, itemId: 'item1' } },
   { name: 'deleteRecording', call: (r) => deleteRecording.run(r), data: { recordingId: RECORDING } },
   { name: 'createStudent', call: (r) => createStudent.run(r), data: { displayName: 'New Student', email: `scoped-${Date.now()}@example.com`, courseId: THEIRS } },
   { name: 'importZoomRecording', call: (r) => importZoomRecording.run(r), data: { meetingUuid: 'uuid', fileId: 'file', sessionId: SESSION } },

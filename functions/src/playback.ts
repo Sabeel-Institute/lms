@@ -12,6 +12,7 @@ import {
   todayInZone,
   type AssignmentDoc,
   type CourseDoc,
+  type MediaItem,
   type RecordingDoc,
   type TokenClaims,
 } from '@sabeel/shared';
@@ -23,7 +24,7 @@ export type PlaybackDenial =
   | 'past-due'
   | 'class-listening-off'
   | 'not-your-class'
-  | 'no-audio';
+  | 'no-media';
 
 /**
  * May this caller play this recording, and if not, why?
@@ -38,14 +39,16 @@ export type PlaybackDenial =
  */
 export function playbackDenial(input: {
   claims: TokenClaims;
-  recording: Pick<RecordingDoc, 'status' | 'audioPath'>;
+  recording: Pick<RecordingDoc, 'status'>;
+  /** The file asked for, or null if the recording has no such item. */
+  item: Pick<MediaItem, 'status' | 'hidden'> | null;
   cls: Pick<CourseDoc, 'effectiveActive' | 'archivedAccess' | 'managerUids'>;
   uid: string;
   assignment: Pick<AssignmentDoc, 'active' | 'dueDate'> | null;
   today: string;
 }): PlaybackDenial | null {
-  const { claims, recording, cls, uid, assignment, today } = input;
-  if (!recording.audioPath) return 'no-audio';
+  const { claims, recording, item, cls, uid, assignment, today } = input;
+  if (!item || item.status !== 'ready') return 'no-media';
 
   if (isStaffRole(claims.role)) {
     // Staff may play ANY status — the brief requires them to listen in order to
@@ -55,7 +58,9 @@ export function playbackDenial(input: {
   }
 
   // Students: only published recordings, only ones granted to them, and only
-  // until the deadline they were given.
+  // until the deadline they were given. A hidden file is withdrawn from them
+  // even inside a recording they may play; staff still hear it to decide.
+  if (item.hidden) return 'no-media';
   if (recording.status !== 'published') return 'not-published';
   if (!assignment || !assignment.active) return 'not-assigned';
   if (!hasRecordingAccess(assignment, today)) return 'past-due';
@@ -66,7 +71,7 @@ export function playbackDenial(input: {
 }
 
 const MESSAGES: Record<PlaybackDenial, string> = {
-  'no-audio': 'That recording has no audio yet.',
+  'no-media': 'That file is not available.',
   'not-published': 'That recording is not published.',
   'not-assigned': 'That recording was not assigned to you.',
   'past-due': 'The due date for this recording has passed.',
@@ -75,7 +80,7 @@ const MESSAGES: Record<PlaybackDenial, string> = {
 };
 
 /**
- * Mint a playback URL for one recording.
+ * Mint a playback URL for one file of one recording.
  *
  * Authorization happens HERE, not in security rules, because the media bucket
  * has no rules: the URL is signed with the bucket's read key and is good for
@@ -93,11 +98,16 @@ export const getPlaybackUrl = reportedCall(async (req) => {
     if (typeof recordingId !== 'string' || !recordingId) {
       throw new HttpsError('invalid-argument', 'recordingId is required.');
     }
+    const itemId = req.data?.itemId;
+    if (typeof itemId !== 'string' || !itemId) {
+      throw new HttpsError('invalid-argument', 'itemId is required.');
+    }
 
     const db = getFirestore();
     const recSnap = await db.collection(COLLECTIONS.recordings).doc(recordingId).get();
     if (!recSnap.exists) throw new HttpsError('not-found', 'No such recording.');
     const recording = recSnap.data() as RecordingDoc;
+    const item = recording.media[itemId] ?? null;
 
     const [clsSnap, asgSnap] = await Promise.all([
       db.collection(COLLECTIONS.courses).doc(recording.courseId).get(),
@@ -108,6 +118,7 @@ export const getPlaybackUrl = reportedCall(async (req) => {
     const denial = playbackDenial({
       claims,
       recording,
+      item,
       cls: clsSnap.data() as CourseDoc,
       uid: req.auth.uid,
       assignment: asgSnap.exists ? (asgSnap.data() as AssignmentDoc) : null,
@@ -115,5 +126,5 @@ export const getPlaybackUrl = reportedCall(async (req) => {
     });
     if (denial) throw new HttpsError('permission-denied', MESSAGES[denial]);
 
-    return signGet(recording.audioPath as string, SIGNED_URL_TTL_MS);
+    return signGet((item as MediaItem).storageKey, SIGNED_URL_TTL_MS);
   }, MEDIA_READ_SECRETS);

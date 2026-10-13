@@ -1,4 +1,5 @@
 import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
+import { withAudio } from '../mediaFixtures';
 import { readFileSync } from 'node:fs';
 import {
   initializeTestEnvironment,
@@ -11,7 +12,6 @@ import {
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
   assignmentId,
-  audioStoragePath,
   enrollmentId,
 } from '@sabeel/shared';
 
@@ -159,9 +159,7 @@ beforeEach(async () => {
         source: 'manual',
         recordedAt: 1,
         notes: '',
-        audioPath: audioStoragePath(id),
-        durationSec: 60,
-        sizeBytes: 100,
+        ...withAudio(id, { durationSec: 60 }),
         createdAt: 1,
         createdBy: ADMIN,
         updatedAt: 1,

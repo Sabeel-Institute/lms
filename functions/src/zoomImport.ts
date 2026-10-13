@@ -2,93 +2,143 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
-  audioStoragePath,
-  isEmptyDraft,
+  deriveDurationSec,
+  mediaStorageKey,
   type CourseDoc,
+  type MediaItem,
   type RecordingDoc,
   type SessionDoc,
+  type ZoomImportDoc,
   type ZoomImportRow,
 } from '@sabeel/shared';
 import { auditedCall } from './audited';
 import { reportedCall } from './reported';
 import { reportError } from './sentry';
 import { requireCourseScope, requireStaff } from './guards';
-import { MAX_AUDIO_BYTES, createRecordingDraft, finalizeRecording } from './recordings';
+import { MAX_AUDIO_BYTES, draftInTransaction, finalizeRecording } from './recordings';
 import { MEDIA_WRITE_SECRETS, deleteObject } from './mediaStore';
 import { ZOOM_SECRETS, zoomClient, type ZoomAudioRecording, type ZoomClient } from './zoom';
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Stream the audio into a recording, finalize it, and settle its status.
+ * Copy one Zoom file into its item, confirm it, and settle the recording.
  *
- * On success the recording is a ready draft (status draft, attentionReason
- * cleared — that also un-sticks a retried import). On failure the recording is
- * left in `needsAttention` with a reason, so staff can retry it rather than
- * losing the draft.
+ * On success the item is `ready` and the recording a draft again (which also
+ * un-sticks a retried import). On failure the item is `failed` with the reason
+ * and the recording needs attention, so staff can retry rather than losing it.
  */
-async function downloadIntoRecording(
+async function copyIntoItem(
   recordingId: string,
+  item: MediaItem,
   downloadUrl: string,
   zoom: { durationSec: number; sizeBytes: number },
   client: ZoomClient,
 ): Promise<void> {
-  const ref = getFirestore().collection(COLLECTIONS.recordings).doc(recordingId);
-  const key = audioStoragePath(recordingId);
+  const db = getFirestore();
+  const ref = db.collection(COLLECTIONS.recordings).doc(recordingId);
   try {
-    // The copy is write-once, like every upload. Whatever an earlier attempt
-    // left is removed first: this only runs on a draft or needs-attention
-    // recording (the callers check), so nothing a student can hear is at stake.
-    await deleteObject(key);
-    await client.copyToMediaStore(downloadUrl, key, zoom.sizeBytes);
-    await finalizeRecording({ recordingId, durationSec: zoom.durationSec });
-    await ref.update({
-      status: 'draft',
-      attentionReason: FieldValue.delete(),
-      updatedAt: Date.now(),
+    // ON ITS WAY IN AGAIN, in the document and not only here: a retry starts
+    // from a `failed` item, and only an item that is copying can be confirmed.
+    await db.runTransaction(async (tx) => {
+      const rec = (await tx.get(ref)).data() as RecordingDoc | undefined;
+      const current = rec?.media[item.id];
+      if (!rec || !current) throw new Error('the recording or its file was removed');
+      tx.update(ref, { [`media.${item.id}`]: { ...current, status: 'copying', failReason: null } });
     });
+    // The copy is write-once, like every upload. Whatever an earlier attempt
+    // at this item left is removed first: only an item that never became
+    // ready gets here, so nothing a student can hear is at stake.
+    await deleteObject(item.storageKey);
+    await client.copyToMediaStore(downloadUrl, item.storageKey, zoom.sizeBytes);
+    await finalizeRecording({ recordingId, itemId: item.id, durationSec: zoom.durationSec });
+    await ref.update({ status: 'draft', attentionReason: FieldValue.delete(), updatedAt: Date.now() });
   } catch (e) {
     const reason = `Zoom import failed: ${(e as Error).message}`.slice(0, 300);
-    await ref.update({ status: 'needsAttention', attentionReason: reason, updatedAt: Date.now() });
+    await db.runTransaction(async (tx) => {
+      const rec = (await tx.get(ref)).data() as RecordingDoc | undefined;
+      const current = rec?.media[item.id];
+      if (!rec || !current) return;
+      tx.update(ref, {
+        [`media.${item.id}`]: { ...current, status: 'failed', failReason: reason },
+        status: 'needsAttention',
+        attentionReason: reason,
+        updatedAt: Date.now(),
+      });
+    });
     // Reported here, because what is thrown next is an HttpsError and the
-    // wrappers deliberately do not send those to Sentry — so a download that
-    // died left a recording in needs-attention and no trace of why anywhere
-    // but the recording itself.
+    // wrappers deliberately do not send those to Sentry — so a copy that died
+    // left a recording in needs-attention and no trace of why anywhere but the
+    // recording itself.
     await reportError(e, { source: 'zoomImport', recordingId });
     throw new HttpsError('internal', reason);
   }
 }
 
-/** Import one Zoom recording into a session as its draft. Idempotent on the meeting UUID. */
+/** A Zoom audio file as a media item on its way in. */
+function zoomItem(recordingId: string, itemId: string, rec: ZoomAudioRecording, callerUid: string): MediaItem {
+  return {
+    id: itemId,
+    part: 1,
+    version: 'audio',
+    kind: 'audio',
+    label: null,
+    status: 'copying',
+    failReason: null,
+    hidden: false,
+    storageKey: mediaStorageKey(recordingId, itemId),
+    contentType: 'audio/mp4',
+    sizeBytes: rec.sizeBytes,
+    durationSec: rec.durationSec,
+    width: null,
+    height: null,
+    source: 'zoom',
+    zoom: {
+      meetingUuid: rec.meetingUuid,
+      fileId: rec.fileId,
+      recordingType: 'audio_only',
+      segmentStart: rec.startTime,
+      topic: rec.topic,
+    },
+    addedAt: Date.now(),
+    addedBy: callerUid,
+  };
+}
+
+/**
+ * Import one Zoom file into a session as its draft recording.
+ *
+ * THE FILE IS CLAIMED IN THE SAME TRANSACTION THAT CREATES THE DRAFT AND ITS
+ * ITEM (`zoomImports/{fileId}`), so a double tap or two staff importing the
+ * same file into two sessions cannot both succeed: the second reads the claim
+ * and is told where the file went. The bytes are copied afterwards, outside
+ * the transaction.
+ */
 export async function applyImportZoomRecording(
   callerUid: string,
   input: { meetingUuid: string; fileId: string; sessionId: string },
   client: ZoomClient,
 ): Promise<{ recordingId: string; alreadyExisted: boolean }> {
   const db = getFirestore();
-  // Dedupe: one Zoom recording maps to at most one app recording.
-  const dupe = await db
-    .collection(COLLECTIONS.recordings)
-    .where('zoomUuid', '==', input.meetingUuid)
-    .limit(1)
-    .get();
-  if (!dupe.empty) {
-    const existing = dupe.docs[0];
-    const prior = existing.data() as RecordingDoc;
-    // A DRAFT WITH NO AUDIO IS NOT AN IMPORT THAT ALREADY HAPPENED. The draft is
-    // created before the download, so an attempt that died mid-transfer leaves
-    // one behind — and answering "already imported" to the retry reports success
-    // for a recording that plays nothing, which is exactly how staff end up
-    // publishing an empty one. Finish the job instead.
-    //
-    // Only for the session that asked: the dedupe is global on the meeting uuid,
-    // so a draft belonging to a DIFFERENT session is somebody else's import and
-    // still answers "already imported" rather than being quietly adopted here.
-    if (!prior.audioPath && prior.sessionId === input.sessionId) {
-      await applyRetryZoomImport(existing.id, client);
-      return { recordingId: existing.id, alreadyExisted: false };
+  const claimRef = db.collection(COLLECTIONS.zoomImports).doc(input.fileId);
+  const claim = await claimRef.get();
+  if (claim.exists) {
+    const prior = claim.data() as ZoomImportDoc;
+    const recSnap = await db.collection(COLLECTIONS.recordings).doc(prior.recordingId).get();
+    const item = recSnap.exists ? (recSnap.data() as RecordingDoc).media[prior.itemId] : undefined;
+    // A FILE THAT NEVER ARRIVED IS NOT AN IMPORT THAT ALREADY HAPPENED. The
+    // item is claimed before the copy, so an attempt that died mid-transfer
+    // leaves one behind, and answering "already imported" to the retry
+    // reports success for a recording that plays nothing. Finish the job —
+    // but only for the session that asked; a claim belonging to another
+    // session is somebody else's import.
+    if (item && item.status !== 'ready' && prior.sessionId === input.sessionId) {
+      await applyRetryZoomImport(prior.recordingId, client);
+      return { recordingId: prior.recordingId, alreadyExisted: false };
     }
-    return { recordingId: existing.id, alreadyExisted: true };
+    if (item) return { recordingId: prior.recordingId, alreadyExisted: true };
+    // A claim whose item is gone was left by a delete that did not finish;
+    // the transaction below takes it over.
   }
 
   // Re-read the meeting for a FRESH download URL + authoritative metadata.
@@ -98,19 +148,38 @@ export async function applyImportZoomRecording(
     throw new HttpsError('failed-precondition', `That recording's audio is larger than the ${mb} MB limit.`);
   }
 
-  // The session owns title/date/due; the recording is pure media. createRecordingDraft
-  // refuses a session that already has a recording.
-  const { id } = await createRecordingDraft(
-    callerUid,
-    { sessionId: input.sessionId },
-    { source: 'zoom', zoomUuid: input.meetingUuid, zoomFileId: rec.fileId },
-  );
+  const sessionRef = db.collection(COLLECTIONS.sessions).doc(input.sessionId);
+  const ref = db.collection(COLLECTIONS.recordings).doc();
+  const itemId = db.collection(COLLECTIONS.recordings).doc().id;
+  const item = zoomItem(ref.id, itemId, rec, callerUid);
+  await db.runTransaction(async (tx) => {
+    const current = await tx.get(claimRef);
+    if (current.exists) {
+      const other = current.data() as ZoomImportDoc;
+      const owner = await tx.get(db.collection(COLLECTIONS.recordings).doc(other.recordingId));
+      if (owner.exists && (owner.data() as RecordingDoc).media[other.itemId]) {
+        throw new HttpsError('already-exists', 'That Zoom file is already being imported.');
+      }
+    }
+    const draft = await draftInTransaction(tx, sessionRef, ref, callerUid, 'zoom');
+    const media = { [itemId]: item };
+    tx.update(ref, { media, durationSec: deriveDurationSec(media) });
+    const claimDoc: ZoomImportDoc = {
+      recordingId: ref.id,
+      itemId,
+      sessionId: input.sessionId,
+      courseId: draft.courseId,
+      meetingUuid: rec.meetingUuid,
+      claimedAt: Date.now(),
+    };
+    tx.set(claimRef, claimDoc);
+  });
 
-  await downloadIntoRecording(id, downloadUrl, rec, client);
-  return { recordingId: id, alreadyExisted: false };
+  await copyIntoItem(ref.id, item, downloadUrl, rec, client);
+  return { recordingId: ref.id, alreadyExisted: false };
 }
 
-/** Retry a failed Zoom import using the refs stored on the recording. */
+/** Retry every Zoom file on a recording that never arrived. */
 export async function applyRetryZoomImport(
   recordingId: string,
   client: ZoomClient,
@@ -118,24 +187,32 @@ export async function applyRetryZoomImport(
   const snap = await getFirestore().collection(COLLECTIONS.recordings).doc(recordingId).get();
   if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
   const rec = snap.data() as RecordingDoc;
-  if (rec.source !== 'zoom' || !rec.zoomUuid || !rec.zoomFileId) {
-    throw new HttpsError('failed-precondition', 'That recording is not a Zoom import.');
-  }
-  // ONLY AN IMPORT THAT NEVER FINISHED. A retry writes over the audio object
-  // and drops the status to `draft`, which on a recording that has its audio
-  // and is out in the world is an unpublish nobody asked for: the fan-out
-  // switches every grant off, and the audit row reads "Retried a Zoom
-  // import". The button appears only on a failed import; the callable has to
-  // be the judge too. Needs-attention itself is always retryable, audio or
-  // not: `downloadIntoRecording` finalizes (which records `audioPath`) BEFORE
-  // it settles the status, so a failure on that last write leaves the audio
-  // in place under needs-attention — and a recording reaches needs-attention
-  // only from a draft, so nothing granted is at stake.
-  if (rec.status !== 'needsAttention' && !isEmptyDraft(rec)) {
+  // ONLY FILES THAT NEVER FINISHED, and only off a recording that is not
+  // live. A retry deletes and rewrites the object and drops the status to
+  // `draft`, which on a recording out in the world is an unpublish nobody
+  // asked for: the fan-out switches every grant off. The button appears only
+  // on a failed import; the callable has to be the judge too.
+  if (rec.status !== 'draft' && rec.status !== 'needsAttention') {
     throw new HttpsError('failed-precondition', 'That recording already has its audio.');
   }
-  const { rec: fresh, downloadUrl } = await client.freshAudioFile(rec.zoomUuid, rec.zoomFileId);
-  await downloadIntoRecording(recordingId, downloadUrl, fresh, client);
+  const zoomItems = Object.values(rec.media).filter((i) => i.zoom);
+  if (zoomItems.length === 0) {
+    throw new HttpsError('failed-precondition', 'That recording is not a Zoom import.');
+  }
+  const pending = zoomItems.filter((i) => i.status !== 'ready');
+  if (pending.length === 0) {
+    // EVERY FILE ARRIVED BUT THE STATUS NEVER SETTLED: `copyIntoItem` confirms
+    // the item, then writes `draft`, and a transient failure on that last write
+    // leaves the recording needing attention with nothing left to copy. The
+    // one button the screen offers for it has to finish the job.
+    await snap.ref.update({ status: 'draft', attentionReason: FieldValue.delete(), updatedAt: Date.now() });
+    return { recordingId };
+  }
+  for (const item of pending) {
+    const ref = item.zoom as NonNullable<MediaItem['zoom']>;
+    const { rec: fresh, downloadUrl } = await client.freshAudioFile(ref.meetingUuid, ref.fileId);
+    await copyIntoItem(recordingId, item, downloadUrl, fresh, client);
+  }
   return { recordingId };
 }
 
@@ -176,29 +253,26 @@ export const listZoomRecordings = reportedCall(async (req) => {
  * `alreadyImported: null` for every row is invisible to a type checker and turns
  * the picker into an invitation to import everything a second time.
  *
- * One query for the mapping, then one read per DISTINCT class actually
+ * One read of the claims (`zoomImports`), then one read per DISTINCT class actually
  * referenced — not per row: a term of imports from four classes costs four reads
  * however many recordings Zoom returns.
  */
 export async function annotateImported(recs: ZoomAudioRecording[]): Promise<ZoomImportRow[]> {
   const db = getFirestore();
-  const imported = await db.collection(COLLECTIONS.recordings).where('source', '==', 'zoom').get();
-  const byUuid = new Map<string, { recordingId: string; courseId: string }>();
-  for (const doc of imported.docs) {
-    const data = doc.data() as RecordingDoc;
-    if (data.zoomUuid) byUuid.set(data.zoomUuid, { recordingId: doc.id, courseId: data.courseId });
-  }
+  const claims = await db.collection(COLLECTIONS.zoomImports).get();
+  const byFile = new Map<string, ZoomImportDoc>();
+  for (const doc of claims.docs) byFile.set(doc.id, doc.data() as ZoomImportDoc);
 
   const courseNames = new Map<string, string>();
   await Promise.all(
-    [...new Set([...byUuid.values()].map((v) => v.courseId))].map(async (id) => {
+    [...new Set([...byFile.values()].map((v) => v.courseId))].map(async (id) => {
       const s = await db.collection(COLLECTIONS.courses).doc(id).get();
       if (s.exists) courseNames.set(id, (s.data() as CourseDoc).name);
     }),
   );
 
   return recs.map((r) => {
-    const imp = byUuid.get(r.meetingUuid);
+    const imp = byFile.get(r.fileId);
     return {
       ...r,
       alreadyImported: imp?.recordingId ?? null,

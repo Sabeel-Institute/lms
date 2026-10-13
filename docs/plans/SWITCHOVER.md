@@ -159,15 +159,17 @@ IAM change there).
 | What | How | Notes |
 |---|---|---|
 | Accounts | Identity Toolkit `accounts:batchGet` from legacy, `accounts:batchCreate` here with legacy's scrypt parameters (read from its Auth config into the process, never printed) | Same uids, same passwords, same Google links, same custom claims (`role`, `status`). |
-| Firestore | Every document, recursively, through the REST API, field values passed through unchanged | Same document ids, so every reference by uid or id stays intact. |
+| Firestore | Every document, recursively, through the REST API, field values passed through unchanged, except recordings | Same document ids, so every reference by uid or id stays intact. |
+| Recordings | Converted on the way: the one audio file becomes the recording's single media item (Part 1, audio only) at the key it already has (`scripts/lib/legacy-media.mjs`) | The live app stores one file per recording; this project stores media items. |
 | Media | Every object under `recordings/` in the legacy bucket, streamed into R2 at the same key | Through this machine: pennies of Google egress at this size. |
 | Push registrations | **Not copied** (`notifications/{uid}/devices`) | FCM tokens belong to the legacy project's sender and cannot deliver from here. Devices register again on first sign-in. |
-| Zoom import markers | Kept | So a recording imported in legacy is not offered again. |
+| Zoom import markers | Each Zoom recording's file gets its `zoomImports/{fileId}` claim | So a recording imported in legacy is not offered again. |
 
 Every run wipes this project first: anything entered here before switchover is
 test data and is lost on the next run, and staff trying features early are told
-so. After copying, it counts documents per collection shape, accounts, claims,
-and media objects and sizes on both sides, and fails on any difference.
+so. After copying, it counts documents per collection shape (the claims it
+added included), accounts, custom claims, and media objects and sizes on both
+sides, and fails on any difference.
 
 Once functions are deployed, a re-run's writes fire the triggers here
 (`onRecordingWritten`, `onSessionWritten`, `onAssignmentWritten`). They

@@ -29,8 +29,10 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 
-/** A recording's audio, as `audioStoragePath` in @sabeel/shared names it. */
-const KEY_PATTERN = /^recordings\/[A-Za-z0-9]+\/audio\.m4a$/;
+/** A media item's object, as `mediaStorageKey` in @sabeel/shared names it:
+ *  `media/{recordingId}/{itemId}`. functions/test/unit/mediaConfig.test.ts
+ *  holds the two together. */
+const KEY_PATTERN = /^media\/[A-Za-z0-9]+\/[A-Za-z0-9]+$/;
 const CONTENT_TYPES = new Set(['audio/mp4']);
 /** R2 takes at most 5 GiB in one put; stay clear of the edge. */
 export const MAX_BYTES = Math.floor(4.9 * 2 ** 30);
@@ -67,7 +69,7 @@ function invalid(body: Partial<CopyRequest> | null): string | null {
   if (typeof body.sourceUrl !== 'string' || !isZoomHttps(body.sourceUrl)) {
     return 'sourceUrl must be an https address on zoom.us';
   }
-  if (typeof body.key !== 'string' || !KEY_PATTERN.test(body.key)) return 'key is not a recording audio key';
+  if (typeof body.key !== 'string' || !KEY_PATTERN.test(body.key)) return 'key is not a media item key';
   if (typeof body.size !== 'number' || !Number.isInteger(body.size) || body.size < 1 || body.size > MAX_BYTES) {
     return `size must be a whole number of bytes from 1 to ${MAX_BYTES}`;
   }

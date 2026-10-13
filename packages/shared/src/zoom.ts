@@ -26,6 +26,20 @@ export interface ZoomImportRow {
 }
 
 /**
+ * `zoomImports/{fileId}`: where one Zoom file went. Written in the same
+ * transaction that adds the media item, deleted with it, so the picker's
+ * "already imported" and the media map cannot disagree.
+ */
+export interface ZoomImportDoc {
+  recordingId: string;
+  itemId: string;
+  sessionId: string;
+  courseId: string;
+  meetingUuid: string;
+  claimedAt: number;
+}
+
+/**
  * The date a Zoom recording was made on, in the institute's calendar.
  *
  * THE ONE ANSWER TO "WHICH DAY", for every place that asks: the picker's card,

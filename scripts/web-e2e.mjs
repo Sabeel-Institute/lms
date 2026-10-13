@@ -753,12 +753,18 @@ const rf = recs[0]?.fields ?? {};
  * a default — while letting the documented escape hatch work.
  */
 const fixtureBytes = statSync(AUDIO_FIXTURE).size;
+// The file is the recording's one media item; its size is the item's.
+const items = Object.values(rf.media?.mapValue?.fields ?? {}).map((v) => v.mapValue?.fields ?? {});
+const item = items[0] ?? {};
 check(
   'duration and size are recorded from the real file',
-  rf.durationSec?.integerValue === String(AUDIO_SECONDS) &&
-    rf.sizeBytes?.integerValue === String(fixtureBytes),
-  `duration=${rf.durationSec?.integerValue} (want ${AUDIO_SECONDS}) ` +
-    `size=${rf.sizeBytes?.integerValue} (fixture is ${fixtureBytes})`,
+  items.length === 1 &&
+    item.status?.stringValue === 'ready' &&
+    rf.durationSec?.integerValue === String(AUDIO_SECONDS) &&
+    item.sizeBytes?.integerValue === String(fixtureBytes),
+  `items=${items.length} status=${item.status?.stringValue} ` +
+    `duration=${rf.durationSec?.integerValue} (want ${AUDIO_SECONDS}) ` +
+    `size=${item.sizeBytes?.integerValue} (fixture is ${fixtureBytes})`,
 );
 check('the recording is linked to its session', !!rf.sessionId?.stringValue);
 
@@ -1706,7 +1712,11 @@ check(
 // THE BOUNDARY IS THE SERVER, not a hidden button — asserted against the real
 // callable rather than through the UI, because the screen now refuses first and
 // would hide a server that had quietly stopped checking.
-const recId = (await readCollection('recordings'))[0].name.split('/').pop();
+const recDoc = (await readCollection('recordings'))[0];
+const recId = recDoc.name.split('/').pop();
+// The recording's one file: a request that names none is refused for that
+// reason instead, and the check below would pass on the wrong refusal.
+const itemId = Object.keys(recDoc.fields.media.mapValue.fields)[0];
 const stuToken = await (
   await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key`, {
     method: 'POST',
@@ -1721,7 +1731,7 @@ const stuToken = await (
 const mint = await fetch(`${FN}/getPlaybackUrl`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stuToken.idToken}` },
-  body: JSON.stringify({ data: { recordingId: recId } }),
+  body: JSON.stringify({ data: { recordingId: recId, itemId } }),
 });
 const mintBody = await mint.text();
 check(

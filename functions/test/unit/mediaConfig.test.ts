@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
+import { FIREBASE_PROJECT_ID, mediaStorageKey } from '@sabeel/shared';
 
 /**
  * The Zoom copier Worker and the Functions that call it describe the same
@@ -68,5 +68,17 @@ describe('the copier Worker and the Functions agree', () => {
     const number = /messagingSenderId:\s*'(\d+)'/.exec(read('app/src/firebase-config.ts'))?.[1];
     expect(number).toBeTruthy();
     expect(w.vars.ALLOWED_CALLER).toBe(`${number}-compute@developer.gserviceaccount.com`);
+  });
+
+  it('on where a copy may be written: the key a media item is stored under', () => {
+    // The Worker refuses any other key, so a key layout changed in one place
+    // and not the other fails every Zoom import, and only in production.
+    const source = read('cloudflare/media-copier/src/index.ts');
+    const literal = /const KEY_PATTERN = \/(.+)\/;/.exec(source)?.[1];
+    expect(literal).toBeTruthy();
+    const pattern = new RegExp(literal as string);
+    // Firestore auto-ids, which is what both ids are.
+    expect(pattern.test(mediaStorageKey('AbC123xyz0AbC123xyz0', 'XyZ987abc0XyZ987abc0'))).toBe(true);
+    expect(pattern.test(mediaStorageKey('AbC123xyz0AbC123xyz0', '..'))).toBe(false);
   });
 });

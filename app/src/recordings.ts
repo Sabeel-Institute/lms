@@ -69,7 +69,7 @@ const call = <I, O>(name: string) => (input: I) =>
   httpsCallable<I, O>(functions, name)(input).then((r) => r.data);
 
 /** Create the draft recording for a session (audio uploaded next). */
-export const createRecording = call<{ sessionId: string }, { id: string; audioPath: string }>(
+export const createRecording = call<{ sessionId: string }, { id: string }>(
   'createRecording',
 );
 
@@ -114,8 +114,8 @@ export function useRecordingState(
 }
 
 export const finalizeRecordingUpload = call<
-  { recordingId: string; durationSec: number | null },
-  { recordingId: string; sizeBytes: number }
+  { recordingId: string; itemId: string; durationSec: number | null },
+  { recordingId: string; itemId: string; sizeBytes: number }
 >('finalizeRecordingUpload');
 
 export const setRecordingStatus = call<
@@ -123,14 +123,17 @@ export const setRecordingStatus = call<
   unknown
 >('setRecordingStatus');
 
-export const clearRecordingAudio = call<{ recordingId: string }, unknown>('clearRecordingAudio');
+/** Remove one file from a draft, so a bad one can be replaced. */
+export const removeRecordingMedia = call<{ recordingId: string; itemId: string }, unknown>(
+  'removeRecordingMedia',
+);
 
 /** Permanent, admin-only, cascading delete. Refused server-side while published. */
 export const deleteRecording = call<{ recordingId: string }, unknown>('deleteRecording');
 
 const startRecordingUpload = call<
   { recordingId: string; contentType: string; sizeBytes: number },
-  { url: string; headers: Record<string, string>; expiresAt: number }
+  { itemId: string; url: string; headers: Record<string, string>; expiresAt: number }
 >('startRecordingUpload');
 
 /**
@@ -144,12 +147,15 @@ const startRecordingUpload = call<
  * XMLHttpRequest rather than fetch: it is the one API that reports upload
  * progress on both the web and React Native. The headers the server returns
  * are part of the signature, so they are sent exactly as given.
+ *
+ * Resolves with the id of the media item the file landed in, which is what
+ * `finalizeRecordingUpload` confirms.
  */
 export async function uploadRecordingAudio(
   recordingId: string,
   file: Blob,
   onProgress: (fraction: number) => void,
-): Promise<void> {
+): Promise<string> {
   const contentType = file.type || 'audio/mp4';
   const put = await startRecordingUpload({ recordingId, contentType, sizeBytes: file.size });
   await new Promise<void>((resolve, reject) => {
@@ -168,5 +174,6 @@ export async function uploadRecordingAudio(
     xhr.onerror = () => reject(new Error('The upload could not reach the server. Check the connection and try again.'));
     xhr.send(file);
   });
+  return put.itemId;
 }
 

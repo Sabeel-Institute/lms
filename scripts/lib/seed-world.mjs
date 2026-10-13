@@ -24,6 +24,7 @@ import { createRequire } from 'node:module';
 
 import { EMULATOR_PROJECT_ID as PROJECT } from './project.mjs';
 import { putLocalObject } from './media-store.mjs';
+import { mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
 
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
@@ -415,9 +416,9 @@ export async function seedWorld({ db, auth, browser, base }) {
     );
     const submittedAt = attendance ? now - daysAgo * DAY : null;
     const hasAudio = status !== 'draft' && status !== 'needsAttention';
-    const audioPath = `recordings/${recId}/audio.wav`;
-    if (hasAudio) {
-      await putLocalObject(audioPath, AUDIO, 'audio/wav');
+    const audioKey = recId ? mediaStorageKey(recId, 'audio1') : null;
+    if (hasAudio && audioKey) {
+      await putLocalObject(audioKey, AUDIO, 'audio/wav');
     }
 
     await db.collection('sessions').doc(id).set({
@@ -428,9 +429,19 @@ export async function seedWorld({ db, auth, browser, base }) {
     if (recId) {
       await db.collection('recordings').doc(recId).set({
         sessionId: id, courseId, cohortId, title, notes, date, status, source: 'manual',
-        audioPath: hasAudio ? audioPath : null,
+        // One audio file, as Part 1, through the same transform the switchover
+        // seed uses, so the fixture is a shape the app actually holds.
+        media: mediaFromSingleAudio({
+          source: 'manual',
+          audioPath: hasAudio ? audioKey : null,
+          sizeBytes: AUDIO.length,
+          durationSec: AUDIO_SECONDS,
+          contentType: 'audio/wav',
+          createdAt: now - daysAgo * DAY,
+          createdBy: adminUid,
+        }, 'audio1'),
+        defaultVersion: 'audio',
         durationSec: hasAudio ? AUDIO_SECONDS : null,
-        sizeBytes: hasAudio ? AUDIO.length : null,
         createdAt: now - daysAgo * DAY, createdBy: adminUid, updatedAt: now - daysAgo * DAY,
         ...(status === 'published' ? { publishedAt: now - daysAgo * DAY } : {}),
         ...(attention ? { attentionReason: attention } : {}),

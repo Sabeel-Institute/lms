@@ -232,6 +232,7 @@ const wait = (ms: number) => {
 
 const recording = (id: string, studentUid: string | null = 'stu-1') => ({
   recordingId: id,
+  itemId: `${id}-audio`,
   courseId: 'course-1',
   title: `Session ${id}`,
   courseName: 'Hikam Foundations',
@@ -249,7 +250,7 @@ describe('opening and closing', () => {
     expect(players).toHaveLength(1);
     expect(players[0].loaded).toBeNull();
     await flush();
-    expect(callable).toHaveBeenCalledWith({ recordingId: 'rec-a' });
+    expect(callable).toHaveBeenCalledWith({ recordingId: 'rec-a', itemId: 'rec-a-audio' });
     expect(players[0].loaded).toBe('https://signed/audio.m4a');
   });
 

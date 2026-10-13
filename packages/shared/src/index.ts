@@ -4,6 +4,7 @@ export * from './auth';
 export * from './types';
 export * from './structure';
 export * from './recordings';
+export * from './media';
 export * from './assignments';
 export * from './audit';
 export * from './ledger';

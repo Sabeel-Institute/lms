@@ -4,7 +4,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
-  audioStoragePath,
+  type MediaItem,
   type RecordingDoc,
   type SessionDoc,
 } from '@sabeel/shared';
@@ -18,7 +18,7 @@ import {
   MAX_AUDIO_BYTES,
   applyDeleteRecording,
   applyRecordingStatus,
-  clearAudio,
+  removeMedia,
   RECORDING_DEPENDENTS,
   applyRecordingDelete,
   createRecordingDraft,
@@ -44,7 +44,7 @@ async function clearAll() {
     const snap = await db.collection(c).get();
     await Promise.all(snap.docs.map((d) => d.ref.delete()));
   }
-  await clearPrefix('recordings/');
+  await clearPrefix('media/');
 }
 
 let courseId = '';
@@ -83,30 +83,47 @@ async function newDraft(): Promise<{ id: string; sessionId: string }> {
   return { id, sessionId };
 }
 
-async function putAudio(recordingId: string, bytes = 2048) {
-  await putObject(audioStoragePath(recordingId), new Uint8Array(bytes));
+/** The recording's items, and its one item when a test has made exactly one. */
+const items = async (id: string): Promise<MediaItem[]> => Object.values((await rec(id)).media);
+const onlyItem = async (id: string): Promise<MediaItem> => {
+  const all = await items(id);
+  expect(all).toHaveLength(1);
+  return all[0];
+};
+
+/**
+ * Bytes that landed for an upload `startUpload` began, but not yet confirmed —
+ * what a browser leaves when it has PUT the file and not called finalize.
+ * Returns the item id.
+ */
+async function landed(recordingId: string, bytes = 2048): Promise<string> {
+  const { itemId } = await startUpload(ADMIN, { recordingId, contentType: 'audio/mp4', sizeBytes: bytes });
+  await putObject((await rec(recordingId)).media[itemId].storageKey, new Uint8Array(bytes));
+  return itemId;
 }
 
 async function ready(): Promise<string> {
   const { id } = await newDraft();
-  await putAudio(id);
-  await finalizeRecording({ recordingId: id, durationSec: 60 });
+  const itemId = await landed(id);
+  await finalizeRecording({ recordingId: id, itemId, durationSec: 60 });
   return id;
 }
 
+const keyOf = async (id: string) => (await onlyItem(id)).storageKey;
+
 describe('createRecordingDraft', () => {
-  it('creates a draft with NO audio, inherits course/cohort, and links the session', async () => {
+  it('creates a draft with NO media, inherits course/cohort, and links the session', async () => {
     const sessionId = await newSession();
-    const { id, audioPath } = await createRecordingDraft(ADMIN, { sessionId });
+    const { id } = await createRecordingDraft(ADMIN, { sessionId });
     const d = await rec(id);
     expect(d).toMatchObject({ sessionId, courseId, status: 'draft', source: 'manual' });
     // Student-facing display copy is denormalized from the session.
     expect(d).toMatchObject({ title: 'Session 1', date: '2026-07-06', notes: '' });
-    expect(d.audioPath).toBeNull(); // stays null until the upload is CONFIRMED
+    expect(d.media).toEqual({}); // nothing until an upload is started
+    expect(d.durationSec).toBeNull();
     // EXACT. `toBeTruthy` passed just as happily on `cohortId: session.courseId`
     // — the denormalization it exists to check, copied from the wrong field.
     expect(d.cohortId).toBe(cohortId);
-    expect(audioPath).toBe(audioStoragePath(id));
     // The session points back at its recording (0..1).
     expect((await session(sessionId)).recordingId).toBe(id);
   });
@@ -186,7 +203,7 @@ describe('createRecordingDraft', () => {
       createRecordingDraft(ADMIN, { sessionId }),
     ]);
     const won = outcomes.filter(
-      (o): o is PromiseFulfilledResult<{ id: string; audioPath: string }> => o.status === 'fulfilled',
+      (o): o is PromiseFulfilledResult<{ id: string }> => o.status === 'fulfilled',
     );
     expect(won).toHaveLength(1);
     expect(String((outcomes.find((o) => o.status === 'rejected') as PromiseRejectedResult).reason)).toMatch(/already/i);
@@ -202,25 +219,36 @@ describe('createRecordingDraft', () => {
 describe('finalizeRecording', () => {
   it('reads size from the media store rather than trusting the client', async () => {
     const { id } = await newDraft();
-    await putAudio(id, 4096);
-    const res = await finalizeRecording({ recordingId: id, durationSec: 720 });
+    const itemId = await landed(id, 4096);
+    const res = await finalizeRecording({ recordingId: id, itemId, durationSec: 720 });
     expect(res.sizeBytes).toBe(4096);
-    const d = await rec(id);
-    expect(d.audioPath).toBe(audioStoragePath(id));
-    expect(d.durationSec).toBe(720);
+    expect(await onlyItem(id)).toMatchObject({ id: itemId, status: 'ready', sizeBytes: 4096, durationSec: 720 });
+    // The recording's length is derived from what is now playable.
+    expect((await rec(id)).durationSec).toBe(720);
   });
 
-  it('refuses when no audio actually landed', async () => {
+  it('refuses when no file actually landed, and leaves the item unplayable', async () => {
     const { id } = await newDraft();
-    await expect(finalizeRecording({ recordingId: id, durationSec: 1 })).rejects.toThrow(/No audio/);
-    expect((await rec(id)).audioPath).toBeNull();
+    const { itemId } = await startUpload(ADMIN, { recordingId: id, contentType: 'audio/mp4', sizeBytes: 10 });
+    await expect(finalizeRecording({ recordingId: id, itemId, durationSec: 1 })).rejects.toThrow(/No file/);
+    expect((await onlyItem(id)).status).toBe('uploading');
+    expect((await rec(id)).durationSec).toBeNull();
   });
 
   it('accepts a null duration', async () => {
     const { id } = await newDraft();
-    await putAudio(id);
-    await finalizeRecording({ recordingId: id, durationSec: null });
+    const itemId = await landed(id);
+    await finalizeRecording({ recordingId: id, itemId, durationSec: null });
     expect((await rec(id)).durationSec).toBeNull();
+  });
+
+  it('cannot rewrite a file that is already confirmed', async () => {
+    // A replayed finalize would otherwise restamp size and duration over a
+    // file students may already be playing.
+    const id = await ready();
+    const { id: itemId } = await onlyItem(id);
+    await expect(finalizeRecording({ recordingId: id, itemId, durationSec: 9 })).rejects.toThrow(/not waiting/);
+    expect((await onlyItem(id)).durationSec).toBe(60);
   });
 });
 
@@ -233,10 +261,20 @@ describe('publishing', () => {
     expect(typeof d.publishedAt).toBe('number');
   });
 
-  it('REFUSES to publish a draft with no audio', async () => {
+  it('REFUSES to publish a draft with nothing to play', async () => {
     const { id } = await newDraft();
     await expect(applyRecordingStatus({ recordingId: id, status: 'published' })).rejects.toThrow(
-      /audio/,
+      /media/,
+    );
+    expect((await rec(id)).status).toBe('draft');
+  });
+
+  it('REFUSES to publish while an upload is still unconfirmed', async () => {
+    // Nothing staff have not seen settle goes out to students.
+    const { id } = await newDraft();
+    await landed(id);
+    await expect(applyRecordingStatus({ recordingId: id, status: 'published' })).rejects.toThrow(
+      /pending/,
     );
     expect((await rec(id)).status).toBe('draft');
   });
@@ -263,21 +301,24 @@ describe('publishing', () => {
   });
 });
 
-describe('clearAudio', () => {
-  it('deletes the object so a replacement can be uploaded', async () => {
+describe('removeMedia', () => {
+  it('deletes the object and the item, so a replacement can be uploaded', async () => {
     const id = await ready();
-    await clearAudio(id);
-    expect(await objectExists(audioStoragePath(id))).toBe(false);
+    const { id: itemId, storageKey } = await onlyItem(id);
+    await removeMedia(id, itemId);
+    expect(await objectExists(storageKey)).toBe(false);
     const d = await rec(id);
-    expect(d.audioPath).toBeNull();
-    expect(d.sizeBytes).toBeNull();
+    expect(d.media).toEqual({});
+    expect(d.durationSec).toBeNull();
   });
 
   it('REFUSES while the recording is live', async () => {
     const id = await ready();
+    const { id: itemId, storageKey } = await onlyItem(id);
     await applyRecordingStatus({ recordingId: id, status: 'published' });
-    await expect(clearAudio(id)).rejects.toThrow(/draft/i);
-    expect(await objectExists(audioStoragePath(id))).toBe(true);
+    await expect(removeMedia(id, itemId)).rejects.toThrow(/draft/i);
+    expect(await objectExists(storageKey)).toBe(true);
+    expect(Object.keys((await rec(id)).media)).toEqual([itemId]);
   });
 });
 
@@ -308,7 +349,6 @@ describe('applyDeleteRecording', () => {
   }
   const recExists = async (id: string) =>
     (await getFirestore().collection(COLLECTIONS.recordings).doc(id).get()).exists;
-  const audioExists = (id: string) => objectExists(audioStoragePath(id));
 
   it('deletes a session whose recording is already gone, rather than failing on the cascade', async () => {
     const sessionId = await newSession();
@@ -334,14 +374,15 @@ describe('applyDeleteRecording', () => {
   it('cascades: audio, doc, every dependent record, AND clears the session pointer', async () => {
     const sessionId = await newSession();
     const { id } = await createRecordingDraft(ADMIN, { sessionId });
-    await putAudio(id);
-    await finalizeRecording({ recordingId: id, durationSec: 5 });
+    const itemId = await landed(id);
+    await finalizeRecording({ recordingId: id, itemId, durationSec: 5 });
+    const key = await keyOf(id);
     await seedDeps(id);
     expect(await depCount(id)).toBe(DEPS.length);
 
     await applyDeleteRecording(id);
 
-    expect(await audioExists(id)).toBe(false);
+    expect(await objectExists(key)).toBe(false);
     expect(await recExists(id)).toBe(false);
     expect(await depCount(id)).toBe(0);
     expect((await session(sessionId)).recordingId).toBeNull(); // session freed for a new recording
@@ -353,7 +394,7 @@ describe('applyDeleteRecording', () => {
    *
    * `isEmptyDraft` was the whole gate, and it is a proxy that only holds for a
    * recording that was NEVER published. `published → unpublished → draft` is a
-   * legal pair of moves, `clearAudio` accepts a draft, and the recording then
+   * legal pair of moves, `removeMedia` accepts a draft, and the recording then
    * looks exactly like one created five minutes ago while a term of assignments
    * and completions still points at it. Four course-scoped calls in a row turned
    * a manager into an admin for the one irreversible act in the product.
@@ -424,11 +465,11 @@ describe('applyDeleteRecording', () => {
       await applyRecordingStatus({ recordingId: id, status: 'published' });
       await applyRecordingStatus({ recordingId: id, status: 'unpublished' });
       await applyRecordingStatus({ recordingId: id, status: 'draft' });
-      await clearAudio(id);
+      await removeMedia(id, (await onlyItem(id)).id);
 
       const walkedBack = await rec(id);
       // Indistinguishable by shape from a brand-new draft — which is the bug.
-      expect(walkedBack.audioPath).toBeNull();
+      expect(walkedBack.media).toEqual({});
       expect(walkedBack.status).toBe('draft');
 
       const req = await scopedManager('mgr-1');
@@ -462,10 +503,11 @@ describe('applyDeleteRecording', () => {
 
   it('REFUSES a published recording and removes nothing (unpublish/archive first)', async () => {
     const id = await ready();
+    const key = await keyOf(id);
     await applyRecordingStatus({ recordingId: id, status: 'published' });
     await seedDeps(id);
     await expect(applyDeleteRecording(id)).rejects.toThrow(/publish/i);
-    expect(await audioExists(id)).toBe(true);
+    expect(await objectExists(key)).toBe(true);
     expect(await recExists(id)).toBe(true);
     expect(await depCount(id)).toBe(DEPS.length);
   });
@@ -478,7 +520,7 @@ describe('applyDeleteRecording', () => {
     expect(await recExists(id)).toBe(false);
   });
 
-  it('deletes a draft that never had audio', async () => {
+  it('deletes a draft that never had media', async () => {
     const { id } = await newDraft();
     await applyDeleteRecording(id);
     expect(await recExists(id)).toBe(false);
@@ -487,17 +529,18 @@ describe('applyDeleteRecording', () => {
   // The two round-trips the session screen's recovery paths depend on. Both
   // failed silently before: the UI offered no way back from a recording with no
   // audio, so these are the invariants that keep it out of a dead-end.
-  it('deletes audio that landed but never finalized (audioPath still null)', async () => {
-    // The real failure this guards: the bytes land, then finalize fails,
-    // so the doc's audioPath is still null. Deleting only what the field points at
-    // would leave those bytes orphaned and billable forever.
+  it('deletes a file that landed but was never confirmed', async () => {
+    // The real failure this guards: the bytes land, then finalize fails, so
+    // nothing playable points at them. Deleting only ready items would leave
+    // those bytes orphaned and billable forever.
     const { id } = await newDraft();
-    await putAudio(id);
-    expect((await rec(id)).audioPath).toBeNull(); // never finalized
-    expect(await audioExists(id)).toBe(true);
+    await landed(id);
+    const { status, storageKey } = await onlyItem(id);
+    expect(status).toBe('uploading'); // never finalized
+    expect(await objectExists(storageKey)).toBe(true);
 
     await applyDeleteRecording(id);
-    expect(await audioExists(id)).toBe(false);
+    expect(await objectExists(storageKey)).toBe(false);
   });
 
   it('discarding an empty draft frees the session for a NEW recording', async () => {
@@ -512,23 +555,23 @@ describe('applyDeleteRecording', () => {
     expect((await session(sessionId)).recordingId).toBe(second.id);
   });
 
-  it('audio removed from a draft can be re-uploaded onto the SAME recording', async () => {
-    // clearAudio exists "so it can be re-uploaded" — the upload URL is
-    // write-once, so this only works because clearAudio deletes it first.
+  it('a file removed from a draft can be replaced on the SAME recording', async () => {
+    // removeMedia exists "so it can be re-uploaded": the upload path refuses a
+    // recording that already has its file, so this only works because the
+    // removal takes the item away as well as the bytes.
     const { id } = await newDraft();
-    await putAudio(id);
-    await finalizeRecording({ recordingId: id, durationSec: 5 });
-    expect((await rec(id)).audioPath).not.toBeNull();
+    const first = await landed(id);
+    await finalizeRecording({ recordingId: id, itemId: first, durationSec: 5 });
+    const firstKey = await keyOf(id);
 
-    await clearAudio(id);
-    expect((await rec(id)).audioPath).toBeNull();
-    expect(await audioExists(id)).toBe(false);
+    await removeMedia(id, first);
+    expect((await rec(id)).media).toEqual({});
+    expect(await objectExists(firstKey)).toBe(false);
 
-    await putAudio(id);
-    await finalizeRecording({ recordingId: id, durationSec: 7 });
-    const after = await rec(id);
-    expect(after.audioPath).toBe(audioStoragePath(id));
-    expect(after.durationSec).toBe(7);
+    const second = await landed(id);
+    await finalizeRecording({ recordingId: id, itemId: second, durationSec: 7 });
+    expect(await onlyItem(id)).toMatchObject({ id: second, status: 'ready' });
+    expect((await rec(id)).durationSec).toBe(7);
   });
 });
 
@@ -547,64 +590,78 @@ describe('uploading audio', () => {
     headers = put.headers,
   ) => fetch(put.url, { method: 'PUT', headers, body });
 
-  it('stores the audio a draft is given, and finalize records it', async () => {
+  const begin = (recordingId: string, sizeBytes = AUDIO.length) =>
+    startUpload(ADMIN, { recordingId, contentType: 'audio/mp4', sizeBytes });
+
+  it('stores the file a draft is given, and finalize makes it playable', async () => {
     const { id } = await newDraft();
-    const put = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: AUDIO.length });
+    const put = await begin(id);
     expect((await send(put, AUDIO)).status).toBe(200);
-    await finalizeRecording({ recordingId: id, durationSec: 60 });
-    expect(await rec(id)).toMatchObject({ audioPath: audioStoragePath(id), sizeBytes: AUDIO.length });
+    await finalizeRecording({ recordingId: id, itemId: put.itemId, durationSec: 60 });
+    expect(await onlyItem(id)).toMatchObject({
+      id: put.itemId,
+      status: 'ready',
+      sizeBytes: AUDIO.length,
+      storageKey: `media/${id}/${put.itemId}`,
+      addedBy: ADMIN,
+    });
   });
 
   it('writes once: the same URL cannot replace what it stored', async () => {
     const { id } = await newDraft();
-    const put = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: AUDIO.length });
+    const put = await begin(id);
     expect((await send(put, AUDIO)).status).toBe(200);
-    const before = await objectInfo(audioStoragePath(id));
+    const key = await keyOf(id);
+    const before = await objectInfo(key);
     expect((await send(put, new Uint8Array(10))).status).toBe(412);
-    expect(await objectInfo(audioStoragePath(id))).toEqual(before);
+    expect(await objectInfo(key)).toEqual(before);
   });
 
   it('refuses a different content type, or a PUT that drops the write-once condition', async () => {
     const { id } = await newDraft();
-    const put = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: AUDIO.length });
+    const put = await begin(id);
     expect((await send(put, AUDIO, { ...put.headers, 'Content-Type': 'video/mp4' })).status).toBe(403);
     expect((await send(put, AUDIO, { 'Content-Type': 'audio/mp4' })).status).toBe(403);
-    expect(await objectExists(audioStoragePath(id))).toBe(false);
+    expect(await objectExists(await keyOf(id))).toBe(false);
   });
 
-  it('gives no URL for a recording that has its audio, or one students can hear', async () => {
+  it('gives no URL for a recording that has its file, or one students can hear', async () => {
     const id = await ready();
-    const stored = await objectInfo(audioStoragePath(id));
-    await expect(startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: 10 })).rejects.toThrow(
-      /already has audio/,
-    );
+    const key = await keyOf(id);
+    const stored = await objectInfo(key);
+    await expect(begin(id, 10)).rejects.toThrow(/already has audio/);
     await applyRecordingStatus({ recordingId: id, status: 'published' });
-    await expect(startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: 10 })).rejects.toThrow(
-      /draft/,
-    );
-    expect(await objectInfo(audioStoragePath(id))).toEqual(stored);
+    await expect(begin(id, 10)).rejects.toThrow(/draft/);
+    expect(await objectInfo(key)).toEqual(stored);
+    expect(await items(id)).toHaveLength(1);
   });
 
-  it('clears an upload that landed but was never finalized, so a retry can land', async () => {
+  it('replaces an upload that landed but was never confirmed, so a retry can land', async () => {
     const { id } = await newDraft();
-    const first = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: AUDIO.length });
+    const first = await begin(id);
     expect((await send(first, AUDIO)).status).toBe(200);
+    const firstKey = await keyOf(id);
     // Finalize never happened (the tab closed); the person tries again.
-    const second = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: 10 });
+    const second = await begin(id, 10);
     expect((await send(second, new Uint8Array(10))).status).toBe(200);
-    await finalizeRecording({ recordingId: id, durationSec: 1 });
-    expect((await rec(id)).sizeBytes).toBe(10);
+    await finalizeRecording({ recordingId: id, itemId: second.itemId, durationSec: 1 });
+    expect(await onlyItem(id)).toMatchObject({ id: second.itemId, sizeBytes: 10 });
+    // The abandoned bytes do not stay billable.
+    expect(await objectExists(firstKey)).toBe(false);
   });
 
   it('deletes and refuses a file over the cap that the URL could not stop', async () => {
     // The URL signs the type, not the size, so a client can send more than it
     // declared. Finalize is where that is caught, and the file goes.
     const { id } = await newDraft();
-    const put = await startUpload({ recordingId: id, contentType: 'audio/mp4', sizeBytes: 1000 });
+    const put = await begin(id, 1000);
     expect((await send(put, new Uint8Array(MAX_AUDIO_BYTES + 1))).status).toBe(200);
-    await expect(finalizeRecording({ recordingId: id, durationSec: 1 })).rejects.toThrow(/too large/);
-    expect(await objectExists(audioStoragePath(id))).toBe(false);
-    expect((await rec(id)).audioPath).toBeNull();
+    const key = await keyOf(id);
+    await expect(finalizeRecording({ recordingId: id, itemId: put.itemId, durationSec: 1 })).rejects.toThrow(
+      /too large/,
+    );
+    expect(await objectExists(key)).toBe(false);
+    expect((await rec(id)).media).toEqual({});
   });
 
   it('gives a student no upload URL at all', async () => {
@@ -618,10 +675,11 @@ describe('uploading audio', () => {
 
   it('is a private bucket: without a signed URL nothing reads or writes', async () => {
     const id = await ready();
-    const direct = `${process.env.MEDIA_S3_ENDPOINT}/${process.env.MEDIA_BUCKET}/${audioStoragePath(id)}`;
+    const key = await keyOf(id);
+    const direct = `${process.env.MEDIA_S3_ENDPOINT}/${process.env.MEDIA_BUCKET}/${key}`;
     expect((await fetch(direct)).status).toBe(403);
     expect((await fetch(direct, { method: 'PUT', body: new Uint8Array(4) })).status).toBe(403);
-    expect((await objectInfo(audioStoragePath(id)))?.size).toBe(2048);
+    expect((await objectInfo(key))?.size).toBe(2048);
   });
 
   it('refuses anything but audio, and a declared size over the cap, before signing', () => {
@@ -652,10 +710,11 @@ describe('validators', () => {
     expect(validateSetStatus({ recordingId: 'r', status: 'archived' }).status).toBe('archived');
   });
 
-  it('reject a nonsensical duration', () => {
+  it('reject a nonsensical duration, and a finalize that names no file', () => {
     for (const bad of [0, -5, 'ten', NaN]) {
-      expect(() => validateFinalize({ recordingId: 'r', durationSec: bad })).toThrow();
+      expect(() => validateFinalize({ recordingId: 'r', itemId: 'i', durationSec: bad })).toThrow();
     }
-    expect(validateFinalize({ recordingId: 'r', durationSec: null }).durationSec).toBeNull();
+    expect(() => validateFinalize({ recordingId: 'r', durationSec: null })).toThrow(/itemId/);
+    expect(validateFinalize({ recordingId: 'r', itemId: 'i', durationSec: null }).durationSec).toBeNull();
   });
 });

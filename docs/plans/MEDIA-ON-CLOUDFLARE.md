@@ -5,17 +5,17 @@ Cloudflare R2. A small Cloudflare Worker copies Zoom recordings straight into
 R2, so no media ever leaves Google and no media is ever downloaded from Google.
 Firestore, Auth, Functions and Hosting stay on Firebase.
 
-Status (2026-10-12): in progress, on **today's data model**: one audio
-file per recording at `recordings/{recordingId}/audio.m4a`. The media-items
-model (`mediaId`, parts and versions) comes with
-[VIDEO-AND-MULTIPLE-MEDIA.md](VIDEO-AND-MULTIPLE-MEDIA.md) after the first
-deploy; `mediaStore.ts` is keyed by object key, so that change touches what
-key is signed, not how. Built so far:
+Status (2026-10-12): in progress, on the **media-items model**
+([VIDEO-AND-MULTIPLE-MEDIA.md](VIDEO-AND-MULTIPLE-MEDIA.md), V1): each file
+is an item in its recording's `media` map and carries its own `storageKey`.
+New files go to `media/{recordingId}/{itemId}`; files copied from the live
+app keep `recordings/{recordingId}/audio.m4a`. `mediaStore.ts` is keyed by
+object key, so the layout is the items' business, not the store's. Built so far:
 
 - Spike M1 (below).
 - `functions/src/mediaStore.ts`: signed GET for playback, signed write-once
   PUT for staff uploads (`startRecordingUpload`), HEAD at finalize (an object
-  over the cap is deleted), DELETE for remove-audio and delete. Firebase
+  over the cap is deleted), DELETE for removing a file and for delete. Firebase
   Storage, `storage.rules` and its emulator are gone.
 - SeaweedFS in `test:emulator`, `test:screens` and `npm run emulators`, with
   the read and write keys split as in production.
@@ -399,11 +399,14 @@ Tests rewritten, following "test the promise, not the mechanism":
 
 ## Moving existing media
 
-Done as part of each seed in [SWITCHOVER.md](SWITCHOVER.md): list
-`recordings/*/audio.m4a` in the legacy bucket, copy each into R2 at its new
-key, and write the media item. Today that is under 1 GB; copying it from
-Faisal's machine costs pennies of Google egress, and Cloudflare's Super
-Slurper can copy straight from a GCS bucket for free if that ever matters.
+Done as part of each seed in [SWITCHOVER.md](SWITCHOVER.md): every object
+under `recordings/` in the legacy bucket is copied into R2 at the same key,
+and every recording document is converted on the way to one media item that
+points at it (`scripts/lib/legacy-media.mjs`, which calls
+`mediaFromSingleAudio` in `@sabeel/shared`), with a `zoomImports` claim for a
+Zoom import. Today that is under 1 GB; copying it from Faisal's machine costs
+pennies of Google egress, and Cloudflare's Super Slurper can copy straight
+from a GCS bucket for free if that ever matters.
 
 ## Delivery steps
 

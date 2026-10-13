@@ -7,6 +7,7 @@ import {
   isDiscardable,
   isOverdue,
   publishBlockers,
+  startingItem,
   todayInZone,
   unbreakableDate,
   type AttendanceStatus,
@@ -33,7 +34,7 @@ import {
   type SessionRow,
 } from '../sessions';
 import {
-  clearRecordingAudio,
+  removeRecordingMedia,
   createRecording,
   deleteRecording,
   finalizeRecordingUpload,
@@ -451,8 +452,8 @@ function RecordingSection({
         if (!existingId) createdId = (await createRecording({ sessionId: session.id })).id;
         const id = existingId ?? createdId!;
         setProgress(0);
-        await uploadRecordingAudio(id, picked.blob, setProgress);
-        await finalizeRecordingUpload({ recordingId: id, durationSec: picked.durationSec });
+        const itemId = await uploadRecordingAudio(id, picked.blob, setProgress);
+        await finalizeRecordingUpload({ recordingId: id, itemId, durationSec: picked.durationSec });
       } catch (e) {
         setError(errorText(e));
         // Roll back a draft this attempt created: it holds nothing, and leaving
@@ -628,14 +629,19 @@ function RecordingCard({
   // the confirm if that stops being true underneath it — the same guard
   // ConfirmDanger applies, so the open panel can never outlive its precondition
   // and offer a button that could only fail.
-  const canClearAudio = !!r.audioPath && (r.status === 'draft' || r.status === 'needsAttention');
+  // ONE FILE PER RECORDING on this card until it becomes a media list
+  // (docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md, V4); the server holds the same
+  // line. A file that never arrived is replaced by the next upload, so only a
+  // ready one is offered for removal.
+  const playable = startingItem(r.media, r.defaultVersion);
+  const canClearAudio = !!playable && (r.status === 'draft' || r.status === 'needsAttention');
   useEffect(() => {
     if (!canClearAudio) setConfirmClear(false);
   }, [canClearAudio]);
   // No audio is a NORMAL state here, not a failure: mid-upload, after a failed
   // one, or after Remove audio. Only say something is wrong once nothing is in
   // flight — otherwise a healthy upload reads as broken for its whole duration.
-  const needsAudio = !r.audioPath && !uploading;
+  const needsAudio = !playable && !uploading;
   // Discarding a recording that never held anything destroys nothing, so it is
   // not the admin-only permanent delete. NOT `isEmptyDraft`, which is only
   // "needs audio": a recording walked back from published has that same shape
@@ -662,7 +668,7 @@ function RecordingCard({
             busy={busy === `clear-${r.id}`}
             onPress={() =>
               onRun(`clear-${r.id}`, async () => {
-                await clearRecordingAudio({ recordingId: r.id });
+                if (playable) await removeRecordingMedia({ recordingId: r.id, itemId: playable.id });
                 setConfirmClear(false);
               })
             }
@@ -687,9 +693,9 @@ function RecordingCard({
               and two live descriptions of one operation just compete. */}
           {uploading
             ? ''
-            : r.audioPath
+            : playable
               ? [r.durationSec ? fmtDuration(r.durationSec) : null,
-                 r.sizeBytes ? `${(r.sizeBytes / 1024 / 1024).toFixed(1)} MB` : null]
+                 playable.sizeBytes ? `${(playable.sizeBytes / 1024 / 1024).toFixed(1)} MB` : null]
                   .filter(Boolean)
                   .join(' · ')
               : 'no audio yet'}
@@ -746,7 +752,7 @@ function RecordingCard({
               thing in this row that is not administration, and drawn like
               Archive and Unpublish it was indistinguishable from the two
               controls that take the recording away. Never two primaries. */}
-          {r.audioPath ? (
+          {playable ? (
             <Button
               testID="recording-listen"
               label="Listen"

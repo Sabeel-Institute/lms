@@ -2,11 +2,12 @@ import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { CallableRequest } from 'firebase-functions/v2/https';
-import { COLLECTIONS, EMULATOR_PROJECT_ID, assignmentId, audioStoragePath } from '@sabeel/shared';
+import { COLLECTIONS, EMULATOR_PROJECT_ID, assignmentId, mediaStorageKey } from '@sabeel/shared';
 import { getPlaybackUrl } from '../../src/playback';
 import { signGet } from '../../src/mediaStore';
 import { idTokenFor } from './emulatorToken';
 import { putObject } from './mediaObjects';
+import { AUDIO_ITEM, withAudio } from '../mediaFixtures';
 
 /**
  * The one callable that hands out audio, driven end to end.
@@ -37,11 +38,12 @@ const RECORDING = 'recording-play';
 const STUDENT = 'student-play';
 const OTHER_STUDENT = 'student-play-other';
 const MANAGER = 'manager-play';
+const KEY = mediaStorageKey(RECORDING, AUDIO_ITEM);
 
 const req = async (uid: string, role: string, status = 'active'): Promise<CallableRequest> =>
   ({
     auth: { uid, token: { role, status }, rawToken: await idTokenFor(uid) },
-    data: { recordingId: RECORDING },
+    data: { recordingId: RECORDING, itemId: AUDIO_ITEM },
   }) as unknown as CallableRequest;
 
 /** Today is well before the deadline unless a test moves the grant's due date. */
@@ -87,15 +89,20 @@ beforeEach(async () => {
     title: 'Playable',
     status: 'published',
     source: 'manual',
-    audioPath: audioStoragePath(RECORDING),
-    durationSec: 60,
-    sizeBytes: 16,
+    ...withAudio(RECORDING, { durationSec: 60, sizeBytes: AUDIO.length }),
     createdAt: 1,
     createdBy: 'admin-uid',
     updatedAt: 1,
   });
-  await putObject(audioStoragePath(RECORDING), AUDIO);
+  await putObject(KEY, AUDIO);
 });
+
+/** The recording's one file, changed. */
+const setItem = (over: Record<string, unknown>) =>
+  db()
+    .collection(COLLECTIONS.recordings)
+    .doc(RECORDING)
+    .update(Object.fromEntries(Object.entries(over).map(([k, v]) => [`media.${AUDIO_ITEM}.${k}`, v])));
 
 /** Read bytes 100..199 through a URL, as a player seeking would. */
 async function rangeThrough(url: string): Promise<{ status: number; bytes: Uint8Array }> {
@@ -154,7 +161,7 @@ describe('getPlaybackUrl', () => {
   });
 
   it('refuses an unauthenticated call', async () => {
-    expect(await denialOf({ data: { recordingId: RECORDING } } as CallableRequest)).toMatch(
+    expect(await denialOf({ data: { recordingId: RECORDING, itemId: AUDIO_ITEM } } as CallableRequest)).toMatch(
       /sign in/i,
     );
   });
@@ -162,7 +169,7 @@ describe('getPlaybackUrl', () => {
   it('refuses a recording that does not exist, without leaking whether it might', async () => {
     const r = {
       auth: { uid: STUDENT, token: { role: 'student', status: 'active' }, rawToken: await idTokenFor(STUDENT) },
-      data: { recordingId: 'no-such-recording' },
+      data: { recordingId: 'no-such-recording', itemId: AUDIO_ITEM },
     } as unknown as CallableRequest;
     expect(await denialOf(r)).toMatch(/no such recording/i);
   });
@@ -180,6 +187,28 @@ describe('getPlaybackUrl', () => {
    * can act on. Pinning either side here would settle it by accident, in a test,
    * which is how a defect becomes a specification.
    */
+  it('refuses a file the recording does not hold, or one not ready', async () => {
+    await grant(STUDENT, FUTURE);
+    const r = await req(STUDENT, 'student');
+    expect(await denialOf({ ...r, data: { recordingId: RECORDING, itemId: 'no-such-item' } } as CallableRequest)).toMatch(
+      /not available/i,
+    );
+    await setItem({ status: 'copying' });
+    expect(await denialOf(r)).toMatch(/not available/i);
+  });
+
+  it('refuses a student a hidden file, and still serves it to the class manager', async () => {
+    await grant(STUDENT, FUTURE);
+    await setItem({ hidden: true });
+    expect(await denialOf(await req(STUDENT, 'student'))).toMatch(/not available/i);
+    expect(await denialOf(await req(MANAGER, 'manager'))).toBeNull();
+  });
+
+  it('refuses a call that names no file', async () => {
+    const r = await req(MANAGER, 'manager');
+    expect(await denialOf({ ...r, data: { recordingId: RECORDING } } as CallableRequest)).toMatch(/itemId/);
+  });
+
   it('refuses a student once their class is archived with listening off', async () => {
     await grant(STUDENT, FUTURE);
     await db()
@@ -197,21 +226,24 @@ describe('getPlaybackUrl', () => {
  */
 describe('a playback URL', () => {
   it('stops working when it expires', async () => {
-    const { url } = await signGet(audioStoragePath(RECORDING), 1000);
+    // TWO SECONDS, not one: the signature carries its start time truncated to
+    // the whole second, so a one-second URL lives anywhere from 0 to 1 s and
+    // was occasionally dead before its first use.
+    const { url } = await signGet(KEY, 2000);
     expect((await rangeThrough(url)).status).toBe(206);
-    await new Promise((r) => setTimeout(r, 2500));
+    await new Promise((r) => setTimeout(r, 3500));
     expect((await rangeThrough(url)).status).toBe(403);
   });
 
   it('opens only the recording it was signed for', async () => {
-    await putObject(audioStoragePath('recording-someone-else'), AUDIO);
-    const { url } = await signGet(audioStoragePath(RECORDING), 60_000);
+    await putObject(mediaStorageKey('recording-someone-else', AUDIO_ITEM), AUDIO);
+    const { url } = await signGet(KEY, 60_000);
     const other = url.replace(RECORDING, 'recording-someone-else');
     expect((await rangeThrough(other)).status).toBe(403);
   });
 
   it('cannot be used to write', async () => {
-    const { url } = await signGet(audioStoragePath(RECORDING), 60_000);
+    const { url } = await signGet(KEY, 60_000);
     const res = await fetch(url, { method: 'PUT', body: new Uint8Array(8) });
     expect(res.status).toBe(403);
     expect((await rangeThrough(url)).bytes).toEqual(AUDIO.slice(100, 200));
