@@ -386,12 +386,24 @@ describe('submitting a register', () => {
   });
 });
 
+/**
+ * Let the emulator's own triggers land. Every session and recording write here
+ * also fires `onSessionWritten` / `onRecordingWritten` out of band, and one that
+ * read the session BEFORE a later change can write its answer after the test
+ * has moved on — which is how a test that flips a due date twice became a coin
+ * toss, and how a grant deactivated on unenrolment came back on CI's slower
+ * runner. Production has the same window and converges on the next write; a
+ * test cannot wait for "the next write", so it waits for the queue to drain.
+ */
+const settle = () => new Promise((r) => setTimeout(r, 1500));
+
 describe('unenrolment', () => {
   it('deactivates a student obligations in the course, keeping history', async () => {
     await seedSession('sess', { attendance: { s1: 'excused', s2: 'excused' }, submitted: true });
     await seedRecording('r1', 'sess', 'published');
     await reconcile('sess');
     expect(await countActive('r1')).toBe(2);
+    await settle();
 
     await deactivateStudentAssignmentsInCourse(db(), courseId, 's1');
     expect((await getAssignment('s1', 'r1'))?.active).toBe(false);
@@ -476,15 +488,6 @@ describe('unenrolment', () => {
    * refuses. Their record of it survives in the deactivated assignment, which is
    * what the ledger's "Excused, access closed" group reads.
    */
-  /**
-   * Let the emulator's own triggers land. Every session write here also fires
-   * `onSessionWritten` out of band, and one that read the session BEFORE a
-   * date change can write its answer after the test has moved on — which is
-   * how a test that flips a due date twice became a coin toss. Production has
-   * the same window and converges on the next write; a test cannot wait for
-   * "the next write", so it waits for the queue to drain instead.
-   */
-  const settle = () => new Promise((r) => setTimeout(r, 1500));
 
   it('does not hand back an obligation whose deadline passed while they were away', async () => {
     await seedSession('closed', { dueDate: '2099-01-01', attendance: { s1: 'excused' }, submitted: true });

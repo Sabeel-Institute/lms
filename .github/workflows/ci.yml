@@ -81,6 +81,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/seaweedfs" && tar -xzf weed.tgz -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
 
+      # The media tests make their sample files (audio, video, pictures) with
+      # ffmpeg on first use (functions/test/mediaSamples.ts); a bare runner has
+      # none, and 38 of them failed on the first run that needed it.
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
       # Secrets the functions bind, as the emulator wants them: present, and
       # never fetched from Secret Manager. Sentry off; the media keys are unused
       # under the emulator (mediaStore.ts reads the local SeaweedFS keys).
