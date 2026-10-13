@@ -36,6 +36,20 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **Students watch and listen by part and version** (video plan
+  V5). One engine, expo-video, plays audio and video on Android; the web uses
+  a `<video>` element. Proven three ways: `playback.test.ts` (resume in the
+  saved part and version, a version switch that keeps the place and counts
+  nothing, auto-advance, the last part's end); the browser e2e, which adds a
+  video version to the student's recording mid-session, switches to it at
+  541 s and lands on 541 s with the picture showing, plays it, and switches
+  back keeping the place (155 checks and the three new ones green); and
+  `tb_emu`, where the debug build switched audio to video at 0:11 with the
+  picture's own clock agreeing, went to picture-in-picture on Home, kept its
+  foreground service and `USAGE_MEDIA` playback in the background, and showed
+  title, course and working pause on the lock screen. Rules (progress may
+  carry `part` and `version`) and hosting deployed; smoke green.
+
 - 2026-10-13 — **Zoom imports take any file, and the session page lists a
   recording's files** (video plan V2 and V4, commits `dafbe2d`, `117edfb`,
   `4a97f7b`). The picker lists every meeting with its segments and formats
