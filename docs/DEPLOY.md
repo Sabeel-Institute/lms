@@ -333,6 +333,24 @@ hit on 2026-10-12 and all apply to any new project here (a test project too):
   token gets an HTML 401, "The access token could not be verified", from Cloud
   Run's front end rather than JSON from the function.
 
+- **The Zoom copy queue (`copyZoomFile`) needs Cloud Tasks and three grants**,
+  made once on 2026-10-13: the Cloud Tasks API enabled; the runtime account
+  (`<number>-compute@developer.gserviceaccount.com`) given
+  `roles/cloudtasks.enqueuer` and `roles/cloudtasks.viewer` on the project
+  and `roles/iam.serviceAccountUser` on itself, so `importZoomFiles` can
+  queue a task carrying its token. The queue calls the function with that
+  token; the account's project-level `roles/run.invoker` lets it in, and the
+  function itself is `invoker: 'private'` (its first deploy left it open to
+  `allUsers`).
+- **A deploy of `copyZoomFile` fails with "Unable to set the invoker" when the
+  queue's IAM policy is empty.** firebase-tools 15.22.4 reads
+  `existing.bindings.filter` and a fresh queue's policy has no `bindings`;
+  the real error, "Cannot read properties of undefined (reading 'filter')",
+  shows only under `--debug`. The CLI removes only the enqueuer role from the
+  queue, so a viewer binding keeps the field present:
+  `gcloud tasks queues add-iam-policy-binding copyZoomFile --location=us-central1 --member=serviceAccount:<runtime account> --role=roles/cloudtasks.viewer`.
+  Done for `oursabeel-lms`; a new project's queue needs it after its first
+  deploy.
 - **Cloud Build 404 on `@sabeel/shared`.** `firebase deploy` ships only
   `functions/` to Cloud Build, so a private workspace package in its
   `package.json` makes `npm install` 404. Handled: `functions/esbuild.config.mjs`

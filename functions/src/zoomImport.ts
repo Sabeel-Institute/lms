@@ -412,6 +412,10 @@ export const copyZoomFile = onTaskDispatched<CopyTask>(
     rateLimits: { maxConcurrentDispatches: 4 },
     // The Worker's copy takes up to 20 minutes for the largest file.
     timeoutSeconds: 1800,
+    // PRIVATE, said out loud: only the queue, with the runtime account's token,
+    // may call this. The first deploy left it open to anyone (allUsers) though
+    // private is the documented default — see docs/DEPLOY.md.
+    invoker: 'private',
     secrets: [SENTRY_DSN, ...ZOOM_SECRETS, ...MEDIA_WRITE_SECRETS],
   },
   async (req) => {
