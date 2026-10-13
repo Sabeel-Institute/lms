@@ -276,7 +276,7 @@ export function buildTodayQueue({
             : rec.status === 'unpublished'
               ? 'Unpublished, so nobody excused can open it.'
               : rec.status === 'archived'
-                ? 'Archived before its listen-by date, so nobody excused can open it.'
+                ? 'Archived before its due date, so nobody excused can open it.'
                 : 'A draft is waiting to be published.',
       });
       continue;

@@ -8,6 +8,7 @@ import {
   isPlayable,
   listenedFraction,
   mediaParts,
+  playVerb,
   startingItem,
   todayInZone,
 } from '@sabeel/shared';
@@ -147,10 +148,10 @@ export function PlayerScreen({
             than telling them it was never theirs. */}
         <Notice tone="info">
           {!closed
-            ? 'This course has been archived and listening has been turned off. Your listening history is kept — ask your teacher if you need access again.'
+            ? 'This course has been archived and its recordings are closed. Your record is kept — ask your teacher if you need access again.'
             : dueDate === null
-              ? 'This recording has not been assigned to you. Your teacher marks who needs to listen when they take the register.'
-              : `This recording closed on ${dueDate}. Your listening record is kept — ask your teacher if you need it reopened.`}
+              ? `This recording has not been assigned to you. Your teacher marks who needs to ${playVerb(recording.media).toLowerCase()} when they take the register.`
+              : `This recording closed on ${dueDate}. Your record is kept — ask your teacher if you need it reopened.`}
         </Notice>
         {/* AND THE RECORD ITSELF, which "is kept" above promises and the screen
             used not to show. A student who finished a recording on time could
@@ -175,7 +176,8 @@ export function PlayerScreen({
     studentUid === null ? i.status === 'ready' : isPlayable(i),
   );
   const parts = mediaParts(offered);
-  const versions = current ? offered.filter((i) => i.part === current.part) : [];
+  // In the same order as the staff file list, from the same helper.
+  const versions = (current && parts.find((p) => p.part === current.part)?.items) || [];
   const remainingMs = Math.max(0, durationMs - shownPositionMs);
   const listened = listenedFraction(state.listenedMs, recording.durationSec);
 
@@ -303,12 +305,12 @@ export function PlayerScreen({
           A short note says why, rather than leaving a bare gap. */}
       {studentUid ? (
         <>
-          <Text style={styles.sectionHeading}>Your listening</Text>
+          <Text style={styles.sectionHeading}>Your progress</Text>
           <View style={styles.listenedTrack}>
             <View style={[styles.listenedFill, { width: `${Math.round(listened * 100)}%` }]} />
           </View>
           <Text style={styles.body}>
-            {Math.round(listened * 100)}% of this recording listened. Your place is saved
+            {Math.round(listened * 100)}% of this recording played. Your place is saved
             automatically, so you can carry on from another device.
           </Text>
           {/*
@@ -333,7 +335,7 @@ export function PlayerScreen({
         </>
       ) : (
         <Text style={styles.staffNote}>
-          Staff preview — your listening isn&apos;t recorded, and there&apos;s nothing to mark
+          Staff preview — your playing isn&apos;t recorded, and there&apos;s nothing to mark
           complete here.
         </Text>
       )}
@@ -350,7 +352,9 @@ export function PlayerScreen({
           a deadline. Staff previewing see the session's date plainly. */}
       {dueDate ? (
         <Text style={styles.due}>
-          {studentUid ? `Available to listen until ${dueDate}` : `Due ${dueDate}`}
+          {studentUid
+            ? `Available to ${playVerb(recording.media).toLowerCase()} until ${dueDate}`
+            : `Due ${dueDate}`}
         </Text>
       ) : null}
     </ScrollView>
@@ -548,10 +552,12 @@ const styles = StyleSheet.create({
   hero: {
     backgroundColor: t.bg.sage,
     borderRadius: 16,
-    paddingVertical: spacing(10),
+    paddingVertical: spacing(7),
     paddingHorizontal: spacing(5),
     marginBottom: spacing(5),
-    minHeight: 200,
+    // Tightened once video arrived: under a picture the card is a caption,
+    // and at 200px it pushed the transport a screen away from the video.
+    minHeight: 160,
     justifyContent: 'center',
   },
   heroCourse: {

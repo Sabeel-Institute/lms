@@ -5,6 +5,7 @@ import {
   mediaParts,
   mediaStorageKey,
   mediaSummary,
+  playVerb,
   startingItem,
   type MediaItem,
   type MediaMap,
@@ -154,5 +155,16 @@ describe('mediaSummary', () => {
     expect(mediaSummary(mediaOf(item('v', { kind: 'video', version: 'video' })))).toBe('video');
     // Hidden or not yet arrived is nothing to a student.
     expect(mediaSummary(mediaOf(item('a', { hidden: true }), item('b', { status: 'copying' })))).toBeNull();
+  });
+});
+
+describe('playVerb', () => {
+  it('asks a student to watch only what they can watch', () => {
+    expect(playVerb(QURAN)).toBe('Watch');
+    expect(playVerb(mediaOf(item('a')))).toBe('Listen');
+    // A hidden or unfinished video leaves the student only the audio.
+    expect(playVerb(mediaOf(item('a'), item('v', { kind: 'video', version: 'video', hidden: true })))).toBe('Listen');
+    expect(playVerb(mediaOf(item('a'), item('v', { kind: 'video', version: 'video', status: 'copying' })))).toBe('Listen');
+    expect(playVerb({})).toBe('Listen');
   });
 });

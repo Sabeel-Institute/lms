@@ -37,7 +37,7 @@ export function StudentCoursesScreen({
       // LIST, like every other collection — see `StudentHomeScreen`.
       width="list"
       title="Your classes"
-      subtitle="Your attendance and required listening, class by class"
+      subtitle="Your attendance and required recordings, class by class"
     >
       {/* IN A GRID, like every other collection. Asking for the list width and
           then stacking full-width rows is the worst of both: a card holding a

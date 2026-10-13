@@ -84,6 +84,8 @@ function build() {
     effect: {
       /** Scrim behind a modal. */
       overlay: p.overlay,
+      /** Behind a control drawn over a video's picture. */
+      videoControl: p.videoControl,
       shadow: p.shadow,
     },
   } as const;

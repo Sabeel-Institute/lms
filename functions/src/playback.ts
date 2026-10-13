@@ -75,7 +75,7 @@ const MESSAGES: Record<PlaybackDenial, string> = {
   'not-published': 'That recording is not published.',
   'not-assigned': 'That recording was not assigned to you.',
   'past-due': 'The due date for this recording has passed.',
-  'class-listening-off': 'This class is archived and listening has been turned off.',
+  'class-listening-off': 'This class is archived and its recordings are closed.',
   'not-your-class': 'You are not assigned to that class.',
 };
 

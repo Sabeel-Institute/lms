@@ -346,7 +346,7 @@ export interface LiveDocOptions<T> {
  * and students are granted `get` on a course they are enrolled in and never
  * `list`. So this is the only way a student screen can hold a live course — and
  * a one-shot getDoc would leave the archived and archived-listening flags frozen
- * at mount, which decide whether the "listening is off" notice shows and whether
+ * at mount, which decide whether the "recordings are closed" notice shows and whether
  * the player enables its transport.
  *
  * `resolved` says whether the listener has answered. `empty` alone cannot tell

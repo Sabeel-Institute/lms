@@ -1,11 +1,8 @@
 import { useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { VideoView } from 'expo-video';
 import { nativeVideoPlayer } from '../player';
-import { Button } from './ui';
-import { getTheme, spacing } from '../theme';
-
-const t = getTheme();
+import { VideoFrame } from './VideoFrame';
 
 /**
  * The picture of the file being played, when it is a video (web sibling:
@@ -15,38 +12,26 @@ const t = getTheme();
  * the screen keeps the sound going (the docked bar) while the picture goes;
  * coming back draws it again from the same player. Fullscreen and
  * picture-in-picture are the platform's own: the app is portrait, and its
- * fullscreen activity turns with the phone.
+ * fullscreen activity turns with the phone. NOT `nativeControls`, which would
+ * bring a second play button and scrubber over the picture, competing with
+ * the screen's own transport; the fullscreen icon is the app's (VideoFrame).
  */
 export function VideoSurface() {
   const view = useRef<VideoView>(null);
   const player = nativeVideoPlayer();
   if (!player) return null;
   return (
-    <View>
+    <VideoFrame onFullscreen={() => void view.current?.enterFullscreen()}>
       <VideoView
         ref={view}
         testID="player-video"
         player={player}
-        style={styles.video}
+        style={StyleSheet.absoluteFill}
         contentFit="contain"
         nativeControls={false}
         allowsPictureInPicture
         startsPictureInPictureAutomatically
       />
-      <View style={styles.actions}>
-        <Button
-          testID="player-fullscreen"
-          label="Full screen"
-          variant="quiet"
-          hug
-          onPress={() => void view.current?.enterFullscreen()}
-        />
-      </View>
-    </View>
+    </VideoFrame>
   );
 }
-
-const styles = StyleSheet.create({
-  video: { width: '100%', aspectRatio: 16 / 9, backgroundColor: t.bg.video, borderRadius: 8 },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing(2) },
-});

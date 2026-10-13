@@ -112,7 +112,7 @@ export function SessionDetailScreen({
     <Screen
       title={session.title}
       parent={{ label: cls.name, testID: 'up-to-course-from-session', onPress: onOpenCourse }}
-      subtitle={`${session.date} · excused students listen\u00A0by\u00A0${unbreakableDate(session.dueDate)}`}
+      subtitle={`${session.date} · excused students have until\u00A0${unbreakableDate(session.dueDate)}`}
       // READ, not `list`. This screen is a register and a set of notes, both of
       // which are read one line at a time; the list width put every name and its
       // control 470px apart. The roster's three-way control is 330px wide, which
@@ -176,7 +176,7 @@ function SessionHeader({ session, isAdmin }: { session: SessionRow; isAdmin: boo
         {error ? <Notice tone="error">{error}</Notice> : null}
         <Field label="Title" value={title} onChangeText={setTitle} autoCapitalize="words" />
         <DateField label="Date" value={date} onChange={setDate} />
-        <DateField label="Listen by" value={dueDate} onChange={setDueDate} />
+        <DateField label="Due by" value={dueDate} onChange={setDueDate} />
         <Field
           label="Notes (everyone with access sees these)"
           value={notes}
@@ -321,7 +321,7 @@ function AttendanceSection({ session }: { session: SessionRow }) {
             : activeUids.length === 0
               ? 'Enrol students in this course first — attendance is taken from its roster.'
               : session.attendanceSubmittedAt
-              ? 'Submitted. Excused students are assigned the recording and can open it until the listen-by date; present and absent students are not.'
+              ? 'Submitted. Excused students are assigned the recording and can open it until the due date; present and absent students are not.'
               : 'Everyone starts as Present — mark who was away, and excuse whoever should listen to the recording. Only excusing grants access, and nothing is granted until you submit.'}
         </Text>
         {rosterState === null ? null : activeUids.length === 0 ? (
@@ -618,7 +618,7 @@ function RecordingCard({
    *
    * `allowedTransitions` describes the recording's own lifecycle; the server
    * additionally refuses to publish onto a session whose listen-by date has gone
-   * ("Move it before publishing, or nobody will be able to listen"). So an
+   * ("Move it before publishing, or nobody will be able to open it"). So an
    * end-of-term ARCHIVED recording — the case the manual calls reversible with
    * "one tap puts it back" — drew a Publish button that could only ever return
    * an error. This app's rule is that a control which cannot succeed is not
@@ -715,7 +715,7 @@ function RecordingCard({
               ? [r.durationSec ? fmtDuration(r.durationSec) : null, totalBytes ? `${(totalBytes / 1024 / 1024).toFixed(1)}\u00a0MB` : null]
                   .filter(Boolean)
                   .join(' · ')
-              : 'no audio yet'}
+              : 'no files yet'}
         </Text>
       </View>
 
@@ -786,14 +786,14 @@ function RecordingCard({
         </Row>
         <Row>
           {/* PRIMARY, as it is on the library card — unless Publish is on offer,
-              which outranks it. Listening to what was just published is the one
+              which outranks it. Playing what was just published is the one
               thing in this row that is not administration, and drawn like
               Archive and Unpublish it was indistinguishable from the two
               controls that take the recording away. Never two primaries. */}
           {playable ? (
             <Button
-              testID="recording-listen"
-              label="Listen"
+              testID="recording-play"
+              label="Play"
               variant={moves.includes('published') ? 'secondary' : 'primary'}
               disabled={uploading}
               onPress={() => onPlay(r, session)}
@@ -819,7 +819,7 @@ function RecordingCard({
             no Publish to explain. */}
         {moves.includes('published') && deadlinePassed ? (
           <Notice tone="info">
-            This session&apos;s Listen by date has passed, so publishing would give nobody access.
+            This session&apos;s due date has passed, so publishing would give nobody access.
             Move the date forward on the session above first.
           </Notice>
         ) : null}
@@ -828,7 +828,7 @@ function RecordingCard({
           <View style={styles.ledgerRow}>
             <Button
               testID="recording-ledger"
-              label="Listening progress"
+              label="Progress"
               variant="secondary"
               onPress={() => onOpenLedger(r)}
             />

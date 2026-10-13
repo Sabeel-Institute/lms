@@ -129,15 +129,15 @@ export interface PushMessage {
 /** Human labels for the settings screen. */
 export const NOTIFICATION_LABEL: Record<NotificationKind, string> = {
   recordingReady: 'A recording is ready for me',
-  lastDay: 'Last day to listen',
+  lastDay: 'Last day for a recording',
   attendanceMissing: 'Attendance still not taken',
 };
 
 export const NOTIFICATION_DESCRIPTION: Record<NotificationKind, string> = {
-  recordingReady: 'When a class you were excused from has a recording you can listen to.',
+  recordingReady: 'When a class you were excused from has a recording for you.',
   lastDay: 'On the morning of the day a recording closes, if you have not finished it.',
   attendanceMissing:
-    'When a class meeting has passed and its attendance has not been submitted, so nobody can hear the recording yet.',
+    'When a class meeting has passed and its attendance has not been submitted, so nobody can open the recording yet.',
 };
 
 /**
@@ -152,13 +152,13 @@ export const NOTIFICATION_DESCRIPTION: Record<NotificationKind, string> = {
 export function recordingReadyMessage(courseName: string, title: string, dueDate: string): PushMessage {
   return {
     title: `${courseName}: a recording is ready`,
-    body: `${title} — you were excused, so it is yours to listen to until ${dueDate}.`,
+    body: `${title} — you were excused, so it is open to you until ${dueDate}.`,
   };
 }
 
 export function lastDayMessage(courseName: string, title: string, dueDate: string): PushMessage {
   return {
-    title: `${courseName}: last day to listen`,
+    title: `${courseName}: a recording closes today`,
     body: `${title} closes at the end of ${dueDate}.`,
   };
 }

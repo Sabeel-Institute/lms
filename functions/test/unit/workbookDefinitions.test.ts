@@ -34,7 +34,7 @@ describe('the workbook definitions in the manual', () => {
   });
 
   it('name each tab of both workbooks', () => {
-    for (const tab of ['Summary', 'Students', 'Sessions', 'Register', 'Listening', 'Detail', 'Courses', 'History', 'Definitions']) {
+    for (const tab of ['Summary', 'Students', 'Sessions', 'Register', 'Recordings', 'Detail', 'Courses', 'History', 'Definitions']) {
       expect(section).toMatch(new RegExp(`^- \\*\\*${tab}\\*\\* —`, 'm'));
     }
   });

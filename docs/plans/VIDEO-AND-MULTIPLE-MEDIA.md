@@ -398,6 +398,22 @@ with audio only keeps today's words. Buttons say **Play** rather than
 Listen. The notification "a recording is ready" needs no change. The user
 manual, the release notes and `PRODUCT_BRIEF.md` change in the same batch.
 
+As built (2026-10-13), the verb is `playVerb(media)` in `@sabeel/shared`:
+"Watch" when a student can play any video of the recording, so a hidden or
+still-copying video asks nobody to watch. Three places have no one recording
+to take it from, and say neither verb:
+
+- **Lists that mix recordings**: the student's home is "Your recordings,
+  required, soonest first", its tab is **Recordings**, and counts say
+  "required recordings".
+- **The staff date field** is **Due by**: a session has its date before it has
+  a recording, so it cannot know which verb applies.
+- **The workbook** says Completed, Played and Due by, and its grid tab is
+  **Recordings**.
+
+The course setting that keeps an archived course's recordings open is worded
+as recordings being open or closed, not listening being on or off.
+
 ## Product rules that change
 
 | Today (`CLAUDE.md`, `PRODUCT_BRIEF.md`) | After |
@@ -419,7 +435,7 @@ manual, the release notes and `PRODUCT_BRIEF.md` change in the same batch.
 | V3 | Upload of several files, part or version choice, probe | Browser e2e with a small MP4 and an M4A; AVD upload |
 | V4 | Staff media list, hide, reorder, publish blockers | Integration tests per lifecycle row above — **built 2026-10-13**; renaming a file is deferred (labels are generated) |
 | V5 | Player: versions, parts, auto-advance, listen only, resume, docked bar | `playback.test.ts` extended; web e2e plays video and switches version keeping position; AVD for background, lock screen, fullscreen, PiP — **built 2026-10-13**; "Audio only" is the version chip rather than a separate button, and starting on audio over a metered connection is deferred |
-| V6 | Wording, manual, workbook and admin stats | Text-source checks; workbook tests |
+| V6 | Wording, manual, workbook and admin stats | Text-source checks; workbook tests — **built 2026-10-13** for wording, manual and workbook; the admin stats wait for Phase 8, which has not started, and are built there by kind and course |
 
 Each step is shown working in the browser first, and on the AVD for audio,
 background playback, gestures and file picking, per `CLAUDE.md`.

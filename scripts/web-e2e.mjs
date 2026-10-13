@@ -31,12 +31,18 @@
  * palette.ts survive right up until you read the rendered screen.
  */
 import { chromium } from 'playwright';
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { readXlsx } from '@sabeel/shared';
 import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { putLocalObject } from './lib/media-store.mjs';
+import {
+  AUDIO_FIXTURE,
+  AUDIO_SECONDS,
+  VIDEO_FIXTURE,
+  ensureAudioFixture,
+  ensureVideoFixture,
+} from './lib/media-fixtures.mjs';
 
 const WEB = process.env.E2E_WEB ?? `http://127.0.0.1:${WEB_PORTS.e2e}/`;
 const FN = `http://127.0.0.1:${EMULATOR_PORTS.functions}/${EMULATOR_PROJECT_ID}/us-central1`;
@@ -45,50 +51,6 @@ const FS_READ = `${FS}/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/do
 const FS_WIPE = `${FS}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents`;
 const AUTH = `http://127.0.0.1:${EMULATOR_PORTS.auth}`;
 const SHOTS = 'e2e-shots';
-const AUDIO_FIXTURE = process.env.E2E_AUDIO ?? 'e2e-shots/test-lecture.m4a';
-/** The fixture's length, shared by the generator below and the metadata check,
- *  so the two cannot drift. A substitute supplied via E2E_AUDIO must match it. */
-const AUDIO_SECONDS = 720;
-
-/**
- * A real 12-minute 32 kbps mono M4A — the shape of an actual class recording
- * (a two-hour one lands near 29 MB at this bitrate).
- *
- * GENERATED rather than committed: a 3 MB binary in git is exactly what this
- * repo's "never add a binary" rule exists to prevent, and ffmpeg reproduces it
- * identically in a second.
- */
-function ensureAudioFixture() {
-  if (existsSync(AUDIO_FIXTURE)) return;
-  try {
-    execFileSync('ffmpeg', [
-      '-f', 'lavfi', '-i', `sine=frequency=220:duration=${AUDIO_SECONDS},volume=0.3`,
-      '-c:a', 'aac', '-b:a', '32k', '-ac', '1', AUDIO_FIXTURE, '-y',
-    ], { stdio: 'ignore' });
-  } catch {
-    throw new Error(
-      `Could not generate ${AUDIO_FIXTURE}. Install ffmpeg, or point E2E_AUDIO at a ` +
-        `${AUDIO_SECONDS}-second audio file (it must live OUTSIDE ${SHOTS}/, which this ` +
-        'suite wipes on startup).',
-    );
-  }
-}
-
-/**
- * The same twelve minutes as video — a picture with a clock on it, and the
- * fixture's audio — tiny, so a version switch is a real switch of source and
- * not a download. Generated, like the audio, rather than committed.
- */
-const VIDEO_FIXTURE = 'e2e-shots/test-lecture.mp4';
-function ensureVideoFixture() {
-  if (existsSync(VIDEO_FIXTURE)) return;
-  execFileSync('ffmpeg', [
-    '-f', 'lavfi', '-i', `testsrc=size=160x90:rate=1:duration=${AUDIO_SECONDS}`,
-    '-i', AUDIO_FIXTURE, '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
-    '-c:a', 'copy', '-shortest', '-movflags', '+faststart', VIDEO_FIXTURE, '-y',
-  ], { stdio: 'ignore' });
-}
-
 /** A plain value as a Firestore REST value, for the out-of-band writes below. */
 const restValue = (v) =>
   v === null ? { nullValue: null }
@@ -638,9 +600,9 @@ const student = await newSession('student');
 await student.getByTestId('signin-email').fill('fatima@example.com');
 await student.getByTestId('signin-password').fill('StudentPass123!');
 await tap(student, 'signin-student');
-// The student lands on their task home ("Your listening"), not a staff greeting.
-await sawText(student, 'Your listening', 25000);
-check('the student signs in with their own password', await showsText(student, 'Your listening'));
+// The student lands on their task home ("Your recordings"), not a staff greeting.
+await sawText(student, 'Your recordings', 25000);
+check('the student signs in with their own password', await showsText(student, 'Your recordings'));
 await shot(student, '09-home-student');
 
 // ------------------------------------------------ session, attendance, publish --
@@ -764,7 +726,7 @@ await (await chooser).setFiles(AUDIO_FIXTURE);
 // Listen appears only once `finalizeRecordingUpload` has recorded the audio
 // path — the one signal on screen that the upload is complete. (This used to
 // wait, with the failure swallowed, for a word the screen never shows.)
-await admin.getByTestId('recording-listen').waitFor({ timeout: 90000 });
+await admin.getByTestId('recording-play').waitFor({ timeout: 90000 });
 const recs = await readCollection('recordings');
 const rf = recs[0]?.fields ?? {};
 /*
@@ -917,6 +879,17 @@ await tap(student, 'player-play');
 await student.waitForTimeout(4000);
 const videoPlayed = await elapsedSeconds(student);
 check('the video plays', videoPlayed >= afterSwitch + 2, `${afterSwitch}s → ${videoPlayed}s`);
+// The icon over the picture's corner: the picture fills the screen, and
+// leaving it puts the picture back where it was.
+await tap(student, 'player-fullscreen');
+await student.waitForTimeout(800);
+const full = await student.evaluate(() => document.fullscreenElement?.tagName ?? null);
+await student.evaluate(() => document.exitFullscreen?.());
+await student.waitForTimeout(800);
+const back = await student.evaluate(
+  () => !document.fullscreenElement && !!document.querySelector('[data-testid="player-video"] video'),
+);
+check('the full-screen icon fills the screen with the video, and it comes back', full === 'VIDEO' && back, `fullscreen ${full}, back ${back}`);
 await tap(student, `player-version-${audioItemId}`);
 await student.waitForTimeout(2500);
 const backOnAudio = await elapsedSeconds(student);
@@ -1287,7 +1260,7 @@ const overridden = await newSession('overridden');
 await overridden.getByTestId('signin-email').fill('bilal@example.com');
 await overridden.getByTestId('signin-password').fill('BilalPass123!');
 await tap(overridden, 'signin-student');
-await sawText(overridden, 'Your listening', 25000);
+await sawText(overridden, 'Your recordings', 25000);
 /*
  * THE GROUP, not the word — same reasoning as Fatima's completion above. The
  * claim is that the row sits under Completed, which is what the student reads;
@@ -1371,8 +1344,8 @@ await admin.locator('[data-testid^="attendance-student-"]').first().waitFor({ ti
 await admin.waitForTimeout(800);
 const studentsView = await bodyText(admin);
 check(
-  'toggling to by-student shows required listening (Bilal caught up via override)',
-  /Bilal Khan/.test(studentsView) && /Required listening/.test(studentsView),
+  'toggling to by-student shows required recordings (Bilal caught up via override)',
+  /Bilal Khan/.test(studentsView) && /Required recordings/.test(studentsView),
 );
 check(
   'the toggle swaps the view: session cards are gone, student cards are present',
@@ -1393,7 +1366,7 @@ const stuCard = admin
 const stuName = (await stuCard.innerText()).split('\n')[0].trim();
 await stuCard.click();
 // WAIT FOR SOMETHING ONLY THE DESTINATION HAS. The report page already
-// carries every student's name and the words "required listening", so a
+// carries every student's name and the words "required recordings", so a
 // body-text check after a fixed wait passed when the tap did nothing.
 await admin.getByTestId('student-ledger-profile').waitFor({ timeout: 10000 });
 check(
@@ -1718,7 +1691,7 @@ check(
   // open task — so the check passed on the accident that this student's one
   // grant was already complete, and any open assignment added above here would
   // have failed it for a reason unrelated to routing.
-  stuOnStaffUrl.includes('your listening') && !stuOnStaffUrl.includes('excused students listen by'),
+  stuOnStaffUrl.includes('your recordings') && !stuOnStaffUrl.includes('excused students have until'),
 );
 check('…so nothing on it is denied', !stuOnStaffUrl.includes('live data error'));
 
@@ -1752,7 +1725,7 @@ await admin.waitForTimeout(2500);
  * the card is still open. Same student, same card, same accessible name — so
  * the zero this run later asserts is a zero the query would have seen as a one.
  */
-const PLAYABLE = 'Listen to Session 1';
+const PLAYABLE = 'Play Session 1';
 await goHome(student);
 await student.getByTestId('task-Session 1').waitFor({ timeout: 20000 });
 const playableBefore = await student.getByRole('button', { name: PLAYABLE }).count();
@@ -1929,7 +1902,7 @@ check(
 );
 check(
   'it has the seven tabs, Definitions last',
-  courseBook.sheets.map((s) => s.name).join(',') === 'Summary,Students,Sessions,Register,Listening,Detail,Definitions',
+  courseBook.sheets.map((s) => s.name).join(',') === 'Summary,Students,Sessions,Register,Recordings,Detail,Definitions',
   courseBook.sheets.map((s) => s.name).join(','),
 );
 const students = tabOf(courseBook, 'Students');
@@ -1964,7 +1937,7 @@ check(
 );
 check(
   'it has the six tabs',
-  studentBook.sheets.map((s) => s.name).join(',') === 'Summary,Courses,Sessions,Listening,History,Definitions',
+  studentBook.sheets.map((s) => s.name).join(',') === 'Summary,Courses,Sessions,Recordings,History,Definitions',
   studentBook.sheets.map((s) => s.name).join(','),
 );
 const courseRow = rowOf(tabOf(studentBook, 'Courses'), 'Hikam Foundations');
@@ -1989,7 +1962,7 @@ const notifyText = await bodyText(student);
 check(
   'a student sees their own two switches and not the staff one',
   /A recording is ready for me/.test(notifyText) &&
-    /Last day to listen/.test(notifyText) &&
+    /Last day for a recording/.test(notifyText) &&
     !/Attendance still not taken/.test(notifyText),
 );
 check(
@@ -2019,7 +1992,7 @@ await mgr.getByTestId('notify-attendanceMissing').waitFor({ timeout: 20000 });
 const mgrNotify = await bodyText(mgr);
 check(
   'staff see the attendance reminder and not the student switches',
-  /Attendance still not taken/.test(mgrNotify) && !/Last day to listen/.test(mgrNotify),
+  /Attendance still not taken/.test(mgrNotify) && !/Last day for a recording/.test(mgrNotify),
 );
 
 /*
@@ -2048,33 +2021,33 @@ console.log('\nRecording library');
 // `<select>`s, which is what gives them keyboard and type-ahead for free.
 await goHome(admin);
 await tap(admin, 'tab-library');
-await admin.getByTestId('library-listen-Session 1').waitFor({ timeout: 20000 });
-check('the library lists the recording with nothing chosen', await shows(admin, 'library-listen-Session 1'));
+await admin.getByTestId('library-play-Session 1').waitFor({ timeout: 20000 });
+check('the library lists the recording with nothing chosen', await shows(admin, 'library-play-Session 1'));
 check('…and offers no clear control when nothing is narrowing', (await admin.getByTestId('library-clear').count()) === 0);
 await admin.getByTestId('library-cohort').selectOption({ label: 'Autumn 2026' });
 await admin.waitForTimeout(600);
 check(
   'choosing the cohort alone keeps every recording in it',
-  (await shows(admin, 'library-listen-Session 1')) && (await shows(admin, 'library-clear')),
+  (await shows(admin, 'library-play-Session 1')) && (await shows(admin, 'library-clear')),
 );
 // Inside a chosen cohort the course list carries no cohort suffix.
 await admin.getByTestId('library-course').selectOption({ label: 'Arabic I' });
 await admin.waitForTimeout(600);
 check(
   'choosing a course narrows to that course — the other course\'s recording is gone',
-  (await admin.getByTestId('library-listen-Session 1').filter({ visible: true }).count()) === 0 &&
+  (await admin.getByTestId('library-play-Session 1').filter({ visible: true }).count()) === 0 &&
     (await showsText(admin, 'No recordings match these filters')),
 );
 await admin.getByTestId('library-course').selectOption({ label: 'Hikam Foundations' });
 await admin.waitForTimeout(600);
-check('choosing the recording\'s own course shows it', await shows(admin, 'library-listen-Session 1'));
+check('choosing the recording\'s own course shows it', await shows(admin, 'library-play-Session 1'));
 await admin.getByTestId('library-course').selectOption({ label: 'Arabic I' });
 await admin.waitForTimeout(600);
 await tap(admin, 'library-clear');
 await admin.waitForTimeout(600);
 check(
   'Clear filters restores the whole library and removes itself',
-  (await shows(admin, 'library-listen-Session 1')) &&
+  (await shows(admin, 'library-play-Session 1')) &&
     (await admin.getByTestId('library-clear').count()) === 0 &&
     (await admin.getByTestId('library-cohort').inputValue()) === '' &&
     (await admin.getByTestId('library-course').inputValue()) === '',

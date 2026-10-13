@@ -234,6 +234,12 @@ cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61311 --clear
 and after running the unit-style emulator suite you must restart the long-lived
 one before the e2e will work. The symptom is every e2e check failing at once.
 
+**Its media is generated, not committed.** `scripts/lib/media-fixtures.mjs`
+makes the twelve-minute M4A, the same twelve minutes as a tiny MP4, and the
+manual's slide videos with ffmpeg, once, under `e2e-shots/`. The e2e and
+`seed-guide.mjs` both take them from there, so neither depends on the other
+having run first.
+
 **It resets Firestore and Auth on every run.** Leftover state silently SKIPS the
 paths that matter: an early version left an admin behind, and every later run
 then jumped straight past the pending screen while still reporting success.

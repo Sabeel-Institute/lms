@@ -224,7 +224,7 @@ const ACTION_LABELS: Record<string, string> = {
   submitAttendance: 'Submitted attendance',
   createRecording: 'Created recording',
   deleteRecording: 'Deleted recording',
-  finalizeRecordingUpload: 'Uploaded audio',
+  finalizeRecordingUpload: 'Uploaded a file',
   setRecordingStatus: 'Changed recording status',
   removeRecordingMedia: 'Removed a file',
   editRecordingMedia: 'Changed a recording’s files',

@@ -1,0 +1,85 @@
+/**
+ * The media files the browser suites and the manual's screenshots play.
+ *
+ * GENERATED rather than committed: a binary in git is exactly what this repo's
+ * "never add a binary" rule exists to prevent, and ffmpeg reproduces each one
+ * identically in a second. Each is made once and then reused.
+ */
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+
+/** The audio fixture's length. A substitute supplied via E2E_AUDIO must match it. */
+export const AUDIO_SECONDS = 720;
+export const AUDIO_FIXTURE = process.env.E2E_AUDIO ?? 'e2e-shots/test-lecture.m4a';
+export const VIDEO_FIXTURE = 'e2e-shots/test-lecture.mp4';
+
+const ffmpeg = (args) => execFileSync('ffmpeg', [...args, '-y'], { stdio: 'ignore' });
+
+/**
+ * A real 12-minute 32 kbps mono M4A — the shape of an actual class recording
+ * (a two-hour one lands near 29 MB at this bitrate).
+ */
+export function ensureAudioFixture() {
+  if (existsSync(AUDIO_FIXTURE)) return;
+  try {
+    ffmpeg([
+      '-f', 'lavfi', '-i', `sine=frequency=220:duration=${AUDIO_SECONDS},volume=0.3`,
+      '-c:a', 'aac', '-b:a', '32k', '-ac', '1', AUDIO_FIXTURE,
+    ]);
+  } catch {
+    throw new Error(
+      `Could not generate ${AUDIO_FIXTURE}. Install ffmpeg, or point E2E_AUDIO at a ` +
+        `${AUDIO_SECONDS}-second audio file (it must live OUTSIDE e2e-shots/, which the ` +
+        'browser suite wipes on startup).',
+    );
+  }
+}
+
+/**
+ * The same twelve minutes as video — a picture with a clock on it, and the
+ * audio fixture's sound — tiny, so a version switch is a real switch of source
+ * and not a download.
+ */
+export function ensureVideoFixture() {
+  ensureAudioFixture();
+  if (existsSync(VIDEO_FIXTURE)) return;
+  ffmpeg([
+    '-f', 'lavfi', '-i', `testsrc=size=160x90:rate=1:duration=${AUDIO_SECONDS}`,
+    '-i', AUDIO_FIXTURE, '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+    '-c:a', 'copy', '-shortest', '-movflags', '+faststart', VIDEO_FIXTURE,
+  ]);
+}
+
+/**
+ * A class's shared screen for the manual's figures: a dark presentation slide
+ * carrying `title` and three bullet points and a speaker's box in the corner,
+ * over the audio fixture's sound. It has to read as VIDEO at
+ * a glance: a plain cream slide in the app's own colours was taken for one
+ * more card on the page.
+ */
+export function ensureSlideVideo(path, title) {
+  ensureAudioFixture();
+  if (existsSync(path)) return;
+  const esc = (t) => t.replace(/[\\':]/g, (c) => `\\${c}`);
+  const text = (t, x, y, size, color = 'white') =>
+    `drawtext=text='${esc(t)}':fontcolor=${color}:fontsize=${size}:x=${x}:y=${y}`;
+  const filters = [
+    text(title, 40, 40, 26),
+    'drawbox=x=40:y=84:w=160:h=3:color=0xC9A227:t=fill',
+    text('•  Patience is a light that does not go out', 56, 120, 18, '0xE5E7EB'),
+    text('•  Gratitude in ease, patience in hardship', 56, 156, 18, '0xE5E7EB'),
+    text('•  Read the passage before next week', 56, 192, 18, '0xE5E7EB'),
+    // The speaker top right, where Zoom's "slides and speaker" layout puts
+    // them — clear of the player's fullscreen icon in the opposite corner.
+    'drawbox=x=490:y=20:w=130:h=96:color=0x4B5563:t=fill',
+    'drawbox=x=538:y=38:w=34:h=34:color=0x9CA3AF:t=fill',
+    'drawbox=x=520:y=78:w=70:h=38:color=0x9CA3AF:t=fill',
+    text('Teacher', 496, 24, 12, '0xE5E7EB'),
+  ].join(',');
+  ffmpeg([
+    '-f', 'lavfi', '-i', `color=c=0x1F2937:size=640x360:rate=1:duration=${AUDIO_SECONDS}`,
+    '-i', AUDIO_FIXTURE, '-vf', filters,
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+    '-c:a', 'copy', '-shortest', '-movflags', '+faststart', path,
+  ]);
+}

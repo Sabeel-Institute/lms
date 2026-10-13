@@ -144,7 +144,7 @@ export function CourseAttendanceScreen({
                 </Text>
                 {s.assigned > 0 ? (
                   <Text style={styles.catchup}>
-                    Required listening: {s.completed} of {s.assigned} completed
+                    Required recordings: {s.completed} of {s.assigned} completed
                     {/* The separator rides with the words AFTER it, or a wrap left
                         every row ending in a dangling "·". */}
                     {s.missed > 0 ? (
@@ -152,7 +152,7 @@ export function CourseAttendanceScreen({
                     ) : null}
                   </Text>
                 ) : (
-                  <Text style={styles.catchup}>No required listening</Text>
+                  <Text style={styles.catchup}>No required recordings</Text>
                 )}
               </Pressable>
             </Card>

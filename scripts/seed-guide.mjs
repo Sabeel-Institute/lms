@@ -1,12 +1,13 @@
 /** Rich, realistic (fake) deployment for the user-manual screenshots — emulator. */
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 import { EMULATOR_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { putLocalObject } from './lib/media-store.mjs';
-import { mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
+import { AUDIO_FIXTURE, ensureAudioFixture, ensureSlideVideo } from './lib/media-fixtures.mjs';
+import { deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
 process.env.FIRESTORE_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.auth}`;
 admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
@@ -64,7 +65,8 @@ for (const s of students) await db.collection('enrollments').doc(`${s.uid}_${cou
 for (const s of students.slice(0,4)) await db.collection('enrollments').doc(`${s.uid}_${courses.arabic.id}`).set({ studentUid:s.uid, courseId:courses.arabic.id, cohortId, active:true, enrolledAt:now-40*day, enrolledBy:ADMIN });
 
 // ---- sessions + their recordings: attendance-driven ----
-const audio=readFileSync('e2e-shots/test-lecture.m4a');
+ensureAudioFixture();
+const audio=readFileSync(AUDIO_FIXTURE);
 const uids=students.map(s=>s.uid);
 // Attendance snapshot: the first `present` of `who` are present, the rest EXCUSED
 // — excused is the only mark that grants the recording, so a seed that defaulted
@@ -76,7 +78,7 @@ const attend=(present, {excused=[], absent=[], who=uids}={})=>Object.fromEntries
   return [u, i<present?'present':'excused'];
 }));
 
-async function mkSession(courseId, sid, rid, title, { status='published', dueOffset=7, daysAgo=7, notes='', attendance=null, attention=null }={}){
+async function mkSession(courseId, sid, rid, title, { status='published', dueOffset=7, daysAgo=7, notes='', attendance=null, attention=null, slides=null }={}){
   const date=iso(now-daysAgo*day);
   // Never null: the due date is the day access closes, so a session cannot be
   // without one.
@@ -90,11 +92,21 @@ async function mkSession(courseId, sid, rid, title, { status='published', dueOff
     recordingId: rid, attendance: attendance??{}, attendanceSubmittedAt: submitted,
     notRecorded:false, createdAt:now-daysAgo*day, createdBy:ADMIN, updatedAt:now-daysAgo*day,
   });
+  const media = mediaFromSingleAudio({ source:'manual', audioPath:hasAudio?path:null, sizeBytes:audio.length, durationSec:720,
+    createdAt:now-daysAgo*day, createdBy:ADMIN }, 'audio1');
+  // A class shared its screen: the same part as video too, which students
+  // start on — so the manual shows the versions and a "Watch by" card.
+  if (slides) {
+    const file=`e2e-shots/guide-${rid}.mp4`;
+    ensureSlideVideo(file, slides);
+    const key=mediaStorageKey(rid, 'video1');
+    await putLocalObject(key, readFileSync(file), 'video/mp4');
+    media.video1={ ...media.audio1, id:'video1', version:'speaker', kind:'video', storageKey:key,
+      contentType:'video/mp4', sizeBytes:statSync(file).size, width:640, height:360 };
+  }
   await db.collection('recordings').doc(rid).set({
     sessionId:sid, courseId, cohortId, title, notes, date, status, source:'manual',
-    media: mediaFromSingleAudio({ source:'manual', audioPath:hasAudio?path:null, sizeBytes:audio.length, durationSec:720,
-      createdAt:now-daysAgo*day, createdBy:ADMIN }, 'audio1'),
-    defaultVersion:'audio', durationSec:hasAudio?720:null,
+    media, defaultVersion:slides?'speaker':'audio', durationSec:deriveDurationSec(media),
     createdAt:now-daysAgo*day, createdBy:ADMIN, updatedAt:now-daysAgo*day,
     ...(status==='published'?{publishedAt:now-daysAgo*day}:{}),
     ...(attention?{attentionReason:attention}:{}),
@@ -117,7 +129,7 @@ await mkSession(H,'g-s1','g-s1r','Session 1 — Introduction to the Hikam', {due
 // has real required listening on the student screenshots: s2 missed, s3 due-soon
 // (60% listened).
 await mkSession(H,'g-s2','g-s2r','Session 2 — Knowledge and Certainty', {dueOffset:-6, daysAgo:14, attendance:attend(4, {excused:[uids[0]]})});
-await mkSession(H,'g-s3','g-s3r','Session 3 — Patience in Hardship', {dueOffset:3, daysAgo:5, notes:'Focus on the section about gratitude in hardship — we will discuss it next week.', attendance:attend(5, {excused:[uids[0]]})});
+await mkSession(H,'g-s3','g-s3r','Session 3 — Patience in Hardship', {dueOffset:3, daysAgo:5, notes:'Focus on the section about gratitude in hardship — we will discuss it next week.', attendance:attend(5, {excused:[uids[0]]}), slides:'Session 3 — Patience in Hardship'});
 await mkSession(H,'g-s4','g-s4r','Session 4 — Sincerity of Intention', {dueOffset:5, daysAgo:2, attendance:attend(6)});
 // Session 5: recording published but attendance NOT taken yet — nobody assigned.
 await mkSession(H,'g-s5','g-s5r','Session 5 — Reliance and Trust', {status:'published', daysAgo:1, attendance:null});

@@ -74,5 +74,8 @@ export const palette = {
   // (text on a gold badge fill is textPrimary #3A2F28 — no separate token)
 
   overlay: '#3A2F2866',
+  // The brand's darkest tone at 70%: a control drawn over a video's picture,
+  // which may be any colour at all.
+  videoControl: '#3A2F28B3',
   shadow: '#A58D7A33',
 } as const;

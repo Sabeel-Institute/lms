@@ -7,6 +7,7 @@ import {
   bucketRank,
   canPlayFromCourse,
   dueBucket,
+  playVerb,
   todayInZone,
   unbreakableDate,
   type CourseDoc,
@@ -166,7 +167,7 @@ export function StudentHomeScreen({
        * what `Grid` is for; the grouping is what keeps the order legible.
        */
       width="list"
-      title="Your listening"
+      title="Your recordings"
       /*
        * NOT "recordings you were excused from". Being excused is what grants
        * these — but read plainly it says "recordings you do not have to listen
@@ -180,8 +181,11 @@ export function StudentHomeScreen({
        * own standing list of required listening was borrowing the word for the
        * exception. It also does not describe the Upcoming or Completed groups,
        * which are two of the four this list has.
+       *
+       * AND NOT "listening": a recording may be video, and its card says
+       * "Watch by". The list's own words name neither.
        */
-      subtitle="Required listening, soonest first"
+      subtitle="Required, soonest first"
     >
 
       {/* Top of the content, below the listener error only. Same place in all
@@ -202,33 +206,35 @@ export function StudentHomeScreen({
         <Pressable
           testID={`next-up-${next.recording.title}`}
           accessibilityRole="button"
-          accessibilityLabel={`Listen to ${next.recording.title}`}
+          accessibilityLabel={`Play ${next.recording.title}`}
           onPress={() => onOpen(next.recording, next.cls, next.dueDate)}
           style={({ pressed }) => [styles.hero, pressed ? styles.heroPressed : null]}
         >
-          <Text style={styles.heroLabel}>NEXT TO LISTEN</Text>
+          <Text style={styles.heroLabel}>NEXT TO {playVerb(next.recording.media).toUpperCase()}</Text>
           <Text style={styles.heroTitle}>{next.recording.title}</Text>
           <Text style={styles.heroCourse}>{next.cls.name}</Text>
-          <Text style={styles.heroDue}>Listen by {unbreakableDate(next.dueDate)}</Text>
+          <Text style={styles.heroDue}>
+            {playVerb(next.recording.media)} by {unbreakableDate(next.dueDate)}
+          </Text>
           {/* THE CARD IS THE BUTTON, so it has to say so. Without this line the
               app's single most important action was a date in bold ivory — it
               looked like a button label and was not one, and nothing on the
               student's landing screen named the thing to do. */}
-          <Text style={styles.heroAction}>Listen ›</Text>
+          <Text style={styles.heroAction}>Play ›</Text>
         </Pressable>
       ) : null}
 
-      {/* "Nothing to listen to" is an ANSWER, and the wrong one shown to a
+      {/* "Nothing required" is an ANSWER, and the wrong one shown to a
           student with three recordings due — on the screen that is the whole of
           this app for them. So it waits for the grants to arrive. */}
       {checking ? (
-        <Empty>Checking what you have to listen to…</Empty>
+        <Empty>Checking your recordings…</Empty>
       ) : granted === null ? (
         // Refused, not empty — and the banner above already says why. Saying
-        // "nothing to listen to" underneath it would contradict it.
-        <Empty>Your listening could not be loaded. The message above says why.</Empty>
+        // "nothing required" underneath it would contradict it.
+        <Empty>Your recordings could not be loaded. The message above says why.</Empty>
       ) : rows.length === 0 ? (
-        <Empty>Nothing to listen to right now. New recordings will appear here.</Empty>
+        <Empty>Nothing required right now. New recordings will appear here.</Empty>
       ) : (
         groups
           .filter((g) => g.rows.length > 0)
@@ -320,7 +326,7 @@ function TaskCard({ row, onOpen }: { row: TaskRow; onOpen: () => void }) {
               ? 'Course archived'
               : missed
                 ? `Closed ${unbreakableDate(row.dueDate)}`
-                : `Listen by ${unbreakableDate(row.dueDate)}`}
+                : `${playVerb(row.recording.media)} by ${unbreakableDate(row.dueDate)}`}
           </Text>
         )}
       </View>
@@ -338,7 +344,7 @@ function TaskCard({ row, onOpen }: { row: TaskRow; onOpen: () => void }) {
     <Pressable
       testID={`task-${row.recording.title}`}
       accessibilityRole="button"
-      accessibilityLabel={`Listen to ${row.recording.title}`}
+      accessibilityLabel={`Play ${row.recording.title}`}
       onPress={onOpen}
       style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
     >

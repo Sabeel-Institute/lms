@@ -242,7 +242,7 @@ export function CourseCard({ cls, onOpen }: { cls: CourseRow; onOpen: (c: Course
         <View style={styles.meta}>
           <StatusChip status={cls.effectiveActive ? 'active' : 'inactive'} />
           {!cls.effectiveActive && cls.archivedAccess ? (
-            <Text style={styles.hint}>listening still allowed</Text>
+            <Text style={styles.hint}>recordings still open</Text>
           ) : null}
           {/* "0 managers" is a count of nothing; the course needs one, so say
               so. */}

@@ -238,7 +238,7 @@ describe('what the badge counts', () => {
     );
     expect(q.items[0].kind).toBe('publish');
     expect(q.items[0].detail).toBe(
-      'Archived before its listen-by date, so nobody excused can open it.',
+      'Archived before its due date, so nobody excused can open it.',
     );
     expect(q.blocking).toBe(1);
   });

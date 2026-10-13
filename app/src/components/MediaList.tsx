@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import {
   VERSION_LABELS,
+  VERSION_ORDER,
   isPlayable,
   itemLabel,
   mediaParts,
@@ -66,7 +67,8 @@ export function MediaList({
 }) {
   const parts = mediaParts(Object.values(r.media));
   if (parts.length === 0) return null;
-  const versions = [...new Set(Object.values(r.media).filter(isPlayable).map((i) => i.version))];
+  const playable = new Set(Object.values(r.media).filter(isPlayable).map((i) => i.version));
+  const versions = VERSION_ORDER.filter((v) => playable.has(v));
   return (
     <View testID="recording-media" style={styles.list}>
       {parts.map(({ part, items }, index) => {

@@ -659,7 +659,7 @@ describe('lastDay', () => {
       .set(grant('s1', 'r1', TODAY));
     expect(await notifyLastDay(db(), TODAY)).toBe(1);
     expect(outbox[0].message).toEqual({
-      title: 'Hikam Foundations: last day to listen',
+      title: 'Hikam Foundations: a recording closes today',
       body: `Session 3 — Patience closes at the end of ${TODAY}.`,
     });
   });

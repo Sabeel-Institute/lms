@@ -171,12 +171,12 @@ describe('courseStudentStats', () => {
     const fatima = courseStudentStats(world, S.fatima, ctx);
     // S1 excused → missed (deadline gone, 62% heard); S2 present; S4 excused
     // but the recording is archived → withdrawn; S5 taken without a mark.
-    expect(fatima).toMatchObject({ held: 3, present: 1, absent: 0, excused: 2, unmarked: 1, required: 1, missed: 1, listened: 0, open: 0, closed: 0 });
+    expect(fatima).toMatchObject({ held: 3, present: 1, absent: 0, excused: 2, unmarked: 1, required: 1, missed: 1, completed: 0, open: 0, closed: 0 });
     expect(fatima.items[0]).toMatchObject({ outcome: 'missed', heard: 0.62 });
 
     const bilal = courseStudentStats(world, S.bilal, ctx);
-    expect(bilal).toMatchObject({ required: 1, listened: 1, missed: 0 });
-    expect(bilal.items[0]).toMatchObject({ outcome: 'listened', markedBy: 'Rukaiya Ahmed' });
+    expect(bilal).toMatchObject({ required: 1, completed: 1, missed: 0 });
+    expect(bilal.items[0]).toMatchObject({ outcome: 'completed', markedBy: 'Rukaiya Ahmed' });
 
     const aminah = courseStudentStats(world, S.aminah, ctx);
     expect(aminah).toMatchObject({ held: 4, absent: 1, required: 1, open: 1 });
@@ -201,7 +201,7 @@ describe('courseStudentStats', () => {
     for (const uid of Object.values(S)) {
       const s = courseStudentStats(world, uid, ctx);
       expect(s.present + s.absent + s.excused).toBe(s.held);
-      expect(s.listened + s.open + s.missed + s.closed).toBe(s.required);
+      expect(s.completed + s.open + s.missed + s.closed).toBe(s.required);
     }
   });
 
@@ -218,7 +218,7 @@ describe('courseStudentStats', () => {
     expect(courseStudentStats(later, S.fatima, ctx).items.find((i) => i.session.id === '1')?.outcome).toBe('missed');
   });
 
-  it('listening off on an archived class closes an open grant', () => {
+  it('recordings closed on an archived class closes an open grant', () => {
     const off = { ...world, course: { ...world.course, effectiveActive: false, archivedAccess: false } };
     expect(courseStudentStats(off, S.aminah, ctx)).toMatchObject({ open: 0, closed: 1 });
   });
@@ -228,26 +228,26 @@ describe('courseWorkbook', () => {
   const wb = courseWorkbook(world, ctx);
 
   it('has the seven tabs, in order, with the Definitions last', () => {
-    expect(wb.sheets.map((s) => s.name)).toEqual(['Summary', 'Students', 'Sessions', 'Register', 'Listening', 'Detail', 'Definitions']);
+    expect(wb.sheets.map((s) => s.name)).toEqual(['Summary', 'Students', 'Sessions', 'Register', 'Recordings', 'Detail', 'Definitions']);
     expect(sheet(wb, 'Definitions').rows).toHaveLength(WORKBOOK_DEFINITIONS.length + 1);
   });
 
   it('the Students tab closes on every row', () => {
     for (const r of table(wb, 'Students')) {
       expect(Number(r.Present) + Number(r.Absent) + Number(r.Excused)).toBe(Number(r.Held));
-      expect(Number(r.Listened) + Number(r['Still open']) + Number(r['Missed deadline']) + Number(r.Closed)).toBe(Number(r.Required));
+      expect(Number(r.Completed) + Number(r['Still open']) + Number(r['Missed deadline']) + Number(r.Closed)).toBe(Number(r.Required));
     }
   });
 
-  it('the Register and Listening totals reproduce the Students tab', () => {
+  it('the Register and Recordings totals reproduce the Students tab', () => {
     const students = new Map(table(wb, 'Students').map((r) => [r.Student, r]));
     for (const r of table(wb, 'Register')) {
       const s = students.get(r.Student)!;
       expect([r.Held, r.P, r.A, r.E]).toEqual([s.Held, s.Present, s.Absent, s.Excused]);
     }
-    for (const r of table(wb, 'Listening')) {
+    for (const r of table(wb, 'Recordings')) {
       const s = students.get(r.Student)!;
-      expect([r.Required, r.Listened, r.Open, r.Missed, r.Closed]).toEqual([s.Required, s.Listened, s['Still open'], s['Missed deadline'], s.Closed]);
+      expect([r.Required, r.Completed, r.Open, r.Missed, r.Closed]).toEqual([s.Required, s.Completed, s['Still open'], s['Missed deadline'], s.Closed]);
     }
   });
 
@@ -255,7 +255,7 @@ describe('courseWorkbook', () => {
     const students = table(wb, 'Students');
     const sessions = table(wb, 'Sessions');
     const sumOf = (rows: Record<string, unknown>[], k: string) => rows.reduce((n, r) => n + (typeof r[k] === 'number' ? (r[k] as number) : 0), 0);
-    expect(sumOf(sessions, 'Listened')).toBe(sumOf(students, 'Listened'));
+    expect(sumOf(sessions, 'Completed')).toBe(sumOf(students, 'Completed'));
     expect(sumOf(sessions, 'Still open')).toBe(sumOf(students, 'Still open'));
     expect(sumOf(sessions, 'Missed deadline')).toBe(sumOf(students, 'Missed deadline'));
     expect(sumOf(sessions, 'Closed')).toBe(sumOf(students, 'Closed'));
@@ -265,9 +265,9 @@ describe('courseWorkbook', () => {
     const s4 = table(wb, 'Sessions').find((r) => r.Session === 'Session 4')!;
     expect(s4.Status).toBe('Archived');
     expect(String(s4.Note)).toMatch(/withdrawn/);
-    expect(s4.Listened).toBe('—');
-    // …and the Listening grid has no column for it.
-    const heads = sheet(wb, 'Listening').rows[1].map((c) => String(c.v));
+    expect(s4.Completed).toBe('—');
+    // …and the Recordings grid has no column for it.
+    const heads = sheet(wb, 'Recordings').rows[1].map((c) => String(c.v));
     expect(heads.some((h) => h.startsWith('Session 4'))).toBe(false);
     expect(heads.some((h) => h.startsWith('Session 1'))).toBe(true);
   });
@@ -285,18 +285,18 @@ describe('courseWorkbook', () => {
   it('dates and times are real dates in the institute’s clock', () => {
     const rows = table(wb, 'Detail');
     const fatima = rows.find((r) => r.Student === 'Fatima Ahmed')!;
-    expect(fatima['Listen by']).toBeInstanceOf(Date);
-    expect(cellText(fatima['Listen by'])).toBe('2026-09-15');
+    expect(fatima['Due by']).toBeInstanceOf(Date);
+    expect(cellText(fatima['Due by'])).toBe('2026-09-15');
     // 12:00 Chicago on 09-10, carried in UTC fields so Excel shows 12:00.
-    expect((fatima['Last listened'] as Date).toISOString()).toBe('2026-09-10T12:00:00.000Z');
-    expect(fatima.Heard).toBeCloseTo(0.62);
+    expect((fatima['Last played'] as Date).toISOString()).toBe('2026-09-10T12:00:00.000Z');
+    expect(fatima.Played).toBeCloseTo(0.62);
   });
 
   it('the Summary states the rates the tabs add up to', () => {
     const summary = Object.fromEntries(sheet(wb, 'Summary').rows.map((r) => [String(r[0].v), String(r[1].v)]));
-    // present 8 of held 14 → 57%; listened 1 ÷ (1 + 1 missed) → 50%.
+    // present 8 of held 14 → 57%; completed 1 ÷ (1 + 1 missed) → 50%.
     expect(summary['Attendance rate (present ÷ held)']).toBe('57%');
-    expect(summary['Catch-up rate (listened ÷ listened + missed)']).toBe('50%');
+    expect(summary['Catch-up rate (completed ÷ completed + missed)']).toBe('50%');
     expect(summary['Recordings published']).toBe('3 of 5 sessions');
   });
 
@@ -352,7 +352,7 @@ describe('studentWorkbook', () => {
   );
 
   it('has the six tabs and one row per course', () => {
-    expect(wb.sheets.map((s) => s.name)).toEqual(['Summary', 'Courses', 'Sessions', 'Listening', 'History', 'Definitions']);
+    expect(wb.sheets.map((s) => s.name)).toEqual(['Summary', 'Courses', 'Sessions', 'Recordings', 'History', 'Definitions']);
     expect(table(wb, 'Courses').map((r) => r.Course)).toEqual(['Hikam Foundations', 'Arabic I']);
   });
 
@@ -374,7 +374,7 @@ describe('studentWorkbook', () => {
   it('carries the scope and the history', () => {
     const summary = Object.fromEntries(sheet(wb, 'Summary').rows.map((r) => [String(r[0].v), String(r[1].v)]));
     expect(summary.Scope).toBe('the courses you manage');
-    expect(summary['Catch-up, all courses']).toBe('0 listened · 0 still open · 1 missed deadline');
+    expect(summary['Catch-up, all courses']).toBe('0 completed · 0 still open · 1 missed deadline');
     expect(table(wb, 'History', 1).map((r) => r.What)).toEqual(['Enrolled in Hikam Foundations', 'Enrolled in Arabic I']);
   });
 });

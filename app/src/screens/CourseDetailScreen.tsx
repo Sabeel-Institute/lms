@@ -243,8 +243,8 @@ export function CourseDetailScreen({
       {!cls.effectiveActive ? (
         <Notice tone="info">
           {cls.archivedAccess
-            ? 'This course is archived. Students can still listen to what they were assigned.'
-            : 'This course is archived and listening is off.'}
+            ? 'This course is archived. Students can still play what they were assigned.'
+            : 'This course is archived and its recordings are closed.'}
         </Notice>
       ) : null}
 
@@ -258,7 +258,7 @@ export function CourseDetailScreen({
         {ledger.resolved ? (
           <Text style={styles.ledgerLine}>
             <Text style={styles.ledgerNum}>{ledger.rollup.total}</Text>
-            {'\u00A0required\u00A0listening'}
+            {'\u00A0required'}
             {'   '}
             <Text style={styles.ledgerNum}>{ledger.rollup.incomplete}</Text>
             {'\u00A0not\u00A0complete'}
@@ -277,7 +277,7 @@ export function CourseDetailScreen({
           <Button testID="nav-audit" label="Audit history" variant="secondary" onPress={onOpenAudit} />
           {/* THE ONE EXPORT: every student, every session, every grant of this
               course in one .xlsx — Summary, Students, Sessions, the Register
-              and Listening grids, Detail, Definitions. It replaced four CSVs
+              and Recordings grids, Detail, Definitions. It replaced four CSVs
               that each photographed one screen and closed on no arithmetic. */}
           <Button
             testID="course-export"
@@ -320,8 +320,8 @@ export function CourseDetailScreen({
                 // what it says — styled identically.
                 label={
                   cls.archivedAccess
-                    ? 'Stop listening when archived'
-                    : 'Allow listening when archived'
+                    ? 'Close recordings when archived'
+                    : 'Keep recordings open when archived'
                 }
                 variant="secondary"
                 busy={busy === 'access'}

@@ -5,6 +5,7 @@ import {
   canPlayFromCourse,
   grantOutcome,
   isOverdue,
+  playVerb,
   todayInZone,
   unbreakableDate,
   type AttendanceStatus,
@@ -21,6 +22,7 @@ import { useMyAttendanceState, type AttendanceRecordRow } from "../attendance";
 
 const NO_MARKS: AttendanceRecordRow[] = [];
 import { useMyAssignments, useMyCompletions } from "../completion";
+import { useRecordingState } from "../recordings";
 import type { CourseRow } from "../structure";
 import { getTheme, spacing } from "../theme";
 
@@ -121,8 +123,8 @@ export function StudentAttendanceScreen({
       {outstanding > 0 ? (
         <Notice tone="info">
           {outstanding === 1
-            ? "1 recording still to listen to for this class."
-            : `${outstanding} recordings still to listen to for this class.`}
+            ? "1 recording still to complete for this class."
+            : `${outstanding} recordings still to complete for this class.`}
         </Notice>
       ) : null}
 
@@ -155,14 +157,13 @@ export function StudentAttendanceScreen({
                   <Text style={styles.title}>{m.title}</Text>
                   <Text style={styles.date}>{m.date}</Text>
                   {a ? (
-                    <Text style={styles.listening}>
-                      {listeningLine(
-                        completions.get(a.recordingId)?.completed ?? false,
-                        a.dueDate,
-                        today,
-                        canPlayFromCourse(cls),
-                      )}
-                    </Text>
+                    <RecordingLine
+                      recordingId={a.recordingId}
+                      completed={completions.get(a.recordingId)?.completed ?? false}
+                      dueDate={a.dueDate}
+                      today={today}
+                      playable={canPlayFromCourse(cls)}
+                    />
                   ) : null}
                 </View>
                 <Text style={styles.status}>{STATUS_LABEL[m.status]}</Text>
@@ -172,6 +173,36 @@ export function StudentAttendanceScreen({
         </Grid>
       )}
     </Screen>
+  );
+}
+
+/**
+ * The line under an excused session. Its own component because the verb —
+ * "listen by" or "watch by" — comes from the recording, one document per row.
+ * NOTHING UNTIL IT ARRIVES: guessing "listen by" would turn into "watch by"
+ * under the reader's eye. A refused read (the course archived with its
+ * recordings closed) is an answer, not a fault; the line then says "course
+ * archived", which needs no verb.
+ */
+function RecordingLine({
+  recordingId,
+  completed,
+  dueDate,
+  today,
+  playable,
+}: {
+  recordingId: string;
+  completed: boolean;
+  dueDate: string;
+  today: string;
+  playable: boolean;
+}) {
+  const { value: recording, resolved } = useRecordingState(recordingId, "attendanceLine", true);
+  if (!resolved) return null;
+  return (
+    <Text style={styles.listening}>
+      {listeningLine(completed, dueDate, today, playable, playVerb(recording?.media ?? {}))}
+    </Text>
   );
 }
 
@@ -187,6 +218,7 @@ function listeningLine(
   dueDate: string,
   today: string,
   playable: boolean,
+  verb: "Watch" | "Listen",
 ): string {
   // Non-breaking spaces around the date AND non-breaking hyphens inside it: it
   // is the whole point of the line, and it is the one token a wrap split — see
@@ -205,7 +237,7 @@ function listeningLine(
     case 'closed':
       return 'Recording required · course archived';
     case 'open':
-      return `Recording required · listen\u00A0by\u00A0${when}`;
+      return `Recording required · ${verb.toLowerCase()}\u00A0by\u00A0${when}`;
   }
 }
 

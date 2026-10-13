@@ -328,7 +328,7 @@ function RecordingLine({
         <StatusChip status={r.status} />
         <Text style={styles.sub}>
           {[
-            r.durationSec ? `${Math.round(r.durationSec / 60)} min` : playable ? 'length unknown' : 'no audio',
+            r.durationSec ? `${Math.round(r.durationSec / 60)} min` : playable ? 'length unknown' : 'nothing to play',
             mediaSummary(r.media),
           ]
             .filter(Boolean)
@@ -347,15 +347,15 @@ function RecordingLine({
           <Row>
             {/* PRIMARY, and the only one on the card. Two identical sage bars
                 six times down a page gave the library no answer to "what do I do
-                here", and listening is what the library is for — the ledger
+                here", and playing is what the library is for — the ledger
                 beside it is the follow-up. */}
             {playable ? (
-              <Button testID={`library-listen-${r.title}`} label="Listen" onPress={onPlay} />
+              <Button testID={`library-play-${r.title}`} label="Play" onPress={onPlay} />
             ) : null}
             {hasLedger(r) ? (
               <Button
                 testID={`library-progress-${r.title}`}
-                label="Listening progress"
+                label="Progress"
                 variant="secondary"
                 onPress={onOpenProgress}
               />

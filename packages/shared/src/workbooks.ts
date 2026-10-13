@@ -32,30 +32,30 @@ export const WORKBOOK_DEFINITIONS: readonly [term: string, definition: string][]
   ],
   [
     'Present / Absent / Excused',
-    'The mark on the register. Excused is the only mark that opens the recording and requires listening.',
+    'The mark on the register. Excused is the only mark that opens the recording and requires it.',
   ],
   ['Attendance rate', 'Present ÷ Held.'],
   [
     'Required',
-    'Excused sessions whose recording is published — one recording the student must listen to, by its listen-by date. A recording that has been archived or unpublished is withdrawn: it counts nowhere, and the Sessions tab says so.',
+    'Excused sessions whose recording is published — one recording the student must play and mark complete by its due date. A recording that has been archived or unpublished is withdrawn: it counts nowhere, and the Sessions tab says so.',
   ],
   [
-    'Listened',
+    'Completed',
     'The student marked the recording complete, or staff overrode it as complete (the override’s reason is recorded).',
   ],
-  ['Still open', 'Not yet listened, and the listen-by date has not passed.'],
+  ['Still open', 'Not yet completed, and the due date has not passed.'],
   [
     'Missed deadline',
-    'Not listened by the listen-by date. Access has closed; nothing further can happen to it unless the date is moved.',
+    'Not completed by the due date. Access has closed; nothing further can happen to it unless the date is moved.',
   ],
   [
     'Closed',
-    'A required recording that was withdrawn from the student before its listen-by date: they left the class, or the class was archived with listening off. Neither listened nor missed.',
+    'A required recording that was withdrawn from the student before its due date: they left the class, or the class was archived with its recordings closed. Neither completed nor missed.',
   ],
-  ['Catch-up rate', 'Listened ÷ (Listened + Missed deadline). Open and closed items are not held against anyone.'],
+  ['Catch-up rate', 'Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone.'],
   [
-    'Heard',
-    'Listening time as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark.',
+    'Played',
+    'Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark.',
   ],
   ['Times', 'Institute time (America/Chicago). Dates are real dates; sort and filter them in Excel.'],
 ];
@@ -101,7 +101,7 @@ export interface WorkbookContext {
 
 // -------------------------------------------------------------- outcomes --
 
-export type ListeningOutcome = 'listened' | 'open' | 'missed' | 'closed';
+export type ListeningOutcome = 'completed' | 'open' | 'missed' | 'closed';
 
 export interface RequiredItem {
   studentUid: string;
@@ -129,7 +129,7 @@ export interface StudentCourseStats {
   /** Registers inside their window that hold no mark for them. */
   unmarked: number;
   required: number;
-  listened: number;
+  completed: number;
   open: number;
   missed: number;
   closed: number;
@@ -180,7 +180,7 @@ export function courseStudentStats(
     excused: 0,
     unmarked: 0,
     required: 0,
-    listened: 0,
+    completed: 0,
     open: 0,
     missed: 0,
     closed: 0,
@@ -225,7 +225,7 @@ export function courseStudentStats(
     const eff = effectiveCompletion(completion, override);
     const progress = progressOf.get(recording.id);
     let outcome: ListeningOutcome;
-    if (eff.completed) outcome = 'listened';
+    if (eff.completed) outcome = 'completed';
     // Left the class before the date: the date never closed on them.
     else if (left && left < session.dueDate) outcome = 'closed';
     else if (isOverdue(session.dueDate, ctx.today)) outcome = 'missed';
@@ -273,9 +273,9 @@ const stamp = (ms: number | null | undefined, zone: string): Cell => {
   return c(new Date(Date.parse(`${d}T${t}:00Z`)), 'datetime');
 };
 const outcomeText = (o: ListeningOutcome): string =>
-  o === 'listened' ? 'Listened' : o === 'open' ? 'Still open' : o === 'missed' ? 'Missed deadline' : 'Closed';
+  o === 'completed' ? 'Completed' : o === 'open' ? 'Still open' : o === 'missed' ? 'Missed deadline' : 'Closed';
 const outcomeStyle = (o: ListeningOutcome): CellStyle =>
-  o === 'listened' ? 'good' : o === 'open' ? 'open' : o === 'missed' ? 'missed' : 'dim';
+  o === 'completed' ? 'good' : o === 'open' ? 'open' : o === 'missed' ? 'missed' : 'dim';
 const outcomeIntStyle = (o: ListeningOutcome, n: number): CellStyle =>
   n > 0 && o === 'missed' ? 'missedInt' : n > 0 && o === 'open' ? 'openInt' : 'int';
 const shortDate = (d: string) => d.slice(5);
@@ -327,7 +327,7 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
     return r && isVisibleToStudents(r.status);
   });
   const status = !data.course.effectiveActive
-    ? `Archived · listening ${data.course.archivedAccess ? 'on' : 'off'}`
+    ? `Archived · recordings ${data.course.archivedAccess ? 'open' : 'closed'}`
     : 'Running';
 
   // Summary
@@ -349,10 +349,10 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
       ],
       [text('Attendance rate (present ÷ held)', 'bold'), text(rate(sum('present'), sum('held')))],
       [text('Recordings published', 'bold'), text(`${published.length} of ${sessions.length} sessions`)],
-      [text('Catch-up rate (listened ÷ listened + missed)', 'bold'), text(rate(sum('listened'), sum('listened') + sum('missed')))],
+      [text('Catch-up rate (completed ÷ completed + missed)', 'bold'), text(rate(sum('completed'), sum('completed') + sum('missed')))],
       [
         text('Still open', 'bold'),
-        text(`${sum('open')} required listening${sum('open') === 1 ? '' : 's'}, ${all.filter((s) => s.open > 0).length} student${all.filter((s) => s.open > 0).length === 1 ? '' : 's'}`),
+        text(`${sum('open')} required recording${sum('open') === 1 ? '' : 's'}, ${all.filter((s) => s.open > 0).length} student${all.filter((s) => s.open > 0).length === 1 ? '' : 's'}`),
       ],
       [text('Exported', 'bold'), text(`${stampInZone(ctx.timeZone, ctx.exportedAt)} · by ${ctx.exportedBy}`)],
       ...(ctx.scopeNote ? [[text('Scope', 'bold'), text(ctx.scopeNote)]] : []),
@@ -364,7 +364,7 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
     { title: '', cols: ['Student'] },
     { title: 'Enrolment', cols: ['Joined', 'Left', 'Status'] },
     { title: 'Attendance', cols: ['Held', 'Present', 'Absent', 'Excused', 'Rate'] },
-    { title: 'Catch-up on excused sessions', cols: ['Required', 'Listened', 'Still open', 'Missed deadline', 'Closed', 'Rate'] },
+    { title: 'Catch-up on excused sessions', cols: ['Required', 'Completed', 'Still open', 'Missed deadline', 'Closed', 'Rate'] },
     { title: '', cols: ['Note'] },
   ]);
   const studentRows = [...all]
@@ -372,8 +372,8 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
     .map((s) => {
       const notes: string[] = [];
       if (s.unmarked > 0) notes.push(`${s.unmarked} register${s.unmarked === 1 ? '' : 's'} without a mark for them`);
-      if (s.closed > 0) notes.push(`${s.closed} closed: ${s.left ? 'left the class' : 'listening off'}`);
-      const byOverride = s.items.filter((i) => i.outcome === 'listened' && i.override?.completed).length;
+      if (s.closed > 0) notes.push(`${s.closed} closed: ${s.left ? 'left the class' : 'recordings closed'}`);
+      const byOverride = s.items.filter((i) => i.outcome === 'completed' && i.override?.completed).length;
       if (byOverride > 0) notes.push(`${byOverride} completion${byOverride === 1 ? '' : 's'} by override`);
       return [
         text(name(s.studentUid)),
@@ -386,11 +386,11 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
         int(s.excused),
         pct(s.present, s.held),
         int(s.required),
-        int(s.listened),
+        int(s.completed),
         int(s.open, outcomeIntStyle('open', s.open)),
         int(s.missed, outcomeIntStyle('missed', s.missed)),
         int(s.closed),
-        pct(s.listened, s.listened + s.missed),
+        pct(s.completed, s.completed + s.missed),
         text(notes.join(' · '), 'note'),
       ];
     });
@@ -407,8 +407,8 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
   const sessionsHeader = groupedHeader([
     { title: '', cols: ['Date', 'Session'] },
     { title: 'Register', cols: ['Taken on', 'Present', 'Absent', 'Excused'] },
-    { title: 'Recording', cols: ['Status', 'Published', 'Listen by'] },
-    { title: 'Catch-up (excused)', cols: ['Listened', 'Still open', 'Missed deadline', 'Closed'] },
+    { title: 'Recording', cols: ['Status', 'Published', 'Due by'] },
+    { title: 'Catch-up (excused)', cols: ['Completed', 'Still open', 'Missed deadline', 'Closed'] },
     { title: '', cols: ['Note'] },
   ]);
   const sessionRows = sessions.map((s) => {
@@ -440,7 +440,7 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
       text(s.notRecorded ? 'Not recorded' : rec ? rec.status[0].toUpperCase() + rec.status.slice(1) : 'None'),
       rec?.publishedAt ? stamp(rec.publishedAt, ctx.timeZone) : text(''),
       day(s.dueDate),
-      tally('listened'),
+      tally('completed'),
       tally('open'),
       tally('missed'),
       tally('closed'),
@@ -487,8 +487,8 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
   // Listening: students down, published recordings across.
   const listeningHeader = groupedHeader([
     { title: '', cols: ['Student'] },
-    { title: 'Recordings (listen by)', cols: published.map((s) => `${s.title}\nby ${shortDate(s.dueDate)}`) },
-    { title: 'Totals', cols: ['Required', 'Listened', 'Open', 'Missed', 'Closed'] },
+    { title: 'Recordings (due by)', cols: published.map((s) => `${s.title}\nby ${shortDate(s.dueDate)}`) },
+    { title: 'Totals', cols: ['Required', 'Completed', 'Open', 'Missed', 'Closed'] },
   ]);
   const listeningRows = roster.map((uid) => {
     const s = stats.get(uid)!;
@@ -500,20 +500,20 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
         const heard = item.heard === null ? '' : ` · ${Math.round(item.heard * 100)}%`;
         const when = item.completedAt ? ` ${shortDate(todayInZone(ctx.timeZone, item.completedAt))}` : '';
         const label =
-          item.outcome === 'listened'
-            ? `${item.override?.completed ? 'override' : 'listened'}${when}`
+          item.outcome === 'completed'
+            ? `${item.override?.completed ? 'override' : 'completed'}${when}`
             : `${item.outcome === 'open' ? 'open' : item.outcome === 'missed' ? 'missed' : 'closed'}${heard}`;
         return text(label, outcomeStyle(item.outcome));
       }),
       int(s.required),
-      int(s.listened),
+      int(s.completed),
       int(s.open, outcomeIntStyle('open', s.open)),
       int(s.missed, outcomeIntStyle('missed', s.missed)),
       int(s.closed),
     ];
   });
   const listening: SheetSpec = {
-    name: 'Listening',
+    name: 'Recordings',
     widths: [28, ...published.map(() => 16), 9, 9, 7, 8, 8],
     rows: [...listeningHeader.rows, ...listeningRows],
     merges: listeningHeader.merges,
@@ -527,8 +527,8 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
     rows: [
       ...groupedHeader([
         { title: '', cols: ['Student', 'Session', 'Recording'] },
-        { title: 'Deadline', cols: ['Listen by', 'Outcome'] },
-        { title: 'Listening', cols: ['Heard', 'Last listened', 'Completed at', 'Marked by'] },
+        { title: 'Deadline', cols: ['Due by', 'Outcome'] },
+        { title: 'Progress', cols: ['Played', 'Last played', 'Completed at', 'Marked by'] },
         { title: 'Override', cols: ['By', 'On', 'Reason'] },
       ]).rows,
       ...all.flatMap((s) =>
@@ -550,8 +550,8 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
     ],
     merges: groupedHeader([
       { title: '', cols: ['Student', 'Session', 'Recording'] },
-      { title: 'Deadline', cols: ['Listen by', 'Outcome'] },
-      { title: 'Listening', cols: ['Heard', 'Last listened', 'Completed at', 'Marked by'] },
+      { title: 'Deadline', cols: ['Due by', 'Outcome'] },
+      { title: 'Progress', cols: ['Played', 'Last played', 'Completed at', 'Marked by'] },
       { title: 'Override', cols: ['By', 'On', 'Reason'] },
     ]).merges,
     freeze: { rows: 2, cols: 1 },
@@ -587,7 +587,7 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
   const sum = (k: keyof StudentCourseStats) => perCourse.reduce((n, { stats }) => n + (stats[k] as number), 0);
   const current = perCourse.filter(({ stats, data }) => stats.enrolled && data.course.effectiveActive).length;
   const status = (data: CourseData) =>
-    !data.course.effectiveActive ? `Archived · listening ${data.course.archivedAccess ? 'on' : 'off'}` : 'Running';
+    !data.course.effectiveActive ? `Archived · recordings ${data.course.archivedAccess ? 'open' : 'closed'}` : 'Running';
 
   const summary: SheetSpec = {
     name: 'Summary',
@@ -606,7 +606,7 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
       ],
       [
         text('Catch-up, all courses', 'bold'),
-        text(`${sum('listened')} listened · ${sum('open')} still open · ${sum('missed')} missed deadline${sum('closed') ? ` · ${sum('closed')} closed` : ''}`),
+        text(`${sum('completed')} completed · ${sum('open')} still open · ${sum('missed')} missed deadline${sum('closed') ? ` · ${sum('closed')} closed` : ''}`),
       ],
       [text('Scope', 'bold'), text(ctx.scopeNote ?? 'every course')],
       [text('Exported', 'bold'), text(`${stampInZone(ctx.timeZone, ctx.exportedAt)} · by ${ctx.exportedBy}`)],
@@ -617,7 +617,7 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
     { title: '', cols: ['Course', 'Cohort'] },
     { title: 'Enrolment', cols: ['Joined', 'Left', 'Course status'] },
     { title: 'Attendance', cols: ['Held', 'Present', 'Absent', 'Excused', 'Rate'] },
-    { title: 'Catch-up on excused sessions', cols: ['Required', 'Listened', 'Still open', 'Missed deadline', 'Closed'] },
+    { title: 'Catch-up on excused sessions', cols: ['Required', 'Completed', 'Still open', 'Missed deadline', 'Closed'] },
   ]);
   const courses: SheetSpec = {
     name: 'Courses',
@@ -636,7 +636,7 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
         int(stats.excused),
         pct(stats.present, stats.held),
         int(stats.required),
-        int(stats.listened),
+        int(stats.completed),
         int(stats.open, outcomeIntStyle('open', stats.open)),
         int(stats.missed, outcomeIntStyle('missed', stats.missed)),
         int(stats.closed),
@@ -674,7 +674,7 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
     .map((r) => r.cells);
   const sessionsHeader = groupedHeader([
     { title: '', cols: ['Date', 'Course', 'Session', 'Mark'] },
-    { title: 'If excused: the recording', cols: ['Listen by', 'Outcome', 'On'] },
+    { title: 'If excused: the recording', cols: ['Due by', 'Outcome', 'On'] },
   ]);
   const sessions: SheetSpec = {
     name: 'Sessions',
@@ -686,16 +686,16 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
   };
 
   const listening: SheetSpec = {
-    name: 'Listening',
+    name: 'Recordings',
     widths: [26, 40, 12, 16, 8, 17, 17, 44],
     rows: [
       [
         text('Course', 'head'),
         text('Recording', 'head'),
-        text('Listen by', 'head'),
+        text('Due by', 'head'),
         text('Outcome', 'head'),
-        text('Heard', 'head'),
-        text('Last listened', 'head'),
+        text('Played', 'head'),
+        text('Last played', 'head'),
         text('Completed at', 'head'),
         text('Override by / reason', 'head'),
       ],

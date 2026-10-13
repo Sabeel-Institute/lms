@@ -8,7 +8,7 @@ The app is not a general LMS. It is a focused platform for class recordings, req
 
 ## Product principles
 
-- **Adult learner tone:** respectful and direct. Use language such as required listening, listen by, missed, completed, and pending sync. Say **missed** rather than overdue once access has closed — overdue implies the work is still doable. Avoid childish, punitive, or shaming language.
+- **Adult learner tone:** respectful and direct. Use language such as required, listen by, watch by, missed, completed, and pending sync. A recording a student can play any video of says **Watch by**; one that is audio only says **Listen by**; buttons say **Play**; lists that mix both say neither ("Your recordings", "Required, soonest first"). Staff set the date as **Due by**, since a session has its date before it has a recording. Say **missed** rather than overdue once access has closed — overdue implies the work is still doable. Avoid childish, punitive, or shaming language.
 - **Action first, full data second:** default views should show what needs attention. Complete sortable list views are still available for students and staff when they need full visibility.
 - **Being excused is the entitlement:** a recording opens to exactly the students marked excused for its session, and closes to them when the due date passes. The same fact makes it required listening. Access and accountability were separate principles until 2026-08-14; they are now deliberately one.
 - **Audio and video, as the class made them:** a recording holds its class's files — audio, and video where staff took it — as parts and versions, and nothing is transcoded (`docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md`).
@@ -398,7 +398,7 @@ for the roster on screen and are not part of a file about who owes listening.
 Push notifications are first-class scope for students and staff alike. Three messages, no more:
 
 1. **Student — a recording is ready for you.** Fires once when a student is excused and the recording is published. Under the excused-only policy this is also "you now have access", so without it a student has no way to know a recording appeared.
-2. **Student — last day to listen.** On the morning of the due date, if not yet complete. There is no day-after reminder: once the deadline passes there is no action left to take, so a message could only say "you missed it".
+2. **Student — last day for a recording.** On the morning of the due date, if not yet complete. There is no day-after reminder: once the deadline passes there is no action left to take, so a message could only say "you missed it".
 3. **Course managers — attendance still not taken.** A session whose date has passed with attendance never submitted, sent to the people who manage that class. Load-bearing under this policy: no attendance means nobody is granted anything, so an un-taken sheet silently locks a whole class out of a published recording. A session marked **not recorded** raises nothing — there is no audio for a missing register to lock anyone out of.
 
 To the class's managers and to nobody else: an admin who manages no class cannot receive it, so their notification settings say where class messages go instead of offering a switch that could do nothing.

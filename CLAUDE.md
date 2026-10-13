@@ -128,7 +128,7 @@ Do not silently change any of these.
   thing the threat model rules out. Never proxy audio through a Function: the
   60-minute timeout kills a 2-hour session. Uploads are pre-signed PUTs that
   create the object once (`If-None-Match: *` is signed).
-- **Adult learner tone.** Required listening, listen by, missed, completed, pending
+- **Adult learner tone.** Required, listen by / watch by, missed, completed, pending
   sync. "Missed" rather than "overdue" once access has closed: overdue implies
   still doable. Never childish, punitive, or shaming language.
 - **Two auth populations.** Staff sign in with Google and must be on

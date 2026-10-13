@@ -334,7 +334,7 @@ export default function App() {
                   <Stack.Screen name="SessionDetail" options={screenOptions('SessionDetail', 'Session')}>
                     {() => <SessionDetail isAdmin={isAdmin} />}
                   </Stack.Screen>
-                  <Stack.Screen name="RecordingLedger" options={screenOptions('RecordingLedger', 'Listening progress')}>
+                  <Stack.Screen name="RecordingLedger" options={screenOptions('RecordingLedger', 'Progress')}>
                     {() => <RecordingLedger />}
                   </Stack.Screen>
                   <Stack.Screen name="StudentLedger" options={screenOptions('StudentLedger', 'Student progress')}>
@@ -384,7 +384,7 @@ export default function App() {
                 </>
               )}
               {/* Both: staff open the player from the library and from a session. */}
-              <Stack.Screen name="Player" options={screenOptions('Player', 'Listen')}>
+              <Stack.Screen name="Player" options={screenOptions('Player', 'Recording')}>
                 {/* KEYED BY RECORDING. Navigating to the player while it is already
                     on the stack re-renders the same `Play` with new params, and
                     for one committed frame its live-doc state is still the

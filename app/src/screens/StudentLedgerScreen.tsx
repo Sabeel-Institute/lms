@@ -5,6 +5,7 @@ import {
   canPlayFromCourse,
   grantOutcome,
   isOverdue,
+  playVerb,
   todayInZone,
   unbreakableDate,
 } from '@sabeel/shared';
@@ -16,7 +17,7 @@ import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
 
-/** One student's required listening in one course. */
+/** One student's required recordings in one course. */
 export function StudentLedgerScreen({
   studentUid,
   studentName,
@@ -31,19 +32,22 @@ export function StudentLedgerScreen({
 }) {
   const today = todayInZone(INSTITUTE_TIMEZONE);
   // An archived class with listening off closes every open grant on it — the
-  // rows say so rather than "Listen by", which reads as still doable.
+  // rows say so rather than "Listen by" or "Watch by", which read as still doable.
   const playable = canPlayFromCourse(cls);
   const items = useStudentLedger(studentUid, cls.id);
   const recordings = useCourseRecordings(cls.id);
-  const titleById = useMemo(() => new Map(recordings.map((r) => [r.id, r.title])), [recordings]);
+  const byId = useMemo(() => new Map(recordings.map((r) => [r.id, r])), [recordings]);
   const [filter, setFilter] = useState<LedgerFilter>('all');
 
   const rows = useMemo(() => {
-    const withTitle = (items ?? []).map((it) => ({ ...it, title: titleById.get(it.recordingId) ?? it.recordingId }));
+    const withTitle = (items ?? []).map((it) => {
+      const rec = byId.get(it.recordingId);
+      return { ...it, title: rec?.title ?? it.recordingId, verb: playVerb(rec?.media ?? {}) };
+    });
     if (filter === 'notComplete') return withTitle.filter((r) => !r.completed);
     if (filter === 'missed') return withTitle.filter((r) => !r.completed && isOverdue(r.dueDate, today));
     return withTitle;
-  }, [items, titleById, filter, today]);
+  }, [items, byId, filter, today]);
 
   return (
     <Screen
@@ -55,7 +59,7 @@ export function StudentLedgerScreen({
         label: `Open ${studentName}'s profile`,
         onPress: onOpenStudent,
       }}
-      subtitle={`${cls.name} · required listening`}
+      subtitle={`${cls.name} · required recordings`}
       width="list"
     >
       <View style={styles.toolbar}>
@@ -65,7 +69,7 @@ export function StudentLedgerScreen({
       </View>
 
       {items === null ? (
-        <Empty>Checking their required listening…</Empty>
+        <Empty>Checking their required recordings…</Empty>
       ) : rows.length === 0 ? (
         <Empty>No required recordings here.</Empty>
       ) : (
@@ -84,7 +88,7 @@ export function StudentLedgerScreen({
                   places. */}
               <View style={styles.rowMeta}>
                 <Text style={[styles.status, styleFor(r, today, playable)]}>
-                  {statusLabel(r, today, playable)}
+                  {statusLabel(r, r.verb, today, playable)}
                 </Text>
               </View>
             </View>
@@ -95,7 +99,12 @@ export function StudentLedgerScreen({
   );
 }
 
-function statusLabel(r: StudentLedgerItem, today: string, playable: boolean): string {
+function statusLabel(
+  r: StudentLedgerItem,
+  verb: 'Watch' | 'Listen',
+  today: string,
+  playable: boolean,
+): string {
   switch (grantOutcome(r, today, playable)) {
     case 'complete':
       return r.source === 'override' ? 'Completed (override)' : 'Completed';
@@ -104,9 +113,9 @@ function statusLabel(r: StudentLedgerItem, today: string, playable: boolean): st
     case 'closed':
       return 'Closed (course archived)';
     case 'open':
-      // "Listen by", the same words the student sees on their own screens — not
-      // a staff-only synonym for the same date.
-      return `Listen by ${unbreakableDate(r.dueDate)}`;
+      // "Listen by" or "Watch by", the same words the student sees on their
+      // own screens — not a staff-only synonym for the same date.
+      return `${verb} by ${unbreakableDate(r.dueDate)}`;
   }
 }
 function styleFor(r: StudentLedgerItem, today: string, playable: boolean) {

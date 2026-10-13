@@ -36,6 +36,16 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **The words follow the recording** (video plan V6). A card,
+  a ledger row and the player say "Watch by" when the student can play any
+  video of the recording and "Listen by" when it is audio only; buttons say
+  Play. Where no single recording decides it the words name neither: the
+  student's home and tab are "Your recordings" / Recordings, staff set a
+  session's **Due by** date, the archived-course switch opens and closes
+  recordings, and the workbook says Completed, Played and Due by. The
+  notifications lost their "listen" verbs the same way. The manual covers
+  versions, parts, the Zoom picker and the media list. Admin stats stay with
+  Phase 8.
 - 2026-10-13 — **Students watch and listen by part and version** (video plan
   V5). One engine, expo-video, plays audio and video on Android; the web uses
   a `<video>` element. Proven three ways: `playback.test.ts` (resume in the

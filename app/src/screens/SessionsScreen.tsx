@@ -97,7 +97,7 @@ function AddSession({ courseId }: { courseId: string }) {
       />
       <DateField label="Date of the meeting" value={date} onChange={changeDate} />
       <DateField
-        label="Listen by"
+        label="Due by"
         value={dueDate}
         onChange={(v) => {
           setDueEdited(true);

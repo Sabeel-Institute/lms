@@ -26,6 +26,8 @@
  *                                        are exactly that shape
  *   - no two same-layer controls         crowding that appears at one width and
  *     overlap                            not another
+ *   - no navigation label is cut     a tab name clipped to "Recordi…" inside
+ *     short                              its own cell passes every check above
  *   - every screen has a way out         a pushed screen with no Back is a dead
  *                                        end in a phone browser, where there is
  *                                        no hardware Back either. A tab root is
@@ -585,6 +587,26 @@ const layoutFaults = (page, readOnly = false) =>
  * its Back, leaving no way back to where you came from — only a way to start
  * over at a tab root, which is not the same thing.
  */
+/**
+ * Navigation labels drawn short of their own text. A tab name is one line by
+ * design, so a name longer than its cell is clipped to "Recordi…" rather than
+ * wrapped — and every geometric check above passes, since nothing overflows
+ * the cell that clips it.
+ */
+const cutNavLabels = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="tab-"]')]
+      .filter((tab) => tab.getBoundingClientRect().width > 0)
+      // The label is the one-line text, which clips with an ellipsis; the badge
+      // overhangs its icon on purpose and is not a label.
+      .filter((tab) =>
+        [...tab.querySelectorAll('*')].some(
+          (el) => getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1,
+        ),
+      )
+      .map((tab) => tab.textContent.trim()),
+  );
+
 const escapes = (page) =>
   page.evaluate(() => {
     const shown = (e) => {
@@ -924,6 +946,13 @@ function visitor(page, tag, homeMarker, counter) {
           : 'no Back in the header — an editor’s Cancel is not a way off the screen',
     );
 
+    // The bar and the rail are the same on every screen of a population, so
+    // each tab root asks once.
+    if (root && !out.sheet) {
+      const cut = await cutNavLabels(page);
+      check(`${tag} / ${name} names every tab in full`, cut.length === 0, `cut short: ${cut.join(', ')}`);
+    }
+
     const fault = columnFault(await contentColumn(page), COLUMN_CAPS);
     check(`${tag} / ${name} content column`, fault === '', fault);
 
@@ -1253,7 +1282,7 @@ async function tourStaff(page, tag) {
   }, 'library-clear');
   await visit('player', async () => {
     await tap(byId(page, 'tab-library'));
-    await tap(byId(page, `library-listen-${missed.title}`));
+    await tap(byId(page, `library-play-${missed.title}`));
   }, 'player-scrubber');
   // The overflow sheet ITSELF, open. It is the one wholly new component of the
   // nav shell, it is a modal panel inside a 320px viewport, and the tours all
@@ -1369,7 +1398,7 @@ const STUDENT_SCREENS = 7;
 
 async function tourStudent(page, tag) {
   const counter = { seen: 0 };
-  const visit = visitor(page, tag, 'tab-listening', counter);
+  const visit = visitor(page, tag, 'tab-recordings', counter);
 
   // The task list, with all five buckets on it — Missed, Archived, Due soon,
   // Upcoming, Completed. Those group headings ARE the layout, and the anchor
@@ -1454,7 +1483,7 @@ async function signInStudent(page) {
   await byId(page, 'signin-email').fill(STUDENT.email);
   await byId(page, 'signin-password').fill(STUDENT_PASSWORD);
   await tap(byId(page, 'signin-student'));
-  await byId(page, 'tab-listening').waitFor({ timeout: 60_000 });
+  await byId(page, 'tab-recordings').waitFor({ timeout: 60_000 });
 }
 
 const TOURS = [

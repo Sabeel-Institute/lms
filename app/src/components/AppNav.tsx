@@ -37,11 +37,11 @@ type Tab = {
  */
 const STUDENT_TABS: Tab[] = [
   {
-    key: 'listening',
-    label: 'Listening',
-    icon: 'headset',
+    key: 'recordings',
+    label: 'Recordings',
+    icon: 'play-circle-outline',
     route: 'Home',
-    // The player is under Listening for a student: it is the only place their
+    // The player is under Recordings for a student: it is the only place their
     // recordings are opened from, and a screen where no tab is lit reads as
     // having fallen out of the app.
     activeFor: ['Home', 'Player'],
@@ -297,7 +297,10 @@ const styles = StyleSheet.create({
   // right, which is why it survived a phone-only review. The pill and the target
   // are the same box; 120 is as wide as either should get.
   itemBar: { flex: 1, paddingHorizontal: spacing(1), maxWidth: 120, alignSelf: 'center' },
-  itemRail: { width: 62, paddingHorizontal: spacing(1) },
+  // NEARLY THE RAIL'S WIDTH, with a sliver of padding: at 62px with 4px each
+  // side, "Recordings" clipped to "Recordi…". The sweep's "names every tab in
+  // full" check holds this.
+  itemRail: { width: RAIL_WIDTH - 6, paddingHorizontal: 2 },
   itemActive: { backgroundColor: t.bg.accentSoft },
   itemPressed: { opacity: 0.6 },
   label: { fontSize: 11, fontWeight: '600' },

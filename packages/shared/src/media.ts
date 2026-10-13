@@ -104,6 +104,9 @@ export interface MediaPart {
   items: MediaItem[];
 }
 
+/** The order versions are listed in everywhere: Zoom's formats first, audio last. */
+export const VERSION_ORDER: readonly MediaVersion[] = ['speaker', 'slides', 'video', 'audio'];
+
 /**
  * The parts a list of items makes, in play order. Items within a part keep a
  * fixed order (Zoom's formats first, by version name) so every surface lists
@@ -116,13 +119,12 @@ export function mediaParts(items: Iterable<MediaItem>): MediaPart[] {
     list.push(item);
     byPart.set(item.part, list);
   }
-  const order: MediaVersion[] = ['speaker', 'slides', 'video', 'audio'];
   return [...byPart.entries()]
     .sort(([a], [b]) => a - b)
     .map(([part, list]) => ({
       part,
       items: list.sort(
-        (x, y) => order.indexOf(x.version) - order.indexOf(y.version) || x.addedAt - y.addedAt,
+        (x, y) => VERSION_ORDER.indexOf(x.version) - VERSION_ORDER.indexOf(y.version) || x.addedAt - y.addedAt,
       ),
     }));
 }
@@ -183,6 +185,16 @@ export function mediaSummary(media: MediaMap): string | null {
   const kinds = new Set(playable.map((i) => i.kind));
   const what = kinds.size === 2 ? 'video and audio' : kinds.has('video') ? 'video' : 'audio';
   return parts > 1 ? `${parts} parts · ${what}` : what;
+}
+
+/**
+ * The verb a student is asked to do with a recording: "Watch" when any of
+ * what they can play is video, "Listen" otherwise — so "Watch by" and "Listen
+ * by". Counts only what a student can play: a hidden video asks nobody to
+ * watch anything.
+ */
+export function playVerb(media: MediaMap): 'Watch' | 'Listen' {
+  return Object.values(media).some((i) => isPlayable(i) && i.kind === 'video') ? 'Watch' : 'Listen';
 }
 
 /** Nothing at all: no item in any state. */
