@@ -34,6 +34,19 @@ recordings use, through callables, which is stricter than rules could be:
 - Read links are pre-signed GETs for one hour, minted by a callable that
   checks the reader may see the file — the same pattern as `getPlaybackUrl`.
 
+**A student's answer is formatted** (decided 2026-10-13, see the decision
+log). The proposal had "a note, plain text". The box is now **Your answer**,
+in the same editor as the instructions, because some assignments are a
+question to the class answered in the box alone. It is still the `note`
+field, stored as markdown in the same five-element vocabulary; `handIn`
+stores it canonical (`normalizeMarkdown`), so a draft written straight to
+Firestore cannot keep a link the reader would refuse.
+
+**The editor is its own web chunk.** Lexical is 130 KB gzipped; it loads when
+a box that uses it opens (`LazyRichEditor`), not with the app. Metro asks for
+Lexical's production build only (`app/metro.config.js`): its default entry
+imports both builds and Metro does not tree-shake.
+
 Everything else follows the proposal's notes: the records are `coursework`,
 `submissions`, `drafts`, `grades` and `submissionEvents` (`assignments` is
 already the listening grant); only the interface says "assignment".
@@ -53,7 +66,7 @@ erDiagram
 |---|---|---|---|
 | `coursework` | auto | callables | course staff; a student holding an active submission, once posted |
 | `submissions` | `{uid}_{courseworkId}` | callables, fan-out | course staff; the student |
-| `drafts` | `{uid}_{courseworkId}` | the student (note only, shape-checked); callables (files) | the student only — no staff arm |
+| `drafts` | `{uid}_{courseworkId}` | the student (the answer only, shape-checked); callables (files) | the student only — no staff arm |
 | `grades` | `{uid}_{courseworkId}` | callables | course staff only |
 | `submissionEvents` | auto | callables | course staff; the student, their own |
 
@@ -70,7 +83,7 @@ no field-level security.
 | A3 | Files: teacher and student uploads to R2 through callables, probed on arrival; signed read links | Integration tests with real files; browser e2e — **done 2026-10-13**: PDF and pictures must be what their name says, Office files a ZIP or OLE container, text no binary signature, audio through the upload probe; the e2e attaches a worksheet and a photographed page and asserts the picture loads for the student and the teacher |
 | A4 | Student screens: To do with both kinds; the assignment screen (note, files, camera, hand in, take back); class page tabs | Browser e2e; layout sweep with seed coursework in every state — **built 2026-10-13**; the sweep now also fails text that runs past its card (it caught a late-work date at 320 px); the whole loop is in the e2e with A5 |
 | A5 | Staff screens: course page, assignment list, the form, the assignment page, grading on a phone, Today's To grade, the Assignments tab on a student's page | Browser e2e; layout sweep — **done 2026-10-13**: the e2e posts, attaches, hands in, takes back, grades and returns, and asserts a saved grade reaches neither the student's screen nor their record until it is returned; the sweep tours the six new staff screens and Today's To grade for a manager |
-| A5b | The rich-text editor in the form (the Kanban editor: Lexical on web, react-native-enriched-html on Android) | Browser e2e; device pass for Arabic |
+| A5b | The rich-text editor for instructions and for a student's answer (the Kanban editor: Lexical on web, react-native-enriched-html on Android) | Browser e2e; device pass for Arabic — **web done 2026-10-13**: the e2e types bold, a list, an Arabic line and a link, asserts the stored markdown and what the student sees, types a formatted answer the teacher sees formatted, and serves a stale editor chunk to prove one reload recovers; the Android build and the device pass come with A7 |
 | A5c | Grading on a laptop: the work and the grade side by side, keys for next and return | Browser e2e; layout sweep at 1440 px |
 | A6 | Messages: four student messages under three switches; taps that open the assignment; channel renamed | Integration tests; device pass |
 | A7 | Words, brief, manual, CLAUDE.md; device pass (camera, Arabic in the editor, audio, taps, Yoga at 320 px); release | The proposal's "Device pass" list |

@@ -8,6 +8,7 @@ export * from './media';
 export * from './assignments';
 export * from './coursework';
 export * from './richtext';
+export * from './richtextHtml';
 export * from './audit';
 export * from './ledger';
 export * from './notifications';

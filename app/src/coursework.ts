@@ -91,17 +91,21 @@ export function useSubmissionState(studentUid: string | null, courseworkId: stri
   );
 }
 
-/** The student's own unsent work, live. */
-export function useMyDraft(uid: string | null, courseworkId: string): DraftDoc | null {
+/**
+ * The student's own unsent work, live. With `resolved`, because the answer
+ * box seeds its editor once and must not seed it from "not arrived yet".
+ */
+export function useMyDraftState(uid: string | null, courseworkId: string) {
   return useLiveDocState<DraftDoc | null>(
     () => (uid ? doc(db, COLLECTIONS.drafts, submissionId(uid, courseworkId)) : null),
     [uid, courseworkId],
     { label: 'myDraft', map: (snap) => snap.data() as DraftDoc, empty: null },
-  ).value;
+  );
 }
 
 /**
- * Save the note on the student's draft — the one thing they write directly.
+ * Save the answer on the student's draft — the one thing they write directly.
+ * Markdown, from the formatting editor; the field is still called `note`.
  * An update when the draft exists (a file may have created it), a create
  * otherwise; the rules hold the create to an empty file list.
  */

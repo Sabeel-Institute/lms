@@ -227,6 +227,9 @@ async function openHikam(page) {
   await goHome(page);
   await tap(page, 'tab-courses');
   await tap(page, 'cohort-open-Autumn 2026');
+  await page.getByTestId('course-open-Arabic I').filter({ visible: true }).first().waitFor({ timeout: 20000 }).catch(() => {});
+  // Archived, it is in the closed section at the bottom.
+  if (!(await shows(page, 'course-open-Hikam Foundations'))) await tap(page, 'courses-archived');
   await tap(page, 'course-open-Hikam Foundations');
 }
 
@@ -1427,8 +1430,61 @@ const WORKSHEET = 'Hikma worksheet.pdf';
 const PAGE = 'Page 1.png';
 await openHikam(admin);
 await tap(admin, 'nav-coursework');
+/*
+ * The editor is its own chunk, and a deploy replaces it: a tab opened before
+ * the deploy asks for a file that is gone and gets the app's HTML back.
+ * Served exactly that, once, the form must still open with its editor — by
+ * reloading the page, once, and not by failing or looping.
+ */
+let staleServed = 0;
+const editorChunk = /RichEditor/;
+await admin.route(editorChunk, async (route) => {
+  if (staleServed++ > 0) return route.continue();
+  const html = await (await fetch(WEB)).text();
+  return route.fulfill({ status: 200, contentType: 'text/html', body: html });
+});
+let loads = 0;
+const countLoad = () => loads++;
+admin.on('load', countLoad);
 await tap(admin, 'coursework-new');
+await admin.getByTestId('coursework-instructions').waitFor({ timeout: 45000 });
+admin.off('load', countLoad);
+await admin.unroute(editorChunk);
+check(
+  'a stale editor chunk costs one reload, and the form opens with its editor',
+  staleServed >= 2 && loads === 1,
+  `chunk requests ${staleServed}, page loads ${loads}`,
+);
 await admin.getByTestId('coursework-title').fill(CW);
+/*
+ * Formatted instructions, typed the way a teacher types them: a toolbar
+ * button for bold, the "- " shortcut for a list, an Arabic line, and a link
+ * on selected words. What is stored is the markdown the reader renders.
+ */
+const ARABIC = 'مِنْ عَلَامَةِ الاعْتِمَادِ عَلَى العَمَلِ';
+const box = admin.getByTestId('coursework-instructions');
+await box.click();
+await admin.keyboard.type('Recite the first hikma ');
+await tap(admin, 'rich-bold');
+await admin.keyboard.type('aloud');
+await tap(admin, 'rich-bold');
+await admin.keyboard.press('Enter');
+await admin.keyboard.type('- Once slowly');
+await admin.keyboard.press('Enter');
+await admin.keyboard.type('Once from memory');
+await admin.keyboard.press('Enter');
+await admin.keyboard.press('Enter');
+await admin.keyboard.insertText(ARABIC);
+await admin.keyboard.press('Enter');
+await admin.keyboard.type('Notes');
+await admin.keyboard.press('Shift+Home');
+await tap(admin, 'rich-link');
+await admin.getByTestId('link-address').fill('https://example.org/notes');
+check('the link sheet offers the selected words', (await admin.getByTestId('link-text').inputValue()) === 'Notes');
+await tap(admin, 'link-add');
+await admin.getByTestId('link-add').waitFor({ state: 'detached', timeout: 10000 });
+const INSTRUCTIONS = `Recite the first hikma **aloud**\n\n- Once slowly\n- Once from memory\n\n${ARABIC}\n\n[Notes](https://example.org/notes)`;
+await shot(admin, '39-instructions-editor');
 await admin.getByTestId('coursework-audience').filter({ hasText: 'Goes to the' }).waitFor({ timeout: 15000 });
 check(
   'before posting, the teacher is told who it goes to',
@@ -1438,6 +1494,13 @@ await tap(admin, 'coursework-post');
 // A new assignment becomes its own page once posted.
 await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
 check('a posted assignment opens on its page, as posted', (await screenTitle(admin)) === CW && (await showsText(admin, 'posted')));
+const storedInstructions = (await readCollection('coursework')).find((c) => c.fields.title.stringValue === CW)?.fields.instructions
+  ?.stringValue;
+check(
+  'the formatted instructions are stored as the reader’s markdown',
+  storedInstructions === INSTRUCTIONS,
+  JSON.stringify(storedInstructions),
+);
 
 await tap(admin, 'coursework-edit');
 const worksheetChooser = admin.waitForEvent('filechooser');
@@ -1459,8 +1522,34 @@ await cwCard.click();
 await student.getByTestId('work-note').waitFor({ timeout: 20000 });
 await student.getByTestId(`attachment-${WORKSHEET}`).waitFor({ timeout: 20000 });
 check('the student sees the teacher’s worksheet', await shows(student, `attachment-${WORKSHEET}`));
+// And the instructions as written: bold is bold and not asterisks, the
+// Arabic line runs right to left, the link is a link.
+const shown = await student.evaluate((arabic) => {
+  const byText = (text) =>
+    [...document.querySelectorAll('div[dir], span, div')].find((e) => e.childElementCount === 0 && e.textContent === text);
+  const bold = byText('aloud');
+  const rtl = [...document.querySelectorAll('div, span')].find((e) => e.textContent === arabic && e.childElementCount <= 1);
+  const link = [...document.querySelectorAll('[role="link"], a')].find((e) => e.textContent === 'Notes');
+  return {
+    bold: bold ? getComputedStyle(bold).fontWeight : null,
+    rtl: rtl ? getComputedStyle(rtl).direction : null,
+    link: !!link,
+    stars: document.body.innerText.includes('**'),
+  };
+}, ARABIC);
+check(
+  'the student reads the instructions formatted, Arabic right to left',
+  shown.bold === '700' && shown.rtl === 'rtl' && shown.link && !shown.stars,
+  JSON.stringify(shown),
+);
 
-await student.getByTestId('work-note').fill('Its meaning, in my own words: hope rests on God, not on what I did.');
+// A formatted answer, typed in the same editor the teacher used.
+await student.getByTestId('work-note').click();
+await student.keyboard.type('Its meaning, in my own words: hope rests on ');
+await tap(student, 'rich-bold');
+await student.keyboard.type('God');
+await tap(student, 'rich-bold');
+await student.keyboard.type(', not on what I did.');
 const pageChooser = student.waitForEvent('filechooser');
 await tap(student, 'attachments-add-work');
 await (await pageChooser).setFiles({ name: PAGE, mimeType: 'image/png', buffer: pagePhoto() });
@@ -1487,7 +1576,7 @@ await tap(student, 'work-take-back');
 await student.getByTestId('work-hand-in').waitFor({ timeout: 20000 });
 // The draft comes back as its own snapshot, a moment after the form does.
 const noteBack = await student
-  .waitForFunction(() => document.querySelector('[data-testid="work-note"]')?.value.startsWith('Its meaning'), null, { timeout: 15000 })
+  .waitForFunction(() => document.querySelector('[data-testid="work-note"]')?.textContent.startsWith('Its meaning'), null, { timeout: 15000 })
   .then(() => true, () => false);
 await student.getByTestId(`attachment-${PAGE}`).waitFor({ timeout: 15000 }).catch(() => {});
 check(
@@ -1506,7 +1595,15 @@ check('the class page lists her as to grade', /To grade/.test(await admin.getByT
 await tap(admin, 'coursework-grade');
 await admin.getByTestId('grade-points').waitFor({ timeout: 20000 });
 check('Grade opens the student who handed in', (await screenTitle(admin)) === 'Fatima Ahmed');
-check('the teacher sees the note and the page', (await showsText(admin, 'hope rests on God')) && (await pictureLoads(admin)));
+const boldGod = await admin.evaluate(() => {
+  const el = [...document.querySelectorAll('div, span')].find((e) => e.childElementCount === 0 && e.textContent === 'God');
+  return el ? getComputedStyle(el).fontWeight : null;
+});
+check(
+  'the teacher sees the answer, formatted, and the page',
+  (await showsText(admin, 'hope rests on')) && boldGod === '700' && (await pictureLoads(admin)),
+  `bold: ${boldGod}`,
+);
 await admin.getByTestId('grade-points').fill('9');
 await admin.getByTestId('grade-feedback').fill('Clear, and in your own words.');
 await admin.getByTestId('grade-status').filter({ hasText: 'Saved' }).waitFor({ timeout: 20000 });
@@ -1560,6 +1657,19 @@ check(
   'archiving one course leaves the other alone',
   s['Hikam Foundations'].eff === false && s['Arabic I'].eff === true,
   JSON.stringify(s),
+);
+// The cohort's page keeps the running course in view and folds the archived
+// one into a closed section at the bottom.
+await goHome(admin);
+await tap(admin, 'tab-courses');
+await tap(admin, 'cohort-open-Autumn 2026');
+await admin.getByTestId('course-open-Arabic I').waitFor({ timeout: 20000 });
+const foldedAway = !(await shows(admin, 'course-open-Hikam Foundations'));
+await tap(admin, 'courses-archived');
+await admin.getByTestId('course-open-Hikam Foundations').filter({ visible: true }).first().waitFor({ timeout: 10000 });
+check(
+  'an archived course waits, closed, under Archived on its cohort’s page',
+  foldedAway && (await shows(admin, 'course-open-Hikam Foundations')),
 );
 // The student's side of an archive with listening off: a recording they had
 // COMPLETED stays under Completed — done is done, and only an open grant is

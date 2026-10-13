@@ -159,11 +159,20 @@ describe('handing in', () => {
     expect(events.docs.map((e) => e.data().kind)).toEqual(['handIn']);
   });
 
+  it('keeps a formatted answer as written, and no link the reader would refuse', async () => {
+    // The draft is the student's own document, written straight to Firestore,
+    // so what reaches the teacher is only what the reader can show safely.
+    const id = await posted();
+    await writeNote(AMINAH, id, '**Hope** rests on [mercy](javascript:alert(1))\n\n- one\n- [two](https://example.org)');
+    await handInWork(AMINAH, id);
+    expect((await sub(AMINAH, id))?.note).toBe('**Hope** rests on mercy\n\n- one\n- [two](https://example.org)');
+  });
+
   it('refuses nothing at all', async () => {
     const id = await posted();
-    await expect(handInWork(AMINAH, id)).rejects.toThrow(/note or add a file/);
+    await expect(handInWork(AMINAH, id)).rejects.toThrow(/answer or add a file/);
     await writeNote(AMINAH, id, '   ');
-    await expect(handInWork(AMINAH, id)).rejects.toThrow(/note or add a file/);
+    await expect(handInWork(AMINAH, id)).rejects.toThrow(/answer or add a file/);
   });
 
   it('takes late work while the teacher accepts it, marked late', async () => {

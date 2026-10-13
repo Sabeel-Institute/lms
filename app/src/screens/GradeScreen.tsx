@@ -15,6 +15,7 @@ import {
 import { Button, Card, Chips, Field, Notice, Row, Screen, SectionTitle } from '../components/ui';
 import { DateField } from '../components/DateField';
 import { Attachments } from '../components/Attachments';
+import { RichText } from '../components/RichText';
 import {
   giveMoreTime,
   returnWork,
@@ -88,7 +89,11 @@ export function GradeScreen({
         {sub.handedInAt ? `Handed in ${dayOf(sub.handedInAt)}${late ? ' · late' : ''}` : 'Nothing handed in'}
       </SectionTitle>
       <Card>
-        {sub.note ? <Text style={styles.note}>{sub.note}</Text> : null}
+        {sub.note ? (
+          <View style={styles.answer}>
+            <RichText markdown={sub.note} />
+          </View>
+        ) : null}
         {Object.keys(sub.files).length ? (
           <Attachments target="work" courseworkId={cw.id} files={sub.files} editable={false} studentUid={studentUid} />
         ) : null}
@@ -126,7 +131,11 @@ export function GradeScreen({
                 {a.returned.grade ? ` · ${gradeText(a.returned.grade, cw.grading)}` : ''}
               </Text>
               {a.returned.feedback ? <Text style={styles.note}>{a.returned.feedback}</Text> : null}
-              {a.note ? <Text style={styles.note}>{a.note}</Text> : null}
+              {a.note ? (
+                <View style={styles.answer}>
+                  <RichText markdown={a.note} />
+                </View>
+              ) : null}
               <Attachments target="work" courseworkId={cw.id} files={a.files} editable={false} studentUid={studentUid} />
             </Card>
           ))}
@@ -356,6 +365,7 @@ const styles = StyleSheet.create({
   quiet: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(2) },
   failed: { color: t.feedback.danger },
   note: { fontSize: 15, lineHeight: 22, color: t.text.primary, marginBottom: spacing(3) },
+  answer: { marginBottom: spacing(3) },
   points: { flexDirection: 'row', alignItems: 'flex-end' },
   pointsField: { width: 160 },
   returnNow: { marginTop: spacing(2) },

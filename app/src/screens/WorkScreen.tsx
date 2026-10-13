@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import {
   INSTITUTE_TIMEZONE,
   canHandIn,
@@ -15,10 +15,11 @@ import {
   type PastAttempt,
   type ReturnedGrade,
 } from '@sabeel/shared';
-import { Button, Card, Field, Notice, Screen, SectionTitle } from '../components/ui';
+import { Button, Card, Notice, Screen, SectionTitle, inputLook } from '../components/ui';
+import { LazyRichEditor } from '../components/LazyRichEditor';
 import { Attachments } from '../components/Attachments';
 import { RichText } from '../components/RichText';
-import { handIn, saveDraftNote, takeBack, useMyDraft, type CourseworkRow, type SubmissionRow } from '../coursework';
+import { handIn, saveDraftNote, takeBack, useMyDraftState, type CourseworkRow, type SubmissionRow } from '../coursework';
 import type { CourseRow } from '../structure';
 import { errorText } from '../errors';
 import { gradingText } from './courseworkWords';
@@ -210,7 +211,11 @@ function Returned({ returned, grading }: { returned: ReturnedGrade; grading: Cou
 function HandedIn({ note, files, courseworkId, uid }: { note: string; files: SubmissionRow['files']; courseworkId: string; uid: string }) {
   return (
     <>
-      {note ? <Text style={styles.note}>{note}</Text> : null}
+      {note ? (
+        <View style={styles.answer}>
+          <RichText markdown={note} />
+        </View>
+      ) : null}
       <Attachments target="work" courseworkId={courseworkId} files={files} editable={false} studentUid={uid} />
     </>
   );
@@ -231,9 +236,10 @@ function Attempt({ attempt, grading, courseworkId, uid }: { attempt: PastAttempt
 }
 
 /**
- * The student's own work while it is open: a note saved as they type, files
- * uploaded the moment they are added, and Hand in once something is there
- * and every file is up.
+ * The student's own work while it is open: an answer, formatted, saved as
+ * they type; files uploaded the moment they are added; and Hand in once
+ * something is there and every file is up. Either may be empty, not both —
+ * a question to the class is answered in the box alone.
  */
 function YourWork({
   uid,
@@ -248,14 +254,25 @@ function YourWork({
   busy: boolean;
   onHandIn: () => void;
 }) {
-  const draft = useMyDraft(uid, cw.id);
+  const draftState = useMyDraftState(uid, cw.id);
+  const draft = draftState.value;
   const [note, setNote] = useState<string | null>(null);
+  /*
+   * The editor seeds ONCE, so it waits for the draft and starts again if the
+   * draft turns up after it — a taken-back answer can arrive a snapshot after
+   * the form does. Never once the student has typed: that would throw their
+   * words away.
+   */
+  const seedKey = useRef('none');
+  if (note === null) seedKey.current = draft ? 'draft' : 'none';
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [uploading, setUploading] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shown = note ?? draft?.note ?? '';
 
   const change = (v: string) => {
+    // The editor reports what it was seeded with; that is not an edit.
+    if (v === shown) return;
     setNote(v);
     setSaving('saving');
     if (timer.current) clearTimeout(timer.current);
@@ -277,13 +294,25 @@ function YourWork({
     <>
       <SectionTitle>Your work</SectionTitle>
       <Card>
-        <Field testID="work-note" label="Note to your teacher" value={shown} onChangeText={change} multiline />
+        <Text style={inputLook.label}>Your answer</Text>
+        {draftState.resolved ? (
+          <LazyRichEditor
+            key={seedKey.current}
+            testID="work-note"
+            label="Your answer"
+            placeholder="Your answer, or a note to go with your files"
+            initialMarkdown={draft?.note ?? ''}
+            onChangeMarkdown={change}
+          />
+        ) : (
+          <ActivityIndicator style={styles.loading} />
+        )}
         <Attachments target="work" courseworkId={cw.id} files={files} editable studentUid={uid} onBusyChange={onBusyChange} />
         <Text testID="work-saved" style={styles.quiet}>
           {saving === 'saving'
             ? 'Saving…'
             : saving === 'failed'
-              ? 'Not saved. Check the connection; your note is still here.'
+              ? 'Not saved. Check the connection; your answer is still here.'
               : 'Saved. Only you can see this until you hand it in.'}
         </Text>
         <Button
@@ -304,5 +333,6 @@ const styles = StyleSheet.create({
   files: { marginTop: spacing(3) },
   grade: { fontSize: 32, fontWeight: '700', color: t.text.primary },
   feedback: { fontSize: 15, lineHeight: 22, color: t.text.primary, marginTop: spacing(2) },
-  note: { fontSize: 15, lineHeight: 22, color: t.text.primary, marginBottom: spacing(3) },
+  answer: { marginBottom: spacing(3) },
+  loading: { minHeight: 184 },
 });

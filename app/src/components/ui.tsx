@@ -407,6 +407,26 @@ export function ListRow({
   );
 }
 
+/**
+ * A text box's look, for the inputs that are not a `TextInput` — the rich-text
+ * editor on both surfaces. One definition, so a formatted field and a plain
+ * one beside it on the same form cannot drift apart.
+ */
+export const inputLook = StyleSheet.create({
+  label: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(1) },
+  box: {
+    backgroundColor: t.bg.inset,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: t.border.subtle,
+    paddingVertical: spacing(3),
+    paddingHorizontal: spacing(3),
+    fontSize: 15,
+    color: t.text.primary,
+    minHeight: 44,
+  },
+});
+
 export function Field({
   label,
   value,
@@ -1314,18 +1334,8 @@ const styles = StyleSheet.create({
    * `onContentSizeChange` moves between them.
    */
   inputMultiline: { minHeight: 114, maxHeight: 312, lineHeight: 22, textAlignVertical: 'top' },
-  fieldLabel: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(1) },
-  input: {
-    backgroundColor: t.bg.inset,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: t.border.subtle,
-    paddingVertical: spacing(3),
-    paddingHorizontal: spacing(3),
-    fontSize: 15,
-    color: t.text.primary,
-    minHeight: 44,
-  },
+  fieldLabel: inputLook.label,
+  input: inputLook.box,
   notice: {
     borderRadius: 8,
     padding: spacing(3),

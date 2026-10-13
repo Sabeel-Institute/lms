@@ -8,6 +8,7 @@ import {
   canTakeBack,
   gradeFits,
   isLate,
+  normalizeMarkdown,
   receivesOnJoining,
   submissionId,
   todayInZone,
@@ -495,10 +496,12 @@ export async function handInWork(uid: string, cwId: string) {
     const draft = (await tx.get(draftRef(uid, cwId))).data() as DraftDoc | undefined;
     const state = workState(sub, todayIs, courseOpen);
     if (!canHandIn(state)) throw new HttpsError('failed-precondition', STATE_REFUSAL[state] ?? 'This cannot be handed in.');
-    const note = draft?.note.trim() ?? '';
+    // The answer as the reader will parse it: the editor's markdown, made
+    // canonical, so a draft written by hand cannot store something else.
+    const note = normalizeMarkdown(draft?.note ?? '').trim();
     const files = draft?.files ?? {};
     if (!note && Object.keys(files).length === 0) {
-      throw new HttpsError('failed-precondition', 'Write a note or add a file before handing in.');
+      throw new HttpsError('failed-precondition', 'Write an answer or add a file before handing in.');
     }
     const now = Date.now();
     const late = isLate(now, sub.dueDate, INSTITUTE_TIMEZONE);

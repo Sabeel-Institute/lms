@@ -608,7 +608,7 @@ export async function seedWorld({ db, auth, browser, base }) {
   const longRoster = students.slice(0, 4);
   await seedCoursework('sw-cw1', 'Memorize the first hikma', {
     dueOffset: 4, lateOffset: 11, roster: students,
-    instructions: 'Memorize the first hikma and record yourself reciting it.\n\nمِنْ عَلامَةِ الاعْتِمادِ عَلى العَمَلِ نُقْصانُ الرَّجاءِ عِنْدَ وُجودِ الزَّلَلِ\n\n- Recite slowly, with the vowels as written.\n- One take is fine. A quiet room helps.\n\nIn your note, explain its meaning in **two or three sentences** of your own.',
+    instructions: 'Memorize the first hikma and record yourself reciting it.\n\nمِنْ عَلامَةِ الاعْتِمادِ عَلى العَمَلِ نُقْصانُ الرَّجاءِ عِنْدَ وُجودِ الزَّلَلِ\n\n- Recite slowly, with the vowels as written.\n- One take is fine. A quiet room helps.\n\nIn your answer, explain its meaning in **two or three sentences** of your own.',
     files: { f1: await file('coursework/sw-cw1/f1', 'f1', 'First hikma, vowelled.pdf', 'application/pdf', PDF) },
   });
   await db.collection('drafts').doc(`${STUDENT.uid}_sw-cw1`).set({

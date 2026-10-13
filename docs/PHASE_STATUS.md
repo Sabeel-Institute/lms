@@ -29,7 +29,7 @@ and commit messages, and renaming them would strand every one of those.
 | 5 | Staff ledger, reporting, audit | **complete** — see 5a–5d above |
 | A | Excused-only access, with a deadline | **complete** (2026-08-14) |
 | B | The student's own attendance record | **complete** (2026-08-14) |
-| C | Assignments and grades (`docs/plans/ASSIGNMENTS.md`) | **in progress** (2026-10-13: A1–A5 done, the whole loop in the browser e2e; the editor, laptop grading, messages and the release to come) |
+| C | Assignments and grades (`docs/plans/ASSIGNMENTS.md`) | **in progress** (2026-10-13: A1–A5 done and the editor on the web, the whole loop in the browser e2e; laptop grading, messages, the Android build and the release to come) |
 | 6 | Zoom import | **built** — waiting on institute credentials and its first live import |
 | 7 | Notifications | **complete** (2026-08-15: delivered to an Android device end to end; web delivery still a browser check) |
 | 8 | Admin backend stats | not started |
@@ -37,6 +37,20 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **A student's answer is formatted.** Faisal chose this over
+  the proposal's plain-text note: some assignments are a question to the
+  whole class, or short enough to answer in the box, with nothing to upload.
+  The box is **Your answer**, in the same editor as the instructions (bold,
+  italic, lists, links, Arabic), and either the answer or the files may be
+  empty, not both. The editor loads when the box opens, so nobody downloads
+  it until they write.
+- 2026-10-13 — **Archived courses fold away.** A teacher reported the old
+  app listing archived and active courses together inside a cohort. Here a
+  cohort's page and a manager's course list keep running courses in view and
+  put archived ones in a closed **Archived** section at the bottom, as the
+  cohort list already does. Inside an archived cohort every course is
+  inactive, so that list stays whole. The legacy recording app is in
+  maintenance and is not changed.
 - 2026-10-13 — **The assignments proposal is approved as drafted**
   (`docs/proposals/lms-assignments-proposal.html`). Faisal said yes to all
   three changes it asks for: the app's scope widens to attendance, required
