@@ -12,6 +12,7 @@ import {
   type RouteProp,
   useNavigation,
   useRoute,
+  StackActions,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { APP_NAME, APP_SHORT_NAME, type Role } from '@sabeel/shared';
@@ -39,6 +40,10 @@ import { StudentAttendanceScreen } from './src/screens/StudentAttendanceScreen';
 import { StudentCoursesScreen } from './src/screens/StudentCoursesScreen';
 import { StudentHomeScreen } from './src/screens/StudentHomeScreen';
 import { WorkScreen } from './src/screens/WorkScreen';
+import { CourseworkListScreen } from './src/screens/CourseworkListScreen';
+import { CourseworkEditScreen } from './src/screens/CourseworkEditScreen';
+import { CourseworkDetailScreen } from './src/screens/CourseworkDetailScreen';
+import { GradeScreen } from './src/screens/GradeScreen';
 import { useCourseworkState, useSubmissionState } from './src/coursework';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { MyCoursesScreen } from './src/screens/MyCoursesScreen';
@@ -109,6 +114,10 @@ const STAFF_PATHS = {
   Sessions: 'courses/:courseId/sessions',
   SessionDetail: 'courses/:courseId/sessions/:sessionId',
   StudentLedger: 'courses/:courseId/students/:studentUid',
+  Coursework: 'courses/:courseId/assignments',
+  CourseworkEdit: 'courses/:courseId/assignments/edit/:courseworkId?',
+  CourseworkDetail: 'courses/:courseId/assignments/:courseworkId',
+  Grade: 'courses/:courseId/assignments/:courseworkId/grade/:studentUid',
   RecordingLedger: 'recordings/:recordingId/progress',
   ZoomImport: 'sessions/:sessionId/import',
   Library: 'library',
@@ -336,6 +345,18 @@ export default function App() {
                   </Stack.Screen>
                   <Stack.Screen name="Sessions" options={screenOptions('Sessions', 'Sessions')}>
                     {() => <Sessions />}
+                  </Stack.Screen>
+                  <Stack.Screen name="Coursework" options={screenOptions('Coursework', 'Assignments')}>
+                    {() => <Coursework />}
+                  </Stack.Screen>
+                  <Stack.Screen name="CourseworkEdit" options={screenOptions('CourseworkEdit', 'Assignment')}>
+                    {() => <CourseworkEdit isAdmin={isAdmin} />}
+                  </Stack.Screen>
+                  <Stack.Screen name="CourseworkDetail" options={screenOptions('CourseworkDetail', 'Assignment')}>
+                    {() => <CourseworkDetail />}
+                  </Stack.Screen>
+                  <Stack.Screen name="Grade" options={screenOptions('Grade', 'Grade')}>
+                    {() => <GradeWork />}
                   </Stack.Screen>
                   <Stack.Screen name="SessionDetail" options={screenOptions('SessionDetail', 'Session')}>
                     {() => <SessionDetail isAdmin={isAdmin} />}
@@ -683,6 +704,7 @@ function Landing({ role, uid, isAdmin }: { role: Role; uid: string; isAdmin: boo
         navigation.navigate('SessionDetail', { sessionId, courseId })
       }
       onOpenLedger={(recordingId) => navigation.navigate('RecordingLedger', { recordingId })}
+      onOpenCoursework={(courseId, courseworkId) => navigation.navigate('CourseworkDetail', { courseId, courseworkId })}
     />
   );
 }
@@ -767,6 +789,7 @@ function CourseDetail({ isAdmin, uid }: { isAdmin: boolean; uid: string }) {
       isAdmin={isAdmin}
       uid={uid}
       onOpenSessions={() => navigation.navigate('Sessions', { courseId })}
+      onOpenCoursework={() => navigation.navigate('Coursework', { courseId })}
       onOpenAttendance={() => navigation.navigate('CourseAttendance', { courseId })}
       onOpenStudent={(studentUid) => navigation.navigate('StudentLedger', { studentUid, courseId })}
       onOpenAudit={() => navigation.navigate('Audit', { courseId })}
@@ -806,6 +829,87 @@ function Sessions() {
       onOpenSession={(session) =>
         navigation.navigate('SessionDetail', { sessionId: session.id, courseId })
       }
+    />
+  );
+}
+
+function Coursework() {
+  const navigation = useNavigation<Nav>();
+  const { courseId } = useRoute<RouteProp<RootStackParamList, 'Coursework'>>().params;
+  const cls = useCourseState(courseId);
+  if (!cls.value) return resolve(cls, 'course');
+  return (
+    <CourseworkListScreen
+      key={courseId}
+      cls={cls.value}
+      onOpenCourse={() => navigation.navigate('CourseDetail', { courseId })}
+      onNew={() => navigation.navigate('CourseworkEdit', { courseId })}
+      onOpen={(cw) => navigation.navigate('CourseworkDetail', { courseId, courseworkId: cw.id })}
+    />
+  );
+}
+
+function CourseworkEdit({ isAdmin }: { isAdmin: boolean }) {
+  const navigation = useNavigation<Nav>();
+  const { courseId, courseworkId } = useRoute<RouteProp<RootStackParamList, 'CourseworkEdit'>>().params;
+  const cls = useCourseState(courseId);
+  const cw = useCourseworkState(courseworkId ?? null);
+  if (!cls.value) return resolve(cls, 'course');
+  if (courseworkId && !cw.value) return resolve(cw, 'assignment');
+  return (
+    <CourseworkEditScreen
+      key={courseworkId ?? 'new'}
+      cls={cls.value}
+      existing={cw.value}
+      isAdmin={isAdmin}
+      onSaved={(id) =>
+        // A new one becomes the assignment it now is; an edit goes back to it.
+        courseworkId
+          ? navigation.goBack()
+          : navigation.dispatch(StackActions.replace('CourseworkDetail', { courseId, courseworkId: id }))
+      }
+      onDeleted={() => navigation.navigate('Coursework', { courseId })}
+      onCancel={() => navigation.goBack()}
+    />
+  );
+}
+
+function CourseworkDetail() {
+  const navigation = useNavigation<Nav>();
+  const { courseId, courseworkId } = useRoute<RouteProp<RootStackParamList, 'CourseworkDetail'>>().params;
+  const cls = useCourseState(courseId);
+  const cw = useCourseworkState(courseworkId);
+  const gate = resolve(cls, 'course') ?? resolve(cw, 'assignment');
+  if (gate || !cls.value || !cw.value) return gate;
+  return (
+    <CourseworkDetailScreen
+      key={courseworkId}
+      cls={cls.value}
+      coursework={cw.value}
+      onOpenCourse={() => navigation.navigate('CourseDetail', { courseId })}
+      onEdit={() => navigation.navigate('CourseworkEdit', { courseId, courseworkId })}
+      onGrade={(studentUid) => navigation.navigate('Grade', { courseId, courseworkId, studentUid })}
+    />
+  );
+}
+
+function GradeWork() {
+  const navigation = useNavigation<Nav>();
+  const { courseId, courseworkId, studentUid } = useRoute<RouteProp<RootStackParamList, 'Grade'>>().params;
+  const cls = useCourseState(courseId);
+  const cw = useCourseworkState(courseworkId);
+  const gate = resolve(cls, 'course') ?? resolve(cw, 'assignment');
+  if (gate || !cls.value || !cw.value) return gate;
+  return (
+    <GradeScreen
+      key={`${courseworkId}_${studentUid}`}
+      cls={cls.value}
+      coursework={cw.value}
+      studentUid={studentUid}
+      // Next REPLACES: walking a class of twenty must not stack twenty screens
+      // under the back arrow.
+      onOpenStudent={(uid) => navigation.setParams({ studentUid: uid })}
+      onBackToList={() => navigation.navigate('CourseworkDetail', { courseId, courseworkId })}
     />
   );
 }
@@ -958,6 +1062,7 @@ function StudentLedger() {
       studentName={student?.displayName ?? ''}
       cls={cls.value}
       onOpenStudent={() => navigation.navigate('StudentDetail', { studentUid })}
+      onOpenWork={(courseworkId) => navigation.navigate('Grade', { courseId, courseworkId, studentUid })}
     />
   );
 }

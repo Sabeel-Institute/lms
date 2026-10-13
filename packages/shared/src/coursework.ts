@@ -371,3 +371,94 @@ export function nextDeadline(state: WorkState, sub: Pick<SubmissionDoc, 'dueDate
   if (state === 'pastDue') return closesOn(sub);
   return null;
 }
+
+// ------------------------------------------------------------ for staff --
+
+/**
+ * One student's work as a teacher sees it: the student's state, split where
+ * only staff can see — work graded but not returned yet is `graded`, work
+ * handed in and not graded is `toGrade`.
+ */
+export type StaffWorkState = Exclude<WorkState, 'handedIn'> | 'toGrade' | 'graded';
+
+export function staffWorkState(
+  sub: Pick<SubmissionDoc, 'state' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly'>,
+  grade: Pick<GradeDoc, 'grade' | 'withoutHandIn'> | undefined,
+  today: string,
+  courseOpen: boolean,
+): StaffWorkState {
+  const state = workState(sub, today, courseOpen);
+  if (state === 'handedIn') return grade ? 'graded' : 'toGrade';
+  // Work done on paper, graded with nothing handed in and not yet returned.
+  if (grade?.withoutHandIn && sub.state === 'open' && state !== 'notRequired') return 'graded';
+  return state;
+}
+
+export interface CourseworkCounts {
+  /** Everyone it went to, still in the class, minus anyone marked not required. */
+  expected: number;
+  handedIn: number;
+  late: number;
+  toGrade: number;
+  /** Graded and not yet given back. */
+  toReturn: number;
+  returned: number;
+  /** Nothing in, due date not passed. */
+  notInYet: number;
+  /** Nothing in, due date passed, late work still taken. */
+  pastDue: number;
+  missed: number;
+  notRequired: number;
+  closed: number;
+  /** Average of RETURNED grades, as a share (0–1); points only. Null when none. */
+  average: number | null;
+}
+
+/**
+ * The figures for one assignment — the assignment page's tiles, its card on
+ * the course's list, Today's "to grade" row. ONE SOURCE, as the proposal asks:
+ * listening is counted twice in this app (screens and workbook), and the
+ * counts for assignments should not repeat that.
+ *
+ * The average counts only returned grades, so it never includes one a student
+ * has not seen.
+ */
+export function courseworkCounts(
+  grading: CourseworkGrading,
+  subs: Pick<SubmissionDoc, 'studentUid' | 'active' | 'state' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly' | 'handedInAt' | 'returned'>[],
+  grades: Map<string, Pick<GradeDoc, 'grade' | 'withoutHandIn'>>,
+  today: string,
+  courseOpen: boolean,
+  timeZone: string,
+): CourseworkCounts {
+  const c: CourseworkCounts = {
+    expected: 0, handedIn: 0, late: 0, toGrade: 0, toReturn: 0, returned: 0,
+    notInYet: 0, pastDue: 0, missed: 0, notRequired: 0, closed: 0, average: null,
+  };
+  const points: number[] = [];
+  for (const s of subs) {
+    if (!s.active && s.state === 'open') continue;
+    const st = staffWorkState(s, grades.get(s.studentUid), today, courseOpen);
+    if (st === 'notRequired') {
+      c.notRequired++;
+      continue;
+    }
+    c.expected++;
+    if (s.state !== 'open') {
+      c.handedIn++;
+      if (s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, timeZone)) c.late++;
+    }
+    if (st === 'toGrade') c.toGrade++;
+    else if (st === 'graded') c.toReturn++;
+    else if (st === 'returned') {
+      c.returned++;
+      const g = s.returned?.grade;
+      if (g && 'points' in g && grading.kind === 'points') points.push(g.points / grading.outOf);
+    } else if (st === 'toDo') c.notInYet++;
+    else if (st === 'pastDue') c.pastDue++;
+    else if (st === 'missed') c.missed++;
+    else if (st === 'closed') c.closed++;
+  }
+  c.average = points.length ? points.reduce((a, b) => a + b, 0) / points.length : null;
+  return c;
+}

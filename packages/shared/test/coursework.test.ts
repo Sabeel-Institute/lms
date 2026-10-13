@@ -7,12 +7,14 @@ import {
   canHandIn,
   canTakeBack,
   closesOn,
+  courseworkCounts,
   defaultLateUntil,
   gradeFits,
   gradeText,
   isLate,
   nextDeadline,
   receivesOnJoining,
+  staffWorkState,
   workBucket,
   workState,
   type SubmissionDoc,
@@ -152,5 +154,45 @@ describe('attachments', () => {
     expect(attachmentProblem('clip.mp4', 10)).toMatch(/Not a file/);
     expect(attachmentProblem('scan.pdf', MAX_ATTACHMENT_BYTES + 1)).toMatch(/25 MB/);
     expect(attachmentProblem('scan.pdf', 1000)).toBeNull();
+  });
+});
+
+describe('what a teacher sees', () => {
+  const sub = (over: Partial<SubmissionDoc>) => ({
+    studentUid: 'u',
+    active: true,
+    state: 'open' as const,
+    dueDate: '2026-10-13',
+    lateUntil: '2026-10-20',
+    notRequired: null,
+    closedEarly: false,
+    handedInAt: null,
+    returned: null,
+    ...over,
+  });
+  const at = (date: string) => Date.parse(`${date}T12:00:00-05:00`);
+
+  it('splits handed-in work into to grade and graded, which students cannot see', () => {
+    expect(staffWorkState(sub({ state: 'handedIn' }), undefined, '2026-10-12', true)).toBe('toGrade');
+    expect(staffWorkState(sub({ state: 'handedIn' }), { grade: { points: 8 }, withoutHandIn: false }, '2026-10-12', true)).toBe('graded');
+    expect(staffWorkState(sub({}), { grade: { points: 8 }, withoutHandIn: true }, '2026-10-12', true)).toBe('graded');
+  });
+
+  it('counts a class: handed in, late, to grade, to return, past due, missed — and leaves out who is not required', () => {
+    const subs = [
+      sub({ studentUid: 'a', state: 'returned', handedInAt: at('2026-10-12'), returned: { grade: { points: 8 }, feedback: '', at: 1, seq: 1, retry: false } }),
+      sub({ studentUid: 'b', state: 'returned', handedInAt: at('2026-10-12'), returned: { grade: { points: 10 }, feedback: '', at: 1, seq: 1, retry: false } }),
+      sub({ studentUid: 'c', state: 'handedIn', handedInAt: at('2026-10-14') }),
+      sub({ studentUid: 'd', state: 'handedIn', handedInAt: at('2026-10-13') }),
+      sub({ studentUid: 'e' }),
+      sub({ studentUid: 'f', notRequired: { reason: 'r', by: 't', at: 1 } }),
+      sub({ studentUid: 'g', active: false }),
+    ];
+    const grades = new Map([['d', { grade: { points: 9 }, withoutHandIn: false }]]);
+    const c = courseworkCounts({ kind: 'points', outOf: 10 }, subs, grades, '2026-10-15', true, INSTITUTE_TIMEZONE);
+    expect(c).toMatchObject({ expected: 5, handedIn: 4, late: 1, toGrade: 1, toReturn: 1, returned: 2, pastDue: 1, missed: 0, notRequired: 1 });
+    // Returned grades only: 80% and 100%, not the 90% still in draft.
+    expect(c.average).toBeCloseTo(0.9);
+    expect(courseworkCounts({ kind: 'points', outOf: 10 }, subs, grades, '2026-10-21', true, INSTITUTE_TIMEZONE).missed).toBe(1);
   });
 });

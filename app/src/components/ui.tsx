@@ -510,6 +510,8 @@ export function Notice({ tone, children }: { tone: 'info' | 'error' | 'success';
 const STATUS_TONE: Record<string, 'good' | 'attention' | 'neutral'> = {
   active: 'good',
   published: 'good',
+  // An assignment out with its class.
+  posted: 'good',
   needsAttention: 'attention',
   pending: 'attention',
   draft: 'neutral',
@@ -1097,7 +1099,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   contentWide: { paddingHorizontal: spacing(8), paddingTop: spacing(7) },
-  headActions: { flexDirection: 'row', gap: spacing(2), alignItems: 'flex-start' },
+  // WRAPS: three actions (Sessions, Assignments, Attendance report) do not
+  // fit one 320px line, and a button cut off at the edge is no button. The
+  // `maxWidth` is what lets it: a row sized to its content never runs out of
+  // room to wrap in, it just runs past the screen.
+  headActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), alignItems: 'flex-start', flexShrink: 1, maxWidth: '100%' },
   h1: { fontSize: 26, fontWeight: '700', color: t.text.primary },
   // Hugs the name rather than spanning the row, so the press target is the
   // words and the chevron, not the empty space beside them.

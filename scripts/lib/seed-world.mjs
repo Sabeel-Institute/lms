@@ -615,6 +615,17 @@ export async function seedWorld({ db, auth, browser, base }) {
     studentUid: STUDENT.uid, courseworkId: 'sw-cw1', courseId: COURSE,
     note: 'It means that losing hope after a slip shows I was relying on my own deeds.', files: {}, updatedAt: now - DAY,
   });
+  /** Three classmates handed it in early, one already graded: the course's
+   *  teachers then have work to grade on Today and in the assignment's page. */
+  for (const [i, st] of students.slice(1, 4).entries()) {
+    await db.collection('submissions').doc(`${st.uid}_sw-cw1`).update({
+      state: 'handedIn', handedInAt: now - (i + 1) * DAY, note: 'Recited this morning, twice through without stopping.',
+    });
+  }
+  await db.collection('grades').doc(`${students[1].uid}_sw-cw1`).set({
+    studentUid: students[1].uid, courseworkId: 'sw-cw1', courseId: COURSE, grade: { points: 8 },
+    feedback: 'Clear and steady. Give the madd its full two counts.', gradedBy: adminUid, gradedAt: now - DAY, withoutHandIn: false,
+  });
   await seedCoursework('sw-cw2', 'Letter forms, week 3', {
     courseId: LONG_COURSE, dueOffset: -3, lateOffset: 5, grading: { kind: 'scale' }, roster: longRoster,
     instructions: 'Write each letter in its four forms, in pencil, then photograph the page flat in good light.',
@@ -719,6 +730,8 @@ export async function seedWorld({ db, auth, browser, base }) {
   return {
     STUDENT, DISABLED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived,
     HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE,
+    /** A classmate whose hand-in on "Memorize the first hikma" is still to grade. */
+    TO_GRADE: students[2],
   };
 }
 

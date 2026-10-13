@@ -1,3 +1,5 @@
+import { useCourseCourseworkState } from '../coursework';
+import { useCourseworkFigures } from './CourseworkListScreen';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -48,6 +50,7 @@ export function CourseDetailScreen({
   isAdmin,
   uid,
   onOpenSessions,
+  onOpenCoursework,
   onOpenAttendance,
   onOpenStudent,
   onOpenAudit,
@@ -57,6 +60,7 @@ export function CourseDetailScreen({
   /** Who is exporting — named on the workbook's cover. */
   uid: string;
   onOpenSessions: () => void;
+  onOpenCoursework: () => void;
   onOpenAttendance: () => void;
   onOpenStudent: (studentUid: string) => void;
   onOpenAudit: () => void;
@@ -221,7 +225,7 @@ export function CourseDetailScreen({
   return (
     <Screen
       title={cls.name}
-      subtitle="Sessions, roster and listening"
+      subtitle="Sessions, assignments, roster and listening"
       status={cls.effectiveActive ? 'active' : 'inactive'}
       width="list"
       /* THE TWO THINGS THIS PAGE IS FOR, beside the name rather than in a card
@@ -230,6 +234,7 @@ export function CourseDetailScreen({
       actions={
         <>
           <Button testID="nav-sessions" label="Sessions" onPress={onOpenSessions} />
+          <Button testID="nav-coursework" label="Assignments" onPress={onOpenCoursework} />
           <Button
             testID="nav-attendance"
             label="Attendance report"
@@ -257,6 +262,7 @@ export function CourseDetailScreen({
             one stat into the head of the next. */}
         {ledger.resolved ? (
           <Text style={styles.ledgerLine}>
+            {'Listening   '}
             <Text style={styles.ledgerNum}>{ledger.rollup.total}</Text>
             {'\u00A0required'}
             {'   '}
@@ -273,6 +279,7 @@ export function CourseDetailScreen({
           // answer, stated as fact — see `useRecordingLedger`.
           <Text style={styles.ledgerLine}>Counting the listening…</Text>
         )}
+        <AssignmentsLine cls={cls} />
         <Row>
           <Button testID="nav-audit" label="Audit history" variant="secondary" onPress={onOpenAudit} />
           {/* THE ONE EXPORT: every student, every session, every grant of this
@@ -544,6 +551,34 @@ export function CourseDetailScreen({
         )}
       </Card>
     </Screen>
+  );
+}
+
+/**
+ * The course's assignments at a glance, under the listening line: what is
+ * posted, what waits on the teacher, and what waits on students.
+ */
+function AssignmentsLine({ cls }: { cls: CourseRow }) {
+  const coursework = useCourseCourseworkState(cls.id);
+  const figures = useCourseworkFigures(cls);
+  if (coursework === null || figures === null) return null;
+  const posted = coursework.filter((c) => c.status === 'posted');
+  const sum = (k: 'toGrade' | 'pastDue' | 'missed') => posted.reduce((n, c) => n + figures(c)[k], 0);
+  return (
+    <Text testID="course-assignments-line" style={styles.ledgerLine}>
+      {'Assignments   '}
+      <Text style={styles.ledgerNum}>{posted.length}</Text>
+      {'\u00A0posted'}
+      {'   '}
+      <Text style={styles.ledgerNum}>{sum('toGrade')}</Text>
+      {'\u00A0to\u00A0grade'}
+      {'   '}
+      <Text style={styles.ledgerNum}>{sum('pastDue')}</Text>
+      {'\u00A0past\u00A0due'}
+      {'   '}
+      <Text style={styles.ledgerNum}>{sum('missed')}</Text>
+      {'\u00A0missed'}
+    </Text>
   );
 }
 

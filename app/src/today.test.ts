@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KIND_ORDER, buildTodayQueue, queueScope } from './todayQueue';
-import { DUE_SOON_DAYS, type RecordingDoc, type SessionDoc } from '@sabeel/shared';
+import { DUE_SOON_DAYS, type CourseworkDoc, type GradeDoc, type RecordingDoc, type SessionDoc, type SubmissionDoc } from '@sabeel/shared';
 
 /**
  * The staff work queue's derivation.
@@ -69,6 +69,35 @@ function recording(
     updatedAt: 1,
   } as RecordingDoc & { id: string };
 }
+
+function coursework(id: string, over: Partial<CourseworkDoc> = {}): CourseworkDoc & { id: string } {
+  return {
+    id,
+    courseId: COURSE,
+    cohortId: 'co1',
+    title: id,
+    instructions: '',
+    files: {},
+    dueDate: day(-1),
+    lateUntil: day(6),
+    grading: { kind: 'points', outOf: 10 },
+    status: 'posted',
+    closedAt: null,
+    postedAt: 1,
+    postedBy: 'admin',
+    createdAt: 1,
+    createdBy: 'admin',
+    updatedAt: 1,
+    editedAt: null,
+    ...over,
+  };
+}
+
+/** Work handed in on `onDay`, by student `uid`. */
+const handedIn = (uid: string, cwId: string, onDay: string): SubmissionDoc =>
+  ({ studentUid: uid, courseworkId: cwId, courseId: COURSE, state: 'handedIn', dueDate: day(-1), handedInAt: Date.parse(`${onDay}T17:00:00Z`) }) as SubmissionDoc;
+const graded = (uid: string, cwId: string): GradeDoc =>
+  ({ studentUid: uid, courseworkId: cwId, courseId: COURSE, grade: { points: 8 }, feedback: '', gradedBy: 't', gradedAt: 1, withoutHandIn: false });
 
 const build = (
   sessions: (SessionDoc & { id: string })[],
@@ -307,6 +336,14 @@ describe('the order', () => {
         session('delta-attendance', { attendanceSubmittedAt: null }),
       ],
       [recording('r1', 'published'), recording('r2', 'draft')],
+      {
+        grading: {
+          managed: new Set([COURSE]),
+          coursework: [coursework('echo-grading')],
+          handedIn: [handedIn('u1', 'echo-grading', day(-2))],
+          grades: [],
+        },
+      },
     );
     // All four, in KIND_ORDER — the length matters as much as the sequence, or
     // an expectation derived from the actual passes when a kind is dropped.
@@ -316,6 +353,7 @@ describe('the order', () => {
       'charlie-draft',
       'bravo-norec',
       'alpha-closing',
+      'echo-grading',
     ]);
   });
 
@@ -472,5 +510,33 @@ describe('queueScope', () => {
 
   it('has an answer before the first snapshot', () => {
     expect(queueScope(null, 10)).toEqual({ key: '', truncated: false });
+  });
+});
+
+describe('work to grade', () => {
+  const grading = (over: Partial<Parameters<typeof buildTodayQueue>[0]['grading'] & object> = {}) => ({
+    managed: new Set([COURSE]),
+    coursework: [coursework('reflection')],
+    handedIn: [handedIn('u1', 'reflection', day(-2)), handedIn('u2', 'reflection', day(0)), handedIn('u3', 'reflection', day(-3))],
+    grades: [graded('u3', 'reflection')],
+    ...over,
+  });
+
+  it('says how much is waiting, how much of it late, and never counts it in the badge', () => {
+    const q = build([], [], { grading: grading() });
+    expect(q.items).toEqual([
+      expect.objectContaining({ kind: 'grading', courseworkId: 'reflection', detail: '2 handed in and not graded yet, 1 of them late.', action: 'Grade', blocking: false }),
+    ]);
+    expect(q.blocking).toBe(0);
+  });
+
+  it('turns into a reminder to return once everything is graded', () => {
+    const q = build([], [], { grading: grading({ handedIn: [handedIn('u3', 'reflection', day(-3))] }) });
+    expect(q.items[0]).toMatchObject({ detail: 'All graded. 1 not returned yet.', action: 'Return' });
+  });
+
+  it('only for courses the reader manages by name, and never for a draft', () => {
+    expect(build([], [], { grading: grading({ managed: new Set() }) }).items).toEqual([]);
+    expect(build([], [], { grading: grading({ coursework: [coursework('reflection', { status: 'draft' })] }) }).items).toEqual([]);
   });
 });

@@ -32,6 +32,14 @@ export type RootStackParamList = {
   /** The recording knows its own session and course, so one id is enough. */
   RecordingLedger: { recordingId: string };
   StudentLedger: { studentUid: string; courseId: string };
+  /** A course's assignments, for its teachers. */
+  Coursework: { courseId: string };
+  /** Writing one; no courseworkId for a new one. */
+  CourseworkEdit: { courseId: string; courseworkId?: string };
+  /** One assignment: where everyone is. courseId rides along like a session's. */
+  CourseworkDetail: { courseId: string; courseworkId: string };
+  /** Grading one student's work on one assignment. */
+  Grade: { courseId: string; courseworkId: string; studentUid: string };
   Library: undefined;
   ZoomImport: { sessionId: string };
   /** Omit courseId for the admin's unscoped view; a manager passes their own. */

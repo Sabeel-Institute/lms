@@ -43,6 +43,7 @@ import {
   ensureAudioFixture,
   ensureHevcFixture,
   ensureVideoFixture,
+  pagePhoto,
 } from './lib/media-fixtures.mjs';
 
 const WEB = process.env.E2E_WEB ?? `http://127.0.0.1:${WEB_PORTS.e2e}/`;
@@ -1411,6 +1412,132 @@ check(
   /Overrode completion/.test(auditText) && /Attended the class live/.test(auditText),
 );
 await shot(admin, '18-audit');
+
+// -------------------------------------------------------------- assignments --
+/*
+ * One assignment, the whole way round: a teacher posts it with a worksheet, the
+ * student hands in a note and a photographed page, takes it back and hands in
+ * again, the teacher grades it, and the grade reaches the student only when it
+ * is returned. Every promise here is the student's or the teacher's, read off
+ * their own screen; the records are read only to show what the screen did not.
+ */
+console.log('\nAssignments');
+const CW = 'Hikma reflection';
+const WORKSHEET = 'Hikma worksheet.pdf';
+const PAGE = 'Page 1.png';
+await openHikam(admin);
+await tap(admin, 'nav-coursework');
+await tap(admin, 'coursework-new');
+await admin.getByTestId('coursework-title').fill(CW);
+await admin.getByTestId('coursework-audience').filter({ hasText: 'Goes to the' }).waitFor({ timeout: 15000 });
+check(
+  'before posting, the teacher is told who it goes to',
+  /Goes to the \d+ students? in Hikam Foundations/.test(await admin.getByTestId('coursework-audience').innerText()),
+);
+await tap(admin, 'coursework-post');
+// A new assignment becomes its own page once posted.
+await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
+check('a posted assignment opens on its page, as posted', (await screenTitle(admin)) === CW && (await showsText(admin, 'posted')));
+
+await tap(admin, 'coursework-edit');
+const worksheetChooser = admin.waitForEvent('filechooser');
+await tap(admin, 'attachments-add-coursework');
+await (await worksheetChooser).setFiles({
+  name: WORKSHEET,
+  mimeType: 'application/pdf',
+  buffer: Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n'),
+});
+await admin.getByTestId(`attachment-${WORKSHEET}`).waitFor({ timeout: 30000 });
+check('a worksheet attaches to a posted assignment', await shows(admin, `attachment-${WORKSHEET}`));
+
+// The student: it is on To do, and the worksheet is on it.
+await goHome(student);
+const cwCard = student.locator(`[data-testid="next-up-${CW}"], [data-testid="task-${CW}"]`).filter({ visible: true }).first();
+await cwCard.waitFor({ timeout: 20000 });
+check('the posted assignment is on the student’s To do', await cwCard.isVisible());
+await cwCard.click();
+await student.getByTestId('work-note').waitFor({ timeout: 20000 });
+await student.getByTestId(`attachment-${WORKSHEET}`).waitFor({ timeout: 20000 });
+check('the student sees the teacher’s worksheet', await shows(student, `attachment-${WORKSHEET}`));
+
+await student.getByTestId('work-note').fill('Its meaning, in my own words: hope rests on God, not on what I did.');
+const pageChooser = student.waitForEvent('filechooser');
+await tap(student, 'attachments-add-work');
+await (await pageChooser).setFiles({ name: PAGE, mimeType: 'image/png', buffer: pagePhoto() });
+await student.getByTestId(`attachment-${PAGE}`).waitFor({ timeout: 30000 });
+await tap(student, 'work-hand-in');
+await student.getByTestId('work-handed-in').waitFor({ timeout: 20000 });
+check('the student hands in', await shows(student, 'work-handed-in'));
+// The picture LOADS, from a link only a party to the work is given — a box
+// with nothing in it would pass a check that the row exists.
+const pictureLoads = (page) =>
+  page.waitForFunction(
+    (id) => {
+      const img = document.querySelector(`[data-testid="${id}"] img`);
+      return !!img && img.complete && img.naturalWidth > 0;
+    },
+    `attachment-${PAGE}`,
+    { timeout: 20000 },
+  ).then(() => true, () => false);
+check('the handed-in page shows as a picture', await pictureLoads(student));
+await shot(student, '40-work-handed-in');
+
+// Take back, and the work is theirs to change again; hand in again.
+await tap(student, 'work-take-back');
+await student.getByTestId('work-hand-in').waitFor({ timeout: 20000 });
+// The draft comes back as its own snapshot, a moment after the form does.
+const noteBack = await student
+  .waitForFunction(() => document.querySelector('[data-testid="work-note"]')?.value.startsWith('Its meaning'), null, { timeout: 15000 })
+  .then(() => true, () => false);
+await student.getByTestId(`attachment-${PAGE}`).waitFor({ timeout: 15000 }).catch(() => {});
+check(
+  'taking it back reopens the work, note and page kept',
+  (await student.getByTestId('work-handed-in').count()) === 0 && noteBack && (await shows(student, `attachment-${PAGE}`)),
+);
+await tap(student, 'work-hand-in');
+await student.getByTestId('work-handed-in').waitFor({ timeout: 20000 });
+
+// The teacher: it is waiting to be graded, and Grade opens Fatima's work.
+await openHikam(admin);
+await tap(admin, 'nav-coursework');
+await tap(admin, `coursework-${CW}`);
+await admin.getByTestId('work-row-Fatima Ahmed').waitFor({ timeout: 20000 });
+check('the class page lists her as to grade', /To grade/.test(await admin.getByTestId('work-row-Fatima Ahmed').innerText()));
+await tap(admin, 'coursework-grade');
+await admin.getByTestId('grade-points').waitFor({ timeout: 20000 });
+check('Grade opens the student who handed in', (await screenTitle(admin)) === 'Fatima Ahmed');
+check('the teacher sees the note and the page', (await showsText(admin, 'hope rests on God')) && (await pictureLoads(admin)));
+await admin.getByTestId('grade-points').fill('9');
+await admin.getByTestId('grade-feedback').fill('Clear, and in your own words.');
+await admin.getByTestId('grade-status').filter({ hasText: 'Saved' }).waitFor({ timeout: 20000 });
+await shot(admin, '41-grade');
+
+// SAVED IS NOT RETURNED. The student's own screen, live, shows no grade; the
+// record they can read carries none either.
+await student.waitForTimeout(2000);
+const cwId = (await readCollection('coursework')).find((c) => c.fields.title.stringValue === CW)?.name.split('/').pop();
+const subBefore =
+  (await readCollection('submissions')).find(
+    (d) => d.fields.courseworkId?.stringValue === cwId && d.fields.state?.stringValue === 'handedIn',
+  )?.fields ?? {};
+check(
+  'a saved grade does not reach the student until it is returned',
+  (await student.getByTestId('work-returned').count()) === 0 &&
+    !(await showsText(student, '9/10')) &&
+    subBefore.state?.stringValue === 'handedIn' &&
+    !subBefore.returned?.mapValue,
+  JSON.stringify(subBefore.returned ?? null),
+);
+
+await tap(admin, 'grade-return');
+await student.getByTestId('work-returned').waitFor({ timeout: 20000 });
+const returnedText = await student.getByTestId('work-returned').innerText();
+check(
+  'once returned, the student sees the grade and the feedback',
+  /9\/10/.test(returnedText) && /in your own words/.test(returnedText),
+  returnedText.replace(/\s+/g, ' '),
+);
+await shot(student, '42-work-returned');
 
 // ---------------------------------------------------------- archive cascade --
 console.log('\nArchive cascade');

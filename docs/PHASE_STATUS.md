@@ -29,6 +29,7 @@ and commit messages, and renaming them would strand every one of those.
 | 5 | Staff ledger, reporting, audit | **complete** — see 5a–5d above |
 | A | Excused-only access, with a deadline | **complete** (2026-08-14) |
 | B | The student's own attendance record | **complete** (2026-08-14) |
+| C | Assignments and grades (`docs/plans/ASSIGNMENTS.md`) | **in progress** (2026-10-13: A1–A5 done, the whole loop in the browser e2e; the editor, laptop grading, messages and the release to come) |
 | 6 | Zoom import | **built** — waiting on institute credentials and its first live import |
 | 7 | Notifications | **complete** (2026-08-15: delivered to an Android device end to end; web delivery still a browser check) |
 | 8 | Admin backend stats | not started |

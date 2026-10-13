@@ -65,6 +65,17 @@ export function ensureHevcFixture() {
 }
 
 /**
+ * A photographed page, as a student hands one in: a PNG, made in memory and
+ * never written to disk. Large enough to read in a screenshot, so a picture
+ * that failed to load shows as the empty box it is.
+ */
+export function pagePhoto() {
+  return execFileSync('ffmpeg', [
+    '-f', 'lavfi', '-i', 'testsrc=size=480x360', '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'png', '-',
+  ], { stdio: ['ignore', 'pipe', 'ignore'] });
+}
+
+/**
  * A class's shared screen for the manual's figures: a dark presentation slide
  * carrying `title` and three bullet points and a speaker's box in the corner,
  * over the audio fixture's sound. It has to read as VIDEO at

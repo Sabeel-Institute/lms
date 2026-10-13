@@ -19,6 +19,7 @@ const HEADING: Record<TodayKind, { label: string; blurb: string }> = {
     blurb: 'Attendance is in; the recording is not. Nobody is waiting on anything else.',
   },
   closing: { label: 'Closing soon', blurb: 'Access ends within the week.' },
+  grading: { label: 'To grade', blurb: 'Handed in, not yet returned.' },
 };
 
 /**
@@ -48,6 +49,7 @@ export function TodayScreen({
   queue,
   onOpenSession,
   onOpenLedger,
+  onOpenCoursework,
 }: {
   uid: string;
   /** Only to say the right thing when there is nothing here yet. */
@@ -56,6 +58,7 @@ export function TodayScreen({
   queue: TodayQueue;
   onOpenSession: (sessionId: string, courseId: string) => void;
   onOpenLedger: (recordingId: string) => void;
+  onOpenCoursework: (courseId: string, courseworkId: string) => void;
 }) {
   const { items, blocking, loading, failed, scoped, allFinished, truncated } = queue;
   const today = todayInZone(INSTITUTE_TIMEZONE);
@@ -101,7 +104,7 @@ export function TodayScreen({
       {!loading && !failed && items.length === 0 ? (
         scoped ? (
           <Empty>
-            Attendance is in, every recording is published, and nothing closes this week.
+            Attendance is in, every recording is published, nothing closes this week, and no work is waiting to be graded.
           </Empty>
         ) : (
           <Notice tone="info">
@@ -132,9 +135,11 @@ export function TodayScreen({
                   key={item.key}
                   item={item}
                   onPress={() =>
-                    item.kind === 'closing' && item.recordingId
-                      ? onOpenLedger(item.recordingId)
-                      : onOpenSession(item.sessionId, item.courseId)
+                    item.kind === 'grading' && item.courseworkId
+                      ? onOpenCoursework(item.courseId, item.courseworkId)
+                      : item.kind === 'closing' && item.recordingId
+                        ? onOpenLedger(item.recordingId)
+                        : onOpenSession(item.sessionId, item.courseId)
                   }
                 />
               ))}
@@ -152,6 +157,7 @@ const ACTION: Record<TodayKind, string> = {
   closing: 'See who has listened',
   publish: 'Review and publish',
   recording: 'Add the recording',
+  grading: 'Grade',
 };
 
 function QueueCard({ item, onPress }: { item: TodayItem; onPress: () => void }) {
@@ -168,7 +174,7 @@ function QueueCard({ item, onPress }: { item: TodayItem; onPress: () => void }) 
        * details so two cards in different sections stopped repeating their own
        * heading left those two cards announcing the identical sentence.
        */
-      accessibilityLabel={`${HEADING[item.kind].label}: ${item.title}, ${item.courseName}. ${item.detail} ${ACTION[item.kind]}.`}
+      accessibilityLabel={`${HEADING[item.kind].label}: ${item.title}, ${item.courseName}. ${item.detail} ${item.action ?? ACTION[item.kind]}.`}
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
@@ -183,7 +189,7 @@ function QueueCard({ item, onPress }: { item: TodayItem; onPress: () => void }) 
         {item.title}
       </Text>
       <Text style={styles.detail}>{item.detail}</Text>
-      <Text style={styles.action}>{ACTION[item.kind]} ›</Text>
+      <Text style={styles.action}>{item.action ?? ACTION[item.kind]} ›</Text>
     </Pressable>
   );
 }

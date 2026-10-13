@@ -10,17 +10,27 @@
  */
 import {
   DUE_SOON_DAYS,
+  INSTITUTE_TIMEZONE,
   daysUntilDue,
+  isLate,
+  type CourseworkDoc,
+  type GradeDoc,
   type RecordingDoc,
   type SessionDoc,
+  type SubmissionDoc,
 } from '@sabeel/shared';
 
-export type TodayKind = 'attendance' | 'recording' | 'publish' | 'closing';
+export type TodayKind = 'attendance' | 'recording' | 'publish' | 'closing' | 'grading';
 
 export interface TodayItem {
   key: string;
   kind: TodayKind;
+  /** The session a row is about; empty for an assignment's. */
   sessionId: string;
+  /** The assignment a `grading` row is about; null otherwise. */
+  courseworkId: string | null;
+  /** The row's own action word, where its kind has two ("Grade", "Return"). */
+  action?: string;
   courseId: string;
   courseName: string;
   title: string;
@@ -119,13 +129,29 @@ export function queueScope(
  * here is work that is visibly outstanding somewhere; this one is work whose
  * absence is invisible.
  */
-export const KIND_ORDER = ['attendance', 'publish', 'recording', 'closing'] as const;
+export const KIND_ORDER = ['attendance', 'publish', 'recording', 'closing', 'grading'] as const;
 const RANK: Record<TodayKind, number> = {
   attendance: KIND_ORDER.indexOf('attendance'),
   publish: KIND_ORDER.indexOf('publish'),
   recording: KIND_ORDER.indexOf('recording'),
   closing: KIND_ORDER.indexOf('closing'),
+  grading: KIND_ORDER.indexOf('grading'),
 };
+
+/**
+ * What a reader's assignments need of them, for the `grading` rows.
+ *
+ * ONLY COURSES THEY MANAGE BY NAME — an admin included. An admin's Today
+ * covers every running course, and every other teacher's grading would bury
+ * the registers that keep students from their recordings.
+ */
+export interface GradingInput {
+  managed: ReadonlySet<string>;
+  coursework: (CourseworkDoc & { id: string })[] | null;
+  /** Work in `handedIn` state across the scope. */
+  handedIn: SubmissionDoc[] | null;
+  grades: GradeDoc[] | null;
+}
 
 /**
  * The whole derivation, as a pure function of what the listeners returned.
@@ -145,6 +171,7 @@ export function buildTodayQueue({
   failed,
   settled,
   truncated,
+  grading,
 }: {
   /** Every course the reader can see, or null before the first snapshot. */
   courses: { id: string; name: string }[] | null;
@@ -170,6 +197,7 @@ export function buildTodayQueue({
   settled: boolean;
   /** Whether `scope` was cut to fit one `in` clause. */
   truncated: boolean;
+  grading?: GradingInput;
 }): TodayQueue {
   const names = new Map((courses ?? []).map((c) => [c.id, c.name]));
 
@@ -201,6 +229,7 @@ export function buildTodayQueue({
     const met = -daysUntilDue(s.date, today);
     const base = {
       sessionId: s.id,
+      courseworkId: null,
       courseId: s.courseId,
       courseName,
       title: s.title,
@@ -303,6 +332,8 @@ export function buildTodayQueue({
     }
   }
 
+  out.push(...gradingRows(grading, names, today));
+
   out.sort(
     (a, b) => RANK[a.kind] - RANK[b.kind] || b.age - a.age || a.title.localeCompare(b.title),
   );
@@ -315,4 +346,44 @@ export function buildTodayQueue({
     allFinished: !subscribed && (courses ?? []).length > 0,
     truncated,
   };
+}
+
+/**
+ * One row per assignment with work waiting on its teacher, last on the
+ * screen and never counted in the badge: ungraded work keeps nobody from
+ * anything, and a badge that is never zero gets ignored. Work handed in early
+ * counts too. Once everything is graded the row turns into a reminder to
+ * return it, and leaves when it is all back with the students.
+ */
+function gradingRows(grading: GradingInput | undefined, names: Map<string, string>, today: string): TodayItem[] {
+  if (!grading?.coursework || !grading.handedIn || !grading.grades) return [];
+  const graded = new Set(grading.grades.map((g) => `${g.studentUid}_${g.courseworkId}`));
+  const rows: TodayItem[] = [];
+  for (const cw of grading.coursework) {
+    if (cw.status !== 'posted' || !grading.managed.has(cw.courseId)) continue;
+    const work = grading.handedIn.filter((s) => s.courseworkId === cw.id);
+    const toGrade = work.filter((s) => !graded.has(`${s.studentUid}_${cw.id}`));
+    const late = toGrade.filter((s) => s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, INSTITUTE_TIMEZONE)).length;
+    const toReturn = work.length - toGrade.length;
+    if (work.length === 0) continue;
+    rows.push({
+      key: `grade-${cw.id}`,
+      kind: 'grading',
+      sessionId: '',
+      courseworkId: cw.id,
+      courseId: cw.courseId,
+      courseName: names.get(cw.courseId) ?? '',
+      title: cw.title,
+      date: cw.dueDate,
+      detail:
+        toGrade.length > 0
+          ? `${toGrade.length} handed in and not graded yet${late ? `, ${late} of them late` : ''}.`
+          : `All graded. ${toReturn} not returned yet.`,
+      action: toGrade.length > 0 ? 'Grade' : 'Return',
+      recordingId: null,
+      age: -daysUntilDue(cw.dueDate, today),
+      blocking: false,
+    });
+  }
+  return rows;
 }

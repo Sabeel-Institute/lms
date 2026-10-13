@@ -288,7 +288,7 @@ const browser = await chromium.launch();
 const world = await seedWorld({ db, auth, browser, base: BASE });
 const {
   STUDENT, DISABLED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived,
-  HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE,
+  HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE, TO_GRADE,
 } = world;
 
 /**
@@ -1059,7 +1059,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 36;
+const STAFF_SCREENS = 42;
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
@@ -1225,6 +1225,36 @@ async function tourStaff(page, tag) {
     await openCourse();
     await tap(byId(page, `student-ledger-${STUDENT.email}`));
   }, 'student-ledger-profile');
+  // Assignments: the course's list, a new one's form, one assignment's page
+  // and its edit form, grading one student's work, and one student's
+  // assignments in the course.
+  const openCoursework = async () => {
+    await openCourse();
+    await tap(byId(page, 'nav-coursework'));
+  };
+  const openMemorize = async () => {
+    await openCoursework();
+    await tap(byId(page, 'coursework-Memorize the first hikma'));
+  };
+  await visit('coursework-list', openCoursework, 'coursework-new');
+  await visit('coursework-new', async () => {
+    await openCoursework();
+    await tap(byId(page, 'coursework-new'));
+  }, 'coursework-audience');
+  await visit('coursework-detail', openMemorize, 'coursework-return-graded');
+  await visit('coursework-edit', async () => {
+    await openMemorize();
+    await tap(byId(page, 'coursework-edit'));
+  }, 'coursework-save');
+  await visit('grade', async () => {
+    await openMemorize();
+    await tap(byId(page, `work-row-${TO_GRADE.name}`));
+  }, 'grade-feedback');
+  await visit('student-assignments', async () => {
+    await openCourse();
+    await tap(byId(page, `student-ledger-${STUDENT.email}`));
+    await tap(byId(page, 'student-tab-assignments'));
+  }, 'student-work-Memorize the first hikma');
   // The ledger of a recording on a course ARCHIVED WITH LISTENING OFF: the one
   // row state — "Closed (course archived)" — that no live course can show, on
   // a recording that is still published and inside its date. Reached through
@@ -1371,7 +1401,7 @@ async function tourStaff(page, tag) {
     `${counter.seen}/${STAFF_SCREENS}`);
 }
 
-const MANAGER_SCREENS = 11;
+const MANAGER_SCREENS = 12;
 
 /**
  * A manager sees the same screens with fewer rows AND fewer controls, which is a
@@ -1396,7 +1426,16 @@ async function tourManager(page, tag) {
   };
 
   await visit('home', async () => {}, `today-att-${blocking.id}`);
+  // Grading reaches a teacher through Today: the classmates' hand-ins on the
+  // course they manage by name, last on the screen.
+  check(`${tag} home lists the assignment to grade`,
+    await byId(page, 'today-grade-sw-cw1').isVisible().catch(() => false));
   await visit('my-courses', () => tap(byId(page, 'tab-courses')), 'course-open-Hikam Foundations');
+  await visit('coursework-detail', async () => {
+    await openCourse();
+    await tap(byId(page, 'nav-coursework'));
+    await tap(byId(page, 'coursework-Memorize the first hikma'));
+  }, 'coursework-edit');
   await visit('course', openCourse, 'nav-sessions');
   await visit('audit-scoped', async () => {
     await openCourse();

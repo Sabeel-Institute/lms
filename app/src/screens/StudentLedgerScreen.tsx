@@ -9,7 +9,8 @@ import {
   todayInZone,
   unbreakableDate,
 } from '@sabeel/shared';
-import { Chips, Empty, Grid, Screen } from '../components/ui';
+import { Chips, Empty, Grid, Screen, Segmented } from '../components/ui';
+import { StaffStudentWork } from './StaffStudentWork';
 import { LEDGER_FILTERS, useStudentLedger, type LedgerFilter, type StudentLedgerItem } from '../ledger';
 import { useCourseRecordings } from '../recordings';
 import type { CourseRow } from '../structure';
@@ -23,13 +24,17 @@ export function StudentLedgerScreen({
   studentName,
   cls,
   onOpenStudent,
+  onOpenWork,
 }: {
   studentUid: string;
   studentName: string;
   cls: CourseRow;
   /** The student's profile — the same page People opens. */
   onOpenStudent: () => void;
+  /** Their work on one assignment, in the grading screen. */
+  onOpenWork: (courseworkId: string) => void;
 }) {
+  const [tab, setTab] = useState<'listening' | 'assignments'>('listening');
   const today = todayInZone(INSTITUTE_TIMEZONE);
   // An archived class with listening off closes every open grant on it — the
   // rows say so rather than "Listen by" or "Watch by", which read as still doable.
@@ -59,9 +64,24 @@ export function StudentLedgerScreen({
         label: `Open ${studentName}'s profile`,
         onPress: onOpenStudent,
       }}
-      subtitle={`${cls.name} · required recordings`}
+      subtitle={`${cls.name} · recordings and assignments`}
       width="list"
     >
+      <View style={styles.toolbar}>
+        <Segmented
+          value={tab}
+          testIdPrefix="student-tab"
+          options={[
+            { value: 'listening', label: `Listening${items === null ? '' : ` (${items.length})`}` },
+            { value: 'assignments', label: 'Assignments' },
+          ]}
+          onChange={setTab}
+        />
+      </View>
+      {tab === 'assignments' ? (
+        <StaffStudentWork studentUid={studentUid} cls={cls} onOpenWork={onOpenWork} />
+      ) : (
+      <>
       <View style={styles.toolbar}>
         {/* The same options object as the recording ledger's, not a second copy
             of the same three words in the same order. */}
@@ -94,6 +114,8 @@ export function StudentLedgerScreen({
             </View>
           ))}
         </Grid>
+      )}
+      </>
       )}
     </Screen>
   );

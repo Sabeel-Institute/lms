@@ -5,8 +5,11 @@ import {
   INSTITUTE_TIMEZONE,
   QUEUE_SCOPE,
   todayInZone,
+  type CourseworkDoc,
+  type GradeDoc,
   type RecordingDoc,
   type SessionDoc,
+  type SubmissionDoc,
 } from '@sabeel/shared';
 // The queue's vocabulary, re-exported so a screen has one import for the hook
 // and the shapes it returns. `buildTodayQueue` itself is not: its callers are
@@ -33,6 +36,7 @@ import { useAllCoursesSource, useMyCoursesSource, type CourseRow } from './struc
  * same moment, from whichever screen you are on.
  */
 function useTodayQueue(
+  uid: string,
   courses: CourseRow[] | null,
   max: number,
   /** See `buildTodayQueue`: "nothing will ever be subscribed", not "loaded". */
@@ -152,12 +156,66 @@ function useTodayQueue(
    * site and a computed one is a call site it cannot read — a guard that stops
    * seeing a query is worse than the duplication.
    */
+  /*
+   * WORK TO GRADE, across the same scope: the assignments, the work handed in
+   * and not yet returned, and the grades being written. Rows are shown only
+   * for the courses the reader manages by name — see `gradingRows`.
+   */
+  const coursework = useLiveQuery<(CourseworkDoc & { id: string })[] | null>(
+    () =>
+      scope.length > 0
+        ? query(collection(db, COLLECTIONS.coursework), where('courseId', 'in', scope))
+        : null,
+    [scope],
+    {
+      label: 'todayCoursework',
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as CourseworkDoc) })),
+      empty: null,
+      expectDenial,
+      extra: { scope: key },
+    },
+  );
+  const handedIn = useLiveQuery<SubmissionDoc[] | null>(
+    () =>
+      scope.length > 0
+        ? query(
+            collection(db, COLLECTIONS.submissions),
+            where('courseId', 'in', scope),
+            where('state', '==', 'handedIn'),
+          )
+        : null,
+    [scope],
+    {
+      label: 'todayHandedIn',
+      map: (snap) => snap.docs.map((d) => d.data() as SubmissionDoc),
+      empty: null,
+      expectDenial,
+      extra: { scope: key },
+    },
+  );
+  const grades = useLiveQuery<GradeDoc[] | null>(
+    () =>
+      scope.length > 0 ? query(collection(db, COLLECTIONS.grades), where('courseId', 'in', scope)) : null,
+    [scope],
+    {
+      label: 'todayGrades',
+      map: (snap) => snap.docs.map((d) => d.data() as GradeDoc),
+      empty: null,
+      expectDenial,
+      extra: { scope: key },
+    },
+  );
+
   const failed = useListenerFailed([
     'todaySessions',
     'todayRecordings',
     'allCourses',
     'myCourses',
   ]);
+  const managed = useMemo(
+    () => new Set((courses ?? []).filter((c) => (c.managerUids ?? []).includes(uid)).map((c) => c.id)),
+    [courses, uid],
+  );
 
   // OUTSIDE the memo: a browser left open past midnight would otherwise keep
   // saying "Met today" until the next snapshot happened to arrive.
@@ -165,8 +223,18 @@ function useTodayQueue(
 
   return useMemo(
     () =>
-      buildTodayQueue({ courses, sessions, recordings, scope, today, failed, settled, truncated }),
-    [courses, sessions, recordings, scope, today, failed, settled, truncated],
+      buildTodayQueue({
+        courses,
+        sessions,
+        recordings,
+        scope,
+        today,
+        failed,
+        settled,
+        truncated,
+        grading: { managed, coursework, handedIn, grades },
+      }),
+    [courses, sessions, recordings, scope, today, failed, settled, truncated, managed, coursework, handedIn, grades],
   );
 }
 
@@ -195,6 +263,7 @@ export function useStaffQueue(isStaff: boolean, isAdmin: boolean, uid: string): 
   const mine = useMyCoursesSource(isStaff && !isAdmin ? uid : null, 'todayQueue');
   const courses = isAdmin ? all : mine;
   return useTodayQueue(
+    uid,
     courses.rows,
     isAdmin ? QUEUE_SCOPE.admin : QUEUE_SCOPE.manager,
     // A student subscribes to nothing, so "no courses" is their settled answer

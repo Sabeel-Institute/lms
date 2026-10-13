@@ -5,7 +5,10 @@ import {
   submissionId,
   type AttachmentFile,
   type CourseworkDoc,
+  type CourseworkGrading,
   type DraftDoc,
+  type Grade,
+  type GradeDoc,
   type SubmissionDoc,
 } from '@sabeel/shared';
 import { db, functions } from './firebase';
@@ -127,3 +130,77 @@ export const getAttachmentUrl = call<
   { courseworkId: string; fileId: string; studentUid?: string },
   { url: string; expiresAt: number; name: string; contentType: string }
 >('getAttachmentUrl');
+
+// ------------------------------------------------------------ staff side --
+
+export interface GradeRow extends GradeDoc {
+  id: string;
+}
+
+/** A course's assignments, drafts included. Class-scoped, as the staff rule requires. */
+export function useCourseCourseworkState(courseId: string | null): CourseworkRow[] | null {
+  return useLiveQuery<CourseworkRow[] | null>(
+    () => (courseId ? query(collection(db, COLLECTIONS.coursework), where('courseId', '==', courseId)) : null),
+    [courseId],
+    {
+      label: 'courseCoursework',
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as CourseworkDoc) })),
+      empty: null,
+    },
+  );
+}
+
+/** Every student's work in a course, for the course's counts and one assignment's page. */
+export function useCourseSubmissionsState(courseId: string | null): SubmissionRow[] | null {
+  return useLiveQuery<SubmissionRow[] | null>(
+    () => (courseId ? query(collection(db, COLLECTIONS.submissions), where('courseId', '==', courseId)) : null),
+    [courseId],
+    {
+      label: 'courseSubmissions',
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as SubmissionDoc) })),
+      empty: null,
+    },
+  );
+}
+
+/** Grades in a course as staff are writing them. Never student-readable. */
+export function useCourseGradesState(courseId: string | null): GradeRow[] | null {
+  return useLiveQuery<GradeRow[] | null>(
+    () => (courseId ? query(collection(db, COLLECTIONS.grades), where('courseId', '==', courseId)) : null),
+    [courseId],
+    {
+      label: 'courseGrades',
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as GradeDoc) })),
+      empty: null,
+    },
+  );
+}
+
+export type CourseworkInput = {
+  title: string;
+  instructions: string;
+  dueDate: string;
+  lateUntil: string | null;
+  grading: CourseworkGrading;
+};
+
+export const createCoursework = call<CourseworkInput & { courseId: string }, { id: string }>('createCoursework');
+export const updateCoursework = call<CourseworkInput & { courseworkId: string }, { id: string }>('updateCoursework');
+export const postCoursework = call<{ courseworkId: string }, { id: string; students: number }>('postCoursework');
+export const closeCoursework = call<{ courseworkId: string }, unknown>('closeCoursework');
+export const deleteCoursework = call<{ courseworkId: string }, unknown>('deleteCoursework');
+export const saveGrade = call<
+  { courseworkId: string; studentUid: string; grade: Grade | null; feedback: string },
+  unknown
+>('saveGrade');
+export const returnWork = call<
+  { courseworkId: string; studentUids: string[]; retry?: { dueDate: string; lateUntil: string | null } },
+  { returned: number }
+>('returnWork');
+export const giveMoreTime = call<
+  { courseworkId: string; studentUid: string; dueDate: string; lateUntil: string | null; reason: string },
+  unknown
+>('giveMoreTime');
+export const setNotRequired = call<{ courseworkId: string; studentUid: string; reason: string | null }, unknown>(
+  'setNotRequired',
+);

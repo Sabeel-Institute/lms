@@ -21,15 +21,11 @@ import { RichText } from '../components/RichText';
 import { handIn, saveDraftNote, takeBack, useMyDraft, type CourseworkRow, type SubmissionRow } from '../coursework';
 import type { CourseRow } from '../structure';
 import { errorText } from '../errors';
+import { gradingText } from './courseworkWords';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
 const dayOf = (ms: number) => unbreakableDate(todayInZone(INSTITUTE_TIMEZONE, ms));
-
-/** "out of 10", "satisfactory / needs work". */
-function gradingText(grading: CourseworkGrading): string {
-  return grading.kind === 'points' ? `graded out of ${grading.outOf}` : 'satisfactory / needs work';
-}
 
 /**
  * One assignment, as the student sees it: the teacher's instructions and
