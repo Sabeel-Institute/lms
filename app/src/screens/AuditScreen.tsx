@@ -227,6 +227,7 @@ const ACTION_LABELS: Record<string, string> = {
   finalizeRecordingUpload: 'Uploaded audio',
   setRecordingStatus: 'Changed recording status',
   removeRecordingMedia: 'Removed a file',
+  editRecordingMedia: 'Changed a recording’s files',
   importZoomFiles: 'Imported from Zoom',
   retryZoomImport: 'Retried a Zoom import',
   setStaffAccess: 'Changed staff access',

@@ -46,7 +46,8 @@ export type RootStackParamList = {
    *  grant for students. For a student it is the day access CLOSES, so the
    *  player states it; omitted only when staff open a recording with no session
    *  context to hand. */
-  Player: { recordingId: string; dueDate?: string | null };
+  /** `itemId`: one file to open, for staff previewing it; otherwise the recording's starting file. */
+  Player: { recordingId: string; dueDate?: string | null; itemId?: string };
   MyCourses: undefined;
   Tokens: undefined;
 };

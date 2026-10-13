@@ -287,6 +287,19 @@ describe('opening and closing', () => {
     expect(players[0].unloaded).toBe(false);
   });
 
+  it('opening another FILE of the same recording loads that file', async () => {
+    // Staff previewing a recording's files one after another from the
+    // session page: the second Play has to play the second file.
+    const pb = await load();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.openPlayback({ ...recording('rec-a'), itemId: 'rec-a-video' });
+    await flush();
+    expect(players).toHaveLength(2);
+    expect(players[0].unloaded).toBe(true);
+    expect(callable).toHaveBeenLastCalledWith({ recordingId: 'rec-a', itemId: 'rec-a-video' });
+  });
+
   /*
    * THE REGRESSION THAT KILLED "PLAY A SECOND RECORDING".
    *

@@ -4,7 +4,7 @@ import { mediaStorageKey, type MediaItem, type MediaMap, type MediaVersion } fro
 export const AUDIO_ITEM = 'audio1';
 
 /** One media item as an upload leaves it once confirmed; override what a test is about. */
-function mediaItem(recordingId: string, id: string, over: Partial<MediaItem> = {}): MediaItem {
+export function mediaFixture(recordingId: string, id: string, over: Partial<MediaItem> = {}): MediaItem {
   return {
     id,
     part: 1,
@@ -37,7 +37,7 @@ export function withAudio(
   recordingId: string,
   over: Partial<MediaItem> = {},
 ): { media: MediaMap; defaultVersion: MediaVersion; durationSec: number | null } {
-  const item = mediaItem(recordingId, AUDIO_ITEM, over);
+  const item = mediaFixture(recordingId, AUDIO_ITEM, over);
   return {
     media: { [item.id]: item },
     defaultVersion: 'audio',

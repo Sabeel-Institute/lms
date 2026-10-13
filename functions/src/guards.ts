@@ -92,6 +92,14 @@ export function requireAdmin(req: CallableRequest): string {
 }
 
 /**
+ * Whether the caller is an admin, for a callable that lets admins do more than
+ * the course scope it has already checked — not a gate on its own.
+ */
+export function isAdminCaller(req: CallableRequest): boolean {
+  return claims(req).role === 'admin';
+}
+
+/**
  * Staff authorization for one class: an admin, or a manager assigned to it.
  *
  * Server-side, and deliberately not expressible in security rules. Every write

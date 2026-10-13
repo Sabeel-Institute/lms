@@ -1,6 +1,6 @@
 import { collection, doc, orderBy, query, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { COLLECTIONS, type RecordingDoc, type RecordingStatus } from '@sabeel/shared';
+import { COLLECTIONS, type MediaEdit, type RecordingDoc, type RecordingStatus } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
 
@@ -122,6 +122,9 @@ export const setRecordingStatus = call<
   { recordingId: string; status: RecordingStatus },
   unknown
 >('setRecordingStatus');
+
+/** Hide or show a file, move a part, or set the version students start on. */
+export const editRecordingMedia = call<{ recordingId: string } & MediaEdit, unknown>('editRecordingMedia');
 
 /** Remove one file from a draft, so a bad one can be replaced. */
 export const removeRecordingMedia = call<{ recordingId: string; itemId: string }, unknown>(

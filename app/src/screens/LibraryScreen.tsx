@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { hasLedger, isVisibleToStudents, startingItem, type RecordingStatus } from '@sabeel/shared';
+import { hasLedger, isVisibleToStudents, mediaSummary, startingItem, type RecordingStatus } from '@sabeel/shared';
 import {
   Button,
   Card,
@@ -327,7 +327,12 @@ function RecordingLine({
       <View style={styles.meta}>
         <StatusChip status={r.status} />
         <Text style={styles.sub}>
-          {r.durationSec ? `${Math.round(r.durationSec / 60)} min` : playable ? 'length unknown' : 'no audio'}
+          {[
+            r.durationSec ? `${Math.round(r.durationSec / 60)} min` : playable ? 'length unknown' : 'no audio',
+            mediaSummary(r.media),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
           {r.date ? ` · ${r.date}` : ''}
         </Text>
       </View>

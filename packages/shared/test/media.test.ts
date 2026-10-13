@@ -4,6 +4,7 @@ import {
   mediaFromSingleAudio,
   mediaParts,
   mediaStorageKey,
+  mediaSummary,
   startingItem,
   type MediaItem,
   type MediaMap,
@@ -143,5 +144,15 @@ describe('mediaFromSingleAudio', () => {
 describe('mediaStorageKey', () => {
   it('names the recording and the item', () => {
     expect(mediaStorageKey('rec1', 'item1')).toBe('media/rec1/item1');
+  });
+});
+
+describe('mediaSummary', () => {
+  it('says what students can play, in a few words', () => {
+    expect(mediaSummary(QURAN)).toBe('2 parts · video and audio');
+    expect(mediaSummary(mediaOf(item('a')))).toBe('audio');
+    expect(mediaSummary(mediaOf(item('v', { kind: 'video', version: 'video' })))).toBe('video');
+    // Hidden or not yet arrived is nothing to a student.
+    expect(mediaSummary(mediaOf(item('a', { hidden: true }), item('b', { status: 'copying' })))).toBeNull();
   });
 });

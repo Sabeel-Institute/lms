@@ -8,17 +8,20 @@ import {
   canTransition,
   deriveDurationSec,
   isDiscardable,
+  isPlayable,
   mediaStorageKey,
   publishBlockers,
   todayInZone,
   type MediaItem,
+  type MediaEdit,
   type MediaMap,
+  type MediaVersion,
   type RecordingDoc,
   type RecordingSource,
   type RecordingStatus,
   type SessionDoc,
 } from '@sabeel/shared';
-import { requireAdmin, requireCourseScope } from './guards';
+import { isAdminCaller, requireAdmin, requireCourseScope } from './guards';
 import { MEDIA_WRITE_SECRETS, deleteObject, head, signPut } from './mediaStore';
 
 /** Max upload size. A 2-hour 128 kbps M4A is ~115 MB; 300 MB leaves room
@@ -464,14 +467,23 @@ export const setRecordingStatus = auditedCall('setRecordingStatus', async (req, 
  * and only while the recording is not live. The object goes, the item goes,
  * and a Zoom file's claim goes, so it can be imported again.
  */
-export async function removeMedia(recordingId: string, itemId: string) {
+export async function removeMedia(recordingId: string, itemId: string, asAdmin = false) {
   const db = getFirestore();
   const ref = db.collection(COLLECTIONS.recordings).doc(recordingId);
   const removed = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
     const rec = snap.data() as RecordingDoc;
-    requireEditableMedia(rec, 'Files can be removed');
+    // WHO MAY, BY STATE. A draft's files are its makers' to correct. A live
+    // recording's are never removed — hidden instead, so nothing a student is
+    // part-way through vanishes. One taken down (archived, unpublished) is an
+    // admin's to clear out, for storage.
+    if (rec.status === 'published') {
+      throw new HttpsError('failed-precondition', 'A published recording’s files are hidden, not removed. Hide it, or unpublish first.');
+    }
+    if ((rec.status === 'archived' || rec.status === 'unpublished') && !asAdmin) {
+      throw new HttpsError('permission-denied', 'Only an admin can remove a file from a recording that has been published.');
+    }
     const item = rec.media[itemId];
     if (!item) throw new HttpsError('not-found', 'No such file on that recording.');
     writeItem(tx, ref, rec, itemId, null);
@@ -495,8 +507,95 @@ export const removeRecordingMedia = auditedCall('removeRecordingMedia', async (r
   const courseId = (rec.data() as RecordingDoc).courseId;
   await requireCourseScope(req, courseId);
   audit.courseId = courseId;
-  return removeMedia(d.recordingId, d.itemId);
+  audit.detail = { itemId: d.itemId };
+  return removeMedia(d.recordingId, d.itemId, isAdminCaller(req));
 }, MEDIA_WRITE_SECRETS);
+
+// ------------------------------------------------------------ edit media --
+
+const VERSIONS: MediaVersion[] = ['speaker', 'slides', 'audio', 'video'];
+
+export function validateMediaEdit(data: unknown): { recordingId: string; edit: MediaEdit } {
+  const d = data as { recordingId?: unknown; op?: unknown; itemId?: unknown; part?: unknown; version?: unknown } | null;
+  if (typeof d?.recordingId !== 'string' || !d.recordingId) {
+    throw new HttpsError('invalid-argument', 'recordingId is required.');
+  }
+  const recordingId = d.recordingId;
+  if (d.op === 'hide' || d.op === 'show') {
+    if (typeof d.itemId !== 'string' || !d.itemId) throw new HttpsError('invalid-argument', 'itemId is required.');
+    return { recordingId, edit: { op: d.op, itemId: d.itemId } };
+  }
+  if (d.op === 'moveUp' || d.op === 'moveDown') {
+    if (typeof d.part !== 'number' || !Number.isInteger(d.part) || d.part < 1) {
+      throw new HttpsError('invalid-argument', 'part must be a part number.');
+    }
+    return { recordingId, edit: { op: d.op, part: d.part } };
+  }
+  if (d.op === 'defaultVersion') {
+    if (!VERSIONS.includes(d.version as MediaVersion)) throw new HttpsError('invalid-argument', 'Unknown version.');
+    return { recordingId, edit: { op: d.op, version: d.version as MediaVersion } };
+  }
+  throw new HttpsError('invalid-argument', 'Unknown edit.');
+}
+
+/**
+ * Hide or show a file, move a part, or set the version students start on.
+ *
+ * Allowed in every state, live included: none of these changes a file, and
+ * each is how a published recording is corrected without taking it down —
+ * the second half that was in another meeting moved into place, a bad camera
+ * angle hidden. Audited, like every change to what students are given.
+ *
+ * ONE THING IS REFUSED: hiding the last file a student could play in a
+ * published recording. Students would keep a recording, a deadline and an
+ * obligation, and be given nothing to play; unpublishing says what is meant.
+ */
+export async function applyMediaEdit(recordingId: string, edit: MediaEdit) {
+  const db = getFirestore();
+  const ref = db.collection(COLLECTIONS.recordings).doc(recordingId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
+    const rec = snap.data() as RecordingDoc;
+    const media: MediaMap = { ...rec.media };
+    if (edit.op === 'hide' || edit.op === 'show') {
+      const item = media[edit.itemId];
+      if (!item) throw new HttpsError('not-found', 'No such file on that recording.');
+      media[edit.itemId] = { ...item, hidden: edit.op === 'hide' };
+      if (rec.status === 'published' && !Object.values(media).some(isPlayable)) {
+        throw new HttpsError(
+          'failed-precondition',
+          'That is the last file students can play. Unpublish the recording instead.',
+        );
+      }
+    } else if (edit.op === 'moveUp' || edit.op === 'moveDown') {
+      const parts = [...new Set(Object.values(media).map((i) => i.part))].sort((a, b) => a - b);
+      const at = parts.indexOf(edit.part);
+      const other = parts[edit.op === 'moveUp' ? at - 1 : at + 1];
+      if (at < 0 || other === undefined) throw new HttpsError('failed-precondition', 'That part cannot move that way.');
+      for (const [id, item] of Object.entries(media)) {
+        if (item.part === edit.part) media[id] = { ...item, part: other };
+        else if (item.part === other) media[id] = { ...item, part: edit.part };
+      }
+    } else if (edit.op === 'defaultVersion') {
+      tx.update(ref, { defaultVersion: edit.version, updatedAt: Date.now() });
+      return;
+    }
+    tx.update(ref, { media, durationSec: deriveDurationSec(media), updatedAt: Date.now() });
+  });
+  return { recordingId };
+}
+
+export const editRecordingMedia = auditedCall('editRecordingMedia', async (req, audit) => {
+  const { recordingId, edit } = validateMediaEdit(req.data);
+  const rec = await getFirestore().collection(COLLECTIONS.recordings).doc(recordingId).get();
+  if (!rec.exists) throw new HttpsError('not-found', 'No such recording.');
+  const courseId = (rec.data() as RecordingDoc).courseId;
+  await requireCourseScope(req, courseId);
+  audit.courseId = courseId;
+  audit.detail = { ...edit };
+  return applyMediaEdit(recordingId, edit);
+});
 
 // Everything that references a recording by id, so a permanent delete leaves no
 // orphans. All are keyed on a `recordingId` field (single-field equality → no

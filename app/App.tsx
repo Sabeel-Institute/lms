@@ -818,8 +818,8 @@ function SessionDetail({ isAdmin }: { isAdmin: boolean }) {
       onOpenLedger={(recording) =>
         navigation.navigate('RecordingLedger', { recordingId: recording.id })
       }
-      onPlay={(recording, s) =>
-        navigation.navigate('Player', { recordingId: recording.id, dueDate: s.dueDate })
+      onPlay={(recording, s, itemId) =>
+        navigation.navigate('Player', { recordingId: recording.id, dueDate: s.dueDate, itemId })
       }
       onImportZoom={(s) => navigation.navigate('ZoomImport', { sessionId: s.id })}
     />
@@ -845,7 +845,7 @@ function MyClassRecord({ uid }: { uid: string }) {
 }
 
 function Play({ studentUid }: { studentUid: string | null }) {
-  const { recordingId, dueDate: routeDueDate } =
+  const { recordingId, dueDate: routeDueDate, itemId } =
     useRoute<RouteProp<RootStackParamList, 'Player'>>().params;
   // Chained: the recording names its own course, so the course resolves only
   // once the recording has. Both are live, so an unpublish or an archive lands
@@ -883,6 +883,7 @@ function Play({ studentUid }: { studentUid: string | null }) {
       cls={cls.value}
       studentUid={studentUid}
       dueDate={dueDate}
+      itemId={itemId ?? null}
     />
   );
 }

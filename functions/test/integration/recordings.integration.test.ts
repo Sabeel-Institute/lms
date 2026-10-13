@@ -14,11 +14,14 @@ import { createCourseRecord } from '../../src/courses';
 import { createSessionRecord, deleteSession, updateSession } from '../../src/sessions';
 import { idTokenFor } from './emulatorToken';
 import { clearPrefix, objectExists, objectInfo, putObject } from './mediaObjects';
+import { mediaFixture } from '../mediaFixtures';
 import {
   MAX_AUDIO_BYTES,
   applyDeleteRecording,
+  applyMediaEdit,
   applyRecordingStatus,
   removeMedia,
+  validateMediaEdit,
   RECORDING_DEPENDENTS,
   applyRecordingDelete,
   createRecordingDraft,
@@ -316,9 +319,95 @@ describe('removeMedia', () => {
     const id = await ready();
     const { id: itemId, storageKey } = await onlyItem(id);
     await applyRecordingStatus({ recordingId: id, status: 'published' });
-    await expect(removeMedia(id, itemId)).rejects.toThrow(/draft/i);
+    await expect(removeMedia(id, itemId)).rejects.toThrow(/hidden, not removed/);
     expect(await objectExists(storageKey)).toBe(true);
     expect(Object.keys((await rec(id)).media)).toEqual([itemId]);
+  });
+});
+
+/**
+ * A recording of two parts — the first in two versions — as a Zoom import of a
+ * class recorded in two stretches leaves it, every file in the bucket.
+ */
+async function twoParts(): Promise<string> {
+  const { id } = await newDraft();
+  const media = {
+    p1v: mediaFixture(id, 'p1v', { part: 1, version: 'speaker', kind: 'video', durationSec: 3600 }),
+    p1a: mediaFixture(id, 'p1a', { part: 1, version: 'audio', durationSec: 3600 }),
+    p2a: mediaFixture(id, 'p2a', { part: 2, version: 'audio', durationSec: 600 }),
+  };
+  for (const item of Object.values(media)) await putObject(item.storageKey, new Uint8Array(16));
+  await getFirestore().collection(COLLECTIONS.recordings).doc(id).update({ media, durationSec: 4200 });
+  return id;
+}
+
+describe('editing a recording’s media', () => {
+  const parts = async (id: string) =>
+    Object.fromEntries(Object.values((await rec(id)).media).map((i) => [i.id, i.part]));
+
+  it('hides a file from students, keeps it, and shortens the length only when a whole part goes', async () => {
+    const id = await twoParts();
+    await applyMediaEdit(id, { op: 'hide', itemId: 'p1v' });
+    expect((await rec(id)).media.p1v.hidden).toBe(true);
+    expect(await objectExists((await rec(id)).media.p1v.storageKey)).toBe(true);
+    expect((await rec(id)).durationSec).toBe(4200); // part 1 still has its audio
+    await applyMediaEdit(id, { op: 'hide', itemId: 'p2a' });
+    expect((await rec(id)).durationSec).toBe(3600);
+    await applyMediaEdit(id, { op: 'show', itemId: 'p2a' });
+    expect((await rec(id)).durationSec).toBe(4200);
+  });
+
+  it('refuses to hide the last file students can play in a published recording, and changes nothing', async () => {
+    const id = await twoParts();
+    await applyRecordingStatus({ recordingId: id, status: 'published' });
+    await applyMediaEdit(id, { op: 'hide', itemId: 'p1v' });
+    await applyMediaEdit(id, { op: 'hide', itemId: 'p1a' });
+    await expect(applyMediaEdit(id, { op: 'hide', itemId: 'p2a' })).rejects.toThrow(/Unpublish/);
+    expect((await rec(id)).media.p2a.hidden).toBe(false);
+  });
+
+  it('moves a part, taking all its versions with it', async () => {
+    const id = await twoParts();
+    await applyMediaEdit(id, { op: 'moveDown', part: 1 });
+    expect(await parts(id)).toEqual({ p1v: 2, p1a: 2, p2a: 1 });
+    await applyMediaEdit(id, { op: 'moveUp', part: 2 });
+    expect(await parts(id)).toEqual({ p1v: 1, p1a: 1, p2a: 2 });
+    await expect(applyMediaEdit(id, { op: 'moveUp', part: 1 })).rejects.toThrow(/cannot move/);
+  });
+
+  it('sets the version students start on', async () => {
+    const id = await twoParts();
+    await applyMediaEdit(id, { op: 'defaultVersion', version: 'speaker' });
+    expect((await rec(id)).defaultVersion).toBe('speaker');
+  });
+
+  it('validates the edit before reading anything', () => {
+    expect(() => validateMediaEdit({ recordingId: 'r', op: 'paint' })).toThrow(/Unknown edit/);
+    expect(() => validateMediaEdit({ recordingId: 'r', op: 'hide' })).toThrow(/itemId/);
+    expect(() => validateMediaEdit({ recordingId: 'r', op: 'moveUp', part: 0 })).toThrow(/part/);
+    expect(() => validateMediaEdit({ recordingId: 'r', op: 'defaultVersion', version: 'hd' })).toThrow(/version/);
+  });
+});
+
+describe('who may remove a file', () => {
+  it('nobody, from a published recording: it is hidden instead, and stays in the bucket', async () => {
+    const id = await twoParts();
+    const key = (await rec(id)).media.p2a.storageKey;
+    await applyRecordingStatus({ recordingId: id, status: 'published' });
+    await expect(removeMedia(id, 'p2a', true)).rejects.toThrow(/hidden, not removed/);
+    expect(await objectExists(key)).toBe(true);
+  });
+
+  it('an admin, from an archived recording; a manager may not', async () => {
+    const id = await twoParts();
+    const key = (await rec(id)).media.p2a.storageKey;
+    await applyRecordingStatus({ recordingId: id, status: 'published' });
+    await applyRecordingStatus({ recordingId: id, status: 'archived' });
+    await expect(removeMedia(id, 'p2a', false)).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(await objectExists(key)).toBe(true);
+    await removeMedia(id, 'p2a', true);
+    expect(await objectExists(key)).toBe(false);
+    expect((await rec(id)).media.p2a).toBeUndefined();
   });
 });
 

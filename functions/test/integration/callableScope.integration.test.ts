@@ -9,6 +9,7 @@ import { createEnrollment, setEnrollmentActive } from '../../src/enrollments';
 import { clearCompletionOverride, overrideCompletion } from '../../src/overrides';
 import { createSession, deleteSession, submitAttendance, updateSession } from '../../src/sessions';
 import {
+  editRecordingMedia,
   removeRecordingMedia,
   createRecording,
   deleteRecording,
@@ -157,6 +158,7 @@ const SCOPED: Array<{
   { name: 'startRecordingUpload', call: (r) => startRecordingUpload.run(r), data: { recordingId: RECORDING, contentType: 'audio/mp4', sizeBytes: 1000 } },
   { name: 'finalizeRecordingUpload', call: (r) => finalizeRecordingUpload.run(r), data: { recordingId: RECORDING, itemId: 'item1', durationSec: 60 } },
   { name: 'setRecordingStatus', call: (r) => setRecordingStatus.run(r), data: { recordingId: RECORDING, status: 'draft' } },
+  { name: 'editRecordingMedia', call: (r) => editRecordingMedia.run(r), data: { recordingId: RECORDING, op: 'hide', itemId: 'item1' } },
   { name: 'removeRecordingMedia', call: (r) => removeRecordingMedia.run(r), data: { recordingId: RECORDING, itemId: 'item1' } },
   { name: 'deleteRecording', call: (r) => deleteRecording.run(r), data: { recordingId: RECORDING } },
   { name: 'createStudent', call: (r) => createStudent.run(r), data: { displayName: 'New Student', email: `scoped-${Date.now()}@example.com`, courseId: THEIRS } },

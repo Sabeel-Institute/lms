@@ -24,7 +24,7 @@ import { createRequire } from 'node:module';
 
 import { EMULATOR_PROJECT_ID as PROJECT } from './project.mjs';
 import { putLocalObject } from './media-store.mjs';
-import { mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
+import { deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
 
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
@@ -389,7 +389,7 @@ export async function seedWorld({ db, auth, browser, base }) {
    */
   async function seedSession(id, recId, title, opts) {
     const { courseId = COURSE, cohortId = COHORT, daysAgo, dueOffset, status = 'published', notes = '',
-      roster = students, present = 0, absent = [], attention = null } = opts;
+      roster = students, present = 0, absent = [], attention = null, media = null } = opts;
     const date = iso(now - daysAgo * DAY);
     // Never null: the due date is the day access closes, so a session cannot be
     // without one. A past one is planted directly, which no callable will do —
@@ -417,8 +417,14 @@ export async function seedWorld({ db, auth, browser, base }) {
     const submittedAt = attendance ? now - daysAgo * DAY : null;
     const hasAudio = status !== 'draft' && status !== 'needsAttention';
     const audioKey = recId ? mediaStorageKey(recId, 'audio1') : null;
-    if (hasAudio && audioKey) {
+    if (hasAudio && audioKey && !media) {
       await putLocalObject(audioKey, AUDIO, 'audio/wav');
+    }
+    // A recording of several files, given whole: each ready one's bytes go in
+    // the bucket, as an import or upload would have left them.
+    const items = media ? media(recId) : null;
+    for (const item of Object.values(items ?? {})) {
+      if (item.status === 'ready') await putLocalObject(item.storageKey, AUDIO, item.contentType);
     }
 
     await db.collection('sessions').doc(id).set({
@@ -431,7 +437,7 @@ export async function seedWorld({ db, auth, browser, base }) {
         sessionId: id, courseId, cohortId, title, notes, date, status, source: 'manual',
         // One audio file, as Part 1, through the same transform the switchover
         // seed uses, so the fixture is a shape the app actually holds.
-        media: mediaFromSingleAudio({
+        media: items ?? mediaFromSingleAudio({
           source: 'manual',
           audioPath: hasAudio ? audioKey : null,
           sizeBytes: AUDIO.length,
@@ -441,7 +447,7 @@ export async function seedWorld({ db, auth, browser, base }) {
           createdBy: adminUid,
         }, 'audio1'),
         defaultVersion: 'audio',
-        durationSec: hasAudio ? AUDIO_SECONDS : null,
+        durationSec: items ? deriveDurationSec(items) : hasAudio ? AUDIO_SECONDS : null,
         createdAt: now - daysAgo * DAY, createdBy: adminUid, updatedAt: now - daysAgo * DAY,
         ...(status === 'published' ? { publishedAt: now - daysAgo * DAY } : {}),
         ...(attention ? { attentionReason: attention } : {}),
@@ -513,9 +519,32 @@ export async function seedWorld({ db, auth, browser, base }) {
    */
   await seedSession('sw-s7', 'sw-s7r', 'Session 7 — Gratitude and Contentment',
     { daysAgo: 6, dueOffset: 8, present: 4, status: 'draft' });
+  /*
+   * A ZOOM IMPORT OF SEVERAL FILES, the session page's media list in every
+   * state it draws: a class recorded in two stretches, the first copied as
+   * video and audio, the second's audio failed — and flagged by staff, which
+   * is how a recording holding ready files comes to need attention.
+   */
+  const zoomItem = (recId, id, over) => ({
+    id, part: 1, version: 'audio', kind: 'audio', label: null, status: 'ready', failReason: null,
+    hidden: false, storageKey: mediaStorageKey(recId, id), contentType: 'audio/wav',
+    sizeBytes: AUDIO.length, durationSec: AUDIO_SECONDS, width: null, height: null, source: 'zoom',
+    zoom: { meetingUuid: 'sw-zoom', fileId: `${id}-file`, recordingType: 'audio_only',
+      segmentStart: new Date(now - 5 * DAY).toISOString(), topic: 'Hikam Foundations' },
+    addedAt: now - 5 * DAY, addedBy: adminUid, ...over,
+  });
   await seedSession('sw-s8', 'sw-s8r', 'Session 8 — The Signs of Sincerity',
     { daysAgo: 5, dueOffset: 9, present: 4, status: 'needsAttention',
-      attention: 'Audio file looks truncated — re-upload before publishing.' });
+      attention: 'Audio file looks truncated — re-upload before publishing.',
+      media: (recId) => ({
+        p1v: zoomItem(recId, 'p1v', { version: 'speaker', kind: 'video', contentType: 'video/mp4' }),
+        p1a: zoomItem(recId, 'p1a', {}),
+        p2a: zoomItem(recId, 'p2a', {
+          part: 2, status: 'failed', failReason: 'Zoom import failed: Zoom did not hand over a download link (HTTP 404).',
+          zoom: { meetingUuid: 'sw-zoom', fileId: 'p2a-file', recordingType: 'audio_only',
+            segmentStart: new Date(now - 5 * DAY + 70 * 60_000).toISOString(), topic: 'Hikam Foundations' },
+        }),
+      }) });
   /** Attendance in, no audio: the queue's "No recording yet". */
   await db.collection('sessions').doc('sw-s9').set({
     courseId: COURSE, cohortId: COHORT, date: iso(now - 2 * DAY),

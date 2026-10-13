@@ -992,7 +992,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 34;
+const STAFF_SCREENS = 35;
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
@@ -1124,6 +1124,21 @@ async function tourStaff(page, tag) {
   await visit('session', openSession, 'recording-ledger');
   // The session editor: four fields and a Save/Cancel row that exist nowhere
   // else, and 320px is where they run out of room.
+  // A recording of several files: parts, versions, a failed copy, the
+  // default-version choice — the media list's every row kind, and only here.
+  await visit('session-media', async () => {
+    await openCourse();
+    await tap(byId(page, 'nav-sessions'));
+    await tap(byId(page, 'session-open-Session 8 — The Signs of Sincerity'));
+  }, 'recording-media');
+  check(
+    `${tag} / the media list shows each part with its files, and says why the failed one failed`,
+    (await page.locator('[data-testid^="media-part-"]').count()) === 2 &&
+      (await page.locator('[data-testid^="media-item-"]').count()) === 3 &&
+      (await byId(page, 'media-item-p2a').innerText().catch(() => '')).includes('HTTP 404') &&
+      (await byId(page, 'recording-retry-import').count()) === 1 &&
+      (await page.locator('[data-testid^="media-default-"]').count()) === 2,
+  );
   await visit('session-editing', async () => {
     await openSession();
     await tap(byName(page, 'Edit session'));

@@ -6,6 +6,7 @@ import {
   hasLedger,
   isDiscardable,
   isOverdue,
+  itemLabel,
   publishBlockers,
   startingItem,
   todayInZone,
@@ -34,15 +35,17 @@ import {
   type SessionRow,
 } from '../sessions';
 import {
-  removeRecordingMedia,
   createRecording,
   deleteRecording,
+  editRecordingMedia,
+  removeRecordingMedia,
   finalizeRecordingUpload,
   setRecordingStatus,
   uploadRecordingAudio,
   useRecording,
   type RecordingRow,
 } from '../recordings';
+import { MediaList } from '../components/MediaList';
 import { retryZoomImport } from '../zoom';
 import { sortByName, useRosterState, type EnrollmentRow } from '../structure';
 import { useStudents } from '../students';
@@ -83,7 +86,7 @@ export function SessionDetailScreen({
   isAdmin: boolean;
   onOpenCourse: () => void;
   onOpenLedger: (recording: RecordingRow) => void;
-  onPlay: (recording: RecordingRow, session: SessionRow) => void;
+  onPlay: (recording: RecordingRow, session: SessionRow, itemId?: string) => void;
   onImportZoom: (session: SessionRow) => void;
 }) {
   const sessionState = useSessionState(sessionId);
@@ -407,7 +410,7 @@ function RecordingSection({
   recording: RecordingRow | null;
   isAdmin: boolean;
   onOpenLedger: (recording: RecordingRow) => void;
-  onPlay: (recording: RecordingRow, session: SessionRow) => void;
+  onPlay: (recording: RecordingRow, session: SessionRow, itemId?: string) => void;
   onImportZoom: (session: SessionRow) => void;
 }) {
   const [progress, setProgress] = useState<number | null>(null);
@@ -577,6 +580,7 @@ function RecordingSection({
             onRun={run}
             onOpenLedger={onOpenLedger}
             onPlay={onPlay}
+            onImportZoom={onImportZoom}
           />
         )}
       </Card>
@@ -594,6 +598,7 @@ function RecordingCard({
   onRun,
   onOpenLedger,
   onPlay,
+  onImportZoom,
 }: {
   recording: RecordingRow;
   session: SessionRow;
@@ -603,7 +608,8 @@ function RecordingCard({
   onUpload: () => void;
   onRun: (key: string, fn: () => Promise<unknown>) => void;
   onOpenLedger: (recording: RecordingRow) => void;
-  onPlay: (recording: RecordingRow, session: SessionRow) => void;
+  onPlay: (recording: RecordingRow, session: SessionRow, itemId?: string) => void;
+  onImportZoom: (session: SessionRow) => void;
 }) {
   const blockers = publishBlockers(r);
   /*
@@ -621,63 +627,75 @@ function RecordingCard({
    */
   const deadlinePassed = isOverdue(session.dueDate, todayInZone(INSTITUTE_TIMEZONE));
   const moves = allowedTransitions(r.status).filter((to) => to !== 'needsAttention');
-  // Removing audio DELETES the file from the media bucket — it is gone, and a
-  // Zoom import has to be re-imported while a manual upload needs the original
-  // again. It sat unguarded among the safe controls, reading like one of them.
-  const [confirmClear, setConfirmClear] = useState(false);
-  // The server only allows it on a draft or a needs-attention recording. Close
-  // the confirm if that stops being true underneath it — the same guard
-  // ConfirmDanger applies, so the open panel can never outlive its precondition
-  // and offer a button that could only fail.
-  // ONE FILE PER RECORDING on this card until it becomes a media list
-  // (docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md, V4); the server holds the same
-  // line. A file that never arrived is replaced by the next upload, so only a
-  // ready one is offered for removal.
+  const items = Object.values(r.media);
   const playable = startingItem(r.media, r.defaultVersion);
-  const canClearAudio = !!playable && (r.status === 'draft' || r.status === 'needsAttention');
+  const arriving = items.some((i) => i.status === 'uploading' || i.status === 'copying');
+  const failedZoom = items.some((i) => i.status === 'failed' && i.zoom);
+  // ONE UPLOADED FILE PER RECORDING until uploads take several
+  // (docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md, V3); the server holds the same
+  // line. A file that never arrived is replaced by the next upload.
+  const canUpload = !items.some((i) => i.status === 'ready' || i.status === 'copying');
+  /*
+   * WHO MAY REMOVE A FILE, as the server decides it: from a draft, whoever
+   * manages the class; from a recording taken down, an admin, for storage;
+   * from a live one, nobody — it is hidden instead, so nothing a student is
+   * part-way through vanishes.
+   */
+  const canRemove =
+    r.status === 'draft' ||
+    r.status === 'needsAttention' ||
+    ((r.status === 'archived' || r.status === 'unpublished') && isAdmin);
+  // Removing a file DELETES it from the media bucket — it is gone, and a Zoom
+  // import has to be re-imported while an upload needs the original again.
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const removing = confirmRemove ? r.media[confirmRemove] : undefined;
+  // Close the confirm if what it confirms stops being possible underneath it —
+  // the same guard ConfirmDanger applies, so the open panel can never outlive
+  // its precondition and offer a button that could only fail.
   useEffect(() => {
-    if (!canClearAudio) setConfirmClear(false);
-  }, [canClearAudio]);
-  // No audio is a NORMAL state here, not a failure: mid-upload, after a failed
-  // one, or after Remove audio. Only say something is wrong once nothing is in
+    if (confirmRemove && (!removing || !canRemove)) setConfirmRemove(null);
+  }, [confirmRemove, removing, canRemove]);
+  // No media is a NORMAL state here, not a failure: mid-upload, after a failed
+  // one, or after a removal. Only say something is wrong once nothing is in
   // flight — otherwise a healthy upload reads as broken for its whole duration.
-  const needsAudio = !playable && !uploading;
+  const needsMedia = !playable && !arriving && !uploading;
   // Discarding a recording that never held anything destroys nothing, so it is
   // not the admin-only permanent delete. NOT `isEmptyDraft`, which is only
-  // "needs audio": a recording walked back from published has that same shape
+  // "needs media": a recording walked back from published has that same shape
   // with its whole ledger intact, and the server refuses a manager there — so
   // this used to offer a manager a button that could only fail, and an admin the
   // words "nothing is lost" over a term of listening history.
   const canDiscard = isDiscardable(r);
+  const totalBytes = items.reduce((n, i) => n + (i.sizeBytes ?? 0), 0);
 
   // Takes over the card for the same reason ConfirmDanger does: a confirmation
   // that leaves Publish and Delete tappable underneath it is not a confirmation.
-  if (confirmClear && canClearAudio) {
+  if (removing && canRemove) {
     return (
       <Card>
         <Notice tone="error">
-          Remove the audio from “{r.title}”? The file is deleted permanently. A Zoom
-          recording would have to be imported again; an uploaded one needs the original
-          file. The recording and its session stay.
+          Remove “{itemLabel(removing)}” from “{r.title}”? The file is deleted permanently. A
+          Zoom file would have to be imported again; an uploaded one needs the original file. The
+          recording and its other files stay.
         </Notice>
         <Row>
           <Button
-            testID="recording-clear-confirm"
-            label="Remove audio"
+            testID="recording-remove-confirm"
+            label="Remove file"
             variant="danger"
-            busy={busy === `clear-${r.id}`}
+            busy={busy === `remove-${r.id}`}
             onPress={() =>
-              onRun(`clear-${r.id}`, async () => {
-                if (playable) await removeRecordingMedia({ recordingId: r.id, itemId: playable.id });
-                setConfirmClear(false);
+              onRun(`remove-${r.id}`, async () => {
+                await removeRecordingMedia({ recordingId: r.id, itemId: removing.id });
+                setConfirmRemove(null);
               })
             }
           />
           <Button
             label="Cancel"
             variant="quiet"
-            disabled={busy === `clear-${r.id}`}
-            onPress={() => setConfirmClear(false)}
+            disabled={busy === `remove-${r.id}`}
+            onPress={() => setConfirmRemove(null)}
           />
         </Row>
       </Card>
@@ -693,20 +711,19 @@ function RecordingCard({
               and two live descriptions of one operation just compete. */}
           {uploading
             ? ''
-            : playable
-              ? [r.durationSec ? fmtDuration(r.durationSec) : null,
-                 playable.sizeBytes ? `${(playable.sizeBytes / 1024 / 1024).toFixed(1)} MB` : null]
+            : items.length > 0
+              ? [r.durationSec ? fmtDuration(r.durationSec) : null, totalBytes ? `${(totalBytes / 1024 / 1024).toFixed(1)}\u00a0MB` : null]
                   .filter(Boolean)
                   .join(' · ')
               : 'no audio yet'}
         </Text>
       </View>
 
-      {needsAudio ? (
+      {needsMedia ? (
         <Notice tone="info">
-          {r.source === 'zoom'
-            ? 'No audio on this recording yet. Retry the Zoom import, or upload the file.'
-            : 'No audio on this recording yet. Upload the file to finish it.'}
+          {failedZoom
+            ? 'Nothing on this recording can be played yet. Retry the Zoom import, or upload the file.'
+            : 'Nothing on this recording can be played yet. Upload the file, or import it from Zoom.'}
         </Notice>
       ) : null}
       {r.status === 'needsAttention' && r.attentionReason ? (
@@ -722,7 +739,7 @@ function RecordingCard({
         warning={
           canDiscard
             ? 'This clears the empty recording off the session so you can start again. Nothing has been uploaded, so nothing is lost.'
-            : "This permanently removes the audio and every listening record for it — it can't be undone. Archiving keeps everything; delete only to free up storage."
+            : "This permanently removes every file and every listening record for it — it can't be undone. Archiving keeps everything; delete only to free up storage."
         }
         busy={busy === `del-${r.id}`}
         testID="recording-delete"
@@ -730,22 +747,43 @@ function RecordingCard({
         onConfirm={() => onRun(`del-${r.id}`, () => deleteRecording({ recordingId: r.id }))}
       >
         {/* EVERY action on this card belongs inside the confirm, so opening it
-            replaces all of them. These two sat outside at first and stayed
+            replaces all of them. These sat outside at first and stayed
             tappable underneath "discard this?" — the exact flaw ConfirmDanger
             exists to prevent, and one only a native run in the needs-audio state
             surfaced. */}
-        {needsAudio && canPickAudio ? (
-          <Button testID="recording-upload" label="Upload audio…" onPress={onUpload} />
-        ) : null}
-        {r.status === 'needsAttention' && r.source === 'zoom' ? (
+        <MediaList
+          recording={r}
+          disabled={uploading || busy !== null}
+          canRemove={canRemove}
+          onPlay={(itemId) => onPlay(r, session, itemId)}
+          onEdit={(edit) => onRun(`edit-${r.id}`, () => editRecordingMedia({ recordingId: r.id, ...edit }))}
+          onRemove={setConfirmRemove}
+        />
+        <Row>
+          {canUpload && canPickAudio ? (
+            <Button testID="recording-upload" label="Upload audio…" variant="secondary" disabled={uploading} onPress={onUpload} />
+          ) : null}
+          {failedZoom ? (
+            <Button
+              testID="recording-retry-import"
+              label="Retry import"
+              variant="secondary"
+              busy={busy === `retry-${r.id}`}
+              disabled={uploading}
+              onPress={() => onRun(`retry-${r.id}`, () => retryZoomImport({ recordingId: r.id }))}
+            />
+          ) : null}
+          {/* MORE FROM ZOOM, in any state: the second half of a class in
+              another meeting is added as a part, and a published recording
+              shows it to students once it has arrived. */}
           <Button
-            label="Retry import"
+            testID="recording-import-zoom-more"
+            label={items.length > 0 ? 'Add from Zoom' : 'Import from Zoom'}
             variant="secondary"
-            busy={busy === `retry-${r.id}`}
             disabled={uploading}
-            onPress={() => onRun(`retry-${r.id}`, () => retryZoomImport({ recordingId: r.id }))}
+            onPress={() => onImportZoom(session)}
           />
-        ) : null}
+        </Row>
         <Row>
           {/* PRIMARY, as it is on the library card — unless Publish is on offer,
               which outranks it. Listening to what was just published is the one
@@ -774,14 +812,6 @@ function RecordingCard({
               onPress={() => onRun(`status-${r.id}`, () => setRecordingStatus({ recordingId: r.id, status: to }))}
             />
           ))}
-          {canClearAudio ? (
-            <Button
-              label="Remove audio"
-              variant="secondary"
-              disabled={uploading}
-              onPress={() => setConfirmClear(true)}
-            />
-          ) : null}
         </Row>
 
         {/* SAY WHY THE BUTTON IS OFF, or a greyed Publish reads as a broken app.
@@ -803,6 +833,16 @@ function RecordingCard({
               onPress={() => onOpenLedger(r)}
             />
           </View>
+        ) : null}
+        {/* SAY WHY PUBLISH IS OFF, beside the deadline's reason below. */}
+        {moves.includes('published') && blockers.some((b) => b !== 'status') ? (
+          <Notice tone="info">
+            {blockers.includes('pending')
+              ? 'Publishing waits until every file has arrived.'
+              : blockers.includes('failed')
+                ? 'Retry or remove the failed files before publishing.'
+                : 'Add a file students can play before publishing.'}
+          </Notice>
         ) : null}
       </ConfirmDanger>
     </>

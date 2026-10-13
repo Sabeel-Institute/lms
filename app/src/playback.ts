@@ -389,7 +389,7 @@ export function openPlayback(now: NowPlaying): void {
    * loaded: without it, coming back to retry hits this branch and the transport
    * is disabled for good, with no way back but closing the docked bar.
    */
-  if (player && !state.error && owner?.recordingId === now.recordingId) {
+  if (player && !state.error && owner?.recordingId === now.recordingId && state.now?.itemId === now.itemId) {
     // Same recording — refresh only the metadata the caller may know better
     // (a staff visit has no due date; the student's own grant does).
     set({ now });

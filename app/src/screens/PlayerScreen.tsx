@@ -35,6 +35,7 @@ export function PlayerScreen({
   cls,
   studentUid,
   dueDate,
+  itemId: askedItemId,
 }: {
   recording: RecordingRow;
   cls: CourseRow;
@@ -42,6 +43,9 @@ export function PlayerScreen({
   /** The caller's due date: the session's for staff, the student's own
    *  assignment for students, or null when browsing something not assigned. */
   dueDate: string | null;
+  /** One file to open — staff previewing it from the session page — or null
+   *  for the recording's starting file. */
+  itemId: string | null;
 }) {
   const listenerError = useListenerError();
   // Two independent reasons the audio may be shut: the course was archived with
@@ -58,7 +62,12 @@ export function PlayerScreen({
   const closed = !allowed && canPlayFromCourse(cls);
   // The file this recording starts on: its first part, in the version students
   // start on. Publishing requires one, so a recording anyone reaches here has it.
-  const itemId = startingItem(recording.media, recording.defaultVersion)?.id ?? null;
+  // A file asked for by id is staff previewing it, hidden or not; the server
+  // decides whether this caller may hear it.
+  const itemId =
+    (askedItemId && recording.media[askedItemId]?.status === 'ready' ? askedItemId : null) ??
+    startingItem(recording.media, recording.defaultVersion)?.id ??
+    null;
   const session = usePlayback();
   // The session is app-wide, so on the first render after arriving it may still
   // describe the PREVIOUS recording. Read it only once it is about this one;

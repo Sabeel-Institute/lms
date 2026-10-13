@@ -162,6 +162,29 @@ export function startingItem(media: MediaMap, defaultVersion: MediaVersion): Med
   );
 }
 
+/**
+ * A change to a recording's media that leaves every file as it is: hide or
+ * show one, move a part, or set the version students start on. The screen and
+ * the callable (`editRecordingMedia`) share this shape.
+ */
+export type MediaEdit =
+  | { op: 'hide' | 'show'; itemId: string }
+  | { op: 'moveUp' | 'moveDown'; part: number }
+  | { op: 'defaultVersion'; version: MediaVersion };
+
+/**
+ * What a recording holds, in a few words for a list: "2 parts · video and
+ * audio", "audio". Counts what students can play; null when that is nothing.
+ */
+export function mediaSummary(media: MediaMap): string | null {
+  const playable = Object.values(media).filter(isPlayable);
+  if (playable.length === 0) return null;
+  const parts = new Set(playable.map((i) => i.part)).size;
+  const kinds = new Set(playable.map((i) => i.kind));
+  const what = kinds.size === 2 ? 'video and audio' : kinds.has('video') ? 'video' : 'audio';
+  return parts > 1 ? `${parts} parts · ${what}` : what;
+}
+
 /** Nothing at all: no item in any state. */
 export function hasNoMedia(media: MediaMap): boolean {
   return Object.keys(media).length === 0;

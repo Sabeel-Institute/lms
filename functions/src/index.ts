@@ -21,6 +21,7 @@ export {
   finalizeRecordingUpload,
   setRecordingStatus,
   removeRecordingMedia,
+  editRecordingMedia,
   deleteRecording,
 } from './recordings';
 export { listZoomRecordings, importZoomFiles, retryZoomImport, copyZoomFile } from './zoomImport';
