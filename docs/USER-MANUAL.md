@@ -347,7 +347,9 @@ Finished terms move into an **Archived** section at the bottom of the cohort
 list — tap the heading to open it.
 
 Open a cohort to see **its settings and its courses**, and open a course to work
-with it. The cohort's settings — **admins only**, like everything that shapes
+with it. Archived courses wait in a closed **Archived** section at the bottom;
+tap the heading to open it. The same goes for **Your courses**, a manager's
+list. The cohort's settings — **admins only**, like everything that shapes
 the structure — are where you **rename** it (change the name and tap
 **Rename**) and where you **archive** it, in the same way a course is renamed
 and archived from the course page. Archiving a cohort turns off every course in

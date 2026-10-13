@@ -4,6 +4,7 @@ import {
   AddAction,
   Button,
   Card,
+  Collapsible,
   Empty,
   Field,
   Grid,
@@ -96,6 +97,14 @@ export function CoursesScreen({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const archived = cohort?.archived ?? false;
+  /*
+   * Archived courses at the bottom, closed — finished classes are history,
+   * and interleaved with the running ones they were most of the page. In an
+   * archived cohort EVERY course is inactive and the notice above says why,
+   * so there the list stays whole rather than folding everything away.
+   */
+  const current = archived ? courses : courses.filter((c) => c.effectiveActive);
+  const past = archived ? [] : courses.filter((c) => !c.effectiveActive);
 
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
@@ -176,18 +185,29 @@ export function CoursesScreen({
         />
       </Card>
 
-      <SectionTitle>Courses{coursesState === null ? '' : ` (${courses.length})`}</SectionTitle>
+      <SectionTitle>Courses{coursesState === null ? '' : ` (${current.length})`}</SectionTitle>
       {coursesState === null ? (
         <Empty>Checking…</Empty>
       ) : courses.length === 0 ? (
         <Empty>No courses in this cohort yet.</Empty>
+      ) : current.length === 0 ? (
+        <Empty>Every course in this cohort is archived.</Empty>
       ) : (
         <Grid min={320}>
-          {courses.map((c) => (
+          {current.map((c) => (
             <CourseCard key={c.id} cls={c} onOpen={onOpen} />
           ))}
         </Grid>
       )}
+      {past.length > 0 ? (
+        <Collapsible testID="courses-archived" title="Archived" count={past.length}>
+          <Grid min={320}>
+            {past.map((c) => (
+              <CourseCard key={c.id} cls={c} onOpen={onOpen} />
+            ))}
+          </Grid>
+        </Collapsible>
+      ) : null}
     </Screen>
   );
 }

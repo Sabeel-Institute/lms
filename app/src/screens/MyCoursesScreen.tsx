@@ -1,4 +1,4 @@
-import { Empty, Grid, Notice, Screen, SectionTitle } from '../components/ui';
+import { Collapsible, Empty, Grid, Notice, Screen, SectionTitle } from '../components/ui';
 import { useListenerFailed } from '../liveQuery';
 import { useMyCoursesState, type CourseRow } from '../structure';
 import { CourseCard } from './CoursesScreen';
@@ -35,9 +35,12 @@ export function MyCoursesScreen({
   // still be looking.
   const failed = useListenerFailed(['myCourses']);
   const checking = loaded === null && !failed;
+  // Archived courses at the bottom, closed, as on a cohort's page.
+  const current = courses.filter((c) => c.effectiveActive);
+  const past = courses.filter((c) => !c.effectiveActive);
   return (
     <Screen title="Your courses" subtitle="Everything you run, and the way in to each" width="list">
-      <SectionTitle>Courses{loaded === null ? '' : ` (${courses.length})`}</SectionTitle>
+      <SectionTitle>Courses{loaded === null ? '' : ` (${current.length})`}</SectionTitle>
       {checking ? (
         <Empty>Checking your courses…</Empty>
       ) : loaded === null ? (
@@ -50,13 +53,24 @@ export function MyCoursesScreen({
             roster here.
           </Notice>
         </>
+      ) : current.length === 0 ? (
+        <Empty>All your courses are archived.</Empty>
       ) : (
         <Grid min={330}>
-          {courses.map((c) => (
+          {current.map((c) => (
             <CourseCard key={c.id} cls={c} onOpen={onOpen} />
           ))}
         </Grid>
       )}
+      {past.length > 0 ? (
+        <Collapsible testID="courses-archived" title="Archived" count={past.length}>
+          <Grid min={330}>
+            {past.map((c) => (
+              <CourseCard key={c.id} cls={c} onOpen={onOpen} />
+            ))}
+          </Grid>
+        </Collapsible>
+      ) : null}
     </Screen>
   );
 }
