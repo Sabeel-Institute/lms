@@ -95,6 +95,12 @@ describe('the copy', () => {
     expect(fetched).toEqual([SOURCE]);
   });
 
+  it('stores a Zoom video as a video', async () => {
+    const res = await copy({ ...valid, contentType: 'video/mp4' }, `Bearer ${await token()}`);
+    expect(res.status).toBe(200);
+    expect((await env.BUCKET.head(KEY))?.httpMetadata?.contentType).toBe('video/mp4');
+  });
+
   it('never overwrites: an existing object is left as it was, and nothing is fetched', async () => {
     const before = new Uint8Array([9, 9, 9]);
     await env.BUCKET.put(KEY, before);
@@ -175,5 +181,7 @@ describe('what it may be asked to do', () => {
     await badRequest({ size: 1.5 });
   });
 
-  it('takes only audio/mp4', () => badRequest({ contentType: 'text/html' }));
+  it.each(['text/html', 'video/quicktime', 'audio/mpeg'])('takes only Zoom’s M4A and MP4: %s', (contentType) =>
+    badRequest({ contentType }),
+  );
 });

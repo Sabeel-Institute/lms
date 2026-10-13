@@ -23,7 +23,7 @@ export {
   removeRecordingMedia,
   deleteRecording,
 } from './recordings';
-export { listZoomRecordings, importZoomRecording, retryZoomImport } from './zoomImport';
+export { listZoomRecordings, importZoomFiles, retryZoomImport, copyZoomFile } from './zoomImport';
 export { getPlaybackUrl } from './playback';
 export { accountExists } from './accountExists';
 export { onRecordingWritten, onSessionWritten } from './assignmentsTrigger';

@@ -2,17 +2,31 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   INSTITUTE_TIMEZONE,
+  VERSION_LABELS,
   addDays,
   todayInZone,
   unbreakableDate,
   zoomRecordingDate,
   zoomRecordingHours,
-  type ZoomImportRow,
+  type ZoomFileRow,
+  type ZoomMeetingRow,
 } from '@sabeel/shared';
-import { Button, Card, Chips, Empty, Field, Notice, Screen } from '../components/ui';
+import { Button, Card, Chips, Empty, Field, Notice, Row, Screen } from '../components/ui';
 import { DateField } from '../components/DateField';
-import { listZoomRecordings, importZoomRecording } from '../zoom';
-import { zoomRowsShown, type ZoomStatusFilter } from '../zoomFilters';
+import { importZoomFiles, listZoomRecordings } from '../zoom';
+import {
+  choosable,
+  chosenFiles,
+  formatShown,
+  isShortSegment,
+  quickPickFiles,
+  selectionSummary,
+  storageCostText,
+  zoomMeetingsShown,
+  type QuickPick,
+  type ZoomFormatFilter,
+  type ZoomStatusFilter,
+} from '../zoomFilters';
 import type { SessionRow } from '../sessions';
 import { getTheme, spacing } from '../theme';
 import { errorText } from '../errors';
@@ -38,13 +52,35 @@ const STATUS_FILTERS: { value: ZoomStatusFilter; label: string }[] = [
   { value: 'all', label: 'all' },
 ];
 
+const FORMAT_FILTERS: { value: ZoomFormatFilter; label: string }[] = [
+  { value: 'all', label: 'all formats' },
+  { value: 'video', label: 'video' },
+  { value: 'audio', label: 'audio only' },
+];
+
+const QUICK_PICKS: { value: QuickPick; label: string }[] = [
+  { value: 'audio', label: 'Audio only' },
+  { value: 'videoAndAudio', label: 'Video and audio' },
+  { value: 'everything', label: 'Everything' },
+];
+
+// A no-break space, so a narrow row never strands "MB" on a line of its own.
+const mb = (bytes: number) => `${(bytes / 1048576).toFixed(1)}\u00a0MB`;
+const length = (sec: number) => {
+  const h = Math.floor(sec / 3600);
+  const m = Math.round((sec % 3600) / 60);
+  return h > 0 ? `${h} h ${m} min` : sec < 60 ? `${sec} s` : `${m} min`;
+};
+
 /**
  * The Zoom import picker, scoped to ONE session.
  *
- * Lists the central account's audio-only recordings for a date range; importing
- * one downloads it as this session's draft recording (the session already owns
- * the title/date/due). A session holds a single recording, so after a successful
- * import we return to it.
+ * Lists the central account's meetings for a date range, each with its
+ * segments and the formats Zoom kept of each. Staff tick the files they want —
+ * one meeting or several, video or audio — and import them into this session's
+ * recording in one go: each segment becomes a part, each format a version of
+ * it. The copies run in the background, so the import returns at once and the
+ * session page shows each file as it arrives.
  */
 export function ZoomImportScreen({
   session,
@@ -55,20 +91,24 @@ export function ZoomImportScreen({
   session: SessionRow;
   cls: { id: string; name: string };
   onImported: () => void;
-  /** Open a recording this institute already imported — see the row below. */
+  /** Open a recording this institute already imported — see the file row below. */
   onOpenImported: (recordingId: string) => void;
 }) {
   // Never set: the range the picker arrives with, read once by the first load.
   const [initial] = useState(() => defaultRange(session.date));
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
-  const [rows, setRows] = useState<ZoomImportRow[] | null>(null);
+  const [rows, setRows] = useState<ZoomMeetingRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<ZoomStatusFilter>('available');
+  const [formats, setFormats] = useState<ZoomFormatFilter>('all');
   const [hideShort, setHideShort] = useState(true);
   const [sessionDayOnly, setSessionDayOnly] = useState(true);
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set());
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Takes the range as an argument rather than closing over `from`/`to`, so it
   // has no dependencies and cannot serve a stale range.
@@ -77,6 +117,8 @@ export function ZoomImportScreen({
     setError(null);
     try {
       setRows(await listZoomRecordings(range));
+      // What was chosen belongs to the list it was chosen from.
+      setChosen(new Set());
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -92,12 +134,49 @@ export function ZoomImportScreen({
     void load(initial);
   }, [load, initial]);
 
-  const filtered = zoomRowsShown(rows ?? [], {
+  const filtered = zoomMeetingsShown(rows ?? [], {
     status,
     search,
     hideShort,
     onDate: sessionDayOnly ? session.date : null,
   });
+  // Only what is on screen counts: a file chosen and then filtered away would
+  // otherwise be imported without anyone seeing it ticked.
+  const visibleChosen = new Set(
+    filtered.flatMap((m) =>
+      m.segments.flatMap((s) => s.files.filter((f) => formatShown(f.format, formats) && chosen.has(f.fileId))),
+    ).map((f) => f.fileId),
+  );
+  const summary = selectionSummary(filtered, visibleChosen);
+
+  const toggle = (fileId: string) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  const quickPick = (m: ZoomMeetingRow, pick: QuickPick) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      for (const f of m.segments.flatMap((s) => s.files)) next.delete(f.fileId);
+      for (const id of quickPickFiles(m, pick)) next.add(id);
+      return next;
+    });
+
+  const doImport = () =>
+    void (async () => {
+      setImporting(true);
+      setImportError(null);
+      try {
+        await importZoomFiles({ sessionId: session.id, files: chosenFiles(filtered, visibleChosen) });
+        onImported();
+      } catch (e) {
+        setImportError(errorText(e));
+      } finally {
+        setImporting(false);
+      }
+    })();
 
   return (
     <Screen title="Import from Zoom" subtitle={`${session.title} · ${cls.name}`}>
@@ -116,9 +195,12 @@ export function ZoomImportScreen({
       <View style={styles.filter}>
         <Chips value={status} testIdPrefix="zoom-filter" options={STATUS_FILTERS} onChange={setStatus} />
       </View>
+      <View style={styles.filter}>
+        <Chips value={formats} testIdPrefix="zoom-format" options={FORMAT_FILTERS} onChange={setFormats} />
+      </View>
 
       {/* ROWS OF THEIR OWN, AND A SHAPE OF THEIR OWN. These are independent
-          toggles, not further members of the one-of-three filter above them —
+          toggles, not further members of the one-of-three filters above them —
           drawn as the same raspberry pill, "available" and "hide <2 min" read as
           two selections in one group. A tick and a square say "on/off"; a
           filled pill says "chosen". */}
@@ -152,15 +234,37 @@ export function ZoomImportScreen({
             : 'No recordings match. Widen the date range or the filters, then Load.'}
         </Empty>
       ) : (
-        filtered.map((r) => (
-          <ZoomRow
-            key={r.meetingUuid}
-            row={r}
-            sessionId={session.id}
-            onImported={onImported}
-            onOpenImported={onOpenImported}
-          />
-        ))
+        <>
+          {filtered.map((m) => (
+            <MeetingCard
+              key={m.meetingUuid}
+              meeting={m}
+              formats={formats}
+              chosen={chosen}
+              onToggle={toggle}
+              onQuickPick={(pick) => quickPick(m, pick)}
+              onOpenImported={onOpenImported}
+            />
+          ))}
+          <Card>
+            {/* WHAT IT ADDS UP TO, before anything is copied: video is where the
+                storage goes, and the figure is the one decision this screen
+                asks staff to make with money attached. */}
+            <Text testID="zoom-selected" style={styles.total}>
+              {summary.files === 0
+                ? 'Nothing chosen yet. Tick files, or use a quick pick on a recording.'
+                : `Selected: ${summary.files} ${summary.files === 1 ? 'file' : 'files'} · ${mb(summary.bytes)} · ${length(summary.durationSec)} of class · ${storageCostText(summary.usdPerMonth)}`}
+            </Text>
+            <Button
+              testID="zoom-import"
+              label={summary.files === 0 ? 'Import' : `Import ${summary.files} ${summary.files === 1 ? 'file' : 'files'}`}
+              disabled={summary.files === 0}
+              busy={importing}
+              onPress={doImport}
+            />
+            {importError ? <Notice tone="error">{importError}</Notice> : null}
+          </Card>
+        </>
       )}
     </Screen>
   );
@@ -172,101 +276,142 @@ function Check({
   onToggle,
   label,
   accessibilityLabel,
+  disabled,
 }: {
   testID: string;
   on: boolean;
   onToggle: () => void;
   label: string;
   accessibilityLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       testID={testID}
       accessibilityRole="checkbox"
       aria-checked={on}
+      disabled={disabled}
       accessibilityLabel={accessibilityLabel ?? label}
       onPress={onToggle}
       style={styles.toggle}
     >
-      <View style={[styles.box, on ? styles.boxOn : null]}>
+      <View style={[styles.box, on ? styles.boxOn : null, disabled ? styles.boxOff : null]}>
         {on ? <Text style={styles.tick}>✓</Text> : null}
       </View>
-      <Text style={styles.toggleText}>{label}</Text>
+      <Text style={[styles.toggleText, disabled ? styles.muted : null]}>{label}</Text>
     </Pressable>
   );
 }
 
-function ZoomRow({
-  row,
-  sessionId,
-  onImported,
+function MeetingCard({
+  meeting,
+  formats,
+  chosen,
+  onToggle,
+  onQuickPick,
   onOpenImported,
 }: {
-  row: ZoomImportRow;
-  sessionId: string;
+  meeting: ZoomMeetingRow;
+  formats: ZoomFormatFilter;
+  chosen: ReadonlySet<string>;
+  onToggle: (fileId: string) => void;
+  onQuickPick: (pick: QuickPick) => void;
   onOpenImported: (recordingId: string) => void;
-  onImported: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const doImport = () =>
-    void (async () => {
-      setBusy(true);
-      setError(null);
-      try {
-        await importZoomRecording({ meetingUuid: row.meetingUuid, fileId: row.fileId, sessionId });
-        onImported();
-      } catch (e) {
-        setError(errorText(e));
-      } finally {
-        setBusy(false);
-      }
-    })();
-
+  const several = meeting.segments.length > 1;
+  // FROM THE FIRST START TO THE LAST END: the gaps between stretches are part
+  // of when the class ran, though not of what was recorded.
+  const last = meeting.segments[meeting.segments.length - 1];
+  const span = {
+    startTime: meeting.startTime,
+    durationSec: (Date.parse(last.startTime) - Date.parse(meeting.startTime)) / 1000 + last.durationSec,
+  };
   return (
     <Card>
-      <Text style={styles.title}>{row.topic.trim() || 'Zoom recording'}</Text>
+      <Text style={styles.title}>{meeting.topic.trim() || 'Zoom recording'}</Text>
       {/* THE HOURS ARE WHAT IDENTIFY IT. One recurring meeting carries every
           class in a cohort, so the topic is the same on every card and two
-          classes can share a date; when the audio ran is what differs. */}
-      <Text testID={`zoom-when-${row.meetingUuid}`} style={styles.when}>
-        {unbreakableDate(zoomRecordingDate(row))} · {zoomRecordingHours(row)}
+          classes can share a date; when the recording ran is what differs. */}
+      <Text testID={`zoom-when-${meeting.meetingUuid}`} style={styles.when}>
+        {unbreakableDate(zoomRecordingDate(meeting))} · {zoomRecordingHours(span)}
       </Text>
       <Text style={styles.sub}>
-        {Math.round(row.durationSec / 60)} min · {(row.sizeBytes / 1048576).toFixed(1)} MB
+        {length(meeting.durationSec)}
+        {several ? ` · recorded in ${meeting.segments.length} stretches` : ''}
       </Text>
-      {row.alreadyImported ? (
-        /*
-          TAPPABLE, because the sentence alone leaves staff stuck.
-          The picker lists the whole Zoom account, so most of what a manager sees
-          part-way through a term is already imported — and "already imported
-          into Hikam Foundations" as flat text sends them off to find it by hand,
-          in a library that lists every recording in the institute. The row knows
-          exactly which one it is. It is not a Button: this is a link out of a
-          list, not the action the card is offering.
-        */
-        <Pressable
-          testID={`zoom-open-${row.meetingUuid}`}
-          accessibilityRole="link"
-          onPress={() => onOpenImported(row.alreadyImported as string)}
-          style={styles.importedRow}
-        >
-          <Text style={styles.imported}>
-            ✓ Already imported{row.importedCourseName ? ` into ${row.importedCourseName}` : ''} —
-            open it
-          </Text>
-        </Pressable>
-      ) : (
-        <Button
-          testID={`zoom-import-${row.meetingUuid}`}
-          label="Import into this session"
-          busy={busy}
-          onPress={doImport}
-        />
-      )}
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      {meeting.segments.some((s) => s.files.some(choosable)) ? (
+        <Row>
+          {QUICK_PICKS.map((q) => (
+            <Button
+              key={q.value}
+              testID={`zoom-pick-${q.value}-${meeting.meetingUuid}`}
+              label={q.label}
+              variant="secondary"
+              onPress={() => onQuickPick(q.value)}
+            />
+          ))}
+        </Row>
+      ) : null}
+      {meeting.segments.map((s, i) => (
+        <View key={s.startTime} style={several ? styles.segment : null}>
+          {several ? (
+            <Text style={styles.segmentHead}>
+              {`Stretch ${i + 1} · ${zoomRecordingHours(s)} · ${length(s.durationSec)}`}
+              {isShortSegment(s) ? ' · short' : ''}
+            </Text>
+          ) : null}
+          {s.files
+            .filter((f) => formatShown(f.format, formats))
+            .map((f) => (
+              <FileRow key={f.fileId} file={f} on={chosen.has(f.fileId)} onToggle={onToggle} onOpenImported={onOpenImported} />
+            ))}
+        </View>
+      ))}
     </Card>
+  );
+}
+
+function FileRow({
+  file,
+  on,
+  onToggle,
+  onOpenImported,
+}: {
+  file: ZoomFileRow;
+  on: boolean;
+  onToggle: (fileId: string) => void;
+  onOpenImported: (recordingId: string) => void;
+}) {
+  const label = `${VERSION_LABELS[file.format]} · ${mb(file.sizeBytes)}`;
+  if (file.imported) {
+    const imp = file.imported;
+    /*
+      TAPPABLE, because the sentence alone leaves staff stuck: the picker lists
+      the whole Zoom account, so most of what a manager sees part-way through a
+      term is already imported, and the row knows exactly where it went. It is
+      not a Button: this is a link out of a list, not the action the card offers.
+    */
+    return (
+      <Pressable
+        testID={`zoom-open-${file.fileId}`}
+        accessibilityRole="link"
+        onPress={() => onOpenImported(imp.recordingId)}
+        style={styles.importedRow}
+      >
+        <Text style={styles.imported}>
+          {`✓ ${label} — already imported${imp.courseName ? ` into ${imp.courseName}` : ''}, open it`}
+        </Text>
+      </Pressable>
+    );
+  }
+  return (
+    <Check
+      testID={`zoom-file-${file.fileId}`}
+      on={on}
+      disabled={!file.ready}
+      onToggle={() => onToggle(file.fileId)}
+      label={file.ready ? label : `${label} · still processing in Zoom`}
+    />
   );
 }
 
@@ -290,10 +435,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   boxOn: { backgroundColor: t.accent.base, borderColor: t.accent.base },
+  boxOff: { opacity: 0.4 },
   tick: { fontSize: 14, fontWeight: '700', color: t.accent.onAccent, lineHeight: 16 },
   toggleText: { flexShrink: 1, fontSize: 14, color: t.text.primary },
+  muted: { color: t.text.secondary },
   title: { fontSize: 16, fontWeight: '600', color: t.text.primary },
   when: { fontSize: 14, fontWeight: '600', color: t.text.primary, marginTop: 2 },
   sub: { fontSize: 13, color: t.text.secondary, marginTop: 2, marginBottom: spacing(2) },
-  imported: { fontSize: 14, color: t.feedback.success, fontWeight: '600', marginTop: spacing(2) },
+  segment: { marginTop: spacing(3) },
+  segmentHead: { fontSize: 13, fontWeight: '600', color: t.text.secondary },
+  imported: { fontSize: 14, color: t.feedback.success, fontWeight: '600' },
+  total: { fontSize: 14, color: t.text.primary, marginBottom: spacing(2) },
 });

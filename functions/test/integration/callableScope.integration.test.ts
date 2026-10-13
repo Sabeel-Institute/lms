@@ -17,7 +17,7 @@ import {
   startRecordingUpload,
 } from '../../src/recordings';
 import { createStudent } from '../../src/students';
-import { importZoomRecording, retryZoomImport } from '../../src/zoomImport';
+import { importZoomFiles, retryZoomImport } from '../../src/zoomImport';
 
 /**
  * "Managers are scoped class by class" — proved against the CALLABLES, one row
@@ -160,7 +160,7 @@ const SCOPED: Array<{
   { name: 'removeRecordingMedia', call: (r) => removeRecordingMedia.run(r), data: { recordingId: RECORDING, itemId: 'item1' } },
   { name: 'deleteRecording', call: (r) => deleteRecording.run(r), data: { recordingId: RECORDING } },
   { name: 'createStudent', call: (r) => createStudent.run(r), data: { displayName: 'New Student', email: `scoped-${Date.now()}@example.com`, courseId: THEIRS } },
-  { name: 'importZoomRecording', call: (r) => importZoomRecording.run(r), data: { meetingUuid: 'uuid', fileId: 'file', sessionId: SESSION } },
+  { name: 'importZoomFiles', call: (r) => importZoomFiles.run(r), data: { sessionId: SESSION, files: [{ meetingUuid: 'uuid', fileId: 'file' }] } },
   { name: 'retryZoomImport', call: (r) => retryZoomImport.run(r), data: { recordingId: RECORDING } },
 ];
 

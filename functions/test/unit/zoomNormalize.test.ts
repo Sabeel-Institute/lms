@@ -1,90 +1,112 @@
 import { describe, it, expect } from 'vitest';
-import { dateWindows, pickAudioRecording } from '../../src/zoom';
+import { dateWindows, meetingListing } from '../../src/zoom';
 
-describe('pickAudioRecording', () => {
-  it('selects the audio_only M4A among mixed files and takes duration from the file', () => {
-    // The exact shape your live account returned: M4A + TIMELINE + MP4.
-    const r = pickAudioRecording({
+const audio = (over = {}) => ({
+  id: 'aud',
+  recording_type: 'audio_only',
+  file_type: 'M4A',
+  file_extension: 'M4A',
+  file_size: 12345,
+  recording_start: '2026-05-07T18:00:05Z',
+  recording_end: '2026-05-07T18:05:05Z',
+  status: 'completed',
+  ...over,
+});
+
+describe('meetingListing', () => {
+  it('lists the formats the import takes, as versions of one segment, and nothing else', () => {
+    // The shape the live account returns: video, audio, timeline and transcript.
+    const m = meetingListing({
       uuid: 'abc/def==',
       topic: 'Session 3',
       start_time: '2026-05-07T18:00:00Z',
       duration: 90,
       recording_files: [
-        { id: 'mp4', recording_type: 'shared_screen_with_speaker_view', file_type: 'MP4', file_size: 99999 },
-        { id: 'tl', recording_type: 'timeline', file_type: 'TIMELINE' },
-        {
-          id: 'aud',
-          recording_type: 'audio_only',
-          file_type: 'M4A',
-          file_extension: 'M4A',
-          file_size: 12345,
-          recording_start: '2026-05-07T18:00:05Z',
-          recording_end: '2026-05-07T18:05:05Z',
-        },
+        { ...audio(), id: 'mp4', recording_type: 'shared_screen_with_speaker_view', file_type: 'MP4', file_size: 99999 },
+        { ...audio(), id: 'tl', recording_type: 'timeline', file_type: 'TIMELINE' },
+        { ...audio(), id: 'vtt', recording_type: 'audio_transcript', file_type: 'TRANSCRIPT' },
+        audio(),
+        { ...audio(), id: 'scr', recording_type: 'shared_screen', file_type: 'MP4', file_size: 5000 },
       ],
     });
-    expect(r).toMatchObject({ meetingUuid: 'abc/def==', topic: 'Session 3', fileId: 'aud', sizeBytes: 12345 });
-    expect(r?.durationSec).toBe(300); // 5 min from recording_start/end, not the coarse meeting minutes
+    expect(m).toMatchObject({ meetingUuid: 'abc/def==', topic: 'Session 3', durationSec: 300 });
+    expect(m?.segments).toHaveLength(1);
+    expect(m?.segments[0].files.map((f) => [f.fileId, f.format, f.sizeBytes])).toEqual([
+      ['mp4', 'speaker', 99999],
+      ['scr', 'slides', 5000],
+      ['aud', 'audio', 12345],
+    ]);
+  });
+
+  it('makes a segment of each time recording restarted, in order, and adds up their lengths', () => {
+    // 2026-08-13 Team Meetings: a 62.5-minute and a 1.5-minute segment.
+    const second = { recording_start: '2026-08-13T19:10:00Z', recording_end: '2026-08-13T19:11:30Z' };
+    const m = meetingListing({
+      uuid: 'u',
+      start_time: '2026-08-13T18:00:00Z',
+      recording_files: [
+        audio({ id: 'a2', ...second }),
+        audio({ id: 'a1', recording_start: '2026-08-13T18:05:00Z', recording_end: '2026-08-13T19:07:30Z' }),
+        { ...audio({ id: 'v2', ...second }), recording_type: 'shared_screen_with_speaker_view', file_type: 'MP4' },
+      ],
+    });
+    expect(m?.segments.map((s) => [s.startTime, s.durationSec, s.files.map((f) => f.fileId)])).toEqual([
+      ['2026-08-13T18:05:00Z', 3750, ['a1']],
+      ['2026-08-13T19:10:00Z', 90, ['v2', 'a2']],
+    ]);
+    expect(m).toMatchObject({ startTime: '2026-08-13T18:05:00Z', durationSec: 3840 });
   });
 
   /*
    * The card prints start + duration as the hours the class ran, and duration
-   * already came from the FILE — so a start taken from the meeting would
-   * stretch the span over the minutes before anyone pressed record, and the end
-   * it printed would match nothing.
+   * comes from the FILE — so a start taken from the meeting would stretch the
+   * span over the minutes before anyone pressed record.
    */
-  it('starts the recording when the audio started, not when the meeting opened', () => {
-    const r = pickAudioRecording({
+  it('starts when recording started, not when the meeting opened', () => {
+    const m = meetingListing({
       uuid: 'x',
       start_time: '2026-10-08T22:50:00Z',
       duration: 150,
-      recording_files: [
-        {
-          id: 'aud',
-          recording_type: 'audio_only',
-          file_type: 'M4A',
-          recording_start: '2026-10-08T23:02:00Z',
-          recording_end: '2026-10-09T01:18:00Z',
-        },
-      ],
+      recording_files: [audio({ recording_start: '2026-10-08T23:02:00Z', recording_end: '2026-10-09T01:18:00Z' })],
     });
-    expect(r).toMatchObject({ startTime: '2026-10-08T23:02:00Z', durationSec: 136 * 60 });
+    expect(m).toMatchObject({ startTime: '2026-10-08T23:02:00Z', durationSec: 136 * 60 });
   });
 
   it('falls back to the meeting start and duration (minutes) when the file has no start/end', () => {
-    const r = pickAudioRecording({
+    const m = meetingListing({
       uuid: 'x',
       start_time: '2026-10-08T23:00:00Z',
       duration: 12,
-      recording_files: [{ id: 'a', recording_type: 'audio_only', file_type: 'M4A' }],
+      recording_files: [audio({ recording_start: undefined, recording_end: undefined })],
     });
-    expect(r).toMatchObject({ startTime: '2026-10-08T23:00:00Z', durationSec: 720 });
+    expect(m).toMatchObject({ startTime: '2026-10-08T23:00:00Z', durationSec: 720 });
+  });
+
+  it('lists a file Zoom is still processing, as not ready', () => {
+    const m = meetingListing({ uuid: 'x', recording_files: [audio({ status: 'processing' })] });
+    expect(m?.segments[0].files[0]).toMatchObject({ fileId: 'aud', ready: false });
   });
 
   it('drops a recording with no start at all — it has no date to list it under', () => {
-    const r = pickAudioRecording({
+    const m = meetingListing({
       uuid: 'x',
       duration: 12,
-      recording_files: [{ id: 'a', recording_type: 'audio_only', file_type: 'M4A' }],
+      recording_files: [audio({ recording_start: undefined, recording_end: undefined })],
     });
-    expect(r).toBeNull();
+    expect(m).toBeNull();
   });
 
-  it('matches by M4A extension even when recording_type is absent', () => {
-    const r = pickAudioRecording({
-      uuid: 'x',
-      start_time: '2026-10-08T23:00:00Z',
-      recording_files: [{ id: 'a', file_type: 'M4A', file_extension: 'M4A' }],
-    });
-    expect(r?.fileId).toBe('a');
+  it('takes an M4A as the audio even when recording_type is absent', () => {
+    const m = meetingListing({ uuid: 'x', recording_files: [audio({ recording_type: undefined })] });
+    expect(m?.segments[0].files[0]).toMatchObject({ fileId: 'aud', format: 'audio' });
   });
 
-  it('returns null when there is no audio-only file (video only)', () => {
-    const r = pickAudioRecording({
+  it('is null when nothing in the meeting is media the import takes', () => {
+    const m = meetingListing({
       uuid: 'x',
-      recording_files: [{ id: 'v', recording_type: 'shared_screen_with_speaker_view', file_type: 'MP4' }],
+      recording_files: [{ ...audio(), id: 'vtt', recording_type: 'audio_transcript', file_type: 'TRANSCRIPT' }],
     });
-    expect(r).toBeNull();
+    expect(m).toBeNull();
   });
 });
 

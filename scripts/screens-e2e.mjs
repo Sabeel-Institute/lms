@@ -296,16 +296,30 @@ const {
  */
 function zoomRows() {
   const at = (days, time) => `${addDays(PENDING_DATE, days)}T${time}Z`;
-  const row = (meetingUuid, startTime, minutes, imported = null) => ({
-    meetingUuid, topic: 'Quran Immersion Fall', startTime, durationSec: minutes * 60,
-    fileId: `${meetingUuid}-aud`, sizeBytes: minutes * 560_000,
-    alreadyImported: imported ? 'sw-s1r' : null, importedCourseName: imported,
+  const file = (fileId, format, minutes, imported = null) => ({
+    fileId, format, sizeBytes: minutes * (format === 'audio' ? 560_000 : 2_000_000), ready: true,
+    imported: imported ? { recordingId: 'sw-s1r', sessionId: 'sw-s1', courseName: imported } : null,
+  });
+  const segment = (startTime, minutes, files) => ({ startTime, durationSec: minutes * 60, files });
+  const meeting = (meetingUuid, segments) => ({
+    meetingUuid, topic: 'Quran Immersion Fall', startTime: segments[0].startTime,
+    durationSec: segments.reduce((n, x) => n + x.durationSec, 0), segments,
   });
   return [
-    row('zoom-evening', at(1, '00:30:00'), 75), // 7:30 pm CDT / 6:30 pm CST on the session's date
-    row('zoom-day', at(0, '18:00:00'), 65), // 1 pm CDT / noon CST on it
-    row('zoom-blip', at(0, '17:40:00'), 1), // a test click: hidden as under 2 minutes
-    row('zoom-earlier', at(-6, '00:30:00'), 136, 'Arabic I & Qur’anic Morphology — Tuesday Evening Section'),
+    // 7:30 pm CDT / 6:30 pm CST on the session's date: video and audio.
+    meeting('zoom-evening', [segment(at(1, '00:30:00'), 75, [file('eve-spk', 'speaker', 75), file('eve-aud', 'audio', 75)])]),
+    // 1 pm CDT / noon CST on it: every format, recording restarted twice —
+    // the second stretch short, the third still processing in Zoom.
+    meeting('zoom-day', [
+      segment(at(0, '18:00:00'), 65, [file('day-spk', 'speaker', 65), file('day-sld', 'slides', 65), file('day-aud', 'audio', 65)]),
+      segment(at(0, '19:06:00'), 1, [file('day2-aud', 'audio', 1)]),
+      segment(at(0, '19:10:00'), 20, [{ ...file('day3-aud', 'audio', 20), ready: false }]),
+    ]),
+    // A test click: hidden as under 2 minutes.
+    meeting('zoom-blip', [segment(at(0, '17:40:00'), 1, [file('blip-aud', 'audio', 1)])]),
+    meeting('zoom-earlier', [
+      segment(at(-6, '00:30:00'), 136, [file('earlier-spk', 'speaker', 136), file('earlier-aud', 'audio', 136, 'Arabic I & Qur’anic Morphology — Tuesday Evening Section')]),
+    ]),
   ];
 }
 
@@ -978,7 +992,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 33;
+const STAFF_SCREENS = 34;
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
@@ -1150,7 +1164,7 @@ async function tourStaff(page, tag) {
    * The emulator suite has no Zoom credentials, so the real callable throws and
    * the rows — where this screen's layout actually breaks — would be laid out
    * at no width at all. The callable's reply is served here instead, in the
-   * shape `ZoomImportRow` declares; what it skips is the Zoom client, which
+   * shape `ZoomMeetingRow` declares; what it skips is the Zoom client, which
    * `functions/test/unit/zoomRange.test.ts` drives against a fake `fetch`.
    *
    * The rows are the case the picker exists to settle: one recurring meeting,
@@ -1170,10 +1184,10 @@ async function tourStaff(page, tag) {
     await tap(byId(page, 'session-open-Session 6 — Today (recording pending)'));
     await tap(byId(page, 'recording-import-zoom'));
   };
-  await visit('zoom-import', openZoomImport, 'zoom-import-zoom-evening');
+  await visit('zoom-import', openZoomImport, 'zoom-when-zoom-evening');
   check(
     `${tag} / zoom import opens on the session's date: its two classes, nothing from other days`,
-    (await page.locator('[data-testid^="zoom-import-"]').count()) === 2 &&
+    (await page.locator('[data-testid^="zoom-when-"]').count()) === 2 &&
       (await page.locator('[data-testid^="zoom-open-"]').count()) === 0,
   );
   const evening = (await byId(page, 'zoom-when-zoom-evening').innerText().catch(() => '')).replace(/\u2011/g, '-');
@@ -1182,16 +1196,37 @@ async function tourStaff(page, tag) {
     new RegExp(`^${PENDING_DATE} · \\d{1,2}:\\d{2}–\\d{1,2}:\\d{2} PM$`).test(evening),
     JSON.stringify(evening),
   );
+  // Files CHOSEN: the running total and the Import button's count exist in no
+  // other state, and the total is the longest line the screen carries.
+  await visit('zoom-import-chosen', async () => {
+    await openZoomImport();
+    await tap(byId(page, 'zoom-pick-videoAndAudio-zoom-day'));
+  }, 'zoom-selected');
+  const total = await byId(page, 'zoom-selected').innerText().catch(() => '');
+  check(
+    `${tag} / a quick pick chooses the stretch of class, not the short restart or the file still processing`,
+    /^Selected: 2 files · .* · 1 h 5 min of class · /.test(total) &&
+      (await byId(page, 'zoom-file-day-spk').getAttribute('aria-checked')) === 'true' &&
+      // react-native-web leaves `aria-checked` off a box that is not ticked.
+      (await byId(page, 'zoom-file-day2-aud').getAttribute('aria-checked')) !== 'true' &&
+      (await byId(page, 'zoom-file-day3-aud').getAttribute('aria-disabled')) === 'true',
+    JSON.stringify({
+      total,
+      spk: await byId(page, 'zoom-file-day-spk').getAttribute('aria-checked'),
+      short: await byId(page, 'zoom-file-day2-aud').getAttribute('aria-checked'),
+      processing: await byId(page, 'zoom-file-day3-aud').getAttribute('aria-disabled'),
+    }),
+  );
   // Every date, every status: the "already imported" row — the longest line a
   // card carries, naming the class it went into — exists in no other state.
   await visit('zoom-import-all', async () => {
     await openZoomImport();
     await tap(byId(page, 'zoom-session-day'));
     await tap(byId(page, 'zoom-filter-all'));
-  }, 'zoom-open-zoom-earlier');
+  }, 'zoom-open-earlier-aud');
   check(
     `${tag} / zoom import with the date filter off shows the other days too`,
-    (await page.locator('[data-testid^="zoom-import-"]').count()) === 2 &&
+    (await page.locator('[data-testid^="zoom-when-"]').count()) === 3 &&
       (await page.locator('[data-testid^="zoom-open-"]').count()) === 1,
   );
   await visit('library', () => tap(byId(page, 'tab-library')), 'library-filter-all');

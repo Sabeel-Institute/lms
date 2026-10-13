@@ -415,7 +415,7 @@ manual, the release notes and `PRODUCT_BRIEF.md` change in the same batch.
 |---|---|---|
 | V0 | Spike: `expo-video` playing M4A and a 3-hour MP4 from R2 on the AVD and web | The list under Engine — **passed 2026-10-12** |
 | V1 | Data model: media map, derived duration, `zoomImports` index; migration of existing recordings to one audio item each | Unit tests on the derivation; seed count check — **done 2026-10-12**, deployed and migrated |
-| V2 | Zoom listing of all files, segments, processing state; picker with formats, quick picks, totals; async import | Integration tests with a fake Zoom of multi-segment, multi-meeting fixtures; screens sweep at 320 px with expanded meetings |
+| V2 | Zoom listing of all files, segments, processing state; picker with formats, quick picks, totals; async import | Integration tests with a fake Zoom of multi-segment, multi-meeting fixtures; screens sweep at 320 px with expanded meetings — **built 2026-10-12**; the course's default pick is deferred: the picker starts with nothing chosen and a quick pick is one tap per meeting |
 | V3 | Upload of several files, part or version choice, probe | Browser e2e with a small MP4 and an M4A; AVD upload |
 | V4 | Staff media list, hide, reorder, publish blockers | Integration tests per lifecycle row above |
 | V5 | Player: versions, parts, auto-advance, listen only, resume, docked bar | `playback.test.ts` extended; web e2e plays video and switches version keeping position; AVD for background, lock screen, fullscreen, PiP |

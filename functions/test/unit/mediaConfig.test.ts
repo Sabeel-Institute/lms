@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FIREBASE_PROJECT_ID, mediaStorageKey } from '@sabeel/shared';
+import { MAX_COPY_BYTES } from '../../src/mediaCopier';
 
 /**
  * The Zoom copier Worker and the Functions that call it describe the same
@@ -68,6 +69,15 @@ describe('the copier Worker and the Functions agree', () => {
     const number = /messagingSenderId:\s*'(\d+)'/.exec(read('app/src/firebase-config.ts'))?.[1];
     expect(number).toBeTruthy();
     expect(w.vars.ALLOWED_CALLER).toBe(`${number}-compute@developer.gserviceaccount.com`);
+  });
+
+  it('on the largest file a copy may be', () => {
+    // The import refuses a larger one before claiming it; the Worker refuses
+    // it at the door. Two numbers, one limit.
+    const source = read('cloudflare/media-copier/src/index.ts');
+    const literal = /export const MAX_BYTES = (.+);/.exec(source)?.[1];
+    expect(literal).toBe('Math.floor(4.9 * 2 ** 30)');
+    expect(MAX_COPY_BYTES).toBe(Math.floor(4.9 * 2 ** 30));
   });
 
   it('on where a copy may be written: the key a media item is stored under', () => {

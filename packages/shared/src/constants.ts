@@ -211,3 +211,12 @@ export const AUDIT_PAGE = 200;
  */
 export const GOOGLE_WEB_CLIENT_ID =
   '226338267845-4ik78e1nokc2nu5rt9rujo0sr89cg9cp.apps.googleusercontent.com';
+
+/**
+ * What R2 charges to store a gigabyte (10^9 bytes) for a month, Standard
+ * class, as published in October 2026. Downloads are free on R2, so storage is
+ * the whole of what keeping a file costs; the Zoom picker shows its running
+ * total from this, and the first 10 GB a month are free, which it leaves out
+ * so the figure errs high.
+ */
+export const R2_STORAGE_USD_PER_GB_MONTH = 0.015;

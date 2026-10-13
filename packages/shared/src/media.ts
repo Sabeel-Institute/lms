@@ -68,6 +68,19 @@ export interface MediaItem {
 
 export type MediaMap = Record<string, MediaItem>;
 
+/** What each version is called wherever it is listed or chosen. */
+export const VERSION_LABELS: Record<MediaVersion, string> = {
+  speaker: 'Video: slides and speaker',
+  slides: 'Video: slides only',
+  audio: 'Audio only',
+  video: 'Video',
+};
+
+/** An item's name: the staff override, or its version's. */
+export function itemLabel(item: Pick<MediaItem, 'label' | 'version'>): string {
+  return item.label ?? VERSION_LABELS[item.version];
+}
+
 /**
  * Where an item's bytes live in the media bucket. One definition, used by the
  * upload and import paths and checked against the copier Worker's own key

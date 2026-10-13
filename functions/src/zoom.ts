@@ -1,5 +1,10 @@
 import { defineSecret } from 'firebase-functions/params';
-import { addDays, zoomRecordingDate } from '@sabeel/shared';
+import {
+  ZOOM_RECORDING_TYPES,
+  addDays,
+  zoomRecordingDate,
+  type ZoomFormat,
+} from '@sabeel/shared';
 import { copyThroughWorker } from './mediaCopier';
 
 /**
@@ -19,33 +24,47 @@ export const ZOOM_SECRETS = [ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET
 /** The single central Sabeel Zoom user whose recordings we import (locked decision). */
 const ZOOM_SOURCE_EMAIL = 'marketing@oursabeel.com';
 
-/** A meeting that has an audio-only M4A, normalized to what the picker + import need. */
-export interface ZoomAudioRecording {
+/** One importable file, as Zoom reports it now. */
+export interface ZoomFileInfo {
   meetingUuid: string;
   topic: string;
-  startTime: string; // ISO 8601 — when the AUDIO began, see `audioSpan`
-  durationSec: number;
-  fileId: string; // the audio_only M4A file's id
+  fileId: string;
+  format: ZoomFormat;
   sizeBytes: number;
+  durationSec: number;
+  /** When its segment began (ISO 8601): the file's own `recording_start`. */
+  segmentStart: string;
+  /** False while Zoom is still processing it. */
+  ready: boolean;
+}
+
+/** A meeting's importable files, grouped into segments. */
+export interface ZoomMeetingListing {
+  meetingUuid: string;
+  topic: string;
+  startTime: string;
+  durationSec: number;
+  segments: { startTime: string; durationSec: number; files: ZoomFileInfo[] }[];
 }
 
 export interface ZoomClient {
   /**
-   * Recordings (with an audio-only M4A) for the source user whose audio began
-   * on `fromDate..toDate` inclusive in the INSTITUTE's calendar, newest first.
+   * Meetings of the source user with at least one importable file, whose first
+   * segment began on `fromDate..toDate` inclusive in the INSTITUTE's calendar,
+   * newest first.
    */
-  listAudioRecordings(fromDate: string, toDate: string): Promise<ZoomAudioRecording[]>;
-  /** Re-read one meeting at import time for a FRESH download URL (they expire). */
-  freshAudioFile(
-    meetingUuid: string,
-    fileId: string,
-  ): Promise<{ rec: ZoomAudioRecording; downloadUrl: string }>;
+  listMeetings(fromDate: string, toDate: string): Promise<ZoomMeetingListing[]>;
+  /**
+   * Re-read one file at copy time, with a FRESH download URL (they expire), or
+   * null when Zoom no longer has it.
+   */
+  freshFile(meetingUuid: string, fileId: string): Promise<{ file: ZoomFileInfo; downloadUrl: string } | null>;
   /**
    * Copy the file into the media store at `key`, which must not exist yet.
    * `sizeBytes` is what Zoom's API listed; the copy refuses a file of any
    * other length.
    */
-  copyToMediaStore(downloadUrl: string, key: string, sizeBytes: number): Promise<void>;
+  copyToMediaStore(downloadUrl: string, key: string, sizeBytes: number, contentType: string): Promise<void>;
 }
 
 // ---- Zoom response shapes (only the fields we read) ----
@@ -98,26 +117,17 @@ async function api<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Pick the audio-only M4A out of a meeting's files, or null if there isn't one. */
-function audioFileOf(m: ZoomMeeting): ZoomFile | null {
-  const files = m.recording_files ?? [];
-  return (
-    files.find(
-      (f) =>
-        (f.status ?? 'completed') === 'completed' &&
-        (f.recording_type === 'audio_only' || (f.file_extension ?? f.file_type) === 'M4A'),
-    ) ?? null
-  );
-}
+const FORMAT_OF: Record<string, ZoomFormat> = Object.fromEntries(
+  Object.entries(ZOOM_RECORDING_TYPES).map(([format, type]) => [type, format as ZoomFormat]),
+);
 
 /**
- * When the AUDIO ran: the file's own start and length, which bracket exactly
- * what students will hear — the meeting may have opened minutes before anyone
- * pressed record. Start and length come from the same source, so the end the
- * picker prints (start + length) is the file's end. The meeting's start and
- * whole minutes only when the file does not say.
+ * When a file ran: its own start and length, which bracket exactly what
+ * students will see or hear — the meeting may have opened minutes before
+ * anyone pressed record. The meeting's start and whole minutes only when the
+ * file does not say.
  */
-function audioSpan(f: ZoomFile, m: ZoomMeeting): { startTime: string; durationSec: number } {
+function fileSpan(f: ZoomFile, m: ZoomMeeting): { startTime: string; durationSec: number } {
   if (f.recording_start && f.recording_end) {
     const d = (Date.parse(f.recording_end) - Date.parse(f.recording_start)) / 1000;
     if (Number.isFinite(d) && d > 0) return { startTime: f.recording_start, durationSec: Math.round(d) };
@@ -125,29 +135,61 @@ function audioSpan(f: ZoomFile, m: ZoomMeeting): { startTime: string; durationSe
   return { startTime: m.start_time ?? '', durationSec: Math.round((m.duration ?? 0) * 60) };
 }
 
-function toRecording(m: ZoomMeeting, f: ZoomFile): ZoomAudioRecording {
+/** One of a meeting's files as an importable file, or null if it is not media the import takes. */
+function fileInfo(m: ZoomMeeting, f: ZoomFile): ZoomFileInfo | null {
+  // An M4A with no `recording_type` is the audio: older listings left it off.
+  const format: ZoomFormat | undefined =
+    FORMAT_OF[f.recording_type ?? ''] ??
+    (!f.recording_type && (f.file_extension ?? f.file_type) === 'M4A' ? 'audio' : undefined);
+  if (!format || !f.id) return null;
+  const span = fileSpan(f, m);
   return {
     meetingUuid: m.uuid ?? '',
     topic: m.topic ?? '',
-    ...audioSpan(f, m),
-    fileId: f.id ?? '',
+    fileId: f.id,
+    format,
     sizeBytes: f.file_size ?? 0,
+    durationSec: span.durationSec,
+    segmentStart: span.startTime,
+    ready: (f.status ?? 'completed') === 'completed',
   };
 }
 
 /**
- * A meeting → a normalized audio row, or null if it has no audio-only file.
- * Pure (no network) — the one bit of Zoom-JSON parsing worth unit-testing, since
- * the fake client used in integration tests hands back already-normalized rows.
+ * A meeting → its importable files grouped into segments, or null if it has
+ * none. Pure (no network): the one bit of Zoom-JSON parsing worth testing on
+ * its own, since the fake client in integration tests hands back listings
+ * already in this shape.
  *
- * Null too for a recording with no readable start: it has no date, so no range
- * could hold it, and dating it would throw on the whole list.
+ * A SEGMENT IS A RECORDING START. Stopping and restarting the recording makes
+ * a new set of files under the same meeting, each file carrying the start of
+ * its own stretch, and the formats of one stretch share it. A segment's length
+ * is its longest file's. Null too for a meeting with no readable start: it has
+ * no date, so no range could hold it, and dating it would throw on the list.
  */
-export function pickAudioRecording(m: ZoomMeeting): ZoomAudioRecording | null {
-  const f = audioFileOf(m);
-  if (!f) return null;
-  const rec = toRecording(m, f);
-  return Number.isFinite(Date.parse(rec.startTime)) ? rec : null;
+export function meetingListing(m: ZoomMeeting): ZoomMeetingListing | null {
+  const bySegment = new Map<string, ZoomFileInfo[]>();
+  for (const f of m.recording_files ?? []) {
+    const info = fileInfo(m, f);
+    if (!info || !Number.isFinite(Date.parse(info.segmentStart))) continue;
+    bySegment.set(info.segmentStart, [...(bySegment.get(info.segmentStart) ?? []), info]);
+  }
+  if (bySegment.size === 0) return null;
+  const order: ZoomFormat[] = ['speaker', 'slides', 'audio'];
+  const segments = [...bySegment.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([startTime, files]) => ({
+      startTime,
+      durationSec: Math.max(...files.map((f) => f.durationSec)),
+      files: files.sort((x, y) => order.indexOf(x.format) - order.indexOf(y.format)),
+    }));
+  return {
+    meetingUuid: m.uuid ?? '',
+    topic: m.topic ?? '',
+    startTime: segments[0].startTime,
+    durationSec: segments.reduce((n, seg) => n + seg.durationSec, 0),
+    segments,
+  };
 }
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -173,7 +215,7 @@ export function dateWindows(fromDate: string, toDate: string): { from: string; t
 }
 
 export const zoomClient: ZoomClient = {
-  async listAudioRecordings(fromDate, toDate) {
+  async listMeetings(fromDate, toDate) {
     /*
      * ZOOM'S DATES ARE UTC; STAFF'S ARE HOUSTON'S. An evening class on the 8th
      * is stamped on the 9th in UTC, so asking Zoom for the 8th alone misses it
@@ -182,7 +224,7 @@ export const zoomClient: ZoomClient = {
      * ahead), then keep what began on the requested dates by the institute's
      * calendar. That holds whichever calendar Zoom actually reads them in.
      */
-    const byUuid = new Map<string, ZoomAudioRecording>();
+    const byUuid = new Map<string, ZoomMeetingListing>();
     for (const window of dateWindows(fromDate, addDays(toDate, 1))) {
       let pageToken = '';
       do {
@@ -195,8 +237,8 @@ export const zoomClient: ZoomClient = {
         if (pageToken) url.searchParams.set('next_page_token', pageToken);
         const body = await api<ZoomListResp>(url.toString());
         for (const m of body.meetings ?? []) {
-          const rec = pickAudioRecording(m);
-          if (rec && rec.meetingUuid) byUuid.set(rec.meetingUuid, rec);
+          const listing = meetingListing(m);
+          if (listing && listing.meetingUuid) byUuid.set(listing.meetingUuid, listing);
         }
         pageToken = body.next_page_token ?? '';
       } while (pageToken);
@@ -209,14 +251,21 @@ export const zoomClient: ZoomClient = {
       .sort((a, b) => b.startTime.localeCompare(a.startTime));
   },
 
-  async freshAudioFile(meetingUuid, fileId) {
+  async freshFile(meetingUuid, fileId) {
     // A UUID with a leading '/' or an embedded '//' must be DOUBLE url-encoded.
     const encoded = encodeURIComponent(encodeURIComponent(meetingUuid));
-    const m = await api<ZoomMeeting>(`https://api.zoom.us/v2/meetings/${encoded}/recordings`);
-    const files = m.recording_files ?? [];
-    const f = files.find((x) => x.id === fileId) ?? audioFileOf(m);
-    if (!f || !f.download_url) throw new Error('That Zoom recording no longer has a downloadable audio file.');
-    return { rec: toRecording(m, f), downloadUrl: f.download_url };
+    const res = await fetch(`https://api.zoom.us/v2/meetings/${encoded}/recordings`, {
+      headers: { Authorization: `Bearer ${await accessToken()}` },
+    });
+    // The meeting's recordings deleted in Zoom: the file is gone, which is an
+    // answer rather than a failure to retry.
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Zoom API ${res.status} for the meeting's recordings.`);
+    const m = (await res.json()) as ZoomMeeting;
+    const f = (m.recording_files ?? []).find((x) => x.id === fileId);
+    const info = f ? fileInfo(m, f) : null;
+    if (!f || !info || !f.download_url) return null;
+    return { file: info, downloadUrl: f.download_url };
   },
 
   /*
@@ -226,7 +275,7 @@ export const zoomClient: ZoomClient = {
    * Worker, so no Zoom credential leaves Google, and the bytes go from Zoom to
    * Cloudflare without passing through here.
    */
-  async copyToMediaStore(downloadUrl, key, sizeBytes) {
+  async copyToMediaStore(downloadUrl, key, sizeBytes, contentType) {
     const res = await fetch(downloadUrl, {
       headers: { Authorization: `Bearer ${await accessToken()}` },
       redirect: 'manual',
@@ -236,6 +285,6 @@ export const zoomClient: ZoomClient = {
     if (res.status !== 302 || !link) {
       throw new Error(`Zoom did not hand over a download link (HTTP ${res.status}).`);
     }
-    await copyThroughWorker({ sourceUrl: link, key, size: sizeBytes, contentType: 'audio/mp4' });
+    await copyThroughWorker({ sourceUrl: link, key, size: sizeBytes, contentType });
   },
 };

@@ -227,7 +227,7 @@ const ACTION_LABELS: Record<string, string> = {
   finalizeRecordingUpload: 'Uploaded audio',
   setRecordingStatus: 'Changed recording status',
   removeRecordingMedia: 'Removed a file',
-  importZoomRecording: 'Imported from Zoom',
+  importZoomFiles: 'Imported from Zoom',
   retryZoomImport: 'Retried a Zoom import',
   setStaffAccess: 'Changed staff access',
   overrideCompletion: 'Overrode completion',
@@ -243,6 +243,7 @@ const ACTION_LABELS: Record<string, string> = {
  */
 const RETIRED_ACTION_LABELS: Record<string, string> = {
   clearRecordingAudio: 'Removed audio',
+  importZoomRecording: 'Imported from Zoom',
 };
 
 const styles = StyleSheet.create({

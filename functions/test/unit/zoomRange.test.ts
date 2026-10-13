@@ -62,19 +62,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('listAudioRecordings — the dates are the institute’s', () => {
+describe('listMeetings — the dates are the institute’s', () => {
   it('lists every class held on the day in Houston, evening ones included', async () => {
-    const rows = await zoomClient.listAudioRecordings('2026-10-08', '2026-10-08');
+    const rows = await zoomClient.listMeetings('2026-10-08', '2026-10-08');
     expect(rows.map((r) => r.meetingUuid)).toEqual(['thu-evening-2', 'thu-evening-1', 'thu-afternoon']);
   });
 
   it('keeps the evening before out, though Zoom files it under the same UTC date', async () => {
-    const rows = await zoomClient.listAudioRecordings('2026-10-08', '2026-10-08');
+    const rows = await zoomClient.listMeetings('2026-10-08', '2026-10-08');
     expect(rows.map((r) => r.meetingUuid)).not.toContain('wed-evening');
   });
 
   it('keeps the day after out, though it had to ask Zoom for it', async () => {
-    const rows = await zoomClient.listAudioRecordings('2026-10-08', '2026-10-08');
+    const rows = await zoomClient.listMeetings('2026-10-08', '2026-10-08');
     expect(rows.map((r) => r.meetingUuid)).not.toContain('fri-afternoon');
     expect(asked).toEqual([{ from: '2026-10-08', to: '2026-10-09' }]);
   });

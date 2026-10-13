@@ -33,7 +33,8 @@ const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth
  *  `media/{recordingId}/{itemId}`. functions/test/unit/mediaConfig.test.ts
  *  holds the two together. */
 const KEY_PATTERN = /^media\/[A-Za-z0-9]+\/[A-Za-z0-9]+$/;
-const CONTENT_TYPES = new Set(['audio/mp4']);
+/** Zoom's formats: the audio-only M4A and the MP4 videos (`zoomFormatMedia`). */
+const CONTENT_TYPES = new Set(['audio/mp4', 'video/mp4']);
 /** R2 takes at most 5 GiB in one put; stay clear of the edge. */
 export const MAX_BYTES = Math.floor(4.9 * 2 ** 30);
 

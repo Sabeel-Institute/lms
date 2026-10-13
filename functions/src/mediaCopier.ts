@@ -23,6 +23,13 @@ const MEDIA_COPIER_URL = defineString('MEDIA_COPIER_URL', {
   description: 'Address of the Cloudflare Worker that copies Zoom files into the media bucket',
 });
 
+/**
+ * The largest file the Worker copies: R2 takes at most 5 GiB in one put, and
+ * the Worker copies in one put. The Worker states the same limit as its
+ * `MAX_BYTES`; `mediaConfig.test.ts` holds the two together.
+ */
+export const MAX_COPY_BYTES = Math.floor(4.9 * 2 ** 30);
+
 /** A 3.5 GB recording takes about 3 minutes at the measured rate; allow 20. */
 const COPY_TIMEOUT_MS = 20 * 60 * 1000;
 
