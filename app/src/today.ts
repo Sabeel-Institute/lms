@@ -19,6 +19,7 @@ import { buildTodayQueue, queueScope, type TodayQueue } from './todayQueue';
 import { db } from './firebase';
 import { useListenerFailed, useLiveQuery } from './liveQuery';
 import { useAllCoursesSource, useMyCoursesSource, type CourseRow } from './structure';
+import { recordingRow } from './recordingRow';
 
 /**
  * The staff work queue, derived — never stored.
@@ -127,7 +128,7 @@ function useTodayQueue(
     {
       label: 'todayRecordings',
       map: (snap) =>
-        new Map(snap.docs.map((d) => [d.id, { id: d.id, ...(d.data() as RecordingDoc) }])),
+        new Map(snap.docs.map((d) => [d.id, recordingRow(d.id, d.data() as RecordingDoc)])),
       empty: null,
       expectDenial,
       extra: { scope: key },

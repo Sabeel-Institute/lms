@@ -52,6 +52,7 @@ import { MyCoursesScreen } from './src/screens/MyCoursesScreen';
 import { TokensScreen } from './src/screens/TokensScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { AppNav } from './src/components/AppNav';
+import { ScreenBoundary } from './src/components/ScreenBoundary';
 import { MoreSheet } from './src/components/MoreSheet';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { useWide } from './src/useWidth';
@@ -225,7 +226,10 @@ export default function App() {
           <Navigator
             linking={isStudent ? STUDENT_LINKING : STAFF_LINKING}
           >
-            <Stack.Navigator screenOptions={{ headerTintColor: t.text.primary }}>
+            <Stack.Navigator
+              screenOptions={{ headerTintColor: t.text.primary }}
+              screenLayout={({ children }) => <ScreenBoundary where="screen">{children}</ScreenBoundary>}
+            >
               {/* A PUSHED screen keeps its header, which is the only thing
                   carrying Back. A tab root runs without one — it is never pushed,
                   and its own heading already names it — so `Screen` takes over the
@@ -388,9 +392,13 @@ export default function App() {
       <KeyboardProvider>
         <StatusBar style="dark" />
         {headerless ? (
-          <SafeAreaView style={styles.root}>{content}</SafeAreaView>
+          <SafeAreaView style={styles.root}>
+            <ScreenBoundary where="app">{content}</ScreenBoundary>
+          </SafeAreaView>
         ) : (
-          <View style={styles.root}>{content}</View>
+          <View style={styles.root}>
+            <ScreenBoundary where="app">{content}</ScreenBoundary>
+          </View>
         )}
       </KeyboardProvider>
     </SafeAreaProvider>

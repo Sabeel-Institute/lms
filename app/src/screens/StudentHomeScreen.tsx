@@ -27,6 +27,7 @@ import { useListenerFailed } from '../liveQuery';
 import { drainCompletionOutbox } from '../completionOutbox';
 import { drainProgressJournal } from '../playback';
 import { useResolvedDocs } from '../resolveDocs';
+import { recordingRow } from '../recordingRow';
 import { arrangeTodo, type TodoEntry } from '../todo';
 import type { CourseRow } from '../structure';
 import type { RecordingRow } from '../recordings';
@@ -126,7 +127,8 @@ export function StudentHomeScreen({
         bucket: todo,
         deadline: todo === 'dueSoon' || todo === 'upcoming' ? a.dueDate : null,
         doneAt: state?.completedAt ?? null,
-        recording: r.doc,
+        // Read as every recording is (recordingRow.ts): a cached copy can predate `media`.
+        recording: recordingRow(r.doc.id, r.doc),
         cls: r.cls,
         dueDate: a.dueDate,
         pending: state?.pending ?? false,

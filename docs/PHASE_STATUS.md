@@ -1678,6 +1678,24 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-13 — **The live site's library went white on a staff phone**
+  (SABEEL-RECORDING-WEB-7, Faisal's screen recording): "Loading the
+  library…", then a blank page, bar and all. `startingItem(r.media, …)` met a
+  recording with no `media`, yet all ten recordings on the server have it.
+  The web app keeps Firestore's persistent cache and a listener answers from
+  it first, so a phone that had opened the library before recordings carried
+  `media` drew those cached copies for the moment before the server's
+  arrived; the throw unmounted everything, and nothing drew again. Not the
+  old build's fault: the code is unchanged since. Fixed twice over: every
+  recording is read through `recordingRow` (`media` and `defaultVersion`
+  defaulted; red first with the production error), and every screen sits in
+  a `ScreenBoundary` (the stack's `screenLayout`), the app in another, so a
+  screen that cannot be drawn says so and the bar still works. Checked in the
+  browser against the emulators with a recording planted in the old shape:
+  listed with the fix; with the fix taken out, the boundary's "This page could
+  not be shown" and a working bar instead of a white page. The browser suite
+  plants one too.
+
 - 2026-10-13 — **Device pass for assignments (A7), debug build on tb_emu.**
   Checked: a notification tap opens its subject from the background and from
   a process Android killed (a force-stopped app receives no FCM at all — that

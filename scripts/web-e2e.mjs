@@ -2559,6 +2559,49 @@ check(
 );
 await shot(admin, '27-library-filters');
 
+/*
+ * A RECORDING IN THE OLD SHAPE does not blank the library. The web app answers
+ * a listener from its cache first, and a cache can hold recordings written
+ * before they carried `media` (one audio file, `audioPath`); the live site went
+ * white over one on a staff phone (SABEEL-RECORDING-WEB-7). Planted here on the
+ * server, which reaches the same reading code. A draft, so no trigger fans it
+ * out, and taken out again after.
+ */
+const hikamCourse = (await readCollection('courses')).find((c) => c.fields.name.stringValue === 'Hikam Foundations');
+const LEGACY_TITLE = 'Recorded before media';
+const legacyUrl = `${FS_READ}/recordings/legacy-shape`;
+const now = Date.now();
+const planted = await fetch(legacyUrl, {
+  method: 'PATCH',
+  headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    fields: {
+      sessionId: { stringValue: 'legacy-session' },
+      courseId: { stringValue: hikamCourse.name.split('/').pop() },
+      cohortId: { stringValue: hikamCourse.fields.cohortId.stringValue },
+      title: { stringValue: LEGACY_TITLE },
+      notes: { stringValue: '' },
+      date: { stringValue: '2026-09-01' },
+      status: { stringValue: 'draft' },
+      source: { stringValue: 'manual' },
+      audioPath: { stringValue: 'recordings/legacy-shape/audio.m4a' },
+      sizeBytes: { integerValue: '1000' },
+      durationSec: { integerValue: '3600' },
+      createdAt: { integerValue: String(now) },
+      createdBy: { stringValue: 'legacy' },
+      updatedAt: { integerValue: String(now) },
+    },
+  }),
+});
+await goHome(admin);
+await tap(admin, 'tab-library');
+const legacyListed = await admin.getByText(LEGACY_TITLE).filter({ visible: true }).first().waitFor({ timeout: 20000 }).then(() => true, () => false);
+check(
+  'a recording in the old shape, without media, is listed and the library is drawn',
+  planted.ok && legacyListed && (await shows(admin, 'library-play-Session 1')) && (await admin.getByTestId('page-failed').count()) === 0,
+);
+await fetch(legacyUrl, { method: 'DELETE', headers: { Authorization: 'Bearer owner' } });
+
 // ---------------------------------------------------- a student's history --
 console.log('\nStudent history');
 // Bilal has been created into a course, disabled, re-enabled and removed from

@@ -419,6 +419,14 @@ Manager, never in the app bundle.**
   two seams (`player.ts`, `player.web.ts`) and an attachment's (`clip.ts`,
   `clip.web.ts`). The OS shares audio focus between apps, not between players
   in one, so a player added without it plays over the docked bar.
+- **A document can be older than the code.** The web app keeps Firestore's
+  persistent cache and a listener answers from it first, so a phone draws what
+  it cached before a shape change for a moment before the server's copy
+  arrives — and a recording without `media` blanked the live site that way.
+  When a document gains a field the screens rely on, read it through a
+  function that supplies the default (`app/src/recordingRow.ts`), never the
+  type alone. Every screen sits in `ScreenBoundary` (the stack's
+  `screenLayout`), so one that still cannot be drawn says so and the bar works.
 - Never `git add` a binary. The APK ships as a GitHub Release asset; committing
   per-release APKs bloated the sibling pages repo's history and had to be
   rewritten out. `*.apk` is gitignored as the backstop.
