@@ -29,6 +29,12 @@ import markdown  # python3-markdown
 VERSION = json.loads((HERE.parent / 'app/app.json').read_text())['expo']['version']
 DATELINE = datetime.date.today().strftime('%B %Y')
 
+# The app's name has one source too: APP_NAME in the shared constants. The
+# logo above it already says "Sabeel Institute", so the cover title is the
+# rest of the name.
+APP_NAME = re.search(r"export const APP_NAME = '([^']+)'", (HERE.parent / 'packages/shared/src/constants.ts').read_text()).group(1)
+COVER_TITLE = APP_NAME.removeprefix('Sabeel Institute ').strip() or APP_NAME
+
 md_text = (HERE / 'USER-MANUAL.md').read_text()
 
 # The markdown states the version too, for anyone reading the source rather than
@@ -52,7 +58,7 @@ logo_b64 = base64.b64encode((HERE.parent / 'app/assets/logo.png').read_bytes()).
 cover = f"""
 <div class="cover">
   <img class="cover-logo" src="data:image/png;base64,{logo_b64}" alt="Sabeel Institute">
-  <div class="cover-title">Class Recordings</div>
+  <div class="cover-title">{COVER_TITLE}</div>
   <div class="cover-sub">User Manual</div>
   <div class="cover-meta">App version {VERSION} &nbsp;·&nbsp; {DATELINE}</div>
 </div>

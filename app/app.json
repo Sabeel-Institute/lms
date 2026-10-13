@@ -3,7 +3,7 @@
     "name": "Sabeel Institute LMS",
     "slug": "sabeel-institute-lms",
     "scheme": "sabeellms",
-    "version": "0.7.1",
+    "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "platforms": [
@@ -13,7 +13,7 @@
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.sabeelinstitute.lms",
-      "versionCode": 34,
+      "versionCode": 35,
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
       "permissions": [
