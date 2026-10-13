@@ -75,13 +75,14 @@ app/               Expo app (Android + web via react-native-web)
 functions/         Cloud Functions (TS, nodejs22, us-central1)
 packages/shared/   Types and constants shared by app, functions and tests
 firestore.rules    Scoped reads; every structural write goes through a callable
-storage.rules      Deny-all — and stays that way for reads
-scripts/           Emulator, dead-code and text-integrity tooling
+cloudflare/        The Zoom copier Worker and the R2 media bucket's settings
+scripts/           Emulator, media store, dead-code and text-integrity tooling
 ```
 
-Clients never read audio through the Storage SDK: playback goes through a
-12-hour signed URL minted by a callable that has already checked the student's
-active assignment and its listen-by date. Enrolment is not consulted: being
-marked excused is the whole of the entitlement, and an assignment already proves
-it.
-`storage.rules` denying reads is the intended end state, not a placeholder.
+Media lives in a private Cloudflare R2 bucket. Clients never hold a permanent
+link: playback goes through a 12-hour pre-signed URL minted by a callable that
+has already checked the student's active assignment and its listen-by date.
+Enrolment is not consulted: being marked excused is the whole of the
+entitlement, and an assignment already proves it. Staff uploads go straight to
+the bucket on a write-once pre-signed URL, and Zoom recordings are copied in by
+the Worker, so no media passes through a Function.

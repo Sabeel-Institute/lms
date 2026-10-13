@@ -4,6 +4,11 @@ Phase-by-phase implementation plan derived from [`product-brief.md`](docs/PRODUC
 and the three research docs. The brief is the *what*; this is the *order* and the
 *exit criteria*. Live status will move to `docs/PHASE_STATUS.md` once Phase 0 lands.
 
+> **Media storage below is superseded.** Everything here about Firebase Cloud
+> Storage, `storage.rules`, V4 signed URLs and the signing grant describes the
+> app as it was built on the legacy project. Media is now in Cloudflare R2:
+> [`docs/plans/MEDIA-ON-CLOUDFLARE.md`](docs/plans/MEDIA-ON-CLOUDFLARE.md).
+
 **Sequencing decision (2026-07-21):** Zoom import is deliberately **not** first,
 against the risk register's recommended order. The Zoom account is a pending
 external input, and the manual-upload path exercises every risky part of the media

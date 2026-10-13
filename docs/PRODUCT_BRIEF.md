@@ -18,7 +18,7 @@ The app is not a general LMS. It is a focused platform for class recordings, req
 ## Planned stack
 
 - Expo and React Native Web for one mobile and web codebase.
-- Firebase Authentication, Firestore, Firebase Storage or Google Cloud Storage, Firebase Functions or Cloud Run, and Firebase Secrets or Secret Manager.
+- Firebase Authentication, Firestore, Cloud Functions and Secret Manager; media in Cloudflare R2, with a Cloudflare Worker copying Zoom recordings in (`docs/plans/MEDIA-ON-CLOUDFLARE.md`).
 - Zoom Server-to-Server OAuth for the primary recording import path.
 
 The product should be designed for Android, web, and future iOS support. Initial builds and testing will target Android and web only because iOS hardware and an Apple Developer account are not available yet. Do not make architectural choices that would block a later iOS build.
@@ -482,15 +482,18 @@ A message is shown whether the app is open, in the background, or closed — on 
 flowchart LR
     Zoom[Zoom cloud recordings]
     Upload[Manual audio upload]
-    Backend[Firebase Functions or Cloud Run]
-    Storage[Firebase Storage or GCS]
+    Backend[Cloud Functions]
+    Copier[Cloudflare Worker]
+    Storage[Cloudflare R2]
     Firestore[(Firestore)]
     Mobile[Expo mobile app]
     Web[React Native Web app]
     Push[Push notification service]
 
-    Zoom --> Backend
-    Upload --> Backend
+    Zoom --> Copier
+    Backend --> Copier
+    Copier --> Storage
+    Upload --> Storage
     Backend --> Storage
     Backend --> Firestore
     Backend --> Push

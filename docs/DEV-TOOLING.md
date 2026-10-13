@@ -549,7 +549,7 @@ is listed apart with the reason. Staff open student accounts on personal
 addresses, and counted with the class they can hide the answer.
 
 What students report is the page Firebase Hosting serves at
-`sabeel-class-recordings.firebaseapp.com/__/auth/action`. It is not part of the
+`<project>.firebaseapp.com/__/auth/action`. It is not part of the
 app, and its wording cannot be changed. Its reset handler renders **"Try
 resetting your password again"** for every failure of `verifyPasswordResetCode`
 (on load) or `confirmPasswordReset` (on Save) except a weak password; that is

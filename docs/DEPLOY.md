@@ -3,9 +3,7 @@
 **`oursabeel-lms` was first deployed on 2026-10-12** (Worker, rules,
 indexes, functions, hosting) after a copy of the legacy data
 ([plans/SWITCHOVER.md](plans/SWITCHOVER.md)); `npm run smoke:prod` passed and
-a real playback and Zoom import were checked against it. Sections below that
-still name Firebase Storage or the legacy project are rewritten with the R2
-docs (M6 in [plans/MEDIA-ON-CLOUDFLARE.md](plans/MEDIA-ON-CLOUDFLARE.md)). It records the order, the traps, and
+a real playback and Zoom import were checked against it. It records the order, the traps, and
 the versioned release cycle so a deploy is never improvised. (The Android build
 ships separately — see "Cutting a release".)
 
@@ -94,10 +92,7 @@ port to `run:android`:
 
 ```sh
 scripts/emulator.sh headless &                                  # the AVD
-bash scripts/free-emulator-ports.sh
-npm run build -w @sabeel/shared && npm run build -w functions    # the emulator loads functions/lib
-npx firebase emulators:start --project demo-sabeel-recordings \
-  --only firestore,auth,storage,functions                       # leave running
+npm run emulators             # frees the ports, builds, starts the emulators + media store; leave running
 
 ( cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 8081 --clear ) &
 npm run seed:emulators        # prints the student's credentials and the fixture ids
@@ -108,9 +103,10 @@ adb reverse tcp:61307 tcp:61307                                  # the audio, se
 ```
 
 The emulators bind loopback, which the AVD reaches as `10.0.2.2` — already wired
-in `app/src/env.ts`. **Playback is the exception:** the emulator's playback URL
-is minted server-side from `FIREBASE_STORAGE_EMULATOR_HOST`, so it names
-`127.0.0.1:61307`, which on the AVD is the AVD itself. Without the `adb reverse`
+in `app/src/env.ts`. **Media is the exception:** playback and upload URLs are
+signed for the local media store at `127.0.0.1:61307`, and the host is part of
+the signature, so it cannot be rewritten to `10.0.2.2`; on the AVD that address
+is the AVD itself. Without the `adb reverse`
 above every recording fails with "Source error" the moment it is opened
 (`ECONNREFUSED` in logcat), and the failure looks like the player's. `run:android`
 adds the Metro mapping itself; this one is yours. And `adb root` drops every
@@ -183,22 +179,21 @@ A release bumps one version and ships it to both surfaces. In order:
      pages repo — do NOT skip it):
      ```bash
      git tag vX.Y.Z <build-commit> && git push origin vX.Y.Z   # tag first
-     gh release create vX.Y.Z -R faisal-shah/sabeel-recording-app \
+     gh release create vX.Y.Z -R Sabeel-Institute/lms \
        --title "vX.Y.Z — Android" --notes-file NOTES.md \
-       "…-0.1.2-arm64-v8a.apk#Android — arm64-v8a (most phones, 40 MB)" …
+       "app-arm64-v8a-release.apk#sabeel-institute-lms-arm64-v8a.apk" \
+       "app-universal-release.apk#sabeel-institute-lms-universal.apk"
      ```
-     Assets are named `sabeel-class-recordings-X.Y.Z-<abi>.apk` (versioned) with a
-     per-version changelog. (`gh release create --target <sha>` on a not-yet-tagged
-     release 422s; create and push the tag first, then the release.)
-   - **Pages repo — the public download.** Upload the same APKs to the rolling
-     `recording-latest` release, renamed `sabeel-recording-app-<abi>.apk`, with
-     `gh release upload recording-latest … --clobber -R faisal-shah/faisal-shah.github.io`.
-     Private-repo release assets are not publicly downloadable — that is the whole
-     reason the public download lives on the pages repo.
+     The repo is public, so these assets ARE the public download: the
+     unversioned names make
+     `https://github.com/Sabeel-Institute/lms/releases/latest/download/sabeel-institute-lms-<abi>.apk`
+     always the newest release. (`gh release create --target <sha>` on a
+     not-yet-tagged release 422s; create and push the tag first, then the
+     release.)
 
-5. **Update the download page** in
-   `faisal-shah.github.io/sabeel-recording-app/` and push. The APK filenames are
-   unversioned, so the download link itself never changes — but three things do:
+5. **Update the download page** in `faisal-shah.github.io/sabeel-institute-lms/`
+   (`DOWNLOAD_PAGE_URL`) and push. The download links never change, but three
+   things do:
    - the **version and publish date** in `index.html`;
    - the **What's new** list — a handful of plain-language lines, no jargon. This
      is the only release note most people ever read;
@@ -207,7 +202,7 @@ A release bumps one version and ships it to both surfaces. In order:
      is invisible — the page keeps serving an older manual quite happily, and it
      had drifted three versions behind before anyone looked:
      ```bash
-     cp docs/USER-MANUAL.pdf ../faisal-shah.github.io/sabeel-recording-app/
+     cp docs/USER-MANUAL.pdf ../faisal-shah/faisal-shah.github.io/sabeel-institute-lms/
      ```
      Verify the published copy, not the local one:
      `pdftotext -f 1 -l 1 USER-MANUAL.pdf - | grep -i version`
@@ -228,8 +223,9 @@ node scripts/wipe-demo-prod.mjs --yes
 
 **If you are asked to "clean up the demo data", that second command is the whole
 job** — there is nothing else to undo. The seed changed no application code,
-deployed no functions, and touched no rules; it wrote to Firestore/Auth/Storage
-with the Admin SDK, which needs no loosening of anything.
+deployed no functions, and touched no rules; it wrote to Firestore and Auth with
+the Admin SDK and to the R2 bucket with the write key from Secret Manager,
+which needs no loosening of anything.
 
 Read the header of `wipe-demo-prod.mjs` before running it with `--yes`. Four things
 are easy to get wrong if you reimplement the cleanup by hand instead:
@@ -252,7 +248,7 @@ are easy to get wrong if you reimplement the cleanup by hand instead:
   `managerUids`, each listed by name in the plan — because the ledger keeps marks
   for departed students on purpose, and a departed uid with no student behind it
   would sit on a real class's ledger for good.
-- **Storage is keyed on the recordings actually removed**, not on a path prefix —
+- **Media is keyed on the recordings actually removed**, not on a path prefix —
   a recording added inside a demo course has an ordinary random id, and its audio
   would otherwise be stranded in the bucket, billable, forever.
 
@@ -262,13 +258,16 @@ it finds one. That scan, not the plan, is what says the job is done.
 
 ## Order
 
-Always: **indexes → rules → functions → hosting.**
+Always: **Worker → indexes → rules → functions → hosting.** The Worker first,
+because the Zoom import calls it; the bucket settings whenever
+`cloudflare/media-bucket/` changes.
 
 ```bash
+npm run deploy -w @sabeel/media-copier          # the Zoom copier (Cloudflare)
+npm run bucket-config -w @sabeel/media-copier   # only when cors.json / lifecycle.json change
 firebase deploy --only firestore:indexes
 firebase deploy --only firestore:rules
-firebase deploy --only storage          # NOT storage:rules — the config has no named target
-firebase deploy --only functions --force  # --force is now always needed: see below
+firebase deploy --only functions --force        # --force is always needed: see below
 firebase deploy --only hosting
 ```
 
@@ -288,10 +287,7 @@ the reverse mistake is harmless: the callable can sit deployed and uncalled for
 as long as you like, which is why it is worth deploying it early rather than in
 the same rush as a release.
 
-`storage:rules` errors with "Could not find rules for the following storage
-targets: rules" — the `storage` block in `firebase.json` is a single unnamed
-config, so the target is just `storage`. And functions ALWAYS need `--force`
-now: `onAssignmentWritten` declares `retry: true`, and the CLI refuses to deploy
+Functions ALWAYS need `--force`: `onAssignmentWritten` declares `retry: true`, and the CLI refuses to deploy
 a function with a failure policy without it ("Pass the --force option to deploy
 functions with a failure policy"). The same flag lets a deploy delete functions
 after a rename, so read the plan it prints before confirming nothing is pruned
@@ -353,8 +349,6 @@ hit on 2026-10-12 and all apply to any new project here (a test project too):
   function. Propagation lag; retry after a few minutes.
 - **Secret Manager 403** for every bound secret on first deploy — grant the
   runtime service account access, then redeploy.
-- **`roles/iam.serviceAccountTokenCreator`** must be granted before signed-URL
-  minting works. The emulator cannot reproduce its absence (see `TODO.md`).
 - **Rules pass locally, queries fail in production.** Emulator rules evaluation
   is not identical; test the real queries after deploying rules.
 - **Stale config baked into the web bundle.** `web:export` always passes
@@ -431,7 +425,7 @@ here, so name it):
 
 ```bash
 gcloud functions describe importZoomRecording --region=us-central1 --gen2 \
-  --project=sabeel-class-recordings \
+  --project=oursabeel-lms \
   --format="value(serviceConfig.timeoutSeconds,serviceConfig.availableMemory)"
 ```
 
