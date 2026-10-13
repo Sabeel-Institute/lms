@@ -50,7 +50,12 @@ and commit messages, and renaming them would strand every one of those.
   upload in flight, and may take a file students never saw off a published
   recording; a daily sweep clears what is left. On tb_emu a 45 MB video went
   up in three parts from the system picker, read through expo-file-system's
-  FileHandle and sent with `expo/fetch`, and landed byte-exact.
+  FileHandle and sent with `expo/fetch`, and landed byte-exact. Deployed
+  (functions, hosting) the same day; the functions lock file needed the
+  probe's packages added before Cloud Build would install them (DEPLOY.md).
+  The deployed bundle loads the ESM-only probe library under Cloud Run's
+  Node 22, and R2 passes all 18 conformance checks. A staff upload on
+  production needs a Google sign-in, so it is the first thing to try there.
 - 2026-10-13 — **The words follow the recording** (video plan V6). A card,
   a ledger row and the player say "Watch by" when the student can play any
   video of the recording and "Listen by" when it is audio only; buttons say
