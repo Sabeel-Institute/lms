@@ -49,11 +49,10 @@ with the rest of the Phase 0 docs ([docs/plans/SWITCHOVER.md](docs/plans/SWITCHO
 - Notifications go to staff only until switchover day (`NOTIFY_AUDIENCE=staff`
   in `functions/.env.oursabeel-lms`). Done: the Web Push key and the Android
   app registration (debug SHA-1, `google-services.json` in place).
-- `npm run check:push` uses Application Default Credentials, which on this
-  machine are the gmail account (another repo relies on them), so it cannot
-  reach `oursabeel-lms`. The same probe was run with the oursabeel.com
-  account's token on 2026-10-12: FCM answered `UNREGISTERED`, i.e. reachable
-  and accepted as this project.
+- `npm run check:queries` and `npm run check:push` take the oursabeel.com
+  account's token through `CHECK_ACCESS_TOKEN` (`docs/DEPLOY.md`), because this
+  machine's Application Default Credentials are the gmail account, which
+  another repo relies on. Nothing for you to do.
 
 ---
 

@@ -196,6 +196,76 @@ for (const [i,[action,courseId,detail]] of history.entries()){
   });
 }
 
+// ---- assignments ----
+// Hikam's assignments, in the states the manual describes: one to do (Fatima
+// has an answer saved), handed in by classmates and waiting to be graded, one
+// graded; and one already returned to Fatima with a grade and feedback. Due
+// AFTER Session 3, so the student's "next up" card stays the recording the
+// capture opens by name. The admin manages Hikam by name, which is what puts
+// "To grade" on their Today.
+await db.collection('courses').doc(H).update({ managerUids:[ADMIN] });
+const PDF=Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n');
+/** A photographed page of handwritten work, drawn by a browser so it reads as one in a figure. */
+async function workPage(){
+  const { chromium } = await import('playwright');
+  const b = await chromium.launch();
+  const pg = await (await b.newContext({ viewport:{ width:900, height:1150 } })).newPage();
+  await pg.setContent(`<html><body style="margin:0;background:#f6f1e4;font-family:'Noto Naskh Arabic',serif">
+    <div style="margin:40px;padding:40px;background:#fffdf6;box-shadow:0 2px 8px #0003;height:980px;transform:rotate(-1deg)">
+      <div style="font:22px sans-serif;color:#555;margin-bottom:24px">Memorize the first hikma — Bilal Khan</div>
+      <div dir="rtl" style="font-size:44px;line-height:2.2;color:#1d2a4a">مِنْ عَلامَةِ الاعْتِمادِ عَلى العَمَلِ<br>نُقْصانُ الرَّجاءِ عِنْدَ وُجودِ الزَّلَلِ</div>
+      <div style="font:italic 26px Georgia,serif;color:#1d2a4a;margin-top:40px;line-height:1.6">When I slip, my hope should not fall,<br>because my hope was never in my deeds.</div>
+    </div></body></html>`);
+  const png = await pg.screenshot({ type:'png' });
+  await b.close();
+  return png;
+}
+const attachment = async (key, id, name, contentType, body) => {
+  await putLocalObject(key, body, contentType);
+  return { id, name, contentType, sizeBytes:body.length, durationSec:null, storageKey:key, addedAt:now-5*day };
+};
+const due=(d)=>iso(now+d*day);
+async function coursework(id, title, { dueOffset, lateOffset, instructions='', files={}, grading={ kind:'points', outOf:10 } }){
+  await db.collection('coursework').doc(id).set({
+    courseId:H, cohortId, title, instructions, files, dueDate:due(dueOffset), lateUntil:due(lateOffset), grading,
+    status:'posted', closedAt:null, postedAt:now-8*day, postedBy:ADMIN, createdAt:now-9*day, createdBy:ADMIN, updatedAt:now-8*day, editedAt:null,
+  });
+  for (const st of students.slice(0,-1)){ // the last is the disabled account
+    await db.collection('submissions').doc(`${st.uid}_${id}`).set({
+      studentUid:st.uid, courseworkId:id, courseId:H, cohortId, active:true, dueDate:due(dueOffset), lateUntil:due(lateOffset),
+      closedEarly:false, state:'open', attempt:1, handedInAt:null, note:'', files:{}, returned:null, attempts:[],
+      notRequired:null, moreTime:null, assignedAt:now-8*day,
+    });
+  }
+}
+await coursework('g-cw1','Memorize the first hikma', {
+  dueOffset:5, lateOffset:12,
+  instructions:'Memorize the first hikma and record yourself reciting it.\n\nمِنْ عَلامَةِ الاعْتِمادِ عَلى العَمَلِ نُقْصانُ الرَّجاءِ عِنْدَ وُجودِ الزَّلَلِ\n\n- Recite slowly, with the vowels as written.\n- One take is fine. A quiet room helps.\n\nIn your answer, explain its meaning in **two or three sentences** of your own.',
+  files:{ f1: await attachment('coursework/g-cw1/f1','f1','First hikma, vowelled.pdf','application/pdf',PDF) },
+});
+await db.collection('drafts').doc(`${uids[0]}_g-cw1`).set({
+  studentUid:uids[0], courseworkId:'g-cw1', courseId:H,
+  note:'It means that losing hope after a slip shows I was relying on my own deeds.', files:{}, updatedAt:now-day,
+});
+// Bilal handed in a photographed page; two more handed in; Omar is graded.
+const page = await attachment(`work/${uids[1]}/g-cw1/p1`,'p1','Page 1.png','image/png', await workPage());
+await db.collection('submissions').doc(`${uids[1]}_g-cw1`).update({ state:'handedIn', handedInAt:now-day, note:'Recited it twice; the page is my written version.', files:{ p1:page } });
+await db.collection('submissionEvents').add({ studentUid:uids[1], courseworkId:'g-cw1', courseId:H, kind:'handIn', attempt:1, at:now-day, late:false });
+for (const [i,u] of [uids[2], uids[3]].entries()){
+  await db.collection('submissions').doc(`${u}_g-cw1`).update({ state:'handedIn', handedInAt:now-(2+i)*day, note:'Recited this morning, twice through without stopping.' });
+  await db.collection('submissionEvents').add({ studentUid:u, courseworkId:'g-cw1', courseId:H, kind:'handIn', attempt:1, at:now-(2+i)*day, late:false });
+}
+await db.collection('grades').doc(`${uids[2]}_g-cw1`).set({ studentUid:uids[2], courseworkId:'g-cw1', courseId:H, grade:{ points:8 }, feedback:'Clear and steady. Give the madd its full two counts.', gradedBy:ADMIN, gradedAt:now-day, withoutHandIn:false });
+await coursework('g-cw2','Reflection on the first hikma', {
+  dueOffset:-4, lateOffset:3,
+  instructions:'Write a short reflection, under 300 words, on the first hikma and one moment in your own week it describes.',
+});
+await db.collection('submissions').doc(`${uids[0]}_g-cw2`).update({
+  state:'returned', handedInAt:now-6*day,
+  note:'The first hikma says that when we slip, our hope should not collapse, because hope was never in our deeds.',
+  returned:{ grade:{ points:9 }, feedback:'A thoughtful reflection, and your example from work is a good one. Next time, connect it to what the commentary says about hope and fear being two wings.', at:now-2*day, seq:1, retry:false },
+});
+
 // ---- staff ----
 // A PENDING staff account, so the approvals figure in the manual can show the
 // two approve buttons the prose names. Without one the screen photographs as

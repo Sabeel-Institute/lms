@@ -29,7 +29,7 @@ and commit messages, and renaming them would strand every one of those.
 | 5 | Staff ledger, reporting, audit | **complete** — see 5a–5d above |
 | A | Excused-only access, with a deadline | **complete** (2026-08-14) |
 | B | The student's own attendance record | **complete** (2026-08-14) |
-| C | Assignments and grades (`docs/plans/ASSIGNMENTS.md`) | **in progress** (2026-10-13: A1–A5 done and the editor on the web, the whole loop in the browser e2e; laptop grading, messages, the Android build and the release to come) |
+| C | Assignments and grades (`docs/plans/ASSIGNMENTS.md`) | **in progress** (2026-10-13: A1–A6 done, the whole loop in the browser e2e; the device pass and the v0.1.0 release to come) |
 | 6 | Zoom import | **built** — waiting on institute credentials and its first live import |
 | 7 | Notifications | **complete** (2026-08-15: delivered to an Android device end to end; web delivery still a browser check) |
 | 8 | Admin backend stats | not started |
@@ -37,6 +37,27 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **This app's releases start at v0.1.0.** Faisal: it is a new
+  app, so its numbering starts again, and any earlier release of it on GitHub
+  goes. The Android `versionCode` keeps counting up, which is what Android
+  compares; only the name starts again.
+- 2026-10-13 — **Behaviour under a hurried hand, app-wide.** Faisal asked that
+  going in and out of screens quickly, double taps and Back at odd moments be
+  consistent, safe and predictable. So: every action button is one at a time
+  (a double tap had created two assignments, two cohorts, two sessions); a
+  screen holding unsaved or in-flight work asks before it is left, or finishes
+  first — the assignment form asks before discarding (his choice), a grade or
+  an answer is stored before moving on, a leave mid-upload asks because it
+  stops the upload; parent links go back to the page above instead of pushing
+  a copy; a save over another teacher's edit is refused; returning all graded
+  goes on past work someone else returned a moment earlier. Each has a check
+  in the browser suite or a unit test.
+- 2026-10-13 — **Every notification tap opens its subject**, recordings and
+  registers as well as assignments. The proposal promised it for assignments;
+  the same path carries all seven messages, and a tap that opened an
+  assignment but not a recording would be the inconsistency.
+- 2026-10-13 — **Students' finished classes fold away** into a closed Finished
+  section on Your classes, as archived courses do for staff (Faisal's choice).
 - 2026-10-13 — **A student's answer is formatted.** Faisal chose this over
   the proposal's plain-text note: some assignments are a question to the
   whole class, or short enough to answer in the box, with nothing to upload.

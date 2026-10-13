@@ -239,15 +239,74 @@ const shapes = [
     () =>
       db.collection('listeningProgress').where('courseId', '==', ID).where('recordingId', '==', ID),
   ],
+
+  // ---- assignments (coursework). Equality only throughout, so none should
+  // need a composite index; listed so a range or an orderBy added later is
+  // caught here rather than by a teacher.
+  ['coursework — a course’s assignments', () => db.collection('coursework').where('courseId', '==', ID)],
+  ['coursework — posted in a course (reconcile)', () => db.collection('coursework').where('courseId', '==', ID).where('status', '==', 'posted')],
+  ['coursework — Today across managed courses', () => db.collection('coursework').where('courseId', 'in', [ID])],
+  ['submissions — a student’s own (To do)', () => db.collection('submissions').where('studentUid', '==', ID).where('active', '==', true)],
+  ['submissions — a course’s (staff pages)', () => db.collection('submissions').where('courseId', '==', ID)],
+  ['submissions — handed in, Today', () => db.collection('submissions').where('courseId', 'in', [ID]).where('state', '==', 'handedIn')],
+  ['submissions — one assignment’s (server)', () => db.collection('submissions').where('courseworkId', '==', ID)],
+  ['submissions — a student in a course (reconcile)', () => db.collection('submissions').where('courseId', '==', ID).where('studentUid', '==', ID)],
+  ['submissions — active in a course (reconcile)', () => db.collection('submissions').where('courseId', '==', ID).where('active', '==', true)],
+  [
+    'submissions — last day to hand in (7 AM sweep)',
+    () => db.collection('submissions').where('dueDate', '==', '2026-01-01').where('state', '==', 'open').where('active', '==', true),
+  ],
+  ['drafts — a student’s own', () => db.collection('drafts').where('studentUid', '==', ID)],
+  ['grades — a course’s (staff pages)', () => db.collection('grades').where('courseId', '==', ID)],
+  ['grades — Today across managed courses', () => db.collection('grades').where('courseId', 'in', [ID])],
+  ['grades — any on an assignment (server)', () => db.collection('grades').where('courseworkId', '==', ID).limit(1)],
+  [
+    'submissionEvents — one student’s hand-in history',
+    () =>
+      db.collection('submissionEvents').where('courseId', '==', ID).where('courseworkId', '==', ID).where('studentUid', '==', ID),
+  ],
+  ['attachmentUploads — abandoned (daily sweep)', () => db.collection('attachmentUploads').where('startedAt', '<', 1)],
+  [
+    'attachmentUploads — one person’s pending on an assignment',
+    () => db.collection('attachmentUploads').where('courseworkId', '==', ID).where('studentUid', '==', ID),
+  ],
 ];
 
-console.log(`Query shapes against ${PROJECT_ID}\n`);
+/**
+ * A query, run — over REST with `CHECK_ACCESS_TOKEN` when it is set.
+ *
+ * The Admin SDK reaches Firestore only through a service account or
+ * Application Default Credentials, and the ADC on a machine shared with other
+ * projects may belong to a different Google account. A user token
+ * (`gcloud auth print-access-token --account=<owner>`) answers the same
+ * question: the query is the SDK's own (`toProto()`), sent to `:runQuery`, so
+ * the shape checked is the shape the code sends. Two fields are written the
+ * way JSON wants them rather than the proto: `limit` as a number, and 64-bit
+ * integers as strings.
+ */
+const TOKEN = process.env.CHECK_ACCESS_TOKEN;
+async function runShape(query) {
+  if (!TOKEN) return (await query.get()).size;
+  const { parent, structuredQuery } = query.toProto();
+  if (structuredQuery.limit?.value !== undefined) structuredQuery.limit = structuredQuery.limit.value;
+  const body = JSON.stringify({ structuredQuery }, (key, value) => (key === 'integerValue' ? String(value) : value));
+  const r = await fetch(`https://firestore.googleapis.com/v1/${parent}:runQuery`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+    body,
+  });
+  const out = await r.json();
+  if (!r.ok) throw new Error(`${out.error?.status ?? r.status}: ${out.error?.message ?? r.statusText}`);
+  return out.filter((row) => row.document).length;
+}
+
+console.log(`Query shapes against ${PROJECT_ID}${TOKEN ? ' (REST, user token)' : ''}\n`);
 
 const failures = [];
 for (const [name, build] of shapes) {
   try {
-    const snap = await build().get();
-    console.log(`  ok   ${name} — ${snap.size} doc(s)`);
+    const size = await runShape(build());
+    console.log(`  ok   ${name} — ${size} doc(s)`);
   } catch (e) {
     // FAILED_PRECONDITION is the missing-index signal; anything else is still a
     // failure worth surfacing rather than swallowing.

@@ -42,7 +42,7 @@ field, stored as markdown in the same five-element vocabulary; `handIn`
 stores it canonical (`normalizeMarkdown`), so a draft written straight to
 Firestore cannot keep a link the reader would refuse.
 
-**The editor is its own web chunk.** Lexical is 130 KB gzipped; it loads when
+**The editor is its own web chunk.** Lexical is 127 KB gzipped; it loads when
 a box that uses it opens (`LazyRichEditor`), not with the app. Metro asks for
 Lexical's production build only (`app/metro.config.js`): its default entry
 imports both builds and Metro does not tree-shake.
@@ -84,6 +84,6 @@ no field-level security.
 | A4 | Student screens: To do with both kinds; the assignment screen (note, files, camera, hand in, take back); class page tabs | Browser e2e; layout sweep with seed coursework in every state — **built 2026-10-13**; the sweep now also fails text that runs past its card (it caught a late-work date at 320 px); the whole loop is in the e2e with A5 |
 | A5 | Staff screens: course page, assignment list, the form, the assignment page, grading on a phone, Today's To grade, the Assignments tab on a student's page | Browser e2e; layout sweep — **done 2026-10-13**: the e2e posts, attaches, hands in, takes back, grades and returns, and asserts a saved grade reaches neither the student's screen nor their record until it is returned; the sweep tours the six new staff screens and Today's To grade for a manager |
 | A5b | The rich-text editor for instructions and for a student's answer (the Kanban editor: Lexical on web, react-native-enriched-html on Android) | Browser e2e; device pass for Arabic — **web done 2026-10-13**: the e2e types bold, a list, an Arabic line and a link, asserts the stored markdown and what the student sees, types a formatted answer the teacher sees formatted, and serves a stale editor chunk to prove one reload recovers; **Android built and checked on the AVD**: instructions and a student's draft load formatted, Arabic right to left, and a bold word typed on the device saves as `**hope**`, the web's markdown; the full device pass comes with A7 |
-| A5c | Grading on a laptop: the work and the grade side by side, keys for next and return | Browser e2e; layout sweep at 1440 px |
-| A6 | Messages: four student messages under three switches; taps that open the assignment; channel renamed | Integration tests; device pass |
+| A5c | Grading on a laptop: the work and the grade side by side, keys for next and return | Browser e2e; layout sweep at 1440 px — **done 2026-10-13**: three columns from 1200 px (the class list with its remembered filter, the work, the grade), two from 900; J and K step through the list, Ctrl/⌘ + Enter returns; the e2e drives the keys; the hand-in history is on the work |
+| A6 | Messages: four student messages under three switches; taps that open the assignment; channel renamed | Integration tests; device pass — **done 2026-10-13**: sent by the callables and the 7 AM sweep (`notifyCoursework.ts`), each test driven through the real callable and mutation-checked; every message carries the path its tap opens, recordings and registers included, and `linkPaths.test.ts` resolves each through the app's routes; the e2e opens a message's link cold |
 | A7 | Words, brief, manual, CLAUDE.md; device pass (camera, Arabic in the editor, audio, taps, Yoga at 320 px); release | The proposal's "Device pass" list |

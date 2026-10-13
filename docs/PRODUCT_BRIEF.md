@@ -1,10 +1,10 @@
-# Hikam Foundations Class Recordings Product Brief
+# Sabeel Institute LMS — Product Brief
 
 ## Summary
 
-Hikam Foundations Class Recordings is a Sabeel Institute mobile and web app for adult students and staff. It replaces manual Zoom link sharing and email-list workflows with a professional recording library, in-app audio listening, and a clear accountability ledger.
+Sabeel Institute LMS is the institute's mobile and web app for adult students and staff: attendance, the class recordings a student who missed a class must play, and assignments with grades. It replaces Zoom links shared by hand, email-list workflows and paper hand-ins with one place for what each student owes and what each class has done, and gives staff a clear accountability ledger.
 
-The app is not a general LMS. It is a focused platform for class recordings, required listening, and staff visibility into completion.
+The app is not a general LMS. It covers attendance, required listening, and assignments with grades — no course grades, quizzes, discussion or messaging.
 
 ## Product principles
 
@@ -28,8 +28,8 @@ The product should be designed for Android, web, and future iOS support. Initial
 | Role | Description |
 |---|---|
 | **Admin** | Full platform access across all cohorts, classes, students, recordings, staff, settings, audit history, Zoom source configuration, and destructive actions. |
-| **Manager** | Operational staff member assigned class by class. Can manage students, recordings, assignments, reports, and audit history within assigned classes. Cannot manage staff/admin settings or Zoom source configuration. |
-| **Student** | Adult learner enrolled in one or more classes. Can access class recordings, listen in-app, download audio inside the app, view progress, and mark recordings complete. |
+| **Manager** | Operational staff member assigned class by class. Can manage students, recordings, attendance, assignments and grades, reports, and audit history within assigned classes. Cannot manage staff/admin settings or Zoom source configuration. |
+| **Student** | Adult learner enrolled in one or more classes. Can play the recordings they are given, download them inside the app, mark them complete, hand in assignments, and see the grades returned to them. |
 
 ### Authentication and access
 
@@ -52,11 +52,13 @@ The primary hierarchy is:
 
 ```text
 Cohort/Semester -> Course -> Session -> Recording
+                          -> Assignment
 ```
 
 - A **course** is the subject taught over a cohort (formerly "class"; renamed because "class" was overloaded with "class meeting").
 - A **session** is one dated meeting of a course. It owns the **attendance** for that meeting and has zero or one recording. A session exists whether or not it was recorded.
 - A **recording** is the audio for a session, linked by `recording.sessionId`. It is pure media + lifecycle; the student-facing title/notes/date are copied (denormalised) from the session, because students cannot read sessions.
+- An **assignment** is work set for a course, independent of attendance: it goes to everyone enrolled and to anyone who joins by its due date (see "Assignments and grades"). Its records are `coursework` and `submissions`; `assignments` is the recording grant's name.
 - A student account can be enrolled in multiple cohorts/courses over time.
 - Listening history is preserved across enrollments.
 - Admins and Managers can create and manage cohorts, courses, and sessions within their permissions. A cohort can be renamed from its own page; a rename touches nothing but the name.
@@ -169,7 +171,7 @@ Permanent deletion of anything carrying **listening history** — a recording wi
 
 Two deletions are deliberately left to a manager, because neither destroys listening history and both are ordinary corrections to their own class: **removing a completion override** they set (the override is a staff judgement, and the audit log keeps the record of setting and removing it, each with its required reason), and **removing a file from an unpublished draft** so a bad one can be replaced. A published recording's playable files are hidden from students rather than removed, and staff may hide, show, reorder and add files in any state. A file no student ever saw — still uploading or copying, or failed — may be removed from a recording in any state: that is cancelling an upload or clearing a failed import. A draft that has ever been published is not one of these — the server checks the collections, not the status.
 
-## Assignment, access, and accountability
+## Recordings: access and accountability
 
 ### Core rule
 
@@ -213,29 +215,64 @@ There is no course archive to browse: a student's list of what they may listen t
 - A student who has already pressed play keeps that playback session: a signed URL lives up to 12 hours from minting. Individual URLs cannot be revoked, which is a documented and accepted property of the design.
 - **A completion that arrives after the deadline still counts, and carries the date the student's own device recorded** (decision, 2026-09-07). The app gives a student no way to mark one late — past the listen-by date the player is a closed screen with no control — so the only writes that arrive late are ones made ON TIME and queued offline. Rejecting those would punish exactly the student who did the work on a poor connection, and enforcing it would mean putting date arithmetic into `firestore.rules`, which the deadline invariant rules out. The trade accepted: the ledger's completion dates are the student's device clock, so they are evidence of what a student did, not proof of when a server saw it.
 
+## Assignments and grades
+
+How it was decided: `docs/proposals/lms-assignments-proposal.html`; how it is
+built: `docs/plans/ASSIGNMENTS.md`.
+
+### Writing and posting
+
+- A teacher writes an assignment on its course: a title, formatted instructions (bold, italic, two kinds of list and links, with Arabic running right to left), files, a due date, how it is graded — points out of a whole number, or satisfactory / needs work — and whether late work is accepted, and until when (a week after the due date unless changed).
+- Dates are whole days in institute time, like a session's, and never written in the past.
+- A **draft** is seen by the course's staff and by no student. **Posting** sends it to everyone enrolled and tells them; a posted assignment never goes back to being a draft.
+- Editing a posted assignment changes it for everyone still working on it, except a student given more time, whose own date stands. How it is graded is fixed once any grade is saved. A form opened before someone else saved their edit cannot save over it: the save is refused, and says so.
+- **Stop taking work** closes it early: everyone with nothing in has missed it, and work already in can still be graded.
+- A teacher may **delete** an assignment no student has started. Once any student has a draft, a hand-in, a grade or a teacher's mark on it, only an admin may, and closing keeps the record instead.
+
+### Who has it
+
+- Everyone enrolled when it is posted, and anyone who joins by its due date. Joining after the due date gives a student nothing to answer for. Leaving the class takes it off their list; their work stays with the record.
+- A teacher can give one student **more time**, or mark it **not required** for them, each with a reason the student sees. It is never called "excused", which is the register's word.
+
+### Handing in
+
+- A student writes an answer, formatted like the instructions, and attaches files: documents, pictures (with a camera button on phones) and audio; up to ten files of 25 MB each, and no video. Either may be empty, but not both, so a question put to the class can be answered in the box alone.
+- What they write is saved as they type, on the server, so they can start on a phone and finish on the website, and leaving the screen keeps it. Nobody else sees it until it is handed in.
+- **Hand in** stores the answer first: what is on the screen is what is handed in.
+- Until the due date, and while it has not been returned, a student can **take it back** to change it.
+- After the due date, while late work is accepted, it can still be handed in and shows as **late**. After that it is **missed**, and the screen offers no button; a teacher can give more time.
+
+### Grading and returning
+
+- A grade is a draft that only staff see until the work is **returned**. A student never sees a grade before then, and the record they can read carries none.
+- A teacher returns work one student at a time, or everything graded at once, which asks once more first. Returning can ask for **another try** with a new date; the attempt, its grade and its feedback stay with the next one.
+- A change to a returned grade reaches the student at once, tells them, and is recorded.
+- Work done on paper or recited in class can be graded with nothing handed in.
+- At a desk, the class list, the work and the grade sit side by side; **J** and **K** step through the list and **Ctrl + Enter** (**⌘ + Enter** on a Mac) returns. Nothing moves on, and nothing is returned, until what is typed is stored.
+- There is no course grade.
+
 ## Student experience
 
-### Student home
+### Student home: To do
 
-Student home is the whole of what a student may listen to, ordered by urgency — because being granted a recording and being required to listen to it are now the same fact, there is nothing accessible-but-optional to separate out.
+**To do** is everything a student owes — the recordings they must play and their assignments — on one list, open work first and the record after. Being granted a recording and being required to play it are the same fact, so there is nothing accessible-but-optional to separate out.
 
-The most urgent recording that is still open is promoted to a card at the top of
-the screen and dropped from the group it would otherwise sit in, so the student's
-next action is the first thing on the page. The rest are grouped, in priority
-order:
+The nearest deadline still ahead, of either kind, is promoted to a card at the top of the screen (for late work, the last day it is accepted) and dropped from the group it would otherwise sit in, so the student's next action is the first thing on the page. Work already late sits directly under it. The rest are grouped, in order:
 
-1. Missed
-2. Due soon
+1. Past due — assignments still accepted late
+2. Due soon — due within the next 7 days
 3. Upcoming
-4. Completed/recent history
-
-Due soon means incomplete recordings due within the next 7 days.
+4. Missed
+5. Archived
+6. Done — the last two weeks, newest first; a class's page keeps the whole record
 
 A **Missed** card stays on the list rather than disappearing: a student is owed the record of what closed and when. It is not a play target — the server refuses to mint a URL past the deadline, and a card that looks tappable and then errors reads as a fault in the app rather than a deadline missed.
 
 ### Class views
 
-Students have a page per class showing **their own attendance record**: a tally of present / absent / excused, then every session they were marked in, with their own mark and its date. An excused row also says that a recording was required and whether they have listened to it.
+**Your classes** lists the classes a student is enrolled in, each with their attendance tally and where their assignments stand. Finished (archived) classes wait in a closed **Finished** section at the bottom.
+
+A class's page has two tabs, and a banner that says what is owed. **Sessions** is **their own attendance record**: a tally of present / absent / excused, then every session they were marked in, with their own mark and its date. An excused row also says that a recording was required and whether they have listened to it. **Assignments** is every assignment they have in the class and where each stands.
 
 - It is a record, not a second way to play: listening starts from the Listening tab, which is the one place a recording is opened. (Once something is playing, the docked now-playing bar can reopen the player from anywhere.)
 - Sessions whose attendance was taken before the student enrolled are simply not in their record.
@@ -300,9 +337,14 @@ The rest, in order: a recording waiting to be published (draft, unpublished, or
 an import needing attention), a session whose attendance is in but whose audio
 is not, and a recording whose access closes within the week.
 
-Nothing in the queue is stored. Every row is derived from sessions and
-recordings the reader can already see, so it cannot claim work that is already
-done, and closing the gap removes the row.
+**To grade** comes last: work handed in and not yet graded, in courses the
+reader manages by name — an admin's Today does not carry every course's
+grading, which would bury the registers that keep students from their
+recordings. It is never counted in the badge.
+
+Nothing in the queue is stored. Every row is derived from records the reader
+can already see, so it cannot claim work that is already done, and closing the
+gap removes the row.
 
 ### The recording library
 
@@ -396,36 +438,41 @@ for the roster on screen and are not part of a file about who owes listening.
 
 ## Notifications
 
-Push notifications are first-class scope for students and staff alike. Three messages, no more:
+Push notifications are first-class scope for students and staff alike. Six switches and seven messages, no more; each message names the class, then says one plain sentence.
 
 1. **Student — a recording is ready for you.** Fires once when a student is excused and the recording is published. Under the excused-only policy this is also "you now have access", so without it a student has no way to know a recording appeared.
 2. **Student — last day for a recording.** On the morning of the due date, if not yet complete. There is no day-after reminder: once the deadline passes there is no action left to take, so a message could only say "you missed it".
-3. **Course managers — attendance still not taken.** A session whose date has passed with attendance never submitted, sent to the people who manage that class. Load-bearing under this policy: no attendance means nobody is granted anything, so an un-taken sheet silently locks a whole class out of a published recording. A session marked **not recorded** raises nothing — there is no audio for a missing register to lock anyone out of.
+3. **Student — new assignment.** When an assignment is posted, to everyone it went to; and **due date moved**, under the same switch, to those still working on it whose date moved. A student who joins later finds the work on To do.
+4. **Student — last day to hand in.** 7 AM on the due date, or on the student's own date when given more time, to each student with nothing handed in who is not marked not required.
+5. **Student — work returned.** When the teacher returns the work, asks for another try, or changes a returned grade. Never the grade itself: a lock screen is not private.
+6. **Course managers — attendance still not taken.** A session whose date has passed with attendance never submitted, sent to the people who manage that class. Load-bearing under this policy: no attendance means nobody is granted anything, so an un-taken sheet silently locks a whole class out of a published recording. A session marked **not recorded** raises nothing — there is no audio for a missing register to lock anyone out of. Still the only message staff get: a message per hand-in would be twenty for one assignment, and Today carries the count.
 
 To the class's managers and to nobody else: an admin who manages no class cannot receive it, so their notification settings say where class messages go instead of offering a switch that could do nothing.
 
-Each has its own on/off switch, per person, defaulting on. Notifications are a convenience, not the accountability mechanism.
+Each switch is per person and on by default. Notifications are a convenience, not the accountability mechanism.
 
-A message is shown whether the app is open, in the background, or closed — on Android and on the website alike. While the app is open it appears as a banner without a sound: the person is already there, and the live screen carries the news.
+A message is shown whether the app is open, in the background, or closed — on Android and on the website alike. While the app is open it appears as a banner without a sound: the person is already there, and the live screen carries the news. **Tapping a message opens what it is about** — the assignment, the recording, the register — on both surfaces. On Android the app's notification channel is **Class alerts and deadlines**.
 
 ## Data policy and audit history
 
 - Recording access state and accountability history are retained indefinitely by default unless an Admin deletes or archives data according to policy.
 - Admins and Managers can view audit/change history within their allowed class scopes.
 - Platform-level staff/admin changes belong in Admin surfaces.
-- Permanent deletion is Admin-only, requires strong confirmation, and is audited.
+- Permanent deletion is Admin-only, requires strong confirmation, and is audited. Three deletions are a manager's: a completion override they set, a file on an unpublished draft recording, and an assignment no student has started.
+- Posting, editing, closing, returning, changing a returned grade, giving more time and marking work not required are in the audit history. A grade becomes a record only when it is returned: drafts change constantly while a teacher works and are not logged keystroke by keystroke.
+- What students do with assignments — each hand-in and take-back, with its time — is kept in its own history, which staff see on the student's work, rather than in the audit history.
 
 ## Out of scope for the first release
 
 - Transcripts/captions.
 - Search.
 - Parent/guardian access.
-- File attachments.
 - Bulk student import.
 - Gamification.
 - External audio file downloads.
-- Video playback.
 - Email notifications of any kind (push only).
+- Course grades, quizzes, discussion and messaging.
+- Video in assignment files.
 
 ## Feature checklist
 
@@ -433,7 +480,9 @@ A message is shown whether the app is open, in the background, or closed — on 
 
 - Email/password login, with a self-service reset from **More → Change password**.
 - View the classes they are enrolled in.
-- See required listening grouped by missed, due soon, upcoming, and recent/completed.
+- See To do: required recordings and assignments together, nearest deadline first.
+- Hand in an assignment: a formatted answer and files, with a camera button on phones; take it back to change it before the due date.
+- See returned grades and feedback, and earlier attempts.
 - See their own attendance record for each class.
 - Stream audio.
 - Download audio inside the app for offline listening.
@@ -462,6 +511,9 @@ A message is shown whether the app is open, in the background, or closed — on 
 - View class and recording ledgers.
 - Drill into student accountability history.
 - Override completion with required reason.
+- Post, edit, close and delete assignments, with files and formatted instructions.
+- Grade and return work, together or one at a time; ask for another try; give one student more time; mark work not required.
+- Grade at a desk with the class list beside the work, and keys for moving on and returning.
 - Export CSV reports.
 - View audit history within assigned scopes.
 
@@ -522,7 +574,12 @@ This is not the final schema. It captures the product objects that need first-cl
 | `assignments` | The grant: one per **excused** student × recording, reconciled from the session's attendance. Both the permission to play and the obligation to listen. `active:false` retains history; the due date closes it without deleting it. |
 | `listeningProgress` | Playback progress, listened percent, last listened, and device/sync metadata. |
 | `completions` / `completionEvents` | Student completion state doc and the append-only event log; `completionOverrides` holds staff overrides (server-only). |
-| `notifications` | Student notification preferences and sent notification records. |
+| `coursework` | An assignment: title, formatted instructions (markdown), files, due date, late-work date, grading, draft/posted, closed. Staff write it through callables. |
+| `submissions` | One student's work on one assignment, keyed `{studentUid}_{courseworkId}`: state, their dates, what was handed in, earlier attempts, more time / not required, and the grade once returned. |
+| `drafts` | A student's unsent answer and files, readable by them alone. |
+| `grades` | Grades and feedback as staff write them. Never student-readable: a grade reaches the student only as `submissions.returned`. |
+| `submissionEvents` | Each hand-in and take-back, append-only. |
+| `notifications` | Notification preferences, registered devices, and sent-notification records. |
 | `backendStats` | Admin-facing operational metrics such as storage usage, recording counts, import failures, background jobs, and notification errors. |
 | `auditLog` | Staff and system changes that must remain inspectable. |
 

@@ -121,6 +121,12 @@ A release bumps one version and ships it to both surfaces. In order:
    authenticate against the live project, so neither CI nor the emulator suite
    can: `npm run check:queries` (every query shape the app sends, against the
    real indexes) and `npm run check:push` (FCM credentials and the VAPID key).
+   This machine's Application Default Credentials belong to another Google
+   account, so run both with the owner's token:
+   ```sh
+   export CHECK_ACCESS_TOKEN="$(gcloud auth print-access-token --account=faisal.shah@oursabeel.com)"
+   npm run check:queries && npm run check:push
+   ```
    See `docs/DEV-TOOLING.md`.
 
 1. **Bump the version in BOTH files, together:**

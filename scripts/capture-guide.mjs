@@ -169,6 +169,18 @@ await pair(stu, '03b-mini-player');
 await tap(stu, 'myclass-Hikam Foundations');
 await stu.waitForTimeout(3000);
 await pair(stu, '04-attendance-record');
+
+// An assignment to do, its answer already started — and one already returned.
+await home(stu);
+await tap(stu, 'task-Memorize the first hikma');
+await stu.getByTestId('work-note').waitFor({ timeout: 30000 });
+await stu.waitForTimeout(2500);
+await pair(stu, '05-work');
+await home(stu);
+await tap(stu, 'task-Reflection on the first hikma');
+await stu.getByTestId('work-returned').waitFor({ timeout: 20000 });
+await stu.waitForTimeout(1500);
+await pair(stu, '06-work-returned');
 await stu.context().close();
 
 console.log('Admin / staff');
@@ -208,6 +220,32 @@ await pair(adm, '14-courses');
 await tap(adm, 'course-open-Hikam Foundations');
 await adm.getByTestId('nav-sessions').waitFor({ timeout: 15000 });
 await pair(adm, '15-course-detail');
+
+// Assignments: the course's list, one assignment's page, grading — three
+// columns on the computer — and the form for a new one.
+await tap(adm, 'nav-coursework');
+await adm.getByTestId('coursework-new').waitFor({ timeout: 15000 });
+await adm.waitForTimeout(2000);
+await pair(adm, '23-assignments');
+await tap(adm, 'coursework-Memorize the first hikma');
+await adm.getByTestId('coursework-tab-students').waitFor({ timeout: 15000 });
+await adm.waitForTimeout(2000);
+await pair(adm, '24-assignment-page');
+await tap(adm, 'work-row-Bilal Khan');
+await adm.getByTestId('grade-points').waitFor({ timeout: 15000 });
+await adm.waitForTimeout(3000);
+await pair(adm, '25-grade');
+await adm.goBack({ waitUntil: 'domcontentloaded' });
+await adm.getByTestId('coursework-tab-students').waitFor({ timeout: 15000 });
+await adm.goBack({ waitUntil: 'domcontentloaded' });
+await tap(adm, 'coursework-new');
+await adm.getByTestId('coursework-instructions').waitFor({ timeout: 30000 });
+await adm.waitForTimeout(1500);
+await pair(adm, '26-new-assignment');
+await adm.goBack({ waitUntil: 'domcontentloaded' });
+await adm.getByTestId('coursework-new').waitFor({ timeout: 15000 });
+await adm.goBack({ waitUntil: 'domcontentloaded' });
+await adm.getByTestId('nav-sessions').waitFor({ timeout: 15000 });
 
 await tap(adm, 'nav-sessions'); await adm.waitForTimeout(2500);
 await pair(adm, '16-sessions');

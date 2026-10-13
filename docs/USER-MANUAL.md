@@ -1,15 +1,15 @@
-# Sabeel Class Recordings — User Manual
+# Sabeel Institute LMS — User Manual
 
-*For app version 0.7.1 · October 2026*
+*For app version 0.1.0 · October 2026*
 
-Welcome! This guide explains everything the Sabeel Class Recordings app can do —
-from playing your first class to taking attendance and tracking who has
-caught up. It is organized by role: **students** start with Part 1; **staff**
+Welcome! This guide explains everything the Sabeel Institute LMS app can do —
+from playing a class you missed and handing in an assignment to taking
+attendance, grading, and tracking who has caught up. It is organized by role: **students** start with Part 1; **staff**
 (managers and admins) add Part 2; **admins** add Part 3. Part 4 is a quick "How
 do I…?" index you can skim any time.
 
 The app works the same on the website
-(<https://sabeel-class-recordings.web.app>) and the Android app — same account,
+(<https://oursabeel-lms.web.app>) and the Android app — same account,
 same data, live everywhere. Every screen in this guide is shown twice: once **on
 a phone** and once **on a computer**, so you can recognize it wherever you are.
 Both are captures of the website, at a phone's width and a laptop's; the Android
@@ -27,7 +27,7 @@ app draws the same screens, minus the one thing Section 2.11 calls out.
 2. **The app is for catching up on a class you were excused from.** Staff take
    **attendance** for each meeting. If they mark you **excused**, that meeting's
    recording opens to you and becomes *required* — it appears on your
-   **Recordings** screen with a date to finish it by, and closes again after it. If you were
+   **To do** list with a date to finish it by, and closes again after it. If you were
    **present**, you don't need it. If you were **absent** without being excused,
    it isn't opened to you. Being excused is the whole of it.
 3. **You mark a recording complete yourself.** The app saves your place and shows
@@ -37,8 +37,12 @@ app draws the same screens, minus the one thing Section 2.11 calls out.
    of the students who were excused, who has finished and who missed the date —
    plus, for the record, who was present and who was absent. Staff can export it
    and, with a written reason, mark a completion on someone's behalf.
-5. **Everything important is written down.** Approvals, overrides and edits are
-   recorded in an audit history that admins can review.
+5. **Assignments are handed in here too.** A teacher posts an assignment to the
+   whole class with a date to hand it in by. You write your answer, attach files
+   or a photo of your page, and hand it in. Your teacher grades it and returns
+   it — and you see the grade only once it is returned.
+6. **Everything important is written down.** Approvals, overrides, edits and
+   returned grades are recorded in an audit history that admins can review.
 
 That's the whole system. Everything below is detail.
 
@@ -48,7 +52,7 @@ The app has a **bar along the bottom** on a phone and a **narrow strip of icons
 down the left** on a computer. It is the same set of places either way, and it
 is always there — so wherever you are, you are one tap from anywhere else.
 
-Students have **Recordings**, **Classes** and **More**. Staff have **Today**,
+Students have **To do**, **Classes** and **More**. Staff have **Today**,
 **Courses**, **Library**, **People** and **More**.
 
 **More** holds the things you need occasionally rather than daily: notification
@@ -82,40 +86,44 @@ password link** on this screen to get a fresh one.
 The **Staff** section at the top is only for teachers and administrators — you
 don't need it.
 
-## 1.2 Your recordings
+## 1.2 To do — everything you owe
 
 <div class="pair">
-<figure class="ph"><img src="manual/img/02-student-home-phone.png" alt="Your recordings, on a phone"><figcaption>On a phone</figcaption></figure>
-<figure class="wd"><img src="manual/img/02-student-home-desktop.png" alt="Your recordings, on a computer"><figcaption>On a computer</figcaption></figure>
+<figure class="ph"><img src="manual/img/02-student-home-phone.png" alt="To do, on a phone"><figcaption>On a phone</figcaption></figure>
+<figure class="wd"><img src="manual/img/02-student-home-desktop.png" alt="To do, on a computer"><figcaption>On a computer</figcaption></figure>
 </div>
 
-This is **Your recordings**, the first thing the app opens on. It holds every recording that has
-been opened to you, most urgent first.
+**To do** is the first thing the app opens on. It is everything you owe on one
+list — the **recordings** you need to play and the **assignments** you need to
+hand in — soonest first.
 
 **A recording is opened to you when your teacher marks you *excused* for that
 class.** That is the whole rule. If you were there, you don't need it; if you
 missed a class without being excused, it isn't opened to you. So this one list is
 both what you *may* play and what you *need* to play — there is no
-separate archive to go hunting through.
+separate archive to go hunting through. **Assignments** come to everyone in the
+class when the teacher posts them, and to anyone who joins the class by the due
+date.
 
-**The one to do next is at the top, in full.** It is the most urgent
-recording still open to you, shown as a large card so there is no hunting on the
-screen you open most. Everything else sits underneath it, grouped so nothing
-slips past you:
+**The one to do next is at the top, in full** — the nearest date still ahead,
+recording or assignment. Late work you can still hand in sits right under it.
+Everything else is grouped so nothing slips past you:
 
-- **Missed** — its date has passed, with the date it closed.
-  Nothing can be done about these, so they are set quietly rather than as an
-  alarm.
+- **Past due** — assignments whose date has passed but which your teacher still
+  accepts, late.
+- **Due soon** — due within the next week.
+- **Upcoming** — further off.
+- **Missed** — closed, with the date it closed. Nothing can be done about these,
+  so they are set quietly rather than as an alarm.
 - **Archived** — the class has been archived and its recordings closed, so
   these are no longer required and cannot be played. Quiet, like Missed.
-- **Due soon** — its date is within the next week.
-- **Upcoming** — opened to you, with more time.
-- **Completed** — recordings you've already marked done.
+- **Done** — what you finished or handed in over the last two weeks. Your class's
+  page keeps the whole record.
 
-Each card shows the recording's title, which class it's from, and its date:
-**Watch by** for a recording with video, **Listen by** for one that is audio
-only. Tap a card to open it and play it — except a Missed or Archived one,
-which can no longer be played and so does not open.
+Each card shows its title, which class it's from, and its date: **Watch by** for
+a recording with video, **Listen by** for one that is audio only, **Hand in by**
+for an assignment. Tap a card to open it — except a Missed or Archived
+recording, which can no longer be played and so does not open.
 
 **Every recording has a closing date.** After it passes you can no longer play
 that recording — the card stays on your list marked *Missed*, so you can still
@@ -125,7 +133,7 @@ is lost when a recording closes. If you need it reopened, ask your teacher: they
 can move the date.
 
 One thing worth knowing: if you finish a recording and mark it complete *before*
-the date, it stays **Completed** forever. It is never turned into a "missed" the
+the date, it counts as complete for good. It is never turned into a "missed" the
 next day.
 
 ## 1.3 Playing a recording
@@ -188,7 +196,7 @@ Closing it with the **×** is what stops playback.
 ## 1.4 Marking a recording complete
 
 The **Mark complete** button is at the bottom of the player. Tap it when you've
-finished, and the recording moves to your **Completed** section.
+finished, and the recording moves to **Done**.
 
 A few things worth knowing:
 
@@ -200,37 +208,90 @@ A few things worth knowing:
 - **Changed your mind?** You can open a completed recording again and play
   more; marking complete isn't a locked door.
 
-## 1.5 Your attendance record
+## 1.5 Assignments — your answer, your files, Hand in
 
 <div class="pair">
-<figure class="ph"><img src="manual/img/04-attendance-record-phone.png" alt="Your attendance for a class on a phone"><figcaption>On a phone</figcaption></figure>
-<figure class="wd"><img src="manual/img/04-attendance-record-desktop.png" alt="Your attendance for a class on a computer"><figcaption>On a computer</figcaption></figure>
+<figure class="ph"><img src="manual/img/05-work-phone.png" alt="An assignment to do, on a phone"><figcaption>On a phone</figcaption></figure>
+<figure class="wd"><img src="manual/img/05-work-desktop.png" alt="An assignment to do, on a computer"><figcaption>On a computer</figcaption></figure>
+</div>
+
+An assignment is work your teacher sets for the whole class: a reflection, a
+recitation, a worksheet. It appears on **To do** with the date to hand it in by,
+and opens to your teacher's **instructions** and any **files** they attached — a
+worksheet to print, a reading, a recording to listen to.
+
+**Your work** is under the instructions:
+
+- **Your answer** — write it right there. Bold, italics, lists and links are on
+  the bar above the box, and Arabic runs right to left. Sometimes the answer is
+  all there is: a question put to the class, a few sentences.
+- **Files** — tap **Add files** for a document, a picture or an audio
+  recording, or, on a phone, **Take a photo** of a page you wrote out by hand.
+  Up to ten files, 25 MB each; no video.
+
+Everything is saved as you go, on the server — start on your phone and finish on
+the website, or leave and come back later — and nobody sees it until you hand it
+in. If you try to leave while a file is still uploading, the app asks first,
+because leaving stops the upload.
+
+When it's ready, tap **Hand in**. It needs an answer, a file, or both. Your
+teacher sees exactly what is on your screen at that moment.
+
+**Changed your mind?** Until the due date, and while your teacher hasn't
+returned it, tap **Take back**, change what you need to, and hand it in again.
+
+**Late.** If your teacher accepts late work, you can still hand it in after the
+due date until the date the screen gives you; it is marked late. After that it
+is **missed**, and the screen says so. If you need more time, ask your teacher —
+they can give you a date of your own.
+
+<div class="pair">
+<figure class="ph"><img src="manual/img/06-work-returned-phone.png" alt="Returned work, on a phone"><figcaption>On a phone</figcaption></figure>
+<figure class="wd"><img src="manual/img/06-work-returned-desktop.png" alt="Returned work, on a computer"><figcaption>On a computer</figcaption></figure>
+</div>
+
+**Returned.** When your teacher returns your work, your grade and their feedback
+appear at the top, and the app tells you it's back — never the grade itself,
+because a lock screen isn't private. You see a grade only once it is returned.
+If your teacher asks for **another try**, the assignment goes back on To do with
+a new date, and your first attempt and its feedback stay underneath.
+
+Now and then an assignment is marked **not required** for you, with your
+teacher's reason. You can still read it.
+
+## 1.6 Your classes
+
+<div class="pair">
+<figure class="ph"><img src="manual/img/04-attendance-record-phone.png" alt="A class's page on a phone"><figcaption>On a phone</figcaption></figure>
+<figure class="wd"><img src="manual/img/04-attendance-record-desktop.png" alt="A class's page on a computer"><figcaption>On a computer</figcaption></figure>
 </div>
 
 Tap **Classes** in the navigation to see the classes you're enrolled in — each
-one shows your tally at a glance — then tap one to see **your own attendance**
-for it.
+one shows your attendance and your assignments at a glance. Classes that have
+finished wait in a closed **Finished** section at the bottom; tap it to open it.
 
-At the top is a tally — how many meetings you were **present** for, **absent**
-from, and **excused** from. Below it, every meeting your teacher recorded you in,
-newest first, with the date and your own mark.
+Tap a class to open its page. A line at the top says what you owe in it, and it
+has two tabs:
 
-Where you were excused, the row also says that a recording was required and
-whether you've completed it — so you can check your record without hunting
-through your recordings.
+- **Sessions** — **your own attendance**. At the top is a tally: how many
+  meetings you were **present** for, **absent** from, and **excused** from.
+  Below it, every meeting your teacher recorded you in, newest first, with the
+  date and your own mark. Where you were excused, the row also says that a
+  recording was required and whether you've completed it.
+- **Assignments** — every assignment in the class and where it stands: to do,
+  handed in, returned with its grade, or missed.
 
-Two things this page is not: it isn't a way to play anything (that's
-**Recordings**), and it never shows anyone else's attendance. You see your own marks and
-nobody else's.
+Two things this page is not: it isn't where you play a recording (that's
+**To do**), and it never shows anyone else's attendance or work.
 
-## 1.6 Changing your password
+## 1.7 Changing your password
 
 Tap **More**, then **Change password**. The app emails you a link to set a new
 one — the same kind of link you used when your account was first created. Your
 account is created for you by the institute; you can't sign yourself up, and
 there's nothing to create here.
 
-## 1.7 Playing on a spotty connection
+## 1.8 Playing on a spotty connection
 
 The app is built to survive a bad signal. If you mark a recording complete while
 you're offline or your connection drops, the app **holds onto that** and syncs it
@@ -244,19 +305,28 @@ less of it than video. Where you got to is saved even if your phone is locked
 and the signal comes and goes; it reaches your account the next time the app
 is open with a connection.
 
-## 1.8 Notifications
+## 1.9 Notifications
 
-The app can send you two messages, and only two. Tap **More**, then
-**Notifications**, to turn either off:
+The app can send you five kinds of message, and no more. Tap **More**, then
+**Notifications**, to turn any of them off:
 
 - **A recording is ready for me** — when a class you were excused from has a
   recording for you. Worth leaving on: it's the only way you'll know
   one has appeared.
 - **Last day for a recording** — on the morning of the day a recording closes, if you
   haven't finished it.
+- **New assignments** — when a teacher posts an assignment for you, or moves
+  its due date.
+- **Last day to hand in** — on the morning an assignment is due, if you haven't
+  handed it in.
+- **Work returned** — when your teacher returns your work, asks for another
+  try, or changes a grade they returned.
 
-Both start switched on. There's deliberately no message *after* a recording
-closes: by then there'd be nothing you could do about it.
+All of them start switched on. There's deliberately no message *after*
+something closes: by then there'd be nothing you could do about it. **Tapping a
+message opens what it's about** — the recording or the assignment. On an
+Android phone the app's messages are listed as **Class alerts and deadlines** in
+its notification settings.
 
 A message is shown whether the app is open or closed, on the phone and on the
 website. While you're in the app — playing a recording, say — it appears as a banner,
@@ -264,7 +334,7 @@ without a sound.
 
 Your choices follow you — they apply on every device you sign in on. Reaching
 this device needs its permission as well. The app offers to set that up once, on
-your recordings screen after you sign in; you can also tap **Enable
+To do after you sign in; you can also tap **Enable
 notifications** on this screen at any time. If it says they are blocked, use **Open settings** on a
 phone, or allow them from the site settings behind the icon in your browser's
 address bar. If it says this device can't show them at all, either the browser
@@ -310,6 +380,10 @@ the thing.
 - **No recording yet** — attendance is in, the recording isn't.
 - **Closing soon** — access to a recording ends within the week; a good moment
   to see who still hasn't finished.
+- **To grade** — work handed in and not yet graded, in the courses you manage
+  (an admin sees it only for courses they are a manager of, so it never buries
+  the registers). It is never in the count on the tab. Tap a card to grade
+  (Section 2.15).
 
 The number on the **Today** tab counts what is blocking access right now: a
 register not yet submitted, and a recording that was published and has since
@@ -325,7 +399,8 @@ count.
 
 A card disappears the moment you close the gap, and the count goes with it. An
 empty Today is the answer, not a blank screen: it means attendance is in, every
-recording is published, and nothing closes this week.
+recording is published, nothing closes this week, and no work is waiting to be
+graded.
 
 The rest of the navigation is the structure: **Courses** (cohorts and their
 courses for an admin, your own courses for a manager), **Library**, **People**,
@@ -333,10 +408,12 @@ and **More**.
 
 ## 2.3 Cohorts, courses, and a course at a glance
 
-The structure is **Cohort → Course → Session → Recording**. A **cohort** is a
-term or intake (like "Autumn 2026"). A **course** is a subject taught over that
-term. A **session** is one dated meeting of the course, and a **recording** is
-that meeting as the class made it: audio, and often video too.
+The structure is **Cohort → Course → Session → Recording**, with **assignments**
+on each course too. A **cohort** is a term or intake (like "Autumn 2026"). A
+**course** is a subject taught over that term. A **session** is one dated
+meeting of the course, and a **recording** is that meeting as the class made it:
+audio, and often video too. An **assignment** is work set for the course
+(Sections 2.14 and 2.15).
 
 <div class="pair">
 <figure class="ph"><img src="manual/img/13-cohorts-phone.png" alt="Cohorts list on a phone"><figcaption>On a phone</figcaption></figure>
@@ -369,11 +446,14 @@ The **course page** is your dashboard for that course:
 
 - **Sessions** takes you to the course's meetings, where attendance and
   recordings live (Section 2.4).
+- **Assignments** takes you to the course's assignments: writing and posting
+  them (Section 2.14), and grading and returning work (Section 2.15).
 - **Attendance report** summarizes attendance and catch-up across the whole
   course (Section 2.9).
-- The counts card — *N required / not complete / missed* — is the
-  whole course's required recordings at a glance, and links straight to the
-  course **Audit history**.
+- The counts card has two lines. **Listening** — *N required / not complete /
+  missed* — is the whole course's required recordings at a glance;
+  **Assignments** counts what is posted, waiting to be graded, past due and
+  missed. It links straight to the course **Audit history**.
 - **Settings** (admins) lets you rename the course, **archive** it when the term
   ends, and choose whether an archived course's recordings stay open to the
   students they were required of (**Keep recordings open when archived** /
@@ -564,13 +644,14 @@ Here's the rule that runs the whole ledger:
 > attendance has been **submitted**. The same fact makes it required.
 > It closes again when the session's **Due by** date passes.
 
-You never assign students one by one; the attendance sheet is the assignment. If
+You never give students a recording one by one; the attendance sheet decides who gets it. If
 you correct attendance — flip someone from excused to present, or the reverse —
 access and obligations update to match, and any progress or completion already
 recorded is kept.
 
-- **Being enrolled opens nothing.** A student in the class who was present, or
-  absent without being excused, cannot play the recording at all.
+- **Being enrolled opens no recording.** A student in the class who was
+  present, or absent without being excused, cannot play the recording at all.
+  (Enrolment does give a student the course's assignments — Section 2.14.)
 - **The due date closes it.** After that day the student sees the recording
   on their list marked *Missed*, with the date it closed, and can no longer play
   it. Move the session's Due by date forward to reopen it. Students see the
@@ -782,7 +863,9 @@ admin sees everything.
 
 ## 2.12 Notifications *(staff)*
 
-Tap **More**, then **Notifications**. Managers get one message:
+Tap **More**, then **Notifications**. Managers get one message — and only one,
+deliberately: students are told about assignments, but a teacher is not sent a
+message for every hand-in, since **Today** carries the count.
 
 - **Attendance still not taken** — a couple of days after a class meeting whose
   attendance you never submitted.
@@ -877,6 +960,108 @@ The file's **Definitions** tab reads:
 The columns hold real dates and real numbers, not text — so they sort, filter
 and add up in Excel. A rate shows a dash where there is nothing to divide by.
 
+Assignments and grades are not in the workbooks yet; an assignment's own page
+(Section 2.15) is the report for it.
+
+## 2.14 Assignments — writing and posting
+
+<div class="pair">
+<figure class="ph"><img src="manual/img/23-assignments-phone.png" alt="A course's assignments on a phone"><figcaption>On a phone</figcaption></figure>
+<figure class="wd"><img src="manual/img/23-assignments-desktop.png" alt="A course's assignments on a computer"><figcaption>On a computer</figcaption></figure>
+</div>
+
+**Assignments** on a course page lists the course's assignments: drafts first,
+then the rest with the latest due date first. Each card says where the class
+stands — how many have handed in, and what is waiting on you (**to grade**,
+**to return**, in gold) apart from what is waiting on students (**past due**,
+**missed**).
+
+<div class="pair">
+<figure class="ph"><img src="manual/img/26-new-assignment-phone.png" alt="A new assignment on a phone"><figcaption>On a phone</figcaption></figure>
+<figure class="wd"><img src="manual/img/26-new-assignment-desktop.png" alt="A new assignment on a computer"><figcaption>On a computer</figcaption></figure>
+</div>
+
+Tap **New assignment**:
+
+- **Title** and **Instructions**. Bold, italics, both kinds of list and links are
+  on the bar above the box, and Arabic runs right to left. Select some words and
+  tap the link button to make them a link.
+- **Files**, once it is saved: worksheets, scans, slides, pictures and audio;
+  up to ten, 25 MB each. Audio you add for the class can be up to 15 minutes,
+  and there is no video.
+- **Hand in by** — a week from today to begin with. The whole day counts, in
+  institute time.
+- **Graded as** — **Points** out of any whole number, or **Satisfactory / needs
+  work**. This cannot change once a grade has been saved.
+- **Accept late work** — on to begin with, until a week after the due date.
+  Late work shows as late; after the last day it is missed.
+
+**Post** sends it to everyone enrolled and tells them; the line above the
+buttons says how many that is. Anyone who joins the class by the due date gets
+it too; anyone who joins after does not. **Save as draft** keeps it for the
+course's staff only, until you post it.
+
+**Changing it later.** Open it and tap **Edit**. A new due date reaches everyone
+still working on it, and tells them — except a student you gave more time, who
+keeps their own date. If someone else changed the assignment while you had it
+open, your save is refused and says so, so their change is not lost; open it
+again to see it. If you leave the form with changes you haven't saved, the app
+asks before discarding them.
+
+**Stop taking work** closes it now: everyone with nothing handed in shows as
+missed, and work already in can still be graded.
+
+**Delete permanently** is for a mistake: a teacher can delete an assignment only
+while no student has started it. Once any student has a draft, a hand-in, a
+grade or a mark on it, only an admin can — close it instead, which keeps the
+record.
+
+## 2.15 Grading and returning work
+
+<div class="pair">
+<figure class="ph"><img src="manual/img/24-assignment-page-phone.png" alt="An assignment's page on a phone"><figcaption>On a phone</figcaption></figure>
+<figure class="wd"><img src="manual/img/24-assignment-page-desktop.png" alt="An assignment's page on a computer"><figcaption>On a computer</figcaption></figure>
+</div>
+
+Open an assignment to see the class: four counts — expected, handed in, not in
+yet (**past due** once the date has gone), missed — then the students by name,
+with filters for **To grade**, **Past due** and **Returned**. The list remembers
+its filter while you grade and come back. **Instructions** shows the assignment
+as students see it.
+
+<div class="pair">
+<figure class="ph"><img src="manual/img/25-grade-phone.png" alt="Grading on a phone"><figcaption>On a phone</figcaption></figure>
+<figure class="wd"><img src="manual/img/25-grade-desktop.png" alt="Grading on a computer"><figcaption>On a computer</figcaption></figure>
+</div>
+
+Tap **Grade**, or a student, to open their work: their answer, their files —
+pictures large enough to read handwriting, audio that plays in place — and the
+**hand-in history**, each hand-in and take-back with its time. Under it:
+
+- **The grade and feedback** save as you type, as a draft only staff see. A
+  student sees nothing until you return it.
+- **Next to grade ›** moves on to the next student waiting, in name order.
+- **Return now** sends this one back at once: the student sees the grade and the
+  feedback and is told it is back. **Ask for another try…** returns it with a new
+  date to hand in again by; this attempt, its grade and its feedback stay with
+  the next one.
+- **More time, or not required…** gives this student a date of their own, or
+  lets them off this assignment, each with a reason the student sees.
+- Work done on paper or recited in class can be graded with nothing handed in.
+
+On a computer the class list, the work and the grade sit side by side. **J** and
+**K** move to the next and previous student in the list, and **Ctrl + Enter**
+(**⌘ + Enter** on a Mac) returns the work on screen — never a single key, so a
+stray one sends nothing. Moving on and returning always store what you typed
+first, so nothing is lost by going quickly; if a grade can't be saved, the
+screen says so and asks before you leave it.
+
+**Returning together.** Back on the assignment's page, **Return N graded** sends
+back every grade not yet returned, at once. The app asks once more first,
+because a return cannot be taken back. Changing a grade after it has been
+returned reaches the student at once, tells them, and is recorded in the audit
+history.
+
 ---
 
 # Part 3 — For admins
@@ -920,7 +1105,11 @@ access; the assignment is always the specific course.
 
 The **audit history** is the running record of consequential actions — staff
 approvals, attendance submissions, completion overrides (with their reasons),
-recording edits — newest first. Each entry shows *who* did *what*, *when*, and the
+recording edits, and assignments posted, edited, closed, deleted and returned,
+with any change to a returned grade — newest first. A grade becomes a record
+when it is returned; drafts change constantly while a teacher works and are not
+logged keystroke by keystroke. What students do with assignments is kept on
+their work instead (Section 2.15). Each entry shows *who* did *what*, *when*, and the
 details that matter.
 
 You can reach it two ways: **globally** from **More → Audit history** (admins,
@@ -946,7 +1135,9 @@ The app is built around **reversible** actions:
   nothing is wrong with the recording itself.
 - **Archive** a course when a term ends — every count stays, and you decide
   whether its recordings stay open. This, not archiving its recordings,
-  is how a term is closed.
+  is how a term is closed. Its assignments close too, and stay on record.
+- **Stop taking work** on an assignment rather than deleting it; a teacher can
+  delete one only while no student has started it.
 
 Permanent deletion exists, but it's deliberately admin-only, asks for strong
 confirmation, and is audited. Reach for disable, unpublish, or archive first.
@@ -957,13 +1148,16 @@ confirmation, and is audited. Reach for disable, unpublish, or archive first.
 
 | I want to… | Do this |
 |---|---|
-| **Catch up on a class I missed** | **Recordings** → tap the card → big round button. |
+| **Catch up on a class I missed** | **To do** → tap the card → big round button. |
 | **Switch between video and audio** | Tap the version under the player — you carry on from the same moment. |
 | **Pick up where I left off** | Just reopen it — your place is saved automatically, on any device. |
 | **Slow down or speed up** | Tap **1×–2×** on the player. |
 | **Mark something done** | Press play once, then **Mark complete** at the bottom of the player. |
 | **See my attendance for a class** | **Classes** → tap the class. |
 | **Set my student password** | Open the emailed link, or tap **Email me a password link** on sign-in. |
+| **Hand in an assignment** | **To do** → the assignment → write your answer and/or **Add files** → **Hand in**. |
+| **Change what I handed in** | Open it → **Take back** (until the due date, and before it is returned) → change it → **Hand in**. |
+| **See my grade** | It appears on the assignment once your teacher returns it. |
 | **Add a session** *(staff)* | Course → **Sessions** → **Add a session** → title + date → **Create session**. |
 | **Take attendance** *(staff)* | Session → mark Present / Absent / Excused → **Submit attendance**. |
 | **Add a recording** *(staff)* | Open the session → **Import from Zoom** → tick files or a quick pick → **Import**. Or **Upload files…** → choose → **Upload N files**. |
@@ -971,6 +1165,9 @@ confirmation, and is audited. Reach for disable, unpublish, or archive first.
 | **Open a recording to students** *(staff)* | Mark them **Excused**, then **Publish** — that is the whole of it. |
 | **Change the closing date** *(staff)* | Session → **Edit session** → **Due by**. Moving it forward reopens a closed recording. |
 | **See who's behind** *(staff)* | Session → **Progress** → **Not complete** / **Missed**. |
+| **Post an assignment** *(staff)* | Course → **Assignments** → **New assignment** → title, instructions, date → **Post**. |
+| **Grade and return** *(staff)* | The assignment → **Grade** → grade + feedback → **Return now**, or **Next to grade ›** and **Return N graded** at the end. |
+| **Give one student more time** *(staff)* | Their work → **More time, or not required…** → reason + date → **Give more time**. |
 | **Give someone credit anyway** *(staff)* | Ledger → **Override** → reason (required) → **Mark complete**. |
 | **Make a latecomer catch up on an old session** *(staff)* | Open that session → mark them **Excused** → **Submit attendance**. (Move **Due by** forward first if it has passed.) |
 | **See course attendance** *(staff)* | Course → **Attendance report** (toggle by session / by student). |

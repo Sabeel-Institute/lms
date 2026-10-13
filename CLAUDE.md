@@ -401,6 +401,19 @@ Manager, never in the app bundle.**
   one on a slow connection — that cost the sibling time-tracker a week. Two files
   are exempt: `liveQuery.ts` itself, and `session.ts`, which subscribes inside
   `onAuthStateChanged` rather than a hook.
+- **Behaviour under a hurried hand is a convention, not a per-screen choice.**
+  Every action button runs through `useOneAtATime` (`app/src/oneAtATime.ts`): a
+  `busy` state is a frame late, and a double tap created two assignments and
+  showed refusals over writes that had worked. A screen holding unsaved or
+  in-flight work uses `useLeaveGuard` (`components/LeaveGuard.tsx`), which sees
+  Back, Android back, browser back and a tab press, and puts the address back
+  when it holds a screen. Save-as-you-type goes through `createAutosave`
+  (`app/src/autosave.ts`): ordered, flushed before moving on, never dropped on
+  leaving. Parent links go UP (`up()` in `App.tsx`), never push a second copy.
+- **A tapped notification opens its subject.** Each message carries a `path`
+  built by `pushPaths` in `@sabeel/shared`, and `app/src/linkPaths.test.ts` holds
+  every one to the route tables. Never name an FCM data key `body`: expo-
+  notifications reads it as the whole payload.
 - Never `git add` a binary. The APK ships as a GitHub Release asset; committing
   per-release APKs bloated the sibling pages repo's history and had to be
   rewritten out. `*.apk` is gitignored as the backstop.

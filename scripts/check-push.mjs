@@ -69,7 +69,17 @@ if (vapid && raw.length === 65 && raw[0] === 0x04) {
   );
 }
 
-admin.initializeApp({ projectId });
+/*
+ * With CHECK_ACCESS_TOKEN set, the send authenticates as that user token
+ * (`gcloud auth print-access-token --account=<owner>`) rather than Application
+ * Default Credentials, which on a machine shared with other projects may be a
+ * different Google account — as `check:queries` does.
+ */
+const token = process.env.CHECK_ACCESS_TOKEN;
+admin.initializeApp({
+  projectId,
+  ...(token ? { credential: { getAccessToken: async () => ({ access_token: token, expires_in: 3000 }) } } : {}),
+});
 const res = await admin.messaging().sendEachForMulticast({
   tokens: ['dGhpcy1pcy1ub3QtYS10b2tlbg:APA91bHnotarealtokennotarealtokennotareal'],
   notification: { title: 'reachability probe', body: 'never delivered to anyone' },
