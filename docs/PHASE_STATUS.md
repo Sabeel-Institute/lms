@@ -29,7 +29,7 @@ and commit messages, and renaming them would strand every one of those.
 | 5 | Staff ledger, reporting, audit | **complete** — see 5a–5d above |
 | A | Excused-only access, with a deadline | **complete** (2026-08-14) |
 | B | The student's own attendance record | **complete** (2026-08-14) |
-| C | Assignments and grades (`docs/plans/ASSIGNMENTS.md`) | **in progress** (2026-10-13: A1–A6 done, the whole loop in the browser e2e; the device pass and the v0.1.0 release to come) |
+| C | Assignments and grades (`docs/plans/ASSIGNMENTS.md`) | **complete** (2026-10-13: A1–A7; v0.1.0 released from `30fbac0`) |
 | 6 | Zoom import | **built** — waiting on institute credentials and its first live import |
 | 7 | Notifications | **complete** (2026-08-15: delivered to an Android device end to end; web delivery still a browser check) |
 | 8 | Admin backend stats | not started |
@@ -1677,6 +1677,26 @@ and commit messages, and renaming them would strand every one of those.
   reports nothing is worse than none.
 
 ## Verification log
+
+- 2026-10-13 — **v0.1.0, the first release of this app, shipped to every
+  surface** (build commit `30fbac0`, versionCode 35): indexes → rules →
+  functions (15 new, the assignment callables; none removed) → hosting;
+  `check:queries` (55 shapes) and `check:push` green against the live
+  project, `smoke:prod` green at `v0.1.0 · 30fbac0`, CI dispatched by hand
+  on the tag failed 39 tests — 38 for want of ffmpeg on the runner, which the
+  media tests have used since today, and one racing the emulator's own
+  trigger — both fixed without app code in `4bef5c5`, where CI passed. A live check on the deployed site, with a
+  temporary student, course and assignment made for it and deleted after
+  (nothing left, checked): the assignment on To do, a recitation and a PDF
+  uploaded to R2 and probed on arrival, listed in the order chosen, the
+  recitation's length read on the server and played from a signed link,
+  both removed, the answer handed in as typed, no error on the page. The
+  release APK installed at 0.1.0 / 35 with the label `v0.1.0 · 30fbac0` and
+  no dev panel. The 34 tags inherited from the old app's history (v0.1.0 to
+  v0.7.1, each identical in `faisal-shah/sabeel-recording-app`) were removed
+  from this repo first; v0.1.0 is tagged on the build commit, published as
+  a pre-release with both APKs, and the download page and its manual copy
+  carry 0.1.0.
 
 - 2026-10-13 — **The live site's library went white on a staff phone**
   (SABEEL-RECORDING-WEB-7, Faisal's screen recording): "Loading the
