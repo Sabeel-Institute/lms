@@ -313,6 +313,50 @@ If the spike fails, audio stays on `expo-audio` and the shared player module
 hard-stops one engine before starting the other (the `hardStop` pattern
 already in `player.ts`).
 
+**Spike V0 result (2026-10-12): passed; one engine, `expo-video` 57.0.5.**
+A 3-hour 640×360 H.264+AAC MP4 (155 MB) and an M4A of the same timeline,
+from R2 through 12-hour signed URLs, on `tb_emu` (API 35, debug build) and in
+Chromium. The adapter was `player.ts` rewritten on `expo-video` behind the
+unchanged `Player` interface; the code is on the local branch
+`spike/v0-expo-video`.
+
+| Check | Android | Web (`<video>`) |
+|---|---|---|
+| M4A with no picture, in the background | plays; `ExpoVideoPlaybackService` foreground, `USAGE_MEDIA` started | plays |
+| Lock-screen controls, title and course | title and course from the source's `metadata`; adds a seek bar and ±10 s buttons | n/a |
+| Seek to 2:50:00 | 50 ms to the first update there, then plays on | 190 ms to `seeked` |
+| Rate 1.5, pitch kept | `speed=1.5` in the media session; `preservesPitch` true (not audible on an AVD) | `preservesPitch` true |
+| Swap M4A → MP4 keeping place | 165 ms, landed on the same second (the frame's burnt-in clock agreed) | 425 ms, delta 0 |
+| Memory over 10 minutes at 1.5× | flat, 600–637 MB PSS (debug build) | n/a |
+| Fullscreen, landscape | separate `FullscreenPlayerActivity`; rotates although the app is portrait-locked | n/a |
+| Picture-in-picture | the app's task goes `pinned` and keeps playing | n/a |
+| First load from cold | 310 ms | 1.75 s to `loadedmetadata` |
+
+What V5 must carry over, each found by the spike:
+
+- **Manifest by hand** (bare workflow, plugins do not run): the
+  `expo.modules.video.playbackService.ExpoVideoPlaybackService` service with
+  `foregroundServiceType="mediaPlayback"`, and
+  `android:supportsPictureInPicture="true"` on `MainActivity`; `app.json`
+  carries the plugin with `supportsBackgroundPlayback` and
+  `supportsPictureInPicture` so a future prebuild agrees. Remove the
+  `expo-audio` service and plugin in the same change.
+- **Player settings:** `staysActiveInBackground`, `showNowPlayingNotification`,
+  `audioMixingMode = 'doNotMix'` (honoured on Android although documented as
+  iOS: it requests `AUDIOFOCUS_GAIN`), `preservesPitch`,
+  `timeUpdateEventInterval = 0.5`; the lock-screen title and course travel in
+  the source's `metadata`, so the `setActiveForLockScreen` race in today's
+  adapter disappears.
+- **A spurious `playToEnd` before the first source loads** (the player is
+  created with no source). Ignore `playToEnd` until a source has loaded.
+- **`replaceAsync` keeps playing if the player was playing.** `expo-audio`'s
+  `replace` did not. Pause before a load that should not play; a version
+  switch is the case that wants it.
+- **The browser resets `playbackRate` to 1 on a new `src`.** Reapply the rate
+  after every swap on web.
+- The lock screen's skips are ±10 s while the app's are −15/+30 s. Acceptable;
+  noted so nobody files it as a bug.
+
 Web uses one `<video>` element for both kinds. The docked mini-player keeps
 playing when the student leaves the player screen: the player object outlives
 the view, and for video only the sound continues until they return.
@@ -369,7 +413,7 @@ manual, the release notes and `PRODUCT_BRIEF.md` change in the same batch.
 
 | Step | What | Checked by |
 |---|---|---|
-| V0 | Spike: `expo-video` playing M4A and a 3-hour MP4 from R2 on the AVD and web | The list under Engine |
+| V0 | Spike: `expo-video` playing M4A and a 3-hour MP4 from R2 on the AVD and web | The list under Engine — **passed 2026-10-12** |
 | V1 | Data model: media map, derived duration, `zoomImports` index; migration of existing recordings to one audio item each | Unit tests on the derivation; seed count check |
 | V2 | Zoom listing of all files, segments, processing state; picker with formats, quick picks, totals; async import | Integration tests with a fake Zoom of multi-segment, multi-meeting fixtures; screens sweep at 320 px with expanded meetings |
 | V3 | Upload of several files, part or version choice, probe | Browser e2e with a small MP4 and an M4A; AVD upload |
