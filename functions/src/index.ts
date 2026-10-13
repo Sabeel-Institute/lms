@@ -23,6 +23,19 @@ export {
   deleteRecording,
 } from './recordings';
 export {
+  createCoursework,
+  updateCoursework,
+  postCoursework,
+  closeCoursework,
+  deleteCoursework,
+  handIn,
+  takeBack,
+  saveGrade,
+  returnWork,
+  giveMoreTime,
+  setNotRequired,
+} from './coursework';
+export {
   startRecordingUpload,
   signRecordingUploadParts,
   finalizeRecordingUpload,

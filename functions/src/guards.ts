@@ -72,6 +72,15 @@ function requireActive(req: CallableRequest): string {
   return uid;
 }
 
+/** An active student, acting on their own work. */
+export function requireStudent(req: CallableRequest): string {
+  const uid = requireActive(req);
+  if (claims(req).role !== 'student') {
+    throw new HttpsError('permission-denied', 'Only a student can do that.');
+  }
+  return uid;
+}
+
 /** Any active staff member: manager or admin. */
 export function requireStaff(req: CallableRequest): string {
   const uid = requireActive(req);

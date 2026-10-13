@@ -1,5 +1,6 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { auditedCall } from './audited';
+import { deactivateStudentCoursework, reconcileStudentCoursework } from './coursework';
 import { getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
@@ -37,9 +38,11 @@ export function validateEnrollment(data: unknown): EnrollmentInput {
  * over the SAME document rather than a second row — which keeps the listening
  * history attached to one enrolment record over time.
  *
- * No obligations are created here: accountability is attendance-driven and
- * starts from enrollment onward. A newly enrolled student simply appears in the
- * roster the teacher marks at the NEXT session; nothing retroactive is assigned.
+ * No RECORDING is granted here: listening is attendance-driven and starts from
+ * enrolment onward. A newly enrolled student simply appears in the roster the
+ * teacher marks at the NEXT session; nothing retroactive is granted. Assignments
+ * are the exception — the class's current work, independent of the register —
+ * so the student gets every posted one not yet past its due date.
  */
 export async function createEnrollmentRecord(callerUid: string, input: EnrollmentInput) {
   const db = getFirestore();
@@ -94,6 +97,9 @@ export async function createEnrollmentRecord(callerUid: string, input: Enrollmen
    * they are in no attendance snapshot, so it can only ever grant them nothing.
    */
   if (reenrolled) await reconcileCourseAssignments(db, input.courseId);
+  // Assignments are the class's current work, so a NEW student gets them too:
+  // every posted assignment not yet past its due date.
+  await reconcileStudentCoursework(input.courseId, input.studentUid);
   return { id, ...doc, reenrolled };
 }
 
@@ -188,8 +194,10 @@ export async function applyEnrollmentActive(input: SetEnrollmentActiveInput) {
     // and what nothing did. There is no trigger on enrolments, so the reconcile
     // has to be asked for here.
     await reconcileCourseAssignments(db, input.courseId);
+    await reconcileStudentCoursework(input.courseId, input.studentUid);
   } else {
     await deactivateStudentAssignmentsInCourse(db, input.courseId, input.studentUid);
+    await deactivateStudentCoursework(input.courseId, input.studentUid);
   }
   return { studentUid: input.studentUid, courseId: input.courseId, active: input.active, changed };
 }

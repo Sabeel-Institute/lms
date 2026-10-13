@@ -374,6 +374,88 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---- Assignments (coursework) ----
+    // An assignment a teacher posts to a whole class, each student's work on
+    // it, the student's unsent draft, the grade as staff write it, and the
+    // history of hand-ins (docs/plans/ASSIGNMENTS.md). Every write but one goes
+    // through a callable, where the dates are checked against the institute's
+    // clock; the one is a student typing the note on their own draft.
+    match /coursework/{courseworkId} {
+      allow get, list: if staffManagesCourse(resource.data.courseId);
+      // A student reads an assignment only through their own work on it, the
+      // way a recording is read through a grant — and never a draft one. GET
+      // only, for the cost reason `/recordings` gives; the exists() guards the
+      // usual case, which is absence.
+      allow get: if isStudent()
+        && resource.data.status == 'posted'
+        && exists(/databases/$(database)/documents/submissions/$(request.auth.uid + '_' + courseworkId))
+        && get(/databases/$(database)/documents/submissions/$(request.auth.uid + '_' + courseworkId)).data.active == true;
+      allow write: if false;
+    }
+
+    // One student's work: what they handed in, their own dates, and the grade
+    // once RETURNED — the only way a grade reaches a student.
+    match /submissions/{submissionId} {
+      allow get, list: if (isStudent() && resource.data.studentUid == request.auth.uid)
+        || staffManagesCourse(resource.data.courseId);
+      allow write: if false;
+    }
+
+    // A student's unsent work. THEIRS ALONE: there is no staff arm, so nobody
+    // sees work before it is handed in. The student writes the note; files
+    // arrive through a callable, so a client may never touch `files`.
+    match /drafts/{draftId} {
+      function submissionPath(cwId) {
+        return /databases/$(database)/documents/submissions/$(request.auth.uid + '_' + cwId);
+      }
+      // Open work, still theirs, in the class it was given in.
+      function workIsOpen(cwId, courseId) {
+        return exists(submissionPath(cwId))
+          && get(submissionPath(cwId)).data.active == true
+          && get(submissionPath(cwId)).data.state == 'open'
+          && get(submissionPath(cwId)).data.courseId == courseId;
+      }
+      function noteShape() {
+        return request.resource.data.note is string
+          && request.resource.data.note.size() <= 10000
+          && request.resource.data.updatedAt is int;
+      }
+      allow get: if isStudent()
+        && (resource == null
+              ? draftId.split('_')[0] == request.auth.uid
+              : resource.data.studentUid == request.auth.uid);
+      allow list: if isStudent() && resource.data.studentUid == request.auth.uid;
+      allow create: if isStudent()
+        && request.resource.data.studentUid == request.auth.uid
+        && draftId == request.auth.uid + '_' + request.resource.data.courseworkId
+        && request.resource.data.keys().hasOnly(
+              ['studentUid', 'courseworkId', 'courseId', 'note', 'files', 'updatedAt'])
+        && request.resource.data.files == {}
+        && noteShape()
+        && workIsOpen(request.resource.data.courseworkId, request.resource.data.courseId);
+      allow update: if isStudent()
+        && resource.data.studentUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['note', 'updatedAt'])
+        && noteShape()
+        && workIsOpen(resource.data.courseworkId, resource.data.courseId);
+      allow delete: if false;
+    }
+
+    // The grade as staff are writing it. NEVER student-readable: Firestore has
+    // no field-level security, so a draft grade lives where no student rule
+    // reaches, and is copied onto the submission when the work is returned.
+    match /grades/{gradeId} {
+      allow get, list: if staffManagesCourse(resource.data.courseId);
+      allow write: if false;
+    }
+
+    // Each hand-in and take-back, append-only, written by the callables.
+    match /submissionEvents/{eventId} {
+      allow get, list: if (isStudent() && resource.data.studentUid == request.auth.uid)
+        || staffManagesCourse(resource.data.courseId);
+      allow write: if false;
+    }
+
     // ---- Completions ----
     // Document id is `${studentUid}_${recordingId}`. Current completion STATE,
     // client-written for the same reason as listeningProgress: marking complete must work OFFLINE, which a

@@ -18,6 +18,17 @@ import {
 import { finalizeRecordingUpload, signRecordingUploadParts, startRecordingUpload } from '../../src/uploads';
 import { createStudent } from '../../src/students';
 import { importZoomFiles, retryZoomImport } from '../../src/zoomImport';
+import {
+  closeCoursework,
+  createCoursework,
+  deleteCoursework,
+  giveMoreTime,
+  postCoursework,
+  returnWork,
+  saveGrade,
+  setNotRequired,
+  updateCoursework,
+} from '../../src/coursework';
 
 /**
  * "Managers are scoped class by class" — proved against the CALLABLES, one row
@@ -33,9 +44,9 @@ import { importZoomFiles, retryZoomImport } from '../../src/zoomImport';
  * SO THE TABLE IS THE TEST. A row per `requireCourseScope` call site in
  * `functions/src`, driven through `onCall`'s `.run()` so the real handler runs —
  * validation, lookups, guard and all. Adding a course-scoped callable without
- * adding a row here is the gap this is built to make obvious; `functions/src`
- * has seventeen call sites and the table has seventeen rows, and the last test in
- * the file holds those two numbers together.
+ * adding a row here is the gap this is built to make obvious; the last test in
+ * the file holds the number of call sites in `functions/src` and the number of
+ * rows together.
  *
  * TWO ASSERTIONS PER ROW, because one is not enough. "A manager of another class
  * is refused" passes just as well when the payload is malformed, the document is
@@ -62,6 +73,7 @@ const MINE = 'course-mine';
 const SESSION = 'session-theirs';
 const RECORDING = 'recording-theirs';
 const STUDENT = 'student-theirs';
+const COURSEWORK = 'coursework-theirs';
 
 const req = async (uid: string, role: 'manager' | 'admin', data: unknown): Promise<CallableRequest> =>
   ({
@@ -119,6 +131,44 @@ async function seed() {
       email: 'scoped@example.com',
       status: 'active',
     }),
+    d.collection(COLLECTIONS.coursework).doc(COURSEWORK).set({
+      courseId: THEIRS,
+      cohortId: 'cohort1',
+      title: 'Reflection',
+      instructions: '',
+      files: {},
+      dueDate: '2099-03-01',
+      lateUntil: null,
+      grading: { kind: 'scale' },
+      status: 'posted',
+      closedAt: null,
+      postedAt: Date.now(),
+      postedBy: OWNER,
+      createdAt: Date.now(),
+      createdBy: OWNER,
+      updatedAt: Date.now(),
+      editedAt: null,
+    }),
+    d.collection(COLLECTIONS.submissions).doc(`${STUDENT}_${COURSEWORK}`).set({
+      studentUid: STUDENT,
+      courseworkId: COURSEWORK,
+      courseId: THEIRS,
+      cohortId: 'cohort1',
+      active: true,
+      dueDate: '2099-03-01',
+      lateUntil: null,
+      closedEarly: false,
+      state: 'handedIn',
+      attempt: 1,
+      handedInAt: Date.now(),
+      note: 'Done',
+      files: {},
+      returned: null,
+      attempts: [],
+      notRequired: null,
+      moreTime: null,
+      assignedAt: Date.now(),
+    }),
     d.collection(COLLECTIONS.enrollments).doc(enrollmentId(STUDENT, THEIRS)).set({
       studentUid: STUDENT,
       courseId: THEIRS,
@@ -130,7 +180,7 @@ async function seed() {
 
 beforeEach(seed);
 
-/** The seventeen `requireCourseScope` call sites, by the callable that reaches them. */
+/** Every `requireCourseScope` call site, by the callable that reaches them. */
 const SCOPED: Array<{
   name: string;
   /** `.run` is what `onCall` exposes for driving the real handler in a test. */
@@ -162,6 +212,15 @@ const SCOPED: Array<{
   { name: 'removeRecordingMedia', call: (r) => removeRecordingMedia.run(r), data: { recordingId: RECORDING, itemId: 'item1' } },
   { name: 'deleteRecording', call: (r) => deleteRecording.run(r), data: { recordingId: RECORDING } },
   { name: 'createStudent', call: (r) => createStudent.run(r), data: { displayName: 'New Student', email: `scoped-${Date.now()}@example.com`, courseId: THEIRS } },
+  { name: 'createCoursework', call: (r) => createCoursework.run(r), data: { courseId: THEIRS, title: 'New', instructions: '', dueDate: '2099-03-01', lateUntil: null, grading: { kind: 'scale' } } },
+  { name: 'updateCoursework', call: (r) => updateCoursework.run(r), data: { courseworkId: COURSEWORK, title: 'Renamed', instructions: '', dueDate: '2099-03-01', lateUntil: null, grading: { kind: 'scale' } } },
+  { name: 'postCoursework', call: (r) => postCoursework.run(r), data: { courseworkId: COURSEWORK } },
+  { name: 'closeCoursework', call: (r) => closeCoursework.run(r), data: { courseworkId: COURSEWORK } },
+  { name: 'deleteCoursework', call: (r) => deleteCoursework.run(r), data: { courseworkId: COURSEWORK }, owner: 'admin' },
+  { name: 'saveGrade', call: (r) => saveGrade.run(r), data: { courseworkId: COURSEWORK, studentUid: STUDENT, grade: { scale: 'satisfactory' }, feedback: '' } },
+  { name: 'returnWork', call: (r) => returnWork.run(r), data: { courseworkId: COURSEWORK, studentUids: [STUDENT] } },
+  { name: 'giveMoreTime', call: (r) => giveMoreTime.run(r), data: { courseworkId: COURSEWORK, studentUid: STUDENT, dueDate: '2099-04-01', lateUntil: null, reason: 'Ill' } },
+  { name: 'setNotRequired', call: (r) => setNotRequired.run(r), data: { courseworkId: COURSEWORK, studentUid: STUDENT, reason: 'Joined late' } },
   { name: 'importZoomFiles', call: (r) => importZoomFiles.run(r), data: { sessionId: SESSION, files: [{ meetingUuid: 'uuid', fileId: 'file' }] } },
   { name: 'retryZoomImport', call: (r) => retryZoomImport.run(r), data: { recordingId: RECORDING } },
 ];

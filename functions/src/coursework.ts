@@ -1,0 +1,772 @@
+import { HttpsError } from 'firebase-functions/v2/https';
+import { FieldValue, getFirestore, type Transaction } from 'firebase-admin/firestore';
+import {
+  COLLECTIONS,
+  INSTITUTE_TIMEZONE,
+  MAX_POINTS,
+  canHandIn,
+  canTakeBack,
+  gradeFits,
+  isLate,
+  receivesOnJoining,
+  submissionId,
+  todayInZone,
+  workState,
+  type AttachmentMap,
+  type CourseDoc,
+  type CourseworkDoc,
+  type CourseworkGrading,
+  type DraftDoc,
+  type Grade,
+  type GradeDoc,
+  type SubmissionDoc,
+  type SubmissionEventDoc,
+} from '@sabeel/shared';
+import { auditedCall } from './audited';
+import { reportedCall } from './reported';
+import { isAdminCaller, requireCourseScope, requireStudent } from './guards';
+import { isCalendarDate } from './sessions';
+import { MEDIA_WRITE_SECRETS, deleteObject } from './mediaStore';
+
+/**
+ * Assignments: a teacher posts work to a whole class, each student hands in a
+ * note and files, and the teacher grades and returns it
+ * (docs/plans/ASSIGNMENTS.md; the rules are the approved proposal's, section 5).
+ *
+ * Every write here is a callable's. Students write one thing directly, the
+ * note on their own draft (`firestore.rules`); the rest — handing in, taking
+ * back, files — comes through here, where the dates are checked against the
+ * institute's clock rather than the phone's.
+ *
+ * WHAT A STUDENT SEES OF A GRADE is `submissions.returned`, copied when the
+ * work is returned. `grades/` is staff-only, and Firestore has no field-level
+ * security, so a grade being written never reaches the student early.
+ */
+
+const db = () => getFirestore();
+const cwRef = (id: string) => db().collection(COLLECTIONS.coursework).doc(id);
+const subRef = (uid: string, cwId: string) => db().collection(COLLECTIONS.submissions).doc(submissionId(uid, cwId));
+const draftRef = (uid: string, cwId: string) => db().collection(COLLECTIONS.drafts).doc(submissionId(uid, cwId));
+const gradeRef = (uid: string, cwId: string) => db().collection(COLLECTIONS.grades).doc(submissionId(uid, cwId));
+const today = () => todayInZone(INSTITUTE_TIMEZONE);
+
+const MAX_TITLE = 200;
+const MAX_INSTRUCTIONS = 20_000;
+const MAX_REASON = 500;
+const MAX_FEEDBACK = 5_000;
+
+// ------------------------------------------------------------ validation --
+
+function str(v: unknown, name: string, max: number, { required = true } = {}): string {
+  if (typeof v !== 'string') throw new HttpsError('invalid-argument', `${name} is required.`);
+  const t = v.trim();
+  if (required && !t) throw new HttpsError('invalid-argument', `${name} is required.`);
+  if (t.length > max) throw new HttpsError('invalid-argument', `${name} is too long (${max} characters at most).`);
+  return t;
+}
+
+function calendarDate(v: unknown, name: string): string {
+  if (typeof v !== 'string' || !isCalendarDate(v)) {
+    throw new HttpsError('invalid-argument', `${name} is required, as YYYY-MM-DD.`);
+  }
+  return v;
+}
+
+/**
+ * The due date and the last day late work is taken. Never written in the
+ * past — nothing is born overdue — and the late-work date is never before
+ * the due date. `current` is the stored pair on an edit: resending a date that
+ * has since passed is not a move, so it is let through.
+ */
+export function validateDates(
+  input: { dueDate: unknown; lateUntil: unknown },
+  todayIs: string,
+  current?: { dueDate: string; lateUntil: string | null },
+): { dueDate: string; lateUntil: string | null } {
+  const dueDate = calendarDate(input.dueDate, 'A due date');
+  if (dueDate !== current?.dueDate && dueDate < todayIs) {
+    throw new HttpsError('invalid-argument', 'A due date cannot be in the past.');
+  }
+  if (input.lateUntil === null) return { dueDate, lateUntil: null };
+  const lateUntil = calendarDate(input.lateUntil, 'The last day for late work');
+  if (lateUntil < dueDate) {
+    throw new HttpsError('invalid-argument', 'Late work cannot end before the due date.');
+  }
+  if (lateUntil !== current?.lateUntil && lateUntil < todayIs) {
+    throw new HttpsError('invalid-argument', 'The last day for late work cannot be in the past.');
+  }
+  return { dueDate, lateUntil };
+}
+
+function validateGrading(v: unknown): CourseworkGrading {
+  const g = v as { kind?: unknown; outOf?: unknown } | null;
+  if (g?.kind === 'scale') return { kind: 'scale' };
+  if (g?.kind === 'points' && typeof g.outOf === 'number' && Number.isInteger(g.outOf) && g.outOf >= 1 && g.outOf <= MAX_POINTS) {
+    return { kind: 'points', outOf: g.outOf };
+  }
+  throw new HttpsError('invalid-argument', `Grading is points out of a whole number from 1 to ${MAX_POINTS}, or satisfactory / needs work.`);
+}
+
+export interface CourseworkFields {
+  title: string;
+  instructions: string;
+  dueDate: string;
+  lateUntil: string | null;
+  grading: CourseworkGrading;
+}
+
+function validateCourseworkFields(
+  d: Record<string, unknown>,
+  todayIs: string,
+  current?: CourseworkDoc,
+): CourseworkFields {
+  return {
+    title: str(d.title, 'A title', MAX_TITLE),
+    instructions: str(d.instructions, 'Instructions', MAX_INSTRUCTIONS, { required: false }),
+    ...validateDates({ dueDate: d.dueDate, lateUntil: d.lateUntil }, todayIs, current),
+    grading: validateGrading(d.grading),
+  };
+}
+
+const idOf = (v: unknown, name: string) => str(v, name, 200);
+
+// ------------------------------------------------------------------ reads --
+
+async function readCoursework(id: string): Promise<CourseworkDoc> {
+  const snap = await cwRef(id).get();
+  if (!snap.exists) throw new HttpsError('not-found', 'No such assignment.');
+  return snap.data() as CourseworkDoc;
+}
+
+async function readCourse(courseId: string): Promise<CourseDoc> {
+  const snap = await db().collection(COLLECTIONS.courses).doc(courseId).get();
+  if (!snap.exists) throw new HttpsError('not-found', 'No such class.');
+  return snap.data() as CourseDoc;
+}
+
+// --------------------------------------------------------------- fan-out --
+
+/** A student's fresh work on an assignment, dated as the assignment is. */
+function freshSubmission(cwId: string, cw: CourseworkDoc, studentUid: string): SubmissionDoc {
+  return {
+    studentUid,
+    courseworkId: cwId,
+    courseId: cw.courseId,
+    cohortId: cw.cohortId,
+    active: true,
+    dueDate: cw.dueDate,
+    lateUntil: cw.lateUntil,
+    closedEarly: cw.closedAt !== null,
+    state: 'open',
+    attempt: 1,
+    handedInAt: null,
+    note: '',
+    files: {},
+    returned: null,
+    attempts: [],
+    notRequired: null,
+    moreTime: null,
+    assignedAt: Date.now(),
+  };
+}
+
+async function activeStudents(courseId: string): Promise<string[]> {
+  const snap = await db()
+    .collection(COLLECTIONS.enrollments)
+    .where('courseId', '==', courseId)
+    .where('active', '==', true)
+    .get();
+  return snap.docs.map((d) => d.data().studentUid as string);
+}
+
+/** Write in chunks under Firestore's batch limit. */
+async function inBatches<T>(items: T[], write: (batch: FirebaseFirestore.WriteBatch, item: T) => void) {
+  for (let i = 0; i < items.length; i += 400) {
+    const batch = db().batch();
+    for (const item of items.slice(i, i + 400)) write(batch, item);
+    await batch.commit();
+  }
+}
+
+/**
+ * Bring one student's assignments in a course up to date with their
+ * enrolment: called when they join or come back.
+ *
+ * WHO GETS WHAT: a student joining gets every posted assignment not yet past
+ * its due date. Coming back restores the work they had — handed in, returned,
+ * or still due — but not open work whose date went by while they were away;
+ * nobody comes back to an obligation they had no chance to meet.
+ */
+export async function reconcileStudentCoursework(courseId: string, studentUid: string): Promise<void> {
+  const todayIs = today();
+  const posted = await db()
+    .collection(COLLECTIONS.coursework)
+    .where('courseId', '==', courseId)
+    .where('status', '==', 'posted')
+    .get();
+  for (const doc of posted.docs) {
+    const cw = doc.data() as CourseworkDoc;
+    const ref = subRef(studentUid, doc.id);
+    await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const sub = snap.data() as SubmissionDoc | undefined;
+      if (!sub) {
+        if (receivesOnJoining(cw, todayIs)) tx.set(ref, freshSubmission(doc.id, cw, studentUid));
+      } else if (!sub.active && (sub.state !== 'open' || receivesOnJoining(cw, todayIs))) {
+        tx.update(ref, { active: true });
+      }
+    });
+  }
+}
+
+/** A student left the course: their assignments leave To do; their work stays as record. */
+export async function deactivateStudentCoursework(courseId: string, studentUid: string): Promise<void> {
+  const snap = await db()
+    .collection(COLLECTIONS.submissions)
+    .where('courseId', '==', courseId)
+    .where('studentUid', '==', studentUid)
+    .get();
+  await inBatches(
+    snap.docs.filter((d) => d.data().active === true),
+    (batch, d) => batch.update(d.ref, { active: false }),
+  );
+}
+
+// ---------------------------------------------------------------- create --
+
+export async function createCourseworkRecord(callerUid: string, courseId: string, fields: CourseworkFields) {
+  const course = await readCourse(courseId);
+  if (!course.effectiveActive) throw new HttpsError('failed-precondition', 'This course is archived.');
+  const ref = db().collection(COLLECTIONS.coursework).doc();
+  const now = Date.now();
+  const doc: CourseworkDoc = {
+    courseId,
+    cohortId: course.cohortId,
+    ...fields,
+    files: {},
+    status: 'draft',
+    closedAt: null,
+    postedAt: null,
+    postedBy: null,
+    createdAt: now,
+    createdBy: callerUid,
+    updatedAt: now,
+    editedAt: null,
+  };
+  await ref.set(doc);
+  return { id: ref.id };
+}
+
+export const createCoursework = auditedCall('createCoursework', async (req, audit) => {
+  const d = (req.data ?? {}) as Record<string, unknown>;
+  const courseId = idOf(d.courseId, 'courseId');
+  const uid = await requireCourseScope(req, courseId);
+  const fields = validateCourseworkFields(d, today());
+  audit.courseId = courseId;
+  const res = await createCourseworkRecord(uid, courseId, fields);
+  audit.targets = { courseworkId: res.id };
+  audit.detail = { title: fields.title, dueDate: fields.dueDate };
+  return res;
+});
+
+// ------------------------------------------------------------------ post --
+
+/**
+ * Send a draft to the class: everyone enrolled now receives it. A posted
+ * assignment never goes back to being a draft.
+ */
+export async function postCourseworkRecord(callerUid: string, id: string): Promise<{ id: string; students: number }> {
+  const cw = await readCoursework(id);
+  if (cw.status !== 'draft') throw new HttpsError('failed-precondition', 'That assignment is already posted.');
+  if (cw.dueDate < today()) {
+    throw new HttpsError('failed-precondition', 'Its due date has passed. Move it before posting.');
+  }
+  const course = await readCourse(cw.courseId);
+  if (!course.effectiveActive) throw new HttpsError('failed-precondition', 'This course is archived.');
+  const now = Date.now();
+  const posted: CourseworkDoc = { ...cw, status: 'posted', postedAt: now, postedBy: callerUid, updatedAt: now };
+  await cwRef(id).update({ status: 'posted', postedAt: now, postedBy: callerUid, updatedAt: now });
+  const students = await activeStudents(cw.courseId);
+  await inBatches(students, (batch, uid) => batch.set(subRef(uid, id), freshSubmission(id, posted, uid)));
+  return { id, students: students.length };
+}
+
+export const postCoursework = auditedCall('postCoursework', async (req, audit) => {
+  const id = idOf((req.data as { courseworkId?: unknown })?.courseworkId, 'courseworkId');
+  const cw = await readCoursework(id);
+  const uid = await requireCourseScope(req, cw.courseId);
+  audit.courseId = cw.courseId;
+  audit.targets = { courseworkId: id };
+  const res = await postCourseworkRecord(uid, id);
+  audit.detail = {
+    title: cw.title,
+    dueDate: cw.dueDate,
+    lateUntil: cw.lateUntil,
+    grading: cw.grading.kind === 'points' ? `out of ${cw.grading.outOf}` : 'satisfactory / needs work',
+    students: res.students,
+  };
+  return res;
+});
+
+// ------------------------------------------------------------------ edit --
+
+/**
+ * Change an assignment. On a posted one, a new due date or late-work date
+ * reaches every student still working on it — except a student given more
+ * time, whose own date stands. How it is graded cannot change once any grade
+ * has been saved.
+ */
+export async function updateCourseworkRecord(id: string, d: Record<string, unknown>) {
+  const cw = await readCoursework(id);
+  const fields = validateCourseworkFields(d, today(), cw);
+  const gradingChanged = JSON.stringify(fields.grading) !== JSON.stringify(cw.grading);
+  if (gradingChanged) {
+    const graded = await db().collection(COLLECTIONS.grades).where('courseworkId', '==', id).limit(1).get();
+    if (!graded.empty) {
+      throw new HttpsError('failed-precondition', 'How it is graded cannot change once a grade has been saved.');
+    }
+  }
+  const now = Date.now();
+  const datesMoved = fields.dueDate !== cw.dueDate || fields.lateUntil !== cw.lateUntil;
+  await cwRef(id).update({
+    ...fields,
+    updatedAt: now,
+    ...(cw.status === 'posted' ? { editedAt: now } : {}),
+  });
+  if (cw.status === 'posted' && datesMoved) {
+    const subs = await db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id).get();
+    await inBatches(
+      subs.docs.filter((s) => (s.data() as SubmissionDoc).moreTime === null),
+      (batch, s) => batch.update(s.ref, { dueDate: fields.dueDate, lateUntil: fields.lateUntil }),
+    );
+  }
+  const changed = (Object.keys(fields) as (keyof CourseworkFields)[]).filter(
+    (k) => JSON.stringify(fields[k]) !== JSON.stringify(cw[k]),
+  );
+  return {
+    id,
+    changed,
+    before: { dueDate: cw.dueDate, lateUntil: cw.lateUntil },
+    after: { dueDate: fields.dueDate, lateUntil: fields.lateUntil },
+  };
+}
+
+export const updateCoursework = auditedCall('updateCoursework', async (req, audit) => {
+  const d = (req.data ?? {}) as Record<string, unknown>;
+  const id = idOf(d.courseworkId, 'courseworkId');
+  const cw = await readCoursework(id);
+  await requireCourseScope(req, cw.courseId);
+  audit.courseId = cw.courseId;
+  audit.targets = { courseworkId: id };
+  const res = await updateCourseworkRecord(id, d);
+  audit.noop = res.changed.length === 0;
+  audit.detail = { changed: res.changed.join(', '), ...(res.changed.some((c) => c === 'dueDate' || c === 'lateUntil') ? res : {}) };
+  return { id, changed: res.changed };
+});
+
+/** Stop taking work before its dates: every student with nothing in has missed it. */
+export async function closeCourseworkRecord(id: string) {
+  const cw = await readCoursework(id);
+  if (cw.status !== 'posted') throw new HttpsError('failed-precondition', 'Only a posted assignment can be closed.');
+  if (cw.closedAt !== null) return { id, changed: false };
+  const now = Date.now();
+  await cwRef(id).update({ closedAt: now, updatedAt: now, editedAt: now });
+  const subs = await db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id).get();
+  await inBatches(subs.docs, (batch, s) => batch.update(s.ref, { closedEarly: true }));
+  return { id, changed: true };
+}
+
+export const closeCoursework = auditedCall('closeCoursework', async (req, audit) => {
+  const id = idOf((req.data as { courseworkId?: unknown })?.courseworkId, 'courseworkId');
+  const cw = await readCoursework(id);
+  await requireCourseScope(req, cw.courseId);
+  audit.courseId = cw.courseId;
+  audit.targets = { courseworkId: id };
+  const res = await closeCourseworkRecord(id);
+  audit.noop = !res.changed;
+  return res;
+});
+
+// ---------------------------------------------------------------- delete --
+
+/**
+ * Whether any student has started this assignment: a draft, a hand-in, a
+ * grade, or a teacher's mark on their work. Asked of the collections that
+ * would hold it, not of the assignment's current shape — the same discipline
+ * as `hasRecordingHistory`.
+ */
+async function hasStudentWork(id: string): Promise<boolean> {
+  const any = async (collection: string) =>
+    !(await db().collection(collection).where('courseworkId', '==', id).limit(1).get()).empty;
+  if ((await any(COLLECTIONS.drafts)) || (await any(COLLECTIONS.submissionEvents)) || (await any(COLLECTIONS.grades))) {
+    return true;
+  }
+  const subs = await db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id).get();
+  return subs.docs.some((s) => {
+    const sub = s.data() as SubmissionDoc;
+    return sub.state !== 'open' || sub.notRequired !== null || sub.moreTime !== null || sub.attempts.length > 0;
+  });
+}
+
+/** Every stored file an assignment and its students' work point at. */
+function filesOf(...maps: AttachmentMap[]): string[] {
+  return maps.flatMap((m) => Object.values(m).map((f) => f.storageKey));
+}
+
+/**
+ * Delete an assignment and everything that hangs off it. A teacher may delete
+ * one no student has started — posted by mistake, say. Once any student has,
+ * only an admin may, because it destroys students' work; checked before
+ * anything is touched, so a refused delete destroys nothing.
+ */
+export async function deleteCourseworkRecord(id: string, asAdmin: boolean) {
+  const cw = await readCoursework(id);
+  if (!asAdmin && (await hasStudentWork(id))) {
+    throw new HttpsError(
+      'permission-denied',
+      'Students have started this assignment, so only an admin can delete it. Close it instead to keep the record.',
+    );
+  }
+  const keys: string[] = filesOf(cw.files);
+  for (const collection of [COLLECTIONS.submissions, COLLECTIONS.drafts, COLLECTIONS.grades, COLLECTIONS.submissionEvents]) {
+    const snap = await db().collection(collection).where('courseworkId', '==', id).get();
+    for (const d of snap.docs) {
+      const data = d.data() as Partial<SubmissionDoc>;
+      if (data.files) keys.push(...filesOf(data.files));
+      for (const a of data.attempts ?? []) keys.push(...filesOf(a.files));
+    }
+    await inBatches(snap.docs, (batch, d) => batch.delete(d.ref));
+  }
+  await Promise.all(keys.map((k) => deleteObject(k)));
+  await cwRef(id).delete();
+  return { id, title: cw.title, files: keys.length };
+}
+
+export const deleteCoursework = auditedCall(
+  'deleteCoursework',
+  async (req, audit) => {
+    const id = idOf((req.data as { courseworkId?: unknown })?.courseworkId, 'courseworkId');
+    const cw = await readCoursework(id);
+    await requireCourseScope(req, cw.courseId);
+    audit.courseId = cw.courseId;
+    audit.targets = { courseworkId: id };
+    const res = await deleteCourseworkRecord(id, isAdminCaller(req));
+    audit.detail = { title: res.title, files: res.files };
+    return { id };
+  },
+  MEDIA_WRITE_SECRETS,
+);
+
+// ----------------------------------------------------- the student's side --
+
+/** The student's own work, with everything a hand-in or take-back checks. */
+async function myWork(tx: Transaction, uid: string, cwId: string) {
+  const subSnap = await tx.get(subRef(uid, cwId));
+  const sub = subSnap.data() as SubmissionDoc | undefined;
+  if (!sub || !sub.active) throw new HttpsError('permission-denied', 'That assignment is not yours.');
+  const course = (await tx.get(db().collection(COLLECTIONS.courses).doc(sub.courseId))).data() as CourseDoc;
+  return { sub, courseOpen: course.effectiveActive };
+}
+
+const STATE_REFUSAL: Record<string, string> = {
+  handedIn: 'This work is already handed in.',
+  returned: 'This work has been returned.',
+  missed: 'This assignment has closed. Ask your teacher if you need more time.',
+  closed: 'This course has been archived, so nothing more can be handed in.',
+  notRequired: 'This assignment is not required for you.',
+};
+
+/**
+ * Hand in what the draft holds. The server checks the date — the phone's clock
+ * plays no part — and records the moment, so late is judged from it.
+ */
+export async function handInWork(uid: string, cwId: string) {
+  const todayIs = today();
+  return db().runTransaction(async (tx) => {
+    const { sub, courseOpen } = await myWork(tx, uid, cwId);
+    const draft = (await tx.get(draftRef(uid, cwId))).data() as DraftDoc | undefined;
+    const state = workState(sub, todayIs, courseOpen);
+    if (!canHandIn(state)) throw new HttpsError('failed-precondition', STATE_REFUSAL[state] ?? 'This cannot be handed in.');
+    const note = draft?.note.trim() ?? '';
+    const files = draft?.files ?? {};
+    if (!note && Object.keys(files).length === 0) {
+      throw new HttpsError('failed-precondition', 'Write a note or add a file before handing in.');
+    }
+    const now = Date.now();
+    const late = isLate(now, sub.dueDate, INSTITUTE_TIMEZONE);
+    tx.update(subRef(uid, cwId), { state: 'handedIn', handedInAt: now, note, files });
+    tx.delete(draftRef(uid, cwId));
+    const event: SubmissionEventDoc = {
+      studentUid: uid,
+      courseworkId: cwId,
+      courseId: sub.courseId,
+      kind: 'handIn',
+      attempt: sub.attempt,
+      at: now,
+      late,
+    };
+    tx.set(db().collection(COLLECTIONS.submissionEvents).doc(), event);
+    return { handedInAt: now, late };
+  });
+}
+
+export const handIn = reportedCall(async (req) => {
+  const uid = requireStudent(req);
+  return handInWork(uid, idOf((req.data as { courseworkId?: unknown })?.courseworkId, 'courseworkId'));
+});
+
+/** Take handed-in work back to change it: until the due date, while it has not been returned. */
+export async function takeBackWork(uid: string, cwId: string) {
+  const todayIs = today();
+  return db().runTransaction(async (tx) => {
+    const { sub } = await myWork(tx, uid, cwId);
+    if (!canTakeBack(sub, todayIs)) {
+      throw new HttpsError(
+        'failed-precondition',
+        sub.state === 'handedIn' ? 'The due date has passed, so this can no longer be taken back.' : 'This work is not handed in.',
+      );
+    }
+    const now = Date.now();
+    const draft: DraftDoc = {
+      studentUid: uid,
+      courseworkId: cwId,
+      courseId: sub.courseId,
+      note: sub.note,
+      files: sub.files,
+      updatedAt: now,
+    };
+    tx.set(draftRef(uid, cwId), draft);
+    tx.update(subRef(uid, cwId), { state: 'open', handedInAt: null, note: '', files: {} });
+    const event: SubmissionEventDoc = {
+      studentUid: uid,
+      courseworkId: cwId,
+      courseId: sub.courseId,
+      kind: 'takeBack',
+      attempt: sub.attempt,
+      at: now,
+      late: false,
+    };
+    tx.set(db().collection(COLLECTIONS.submissionEvents).doc(), event);
+    return { takenBackAt: now };
+  });
+}
+
+export const takeBack = reportedCall(async (req) => {
+  const uid = requireStudent(req);
+  return takeBackWork(uid, idOf((req.data as { courseworkId?: unknown })?.courseworkId, 'courseworkId'));
+});
+
+// ------------------------------------------------------- grade and return --
+
+function validateGrade(v: unknown, grading: CourseworkGrading): Grade | null {
+  if (v === null) return null;
+  const g = v as Grade;
+  if (typeof g !== 'object' || !gradeFits(g, grading)) {
+    throw new HttpsError(
+      'invalid-argument',
+      grading.kind === 'points'
+        ? `A grade is a number from 0 to ${grading.outOf}, in halves at most.`
+        : 'A grade is satisfactory or needs work.',
+    );
+  }
+  return 'points' in g ? { points: g.points } : { scale: g.scale };
+}
+
+interface StudentWorkInput {
+  courseworkId: string;
+  studentUid: string;
+}
+
+function studentWorkInput(d: Record<string, unknown>): StudentWorkInput {
+  return { courseworkId: idOf(d.courseworkId, 'courseworkId'), studentUid: idOf(d.studentUid, 'studentUid') };
+}
+
+async function readSubmission(tx: Transaction, uid: string, cwId: string): Promise<SubmissionDoc> {
+  const sub = (await tx.get(subRef(uid, cwId))).data() as SubmissionDoc | undefined;
+  if (!sub) throw new HttpsError('not-found', 'That student does not have this assignment.');
+  return sub;
+}
+
+/**
+ * Save a grade and feedback. Until the work is returned this is a draft only
+ * staff see. On returned work it changes what the student sees at once, and
+ * the change is recorded; a changed GRADE is a new return, so the student is
+ * told (`seq` moves on). Work done on paper can be graded with nothing handed
+ * in.
+ */
+export async function saveGradeRecord(staffUid: string, input: StudentWorkInput & { grade: unknown; feedback: unknown }) {
+  const cw = await readCoursework(input.courseworkId);
+  const grade = validateGrade(input.grade, cw.grading);
+  const feedback = str(input.feedback ?? '', 'Feedback', MAX_FEEDBACK, { required: false });
+  return db().runTransaction(async (tx) => {
+    const sub = await readSubmission(tx, input.studentUid, input.courseworkId);
+    if (sub.notRequired) throw new HttpsError('failed-precondition', 'This work is marked not required.');
+    const doc: GradeDoc = {
+      studentUid: input.studentUid,
+      courseworkId: input.courseworkId,
+      courseId: cw.courseId,
+      grade,
+      feedback,
+      gradedBy: staffUid,
+      gradedAt: Date.now(),
+      withoutHandIn: sub.state === 'open',
+    };
+    tx.set(gradeRef(input.studentUid, input.courseworkId), doc);
+    if (sub.state !== 'returned' || !sub.returned) return { returnedChanged: false, before: null, after: grade };
+    const gradeChanged = JSON.stringify(sub.returned.grade) !== JSON.stringify(grade);
+    tx.update(subRef(input.studentUid, input.courseworkId), {
+      returned: { ...sub.returned, grade, feedback, ...(gradeChanged ? { seq: sub.returned.seq + 1, at: Date.now() } : {}) },
+    });
+    return { returnedChanged: true, before: sub.returned.grade, after: grade };
+  });
+}
+
+export const saveGrade = auditedCall('saveGrade', async (req, audit) => {
+  const d = (req.data ?? {}) as Record<string, unknown>;
+  const input = studentWorkInput(d);
+  const cw = await readCoursework(input.courseworkId);
+  const uid = await requireCourseScope(req, cw.courseId);
+  audit.courseId = cw.courseId;
+  audit.targets = { courseworkId: input.courseworkId, studentUid: input.studentUid };
+  const res = await saveGradeRecord(uid, { ...input, grade: d.grade, feedback: d.feedback });
+  // A draft grade changes constantly while a teacher works; only a change to
+  // one the student has is a record.
+  audit.noop = !res.returnedChanged;
+  audit.detail = { before: JSON.stringify(res.before), after: JSON.stringify(res.after) };
+  return { saved: true };
+});
+
+/**
+ * Give graded work back. Each student named must have a saved grade, unless
+ * the teacher is asking for another try, which may come with feedback alone.
+ *
+ * ANOTHER TRY keeps this attempt — the work, the grade, the feedback — in
+ * `attempts`, and opens the work again with a new date. The grade being
+ * written for the next attempt starts empty.
+ */
+export async function returnWorkRecord(
+  cwId: string,
+  studentUids: string[],
+  retry: { dueDate: string; lateUntil: string | null } | null,
+) {
+  const results: { studentUid: string; grade: Grade | null }[] = [];
+  for (const studentUid of studentUids) {
+    const res = await db().runTransaction(async (tx) => {
+      const sub = await readSubmission(tx, studentUid, cwId);
+      const graded = (await tx.get(gradeRef(studentUid, cwId))).data() as GradeDoc | undefined;
+      if (sub.notRequired) throw new HttpsError('failed-precondition', 'This work is marked not required.');
+      if (sub.state === 'returned') throw new HttpsError('failed-precondition', 'This work has already been returned.');
+      if (!graded && !retry) throw new HttpsError('failed-precondition', 'Grade the work before returning it.');
+      if (sub.state === 'open' && !graded?.withoutHandIn) {
+        throw new HttpsError('failed-precondition', 'Nothing has been handed in to return.');
+      }
+      const returned = {
+        grade: graded?.grade ?? null,
+        feedback: graded?.feedback ?? '',
+        at: Date.now(),
+        seq: (sub.returned?.seq ?? 0) + 1,
+        retry: retry !== null,
+      };
+      if (retry) {
+        tx.update(subRef(studentUid, cwId), {
+          state: 'open',
+          attempt: sub.attempt + 1,
+          attempts: FieldValue.arrayUnion({
+            attempt: sub.attempt,
+            note: sub.note,
+            files: sub.files,
+            handedInAt: sub.handedInAt,
+            returned,
+          }),
+          note: '',
+          files: {},
+          handedInAt: null,
+          returned,
+          dueDate: retry.dueDate,
+          lateUntil: retry.lateUntil,
+        });
+        if (graded) tx.delete(gradeRef(studentUid, cwId));
+      } else {
+        tx.update(subRef(studentUid, cwId), { state: 'returned', returned });
+      }
+      return { studentUid, grade: returned.grade };
+    });
+    results.push(res);
+  }
+  return results;
+}
+
+export const returnWork = auditedCall('returnWork', async (req, audit) => {
+  const d = (req.data ?? {}) as Record<string, unknown>;
+  const cwId = idOf(d.courseworkId, 'courseworkId');
+  const uids = d.studentUids;
+  if (!Array.isArray(uids) || uids.length === 0 || uids.length > 500 || !uids.every((u) => typeof u === 'string' && u)) {
+    throw new HttpsError('invalid-argument', 'studentUids must name the students to return work to.');
+  }
+  const cw = await readCoursework(cwId);
+  await requireCourseScope(req, cw.courseId);
+  const retry =
+    d.retry === undefined || d.retry === null
+      ? null
+      : validateDates(d.retry as { dueDate: unknown; lateUntil: unknown }, today());
+  audit.courseId = cw.courseId;
+  audit.targets = { courseworkId: cwId };
+  const res = await returnWorkRecord(cwId, uids as string[], retry);
+  audit.detail = { returned: res.map((r) => `${r.studentUid}: ${JSON.stringify(r.grade)}`).join('; '), retry: retry !== null };
+  return { returned: res.length };
+});
+
+/** A later date for one student, before or after theirs has passed, with a reason they see. */
+export async function giveMoreTimeRecord(staffUid: string, input: StudentWorkInput & { dates: { dueDate: string; lateUntil: string | null }; reason: string }) {
+  return db().runTransaction(async (tx) => {
+    const sub = await readSubmission(tx, input.studentUid, input.courseworkId);
+    if (sub.state === 'returned') throw new HttpsError('failed-precondition', 'This work has been returned.');
+    tx.update(subRef(input.studentUid, input.courseworkId), {
+      ...input.dates,
+      closedEarly: false,
+      moreTime: { reason: input.reason, by: staffUid, at: Date.now() },
+    });
+    return { before: { dueDate: sub.dueDate, lateUntil: sub.lateUntil } };
+  });
+}
+
+export const giveMoreTime = auditedCall('giveMoreTime', async (req, audit) => {
+  const d = (req.data ?? {}) as Record<string, unknown>;
+  const input = studentWorkInput(d);
+  const cw = await readCoursework(input.courseworkId);
+  const uid = await requireCourseScope(req, cw.courseId);
+  const dates = validateDates({ dueDate: d.dueDate, lateUntil: d.lateUntil ?? null }, today());
+  const reason = str(d.reason, 'A reason', MAX_REASON);
+  audit.courseId = cw.courseId;
+  audit.targets = { courseworkId: input.courseworkId, studentUid: input.studentUid };
+  const res = await giveMoreTimeRecord(uid, { ...input, dates, reason });
+  audit.detail = { ...dates, reason, beforeDueDate: res.before.dueDate };
+  return { saved: true };
+});
+
+/** Let one student off one assignment, with a reason they see; `null` undoes it. */
+export async function setNotRequiredRecord(staffUid: string, input: StudentWorkInput & { reason: string | null }) {
+  return db().runTransaction(async (tx) => {
+    const sub = await readSubmission(tx, input.studentUid, input.courseworkId);
+    if (sub.state === 'returned') throw new HttpsError('failed-precondition', 'This work has been returned.');
+    const was = sub.notRequired !== null;
+    tx.update(subRef(input.studentUid, input.courseworkId), {
+      notRequired: input.reason === null ? null : { reason: input.reason, by: staffUid, at: Date.now() },
+    });
+    return { changed: was !== (input.reason !== null) || input.reason !== sub.notRequired?.reason };
+  });
+}
+
+export const setNotRequired = auditedCall('setNotRequired', async (req, audit) => {
+  const d = (req.data ?? {}) as Record<string, unknown>;
+  const input = studentWorkInput(d);
+  const cw = await readCoursework(input.courseworkId);
+  const uid = await requireCourseScope(req, cw.courseId);
+  const reason = d.reason === null ? null : str(d.reason, 'A reason', MAX_REASON);
+  audit.courseId = cw.courseId;
+  audit.targets = { courseworkId: input.courseworkId, studentUid: input.studentUid };
+  const res = await setNotRequiredRecord(uid, { ...input, reason });
+  audit.noop = !res.changed;
+  audit.detail = { notRequired: reason !== null, ...(reason ? { reason } : {}) };
+  return { saved: true };
+});

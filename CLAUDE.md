@@ -97,8 +97,9 @@ Do not silently change any of these.
   `docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md`.
 - **Being marked EXCUSED is the whole of a student's entitlement.** One
   `assignments` document both grants access to a recording and requires listening
-  to it, and it lapses when the session's due date passes. Enrolment opens nothing
-  on its own; `present` and `absent` open nothing at all. "Everyone must listen"
+  to it, and it lapses when the session's due date passes. Enrolment opens no
+  recording (it does give a student the class's assignments, which have nothing
+  to do with the register); `present` and `absent` open nothing at all. "Everyone must listen"
   is said by excusing everyone. Access and accountability were separate until
   2026-08-14 and are now deliberately one fact — see the decision log; do not
   re-split them.
@@ -149,13 +150,14 @@ Do not silently change any of these.
   `sabeel-institute-kanban/docs/STORE-RELEASE.md`.
 - **Disable, archive, unpublish — don't delete.** Permanent deletion of anything
   carrying **listening history** is admin-only, needs strong confirmation, and is
-  audited. Two deletions are deliberately a manager's: removing a completion
-  override they set, and removing a file from an unpublished draft so a bad one
-  can be replaced. A published recording's playable files are hidden, never
-  removed; a file no student ever saw (still arriving, or failed) can be removed
-  from any recording. Neither destroys history, both are audited with a
-  required reason, and both are ordinary corrections to their own class — see
-  `docs/PRODUCT_BRIEF.md`.
+  audited. Three deletions are deliberately a manager's: removing a completion
+  override they set; removing a file from an unpublished draft so a bad one can
+  be replaced; and deleting an assignment no student has started (once any
+  student has a draft, a hand-in, a grade or a teacher's mark on it, only an
+  admin may). A published recording's playable files are hidden, never removed;
+  a file no student ever saw (still arriving, or failed) can be removed from any
+  recording. None destroys history, all are audited, and all are ordinary
+  corrections to their own class — see `docs/PRODUCT_BRIEF.md`.
 - **BRAND COLORS ARE FIXED.** `docs/BRAND.md` and the shared `sabeel-brand`
   skill are the authority. Single light theme, **no dark mode**. Never hardcode a
   colour; the ESLint rule will reject it. `app/src/theme/palette.ts` is the only

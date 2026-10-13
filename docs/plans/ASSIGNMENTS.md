@@ -65,8 +65,8 @@ no field-level security.
 
 | Step | What | Checked by |
 |---|---|---|
-| A1 | Shared types and the pure rules: a submission's state, late, past due, missed, To do buckets, who receives coursework | Unit tests in shared |
-| A2 | Server: create, edit, post, delete coursework; fan-out on posting, enrolment and leaving; hand in and take back; grade, return, another try, more time, not required; archive closing; audit; rules | Integration and rules tests, each named for the promise |
+| A1 | Shared types and the pure rules: a submission's state, late, past due, missed, To do buckets, who receives coursework | Unit tests in shared — **done 2026-10-13** |
+| A2 | Server: create, edit, post, delete coursework; fan-out on posting, enrolment and leaving; hand in and take back; grade, return, another try, more time, not required; archive closing; audit; rules | Integration and rules tests, each named for the promise — **done 2026-10-13**; the drafts and grades rules were opened once and their denials went red |
 | A3 | Files: teacher and student uploads to R2 through callables, probed on arrival; signed read links | Integration tests with real files; browser e2e |
 | A4 | Student screens: To do with both kinds; the assignment screen (note, files, camera, hand in, take back); class page tabs | Browser e2e; layout sweep with seed coursework in every state |
 | A5 | Staff screens: course page, assignment list, the form with the rich-text editor, the assignment page, grading on phone and laptop, Today's To grade | Browser e2e; layout sweep |

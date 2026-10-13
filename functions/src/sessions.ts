@@ -23,7 +23,7 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
  * (bucketed as upcoming), and the last-day sweep never matched it. Round-trip
  * through the UTC calendar and require the same text back.
  */
-function isCalendarDate(value: string): boolean {
+export function isCalendarDate(value: string): boolean {
   if (!DATE_ONLY.test(value)) return false;
   const ms = Date.parse(`${value}T00:00:00Z`);
   return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === value;

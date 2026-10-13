@@ -1,5 +1,6 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { auditedCall } from './audited';
+import { reconcileStudentCoursework } from './coursework';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import {
@@ -162,9 +163,12 @@ export async function createStudentAccount(callerUid: string, input: CreateStude
     throw e;
   }
 
-  // No obligations at creation time: accountability is attendance-driven and
-  // starts from enrollment onward — a student enrolled now is marked at the next
-  // session, and nothing published earlier is retroactively assigned.
+  // No RECORDING obligations at creation time: listening is attendance-driven
+  // and starts from enrolment onward, so nothing published earlier is
+  // retroactively granted. ASSIGNMENTS are different — they are the class's
+  // current work, so a student created into a course gets every posted one not
+  // yet past its due date.
+  if (input.courseId) await reconcileStudentCoursework(input.courseId, user.uid);
   return { uid: user.uid, email: input.email, courseId: input.courseId ?? null };
 }
 
