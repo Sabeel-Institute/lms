@@ -36,6 +36,21 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **Zoom imports take any file, and the session page lists a
+  recording's files** (video plan V2 and V4, commits `dafbe2d`, `117edfb`,
+  `4a97f7b`). The picker lists every meeting with its segments and formats
+  and imports several files at once; a Cloud Tasks queue (`copyZoomFile`)
+  copies each through the Worker, which now takes Zoom's MP4s. The session
+  page shows parts and versions with their state, and staff hide, show,
+  remove, reorder and choose the starting version. Deployed in order (Worker,
+  functions, hosting); the queue needed the Cloud Tasks API, three grants and
+  a workaround for a firebase-tools bug (DEPLOY.md). Proven on production: the
+  real Zoom account listed 18 meetings in all three formats; a speaker video
+  and its audio imported in 2.4 s, the queue copied both in 13 s, both played
+  from R2 with their content types, and deleting the session released both
+  claims. Students still play one file per recording until the player
+  learns parts and versions (V5).
+
 - 2026-10-12 — **Recordings hold media items** (video plan V1, commit
   `7a34552`). A recording's one `audioPath` became a `media` map of items
   (part, version, status, storage key), with `durationSec` derived from the
