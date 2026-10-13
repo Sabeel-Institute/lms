@@ -33,6 +33,19 @@ export const COLLECTIONS = {
    *  upload id and how the file is cut into parts. Server-only; gone once the
    *  upload is finished, cancelled or swept. */
   mediaUploads: 'mediaUploads',
+  /** Assignments a teacher posts to a whole class (the interface says
+   *  "assignment"; `assignments` is the listening grant). Callables only. */
+  coursework: 'coursework',
+  /** One student's work on one assignment: what they handed in, their own
+   *  dates, and the grade once returned. Server-written. */
+  submissions: 'submissions',
+  /** A student's unsent work. The student's alone: no staff rule reads it. */
+  drafts: 'drafts',
+  /** Grades as staff write them. Never student-readable; a grade reaches the
+   *  student only as `submissions.returned`. */
+  grades: 'grades',
+  /** Each hand-in and take-back, append-only. */
+  submissionEvents: 'submissionEvents',
   /** Required-listening obligations, and the ONLY thing granting a student
    *  access to a recording (the excused of a session, until the due date). */
   assignments: 'assignments',
