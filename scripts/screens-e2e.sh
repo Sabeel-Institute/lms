@@ -16,17 +16,8 @@ cd "$(dirname "$0")/.."
 #   SWEEP_WIDTHS=320 bash scripts/screens-e2e.sh    # one width, for a tight loop
 #   SWEEP_FULL=1 bash scripts/screens-e2e.sh        # + real device profiles
 
-# The Firebase emulators need JDK 21+; the Android/Gradle build needs 17 as the
-# default `java`. Same resolution order as scripts/test-emulator.sh — keep them
-# in step.
-if [ -n "${SR_JDK21_HOME:-}" ]; then
-  export JAVA_HOME="$SR_JDK21_HOME"
-elif [ -d "$HOME/opt/jdk-21" ]; then
-  export JAVA_HOME="$HOME/opt/jdk-21"
-fi
-if [ -n "${JAVA_HOME:-}" ]; then
-  export PATH="$JAVA_HOME/bin:$PATH"
-fi
+# shellcheck source=scripts/lib/jdk21.sh
+source "$(dirname "$0")/lib/jdk21.sh"
 
 # 61310, not the 61311 `test:e2e` uses. Two suites that grab the same port cannot
 # be run side by side, and the failure mode is not "port busy" — see the stale
