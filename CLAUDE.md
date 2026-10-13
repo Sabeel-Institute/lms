@@ -72,11 +72,11 @@ stub for that reason. A stub cannot drift.
 
 **Contribute back in the same batch as the fix.** This app is the first Sabeel
 project to use Cloud Storage, long-media playback, background audio and offline
-media, so it is the one most likely to find something new. The skill already has
-**"Cloud Storage and long media"** and the offline-outbox pattern under
-**"Offline persistence"**; **background-audio setup** (audio mode, foreground
-service, lock-screen controls) is still uncovered — write it in when it next
-costs real time.
+media, so it is the one most likely to find something new. The skill has
+**"Cloud Storage and long media"** (including background-audio setup and how to
+verify it on an AVD with `dumpsys`) and, under **"Offline persistence"**, the
+outbox pattern and why a write made with the screen locked does not leave the
+device until the app comes back.
 
 The skill also carries `tools/bootstrap-linux.sh`, which installs this whole
 toolchain on a fresh machine under `$HOME` with no root. See

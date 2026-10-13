@@ -36,6 +36,25 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-12 — **Listening on the lock screen keeps its place across an app
+  kill.** Found in the release device pass on `oursabeel-lms`: progress saved
+  while the app was in the background did not reach the server until the app
+  came back, and was lost if it was closed first. React Native stops JS
+  timers in the background and the Firebase SDK's network runs on them; the
+  audio and its ticks carry on. Every save is now also journalled on the
+  device (`app/src/progressJournal.ts`, AsyncStorage, one key per progress
+  document), replayed on launch and merged when the recording is reopened,
+  and the write queue keeps one write in flight and at most one waiting per
+  document, where it had queued one per 15-second save. Proven on `tb_emu`
+  against production: played, backgrounded 70 s, paused from the media
+  controls, force-stopped. The server stood at the pre-background place, held
+  the paused place within seconds of relaunch, and the player resumed there.
+  Same pass, release build against production: student sign-in, push
+  delivered on its channel and opening the app, playback from R2, seek and
+  speed, background playback with the foreground service, lock-screen
+  controls, and a staff upload from the phone (byte-exact on R2, duration
+  read on device) played back.
+
 - 2026-10-11 — **v0.7.1 shipped to every surface** (build commit `56c3c8d`,
   versionCode 34): functions → hosting, `smoke:prod`, `check:queries` and
   `check:push` green against the live project, CI dispatched by hand and

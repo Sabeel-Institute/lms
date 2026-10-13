@@ -12,6 +12,7 @@ import {
 import { audioErrorText, errorText } from './errors';
 import { db, functions } from './firebase';
 import { createPlayer } from './player';
+import { forgetProgress, journaledFor, journaledProgress, journalProgress } from './progressJournal';
 import type { Player } from './playerTypes';
 
 interface Minted {
@@ -207,51 +208,85 @@ function set(next: Partial<PlaybackState>) {
   listeners.forEach((l) => l(state));
 }
 
-/**
- * The write queue for the current session's progress document.
- *
- * ONE AT A TIME. `persistFor` is read-modify-write, and two of them in flight
- * against the same document race: the throttled tick and the write on the way
- * out both read the same stale value, and whichever `setDoc` lands second wins
- * — which is usually the throttled one, so the LAST seconds of a session are
- * the ones lost. Chaining is enough; there is only ever one session.
- */
-let writes: Promise<void> = Promise.resolve();
+/** Whose progress document a write is for. */
+interface Subject {
+  studentUid: string;
+  recordingId: string;
+  courseId: string;
+}
 
-function persistFor(
-  gen: number,
-  who: { studentUid: string; recordingId: string; courseId: string },
-  positionMs: number,
-  listenedMs: number,
-): Promise<void> {
-  writes = writes.then(() => writeProgress(gen, who, positionMs, listenedMs));
-  return writes;
+/** One save, captured when it was asked for. */
+interface Save {
+  gen: number;
+  who: Subject;
+  positionMs: number;
+  listenedMs: number;
+  updatedAt: number;
 }
 
 /**
- * Write one session's progress. TAKES ITS SUBJECT, rather than reading the
- * module's.
+ * The write queue: ONE WRITE IN FLIGHT, AND AT MOST ONE WAITING PER DOCUMENT.
  *
- * Every argument is captured by the caller before the first `await`, and the
- * generation is checked before anything module-level is touched again. That is
- * what makes a write belonging to the recording you just left unable to land on
- * the one you just opened: the round trip is two network calls long, and in that
- * window `owner`, `position` and `listened` can all belong to something else.
- * Writing the wrong `listenedMs` here is not a cosmetic bug — that number is the
- * audit evidence staff read on the ledger.
+ * One in flight because `writeProgress` is read-modify-write, and two against
+ * the same document race: the throttled tick and the write on the way out both
+ * read the same stale value, and whichever `setDoc` lands second wins — usually
+ * the throttled one, so the LAST seconds of a session are the ones lost.
+ *
+ * One waiting per document because a newer save of the same document makes the
+ * older one worthless, and a write can stall for as long as the app is in the
+ * background (progressJournal.ts). Chained instead, a two-hour lecture on the
+ * lock screen queued a read and a write per throttle interval — 480 of each,
+ * sent back to back the moment the app came forward. A waiting save is only
+ * replaced by a NEWER one, so a replayed journal record cannot displace the
+ * open session's own.
  */
-async function writeProgress(
-  gen: number,
-  who: { studentUid: string; recordingId: string; courseId: string },
-  positionMs: number,
-  listenedMs: number,
-): Promise<void> {
-  const { studentUid, recordingId, courseId } = who;
-  const ref = doc(db, COLLECTIONS.listeningProgress, progressId(studentUid, recordingId));
+const waiting = new Map<string, Save>();
+let draining: Promise<void> | null = null;
+
+function enqueue(save: Save): Promise<void> {
+  const id = progressId(save.who.studentUid, save.who.recordingId);
+  const queued = waiting.get(id);
+  if (!queued || queued.updatedAt <= save.updatedAt) waiting.set(id, save);
+  // On a microtask, as the chain it replaced did: never a network call from
+  // inside the tick, seek or pause that asked for the save.
+  draining ??= Promise.resolve().then(drain);
+  return draining;
+}
+
+async function drain(): Promise<void> {
+  try {
+    for (let next = waiting.entries().next(); !next.done; next = waiting.entries().next()) {
+      const [key, save] = next.value;
+      waiting.delete(key);
+      await writeProgress(save);
+    }
+  } finally {
+    draining = null;
+  }
+}
+
+/** Resolves once nothing is in flight or waiting. */
+const settled = (): Promise<void> => draining ?? Promise.resolve();
+
+/**
+ * Write one save. TAKES ITS SUBJECT, rather than reading the module's.
+ *
+ * Every number was captured when the save was asked for, and the generation is
+ * checked before anything module-level is touched again. That is what makes a
+ * write belonging to the recording you just left unable to land on the one you
+ * just opened: the round trip is two network calls long, and in that window
+ * `owner`, `position` and `listened` can all belong to something else. Writing
+ * the wrong `listenedMs` here is not a cosmetic bug — that number is the audit
+ * evidence staff read on the ledger.
+ */
+async function writeProgress(save: Save): Promise<void> {
+  const { gen, who } = save;
+  const id = progressId(who.studentUid, who.recordingId);
+  const ref = doc(db, COLLECTIONS.listeningProgress, id);
   const mine = {
-    positionMs: Math.round(positionMs),
-    listenedMs: Math.round(listenedMs),
-    updatedAt: Date.now(),
+    positionMs: Math.round(save.positionMs),
+    listenedMs: Math.round(save.listenedMs),
+    updatedAt: save.updatedAt,
   };
   try {
     // Merge against whatever is already there rather than overwriting: another
@@ -259,7 +294,8 @@ async function writeProgress(
     // backwards.
     const existing = (await getDoc(ref)).data() as ListeningProgressDoc | undefined;
     const merged = existing ? mergeProgress(mine, existing) : mine;
-    await setDoc(ref, { studentUid, recordingId, courseId, ...merged });
+    await setDoc(ref, { ...who, ...merged });
+    void forgetProgress(id, mine.updatedAt);
     // TAKE THE LARGER, never add the difference. `mine` was captured before two
     // round trips and the ticks that arrived during them are already in
     // `listened`, so assigning the merged total would throw them away — but
@@ -269,12 +305,32 @@ async function writeProgress(
     // turned a laptop's 15 minutes into 44, in the number the ledger presents as
     // evidence. `max` keeps the in-flight ticks and cannot double-count.
     if (generation === gen) listened = Math.max(listened, merged.listenedMs);
-  } catch {
+  } catch (e) {
+    // A REFUSAL IS FINAL. The grant the rules check on every write has gone —
+    // the student un-excused, the recording unpublished or deleted — and a
+    // journal record kept for it would be refused on every launch for the life
+    // of the install.
+    if ((e as { code?: string } | null)?.code === 'permission-denied') {
+      void forgetProgress(id, mine.updatedAt);
+      return;
+    }
     // A failed write must not break playback. The next tick retries — but only
-    // for the session that is still open; a session already ended has had its
-    // one best-effort attempt.
+    // for the session that is still open; a session already ended keeps its
+    // journal record for the next launch.
     if (generation === gen) dirty = true;
   }
+}
+
+/** Record a save on the device, then queue it for the server. */
+function save(gen: number, who: Subject, positionMs: number, listenedMs: number): Promise<void> {
+  const updatedAt = Date.now();
+  journalProgress(progressId(who.studentUid, who.recordingId), {
+    ...who,
+    positionMs: Math.round(positionMs),
+    listenedMs: Math.round(listenedMs),
+    updatedAt,
+  });
+  return enqueue({ gen, who, positionMs, listenedMs, updatedAt });
 }
 
 /** Persist the CURRENT session, if it has anything to write. */
@@ -282,12 +338,28 @@ function persist(): void {
   if (!owner?.studentUid || !dirty) return;
   dirty = false;
   lastWrite = Date.now();
-  void persistFor(
+  void save(
     generation,
     { studentUid: owner.studentUid, recordingId: owner.recordingId, courseId: owner.courseId },
     position,
     listened,
   );
+}
+
+/**
+ * Send whatever this device saved for a student and never confirmed — the
+ * listening done in the background before the app was closed. Called on launch
+ * once the student is signed in, so the writes carry their auth. A no-op on web.
+ *
+ * Generation -1 matches no session, so a replay never touches the open one's
+ * running total; reopening the recording merges the record in instead.
+ */
+export async function drainProgressJournal(studentUid: string): Promise<void> {
+  for (const [, entry] of await journaledFor(studentUid)) {
+    const { positionMs, listenedMs, updatedAt, ...who } = entry;
+    void enqueue({ gen: -1, who, positionMs, listenedMs, updatedAt });
+  }
+  return settled();
 }
 
 /**
@@ -418,6 +490,9 @@ export function openPlayback(now: NowPlaying): void {
       if (generation === gen && state.playing !== playing) {
         if (!playing) lastTick = null;
         set({ playing });
+        // Saved like an in-app pause. The lock-screen Pause is the one a
+        // background listener actually presses.
+        if (!playing) persist();
       }
     },
   });
@@ -425,16 +500,19 @@ export function openPlayback(now: NowPlaying): void {
 
   void (async () => {
     try {
-      const [url, saved] = await Promise.all([
+      const id = now.studentUid ? progressId(now.studentUid, now.recordingId) : null;
+      const [url, saved, journaled] = await Promise.all([
         playbackUrl(now.recordingId, now.durationMs),
-        now.studentUid
-          ? getDoc(
-              doc(db, COLLECTIONS.listeningProgress, progressId(now.studentUid, now.recordingId)),
-            )
-          : Promise.resolve(null),
+        id ? getDoc(doc(db, COLLECTIONS.listeningProgress, id)) : Promise.resolve(null),
+        id ? journaledProgress(id) : Promise.resolve(null),
       ]);
       if (generation !== gen) return;
-      const prior = saved?.data() as ListeningProgressDoc | undefined;
+      // THIS DEVICE'S OWN UNSENT SAVE COUNTS. Listening done on the lock screen
+      // and then closed is in the journal, not on the server, until something
+      // sends it — and resuming from the server alone put the student back
+      // where the screen went off.
+      const stored = saved?.data() as ListeningProgressDoc | undefined;
+      const prior = stored && journaled ? mergeProgress(stored, journaled) : (stored ?? journaled);
       listened = prior?.listenedMs ?? 0;
       position = prior?.positionMs ?? 0;
       await p.load(url, position, { title: now.title, courseName: now.courseName });
@@ -518,8 +596,8 @@ export function closePlayback(): Promise<void> {
   if (!dying?.studentUid) return Promise.resolve();
   // Nothing new since the last throttled save — but one may still be in flight,
   // and the caller that awaits this is about to drop the credential.
-  if (!moved) return writes;
-  return persistFor(
+  if (!moved) return settled();
+  return save(
     gen,
     { studentUid: dying.studentUid, recordingId: dying.recordingId, courseId: dying.courseId },
     finalPosition,

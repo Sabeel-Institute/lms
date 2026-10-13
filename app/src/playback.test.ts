@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PROGRESS_WRITE_INTERVAL_MS } from '@sabeel/shared';
 
 /**
  * The app-wide playback session.
@@ -15,6 +16,28 @@ import { describe, expect, it, vi } from 'vitest';
  * bookkeeping between them.
  */
 vi.mock('./firebase', () => ({ db: {}, functions: {} }));
+vi.mock('./sentry', () => ({ captureError: vi.fn() }));
+
+/**
+ * The device's storage — AsyncStorage, which holds the progress journal.
+ *
+ * DECLARED OUTSIDE `load()`, which resets every module: what is on the device
+ * survives the app being killed, and that survival is what the journal tests
+ * are about.
+ */
+const device = new Map<string, string>();
+vi.mock('@react-native-async-storage/async-storage', () => ({
+  default: {
+    getItem: async (k: string) => device.get(k) ?? null,
+    setItem: async (k: string, v: string) => {
+      device.set(k, v);
+    },
+    removeItem: async (k: string) => {
+      device.delete(k);
+    },
+    getAllKeys: async () => [...device.keys()],
+  },
+}));
 
 const callable = vi.fn();
 vi.mock('firebase/functions', () => ({ httpsCallable: () => callable }));
@@ -59,7 +82,10 @@ const getDoc = vi.fn((ref: { path: string }) => {
  */
 let holdSet = false;
 let finishSet: (() => void) | null = null;
+/** When set, every `setDoc` is refused the way the rules refuse a lapsed grant. */
+let denySet = false;
 const setDoc = vi.fn((ref: { path: string }, value: Record<string, unknown>) => {
+  if (denySet) return Promise.reject(Object.assign(new Error('denied'), { code: 'permission-denied' }));
   docs.set(ref.path, value);
   ioLog.push('set');
   if (!holdSet) return Promise.resolve();
@@ -158,14 +184,20 @@ vi.mock('./player', () => ({
 type Playback = typeof import('./playback');
 
 /** Fresh module per test: the session, the URL cache and the epoch are global. */
-async function load(): Promise<Playback> {
+async function load({ killed = false } = {}): Promise<Playback> {
   vi.resetModules();
+  // `killed`: the app is reopened on the same device, so its storage stays —
+  // and so, of course, does the server.
+  if (!killed) {
+    device.clear();
+    docs.clear();
+  }
   players.length = 0;
   holdLoad = false;
-  docs.clear();
   ioLog = [];
   holdSet = false;
   finishSet = null;
+  denySet = false;
   getDoc.mockClear();
   setDoc.mockClear();
   callable.mockReset();
@@ -783,12 +815,16 @@ describe('the write queue', () => {
     // under test is the writes that follow it.
     ioLog = [];
 
+    // The first tick's write is held open, so the saves after it are asked
+    // for while it is still in flight.
+    holdSet = true;
     players[0].events.onProgress(1_000);
+    await flush();
     wait(1_000);
     players[0].events.onProgress(2_000);
-    // Two persists with nothing awaited between them.
     pb.playback.seek(2_000);
     pb.playback.pause();
+    finishSet?.();
     await pb.closePlayback();
     await flush();
 
@@ -807,6 +843,155 @@ describe('the write queue', () => {
  * which is the note above `skipForward`. Neither skip was called anywhere in
  * this file.
  */
+/*
+ * THE LOCK SCREEN. React Native stops JavaScript timers while the app is in the
+ * background and the Firestore SDK's network layer runs on them, so a write
+ * issued with the screen locked does not leave the device until the app comes
+ * back — and never, if it is closed first. The audio and the ticks carry on.
+ * Here a held `setDoc` is the stalled network and `load({ killed: true })` is
+ * the app swiped away and reopened.
+ */
+describe('listening with the screen locked', () => {
+  /** Listen from 0 to `toMs` in one-second ticks, at real-time speed. */
+  const listen = (fake: Fake, fromMs: number, toMs: number) => {
+    for (let at = fromMs; at <= toMs; at += 1_000) {
+      fake.events.onProgress(at);
+      wait(1_000);
+    }
+  };
+
+  it('keeps the place and the listening when the app is closed before it syncs', async () => {
+    let pb = await load();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.playback.play();
+    // The first save goes out and stalls: the screen is off.
+    holdSet = true;
+    listen(players[0], 0, 0);
+    await flush();
+    // Ten minutes on the lock screen, then the lock-screen Pause — seven
+    // seconds after the last throttled save, so only the pause holds them.
+    listen(players[0], 1_000, 607_000);
+    players[0].events.onPlayingChanged(false);
+    await flush();
+    // Nothing has reached the server beyond the first, stalled save.
+    expect(docOf('rec-a')?.positionMs).toBe(0);
+
+    // Closed from recents, reopened later.
+    pb = await load({ killed: true });
+    await pb.drainProgressJournal('stu-1');
+    expect(docOf('rec-a')).toMatchObject({ positionMs: 607_000, listenedMs: 607_000 });
+  });
+
+  it('resumes from this device\'s unsent place before anything is sent', async () => {
+    let pb = await load();
+    seedDoc('rec-a', { positionMs: 60_000, listenedMs: 60_000, updatedAt: nowMs - 1_000 });
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    holdSet = true;
+    listen(players[0], 60_000, 60_000);
+    await flush();
+    listen(players[0], 61_000, 300_000);
+    players[0].events.onPlayingChanged(false);
+    await flush();
+
+    // Reopened straight onto the same lecture, with the server still behind.
+    pb = await load({ killed: true });
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    expect(players[0].startedAt).toBe(300_000);
+    // And the count carries on from the journal's total, not the server's.
+    listen(players[0], 300_000, 301_000);
+    await pb.closePlayback();
+    await flush();
+    expect(docOf('rec-a')).toMatchObject({ positionMs: 301_000, listenedMs: 301_000 });
+  });
+
+  it('sends one write, not one per interval, when the app comes back', async () => {
+    const pb = await load();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    holdSet = true;
+    // The first save stalls; an hour of throttled saves pile up behind it.
+    listen(players[0], 0, 0);
+    await flush();
+    listen(players[0], 1_000, 3_600_000);
+    await flush();
+    expect(setDoc).toHaveBeenCalledTimes(1);
+
+    // The app comes forward and the stalled write completes.
+    finishSet?.();
+    await flush();
+    await flush();
+    expect(setDoc).toHaveBeenCalledTimes(2);
+    expect(docOf('rec-a')?.positionMs).toBeGreaterThanOrEqual(3_600_000 - PROGRESS_WRITE_INTERVAL_MS);
+  });
+
+  it('a replayed record never displaces a newer save waiting to go', async () => {
+    const pb = await load();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.playback.play();
+    holdSet = true;
+    listen(players[0], 0, 0);
+    await flush();
+    listen(players[0], 1_000, 20_000);
+    pb.playback.seek(50_000);
+    await flush();
+    // A record older than the waiting save, as a launch-time replay can read
+    // it just before the session saves again.
+    device.set(
+      'sabeel.progressJournal.v1:stu-1_rec-a',
+      JSON.stringify({ studentUid: 'stu-1', recordingId: 'rec-a', courseId: 'course-1', positionMs: 5_000, listenedMs: 5_000, updatedAt: nowMs - 10_000 }),
+    );
+    const drained = pb.drainProgressJournal('stu-1');
+    await flush();
+    finishSet?.();
+    await drained;
+    await flush();
+    expect(docOf('rec-a')?.positionMs).toBe(50_000);
+  });
+
+  it('drops a record the server refuses, rather than replaying it for ever', async () => {
+    let pb = await load();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    holdSet = true;
+    listen(players[0], 0, 0);
+    await flush();
+    listen(players[0], 1_000, 30_000);
+
+    // Closed; meanwhile the student is un-excused, so the grant has gone.
+    pb = await load({ killed: true });
+    denySet = true;
+    await pb.drainProgressJournal('stu-1');
+    await flush();
+    expect(setDoc).toHaveBeenCalledTimes(1);
+
+    // The next launch has nothing left to send.
+    pb = await load({ killed: true });
+    await pb.drainProgressJournal('stu-1');
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('forgets the device\'s record once the server has it', async () => {
+    let pb = await load();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    listen(players[0], 0, 30_000);
+    await pb.closePlayback();
+    await flush();
+    const sent = docOf('rec-a');
+
+    // Another device moves on; a replay of a stale record must not undo it.
+    seedDoc('rec-a', { ...sent, positionMs: 5_000, updatedAt: nowMs + 60_000 });
+    pb = await load({ killed: true });
+    await pb.drainProgressJournal('stu-1');
+    expect(docOf('rec-a')?.positionMs).toBe(5_000);
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+});
+
 describe('the skip controls', () => {
   it('skips forward by 30 seconds', async () => {
     const pb = await load();

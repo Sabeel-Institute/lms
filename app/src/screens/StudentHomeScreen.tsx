@@ -20,6 +20,7 @@ import { captureError } from '../sentry';
 import { useMyAssignments, useMyCompletions } from '../completion';
 import { useListenerFailed } from '../liveQuery';
 import { drainCompletionOutbox } from '../completionOutbox';
+import { drainProgressJournal } from '../playback';
 import type { CourseRow } from '../structure';
 import type { RecordingRow } from '../recordings';
 import { getTheme, spacing } from '../theme';
@@ -64,11 +65,13 @@ export function StudentHomeScreen({
   // until those land the list is empty for a reason that is not "nothing to
   // listen to".
   //
-  // On launch, replay any completion this device marked offline and then lost to
-  // an app kill before it synced (native only; a no-op on web). Runs once the
-  // student is signed in, so the replayed writes carry their auth.
+  // On launch, replay what this device saved and then lost to an app kill
+  // before it synced: a completion marked offline, and listening done with the
+  // screen locked (native only; both are no-ops on web). Runs once the student
+  // is signed in, so the replayed writes carry their auth.
   useEffect(() => {
     void drainCompletionOutbox(uid);
+    void drainProgressJournal(uid);
   }, [uid]);
 
   const today = todayInZone(INSTITUTE_TIMEZONE);
