@@ -295,10 +295,16 @@ service cloud.firestore {
        */
       function progressShape() {
         return request.resource.data.keys().hasOnly(
-              ['studentUid', 'recordingId', 'courseId', 'positionMs', 'listenedMs', 'updatedAt'])
+              ['studentUid', 'recordingId', 'courseId', 'positionMs', 'listenedMs', 'updatedAt',
+               'part', 'version'])
           && request.resource.data.positionMs is int
           && request.resource.data.listenedMs is int
-          && request.resource.data.updatedAt is int;
+          && request.resource.data.updatedAt is int
+          // Where in the recording: which part, in which version. Optional,
+          // because rows from before parts existed have neither.
+          && (!('part' in request.resource.data) || request.resource.data.part is int)
+          && (!('version' in request.resource.data)
+              || request.resource.data.version in ['speaker', 'slides', 'audio', 'video']);
       }
 
       // `resource` is NULL when the document does not exist, and dereferencing

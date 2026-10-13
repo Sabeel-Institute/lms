@@ -2,7 +2,7 @@
  * Web side of the audio-picker seam (native sibling: filePicker.ts).
  *
  * A plain file input gives the OS picker for free, and the duration is read from
- * a browser <audio> element. A phone upload reads the same value with expo-audio,
+ * a browser <audio> element. A phone upload reads the same value with the player engine,
  * so a recording's stored `durationSec` is identical whichever device made it —
  * which matters because the player's scrubber, remaining time and listened-%
  * bar all derive from that stored value.

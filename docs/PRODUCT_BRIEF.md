@@ -11,7 +11,7 @@ The app is not a general LMS. It is a focused platform for class recordings, req
 - **Adult learner tone:** respectful and direct. Use language such as required listening, listen by, missed, completed, and pending sync. Say **missed** rather than overdue once access has closed — overdue implies the work is still doable. Avoid childish, punitive, or shaming language.
 - **Action first, full data second:** default views should show what needs attention. Complete sortable list views are still available for students and staff when they need full visibility.
 - **Being excused is the entitlement:** a recording opens to exactly the students marked excused for its session, and closes to them when the due date passes. The same fact makes it required listening. Access and accountability were separate principles until 2026-08-14; they are now deliberately one.
-- **Audio first:** the first release is audio-only. Do not expose Zoom video playback in the MVP.
+- **Audio and video, as the class made them:** a recording holds its class's files — audio, and video where staff took it — as parts and versions, and nothing is transcoded (`docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md`).
 - **Professional UX:** the app should feel polished, calm, and easy to use for every role. Avoid a wall of recordings as content grows.
 - **Sabeel visual system:** use the Sabeel Institute light theme and brand palette through semantic design tokens. Do not introduce a dark mode.
 
@@ -107,7 +107,7 @@ and grants access, is course-scoped as everything else is.
 - The Zoom import picker supports date range, meeting title, import status, and duration filters.
 - Each Zoom recording in the picker shows the date and the hours its audio ran, in institute time on a 12-hour clock. One recurring meeting carries every class in a cohort, so the topic is the same on every row and two classes can share a date; the hours are what tell them apart.
 - The picker opens filtered to the session's own date, as a toggle staff can turn off. Its date range is in institute dates too: an evening class, which Zoom stamps on the next UTC day, is listed under the day it was held.
-- One Zoom meeting is one class. Teachers end the meeting between classes rather than stopping and restarting the recording inside it; the picker takes one audio file per meeting (decision, 2026-10-10).
+- The picker takes any of Zoom's formats — slides and speaker, slides only, audio only — from one meeting or several (decision, 2026-10-12, replacing one audio file per meeting). A class recorded in several stretches, or across a meeting that was ended and started again, is imported as parts in the order they ran; the formats of one stretch become versions of one part. It shows the size, class time and monthly storage cost of what is chosen before anything is copied, and the copies run in the background.
 - Already imported Zoom recordings show as imported and link to the existing app recording.
 - Failed imports show a needs-attention status with retry and useful error details.
 - Drafts take their duration and source details from Zoom. Title and date come from the session, which owns them — see the data model — so the Zoom topic and start time are not copied onto the recording.
@@ -146,7 +146,7 @@ flowchart LR
 
 ### Required metadata before publish
 
-Title, date, due date, and shared notes live on the **session**, not the recording — set when the session is created and edited there. So the only thing a recording needs before publish is its **audio**; everything student-facing is inherited from the session it belongs to. (The session's title/notes/date are denormalised onto the recording so students, who cannot read sessions, can still see them.)
+Title, date, due date, and shared notes live on the **session**, not the recording — set when the session is created and edited there. So the only thing a recording needs before publish is **something a student can play** — and nothing still arriving or failed; everything student-facing is inherited from the session it belongs to. (The session's title/notes/date are denormalised onto the recording so students, who cannot read sessions, can still see them.)
 
 Session date defaults to the meeting date. Due date is **required** — see *Due dates* below; it is the day access closes, so a blank one would mean permanent access. Notes are visible to everyone who can access the recording — they are not private staff notes. File attachments are out of scope for the first release.
 
@@ -166,7 +166,7 @@ Accountability follows the session's attendance, so it is corrected by re-taking
 
 Permanent deletion of anything carrying **listening history** — a recording with grants, completions or progress behind it, a student, a course, a session — is Admin-only, requires strong confirmation, and is recorded in the audit log. Normal operations should use disable, archive, or unpublish.
 
-Two deletions are deliberately left to a manager, because neither destroys listening history and both are ordinary corrections to their own class: **removing a completion override** they set (the override is a staff judgement, and the audit log keeps the record of setting and removing it, each with its required reason), and **removing the audio from an unpublished draft** so a bad file can be replaced. A draft that has ever been published is not one of these — the server checks the collections, not the status.
+Two deletions are deliberately left to a manager, because neither destroys listening history and both are ordinary corrections to their own class: **removing a completion override** they set (the override is a staff judgement, and the audit log keeps the record of setting and removing it, each with its required reason), and **removing a file from an unpublished draft** so a bad one can be replaced. A published recording's files are hidden from students rather than removed, and staff may hide, show, reorder and add files in any state. A draft that has ever been published is not one of these — the server checks the collections, not the status.
 
 ## Assignment, access, and accountability
 
@@ -244,8 +244,9 @@ Students have a page per class showing **their own attendance record**: a tally 
 
 Required first-release playback features:
 
-- Audio streaming by default.
-- Resume progress.
+- Streaming, audio or video.
+- Versions of a part (slides and speaker, slides only, audio only) to switch between, keeping the place; parts to move between, the next starting by itself.
+- Resume progress, in the part and version the student was in.
 - Playback speed.
 - Background audio.
 - Mark complete.

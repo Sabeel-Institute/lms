@@ -253,6 +253,19 @@ describe('mergeProgress', () => {
   it('is stable on a tie, rather than flapping between devices', () => {
     expect(mergeProgress(at(100, 1, 5), at(100, 2, 5)).positionMs).toBe(1);
   });
+
+  it('takes the place whole: a position belongs to its part and version', () => {
+    // A phone at 13:05 into Part 2's video and a laptop at 40:00 into Part 1's
+    // audio: mixing them would resume at 40:00 into Part 2.
+    const phone = { ...at(200, 785_000, 10), part: 2, version: 'speaker' as const };
+    const laptop = { ...at(100, 2_400_000, 99), part: 1, version: 'audio' as const };
+    expect(mergeProgress(phone, laptop)).toEqual({ updatedAt: 200, positionMs: 785_000, listenedMs: 99, part: 2, version: 'speaker' });
+    expect(mergeProgress(laptop, phone)).toEqual(mergeProgress(phone, laptop));
+  });
+
+  it('keeps a row from before parts existed meaning Part 1', () => {
+    expect(mergeProgress(at(200, 5000, 10), at(100, 1, 1))).not.toHaveProperty('part');
+  });
 });
 
 describe('listenedFraction', () => {

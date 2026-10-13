@@ -532,7 +532,7 @@ as a fault; four crash-in-the-middle states repair themselves. Left for you:
       an end-of-term step.
 - [ ] **Headphones unplugged keeps playing.** Android's convention is to pause
       when the output route disappears (`ACTION_AUDIO_BECOMING_NOISY`).
-      expo-audio does not handle it; it needs a small native receiver, i.e. a
+      The player (expo-video) does not handle it; it needs a small native receiver, i.e. a
       native change in `android/`. Decide whether it matters before the first
       real-phone complaint.
 - [ ] **A push arriving while the app is open shows nothing.** FCM's own

@@ -418,7 +418,7 @@ manual, the release notes and `PRODUCT_BRIEF.md` change in the same batch.
 | V2 | Zoom listing of all files, segments, processing state; picker with formats, quick picks, totals; async import | Integration tests with a fake Zoom of multi-segment, multi-meeting fixtures; screens sweep at 320 px with expanded meetings — **built 2026-10-12**; the course's default pick is deferred: the picker starts with nothing chosen and a quick pick is one tap per meeting |
 | V3 | Upload of several files, part or version choice, probe | Browser e2e with a small MP4 and an M4A; AVD upload |
 | V4 | Staff media list, hide, reorder, publish blockers | Integration tests per lifecycle row above — **built 2026-10-13**; renaming a file is deferred (labels are generated) |
-| V5 | Player: versions, parts, auto-advance, listen only, resume, docked bar | `playback.test.ts` extended; web e2e plays video and switches version keeping position; AVD for background, lock screen, fullscreen, PiP |
+| V5 | Player: versions, parts, auto-advance, listen only, resume, docked bar | `playback.test.ts` extended; web e2e plays video and switches version keeping position; AVD for background, lock screen, fullscreen, PiP — **built 2026-10-13**; "Audio only" is the version chip rather than a separate button, and starting on audio over a metered connection is deferred |
 | V6 | Wording, manual, workbook and admin stats | Text-source checks; workbook tests |
 
 Each step is shown working in the browser first, and on the AVD for audio,

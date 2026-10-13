@@ -4,8 +4,9 @@
 
 The learning management system for Sabeel Institute's adult classes:
 attendance, class recordings, assignments and grades. Built today: attendance
-registers, audio-only class recordings with in-app listening for students who
-missed a class, and an accountability ledger for staff. Faisal is the
+registers, class recordings — audio and video, in parts and versions — that
+students who missed a class play in the app, and an accountability ledger for
+staff. Faisal is the
 developer; the institute's staff are the admins/managers.
 
 **This repo is the permanent home, and it is mid-move.** `Sabeel-Institute/lms`
@@ -86,9 +87,14 @@ toolchain on a fresh machine under `$HOME` with no root. See
 
 Do not silently change any of these.
 
-- **Audio only.** No video playback, no video stored. This is the single biggest
-  cost cliff in the product — a 2-hour Zoom MP4 is 15–70x an audio-only M4A, and
-  it is what takes the project from $0/month to material spend.
+- **Audio and video, as the class made them, and nothing transcoded.** A
+  recording holds media items: parts (stretches of class, played in order) and
+  versions (formats of a part — slides and speaker, slides only, audio only),
+  `packages/shared/src/media.ts`. Video is MP4 (H.264 + AAC). Video is where the
+  storage goes (about 5x the audio for Zoom's slides and speaker), so the Zoom
+  picker shows what a choice costs to keep before anything is copied, and
+  "Audio only" is always one tap away in the player. Plan:
+  `docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md`.
 - **Being marked EXCUSED is the whole of a student's entitlement.** One
   `assignments` document both grants access to a recording and requires listening
   to it, and it lapses when the session's due date passes. Enrolment opens nothing
@@ -142,8 +148,8 @@ Do not silently change any of these.
 - **Disable, archive, unpublish — don't delete.** Permanent deletion of anything
   carrying **listening history** is admin-only, needs strong confirmation, and is
   audited. Two deletions are deliberately a manager's: removing a completion
-  override they set, and removing the audio from an unpublished draft so a bad
-  file can be replaced. Neither destroys history, both are audited with a
+  override they set, and removing a file from an unpublished draft so a bad one
+  can be replaced. A published recording's files are hidden, never removed. Neither destroys history, both are audited with a
   required reason, and both are ordinary corrections to their own class — see
   `docs/PRODUCT_BRIEF.md`.
 - **BRAND COLORS ARE FIXED.** `docs/BRAND.md` and the shared `sabeel-brand`

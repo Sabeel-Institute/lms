@@ -4,11 +4,15 @@ import {
   INSTITUTE_TIMEZONE,
   canPlayFromCourse,
   canPlayNow,
+  VERSION_LABELS,
+  isPlayable,
   listenedFraction,
+  mediaParts,
   startingItem,
   todayInZone,
 } from '@sabeel/shared';
-import { Notice } from '../components/ui';
+import { Chips, Notice } from '../components/ui';
+import { VideoSurface } from '../components/VideoSurface';
 import { Scrubber } from '../components/Scrubber';
 import { Transport } from '../components/Transport';
 import { IDLE, closePlayback, formatClock, openPlayback, playback, usePlayback } from '../playback';
@@ -63,11 +67,10 @@ export function PlayerScreen({
   // The file this recording starts on: its first part, in the version students
   // start on. Publishing requires one, so a recording anyone reaches here has it.
   // A file asked for by id is staff previewing it, hidden or not; the server
-  // decides whether this caller may hear it.
-  const itemId =
-    (askedItemId && recording.media[askedItemId]?.status === 'ready' ? askedItemId : null) ??
-    startingItem(recording.media, recording.defaultVersion)?.id ??
-    null;
+  // decides whether this caller may hear it. Otherwise the session resumes
+  // where this listener left off.
+  const requested = askedItemId && recording.media[askedItemId]?.status === 'ready' ? askedItemId : null;
+  const playable = requested !== null || startingItem(recording.media, recording.defaultVersion) !== null;
   const session = usePlayback();
   // The session is app-wide, so on the first render after arriving it may still
   // describe the PREVIOUS recording. Read it only once it is about this one;
@@ -93,23 +96,26 @@ export function PlayerScreen({
   // playing must re-focus rather than restart. `openPlayback` is idempotent for
   // the loaded recording, so a re-render costs nothing.
   useEffect(() => {
-    if (!allowed || !itemId) return;
+    if (!allowed || !playable) return;
     openPlayback({
       recordingId: recording.id,
-      itemId,
+      itemId: requested,
       courseId: recording.courseId,
       title: recording.title,
       courseName: cls.name,
-      durationMs: (recording.durationSec ?? 0) * 1000,
+      media: recording.media,
+      defaultVersion: recording.defaultVersion,
       studentUid,
       dueDate,
     });
   }, [
     allowed,
-    itemId,
+    playable,
+    requested,
     recording.id,
     recording.title,
-    recording.durationSec,
+    recording.media,
+    recording.defaultVersion,
     recording.courseId,
     cls.name,
     studentUid,
@@ -157,8 +163,19 @@ export function PlayerScreen({
     );
   }
 
-  const durationMs = (recording.durationSec ?? 0) * 1000;
+  // The file being played: its length is the scrubber's, a part rather than
+  // the whole recording.
+  const current = state.now ? state.now.media[state.now.itemId] : undefined;
+  const durationMs = state.now?.durationMs ?? 0;
   const shownPositionMs = scrubMs ?? state.positionMs;
+  // What this listener can move between: the versions of the part being
+  // played, and the recording's parts. Staff may play hidden files; students
+  // see what students are given.
+  const offered = Object.values(recording.media).filter((i) =>
+    studentUid === null ? i.status === 'ready' : isPlayable(i),
+  );
+  const parts = mediaParts(offered);
+  const versions = current ? offered.filter((i) => i.part === current.part) : [];
   const remainingMs = Math.max(0, durationMs - shownPositionMs);
   const listened = listenedFraction(state.listenedMs, recording.durationSec);
 
@@ -177,7 +194,24 @@ export function PlayerScreen({
         page, and 560px is the width it wants. The room a desktop has to spare is
         margin, not a second column.
       */}
+      {current?.kind === 'video' ? <VideoSurface /> : null}
       <Hero recording={recording} courseName={cls.name} cohortName={cohortName} />
+
+      {/* THE VERSIONS OF THIS PART, which share its timeline: switching keeps
+          the place and plays on. "Audio only" is also the way to save data
+          on the move. */}
+      {versions.length > 1 && current ? (
+        <View style={styles.versions}>
+          <Chips
+            value={current.id}
+            testIdPrefix="player-version"
+            options={versions.map((i) => ({ value: i.id, label: VERSION_LABELS[i.version] }))}
+            onChange={(id) => playback.selectItem(id)}
+          />
+        </View>
+      ) : null}
+
+      {!playable ? <Notice tone="info">Nothing in this recording can be played yet.</Notice> : null}
 
       <Scrubber
         testID="player-scrubber"
@@ -224,7 +258,42 @@ export function PlayerScreen({
         })}
       </View>
 
-      {!state.ready && !state.error ? <Text style={styles.preparing}>Preparing…</Text> : null}
+      {!state.ready && !state.error && playable ? <Text style={styles.preparing}>Preparing…</Text> : null}
+
+      {/* THE PARTS, when the class was recorded in more than one stretch. At
+          the end of one the next starts by itself; these are for jumping. */}
+      {parts.length > 1 && current ? (
+        <View style={styles.parts}>
+          {parts.map(({ part, items }, index) => {
+            const longest = Math.max(0, ...items.map((i) => i.durationSec ?? 0));
+            const here = part === current.part;
+            return (
+              <Pressable
+                key={part}
+                testID={`player-part-${index + 1}`}
+                accessibilityRole="button"
+                aria-pressed={here}
+                accessibilityLabel={`Part ${index + 1}${here ? ', playing' : ''}`}
+                disabled={here || !state.ready}
+                onPress={() => playback.selectPart(part)}
+                style={[styles.part, here ? styles.partOn : null]}
+              >
+                <Text style={[styles.partText, here ? styles.partTextOn : null]}>
+                  {`Part ${index + 1}`}
+                  {longest > 0 ? ` · ${formatClock(longest * 1000)}` : ''}
+                  {here ? ' · playing' : ''}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {/* AT THE END, the moment completion is for — said plainly, never as a
+          demand: marking complete is the student's own statement. */}
+      {state.ended && studentUid ? (
+        <Notice tone="info">You have reached the end of this recording. If you have finished it, mark it complete below.</Notice>
+      ) : null}
 
       {/* ---- below the fold ---- */}
       <View style={styles.divider} />
@@ -519,6 +588,19 @@ const styles = StyleSheet.create({
   speedText: { fontSize: 14, fontWeight: '600', color: t.text.secondary },
   speedTextOn: { color: t.accent.onAccent },
   preparing: { fontSize: 13, color: t.text.secondary, textAlign: 'center', marginTop: spacing(3) },
+  versions: { marginTop: spacing(2), marginBottom: spacing(2) },
+  parts: { marginTop: spacing(4), gap: spacing(2) },
+  part: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing(3),
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: t.border.subtle,
+  },
+  partOn: { backgroundColor: t.bg.accentSoft, borderColor: t.accent.base },
+  partText: { fontSize: 14, color: t.text.primary },
+  partTextOn: { fontWeight: '700', color: t.accent.base },
   divider: { height: 1, backgroundColor: t.accent.gold, marginVertical: spacing(7) },
   sectionHeading: {
     fontSize: 13,

@@ -1,49 +1,38 @@
-import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { createVideoPlayer, type VideoPlayer } from 'expo-video';
 import type { NowPlayingMeta, Player, PlayerEvents } from './playerTypes';
-import { captureError } from './sentry';
-
-type NativePlayer = ReturnType<typeof createAudioPlayer>;
 
 /**
- * Native side of the player seam (web sibling: player.web.ts), on expo-audio.
- * `expo-av` is end-of-life and is not used.
+ * Native side of the player seam (web sibling: player.web.ts), on expo-video,
+ * for audio and video alike: one engine, so one foreground service and one
+ * lock-screen session. `expo-av` is end-of-life and is not used; `expo-audio`
+ * was, and would have been a second engine competing for the lock screen once
+ * video arrived (spike V0, docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md).
  *
- * Background playback needs two things, and the Phase 3a spike proved that
- * missing either fails quietly:
+ * Background playback needs two things, and missing either fails quietly:
  *
- *  1. `shouldPlayInBackground` in the audio mode;
- *  2. the FOREGROUND_SERVICE permissions and the media service in the manifest —
- *     which come from the config plugin and therefore need `expo prebuild`, since
- *     plugins do not run on their own in the bare workflow.
+ *  1. `staysActiveInBackground` on the player;
+ *  2. the FOREGROUND_SERVICE permissions and expo-video's playback service in
+ *     the manifest — written by hand, since config plugins do not run in the
+ *     bare workflow.
  *
  * NOT the notification permission. The media controls are a MediaStyle
  * notification bound to the media session, and Android exempts those from
- * POST_NOTIFICATIONS: with the permission denied — "don't ask again" — the
- * controls still appear, verified on the API 35 AVD on 2026-09-11. Asking for
- * it here put the system's "Allow notifications?" dialog in front of a person
- * who had just pressed Play, on every new session until the OS stopped asking,
- * and had nothing to do with the push opt-in that owns that question
- * (`pushNudge.ts`, the Notifications screen).
+ * POST_NOTIFICATIONS; asking for it here put the system's "Allow
+ * notifications?" dialog in front of a person who had just pressed Play.
  *
- * Because of (1)+(2) there is a foreground service keeping audio alive, and that
- * is exactly why there must be **at most ONE player alive at a time**. Two
- * problems otherwise, both seen on a real device:
- *  - `player.remove()` alone does NOT stop a playing background player, so a
- *    screen that unmounts leaves audio running with no UI to control it; and
- *  - navigation can create the next player before the previous one's cleanup has
- *    run (or a cleanup fails), so you get two streams at once, and neither the
- *    lock-screen controls nor killing the app can stop the orphan.
- *
- * A module-level handle fixes both: creating a player tears its predecessor down
- * first, and teardown PAUSES (and drops the lock-screen session) before removing.
+ * There must be **at most ONE player alive at a time**, for two reasons seen on
+ * a real device: releasing a player that is playing in the background does not
+ * reliably silence it first, and navigation can create the next player before
+ * the previous one's cleanup has run. A module-level handle fixes both: creating
+ * a player tears its predecessor down first, and teardown PAUSES before it
+ * releases.
  */
-let current: { player: NativePlayer; detach: () => void } | null = null;
+let current: { player: VideoPlayer; detach: () => void } | null = null;
 
-function hardStop(player: NativePlayer, detach: () => void) {
+function hardStop(player: VideoPlayer, detach: () => void) {
   try { detach(); } catch { /* best-effort teardown */ }
-  try { player.setActiveForLockScreen(false); } catch { /* best-effort teardown */ }
   try { player.pause(); } catch { /* best-effort teardown */ }
-  try { player.remove(); } catch { /* best-effort teardown */ }
+  try { player.release(); } catch { /* best-effort teardown */ }
 }
 
 function stopCurrent() {
@@ -53,113 +42,79 @@ function stopCurrent() {
   hardStop(c.player, c.detach);
 }
 
+/** The live player, for the surface that draws its picture (VideoSurface.tsx). */
+export function nativeVideoPlayer(): VideoPlayer | null {
+  return current?.player ?? null;
+}
+
 export function createPlayer(events: PlayerEvents): Player {
   // Kill any predecessor FIRST — this stops an orphan when a recording is
-  // re-opened and guarantees a single audio stream from the app.
+  // re-opened and guarantees a single stream from the app.
   stopCurrent();
 
-  const player = createAudioPlayer(null);
+  const player = createVideoPlayer(null);
+  player.staysActiveInBackground = true;
+  player.showNowPlayingNotification = true;
+  /*
+   * `doNotMix` — EXCLUSIVE AUDIO FOCUS. Documented as iOS-only, honoured on
+   * Android too (it requests AUDIOFOCUS_GAIN). Without it a two-hour lecture
+   * plays over whatever else is going, does not pause for a phone call, and has
+   * no claim on the transport the OS hands to the app that owns focus.
+   */
+  player.audioMixingMode = 'doNotMix';
+  player.preservesPitch = true;
+  player.timeUpdateEventInterval = 0.5;
 
-  let playing: boolean | null = null;
+  /*
+   * A SOURCE HAS LOADED. The player is created with none, and it reports
+   * `playToEnd` for that empty source on its first load — which the session
+   * would take for the end of the lecture (spike V0). Ends count only once a
+   * source has loaded.
+   */
+  let loaded = false;
   let sourceError: string | null = null;
-  const sub = player.addListener('playbackStatusUpdate', (status) => {
-    /*
-     * THE ERROR FIELD, WHICH NOTHING WAS READING. `onError` was reachable only
-     * from the audio-mode setup below, so a source that failed to load — the
-     * ordinary outcome of opening a lecture on a flaky connection — reported
-     * nothing at all. `load` does not await `replace`, so the session went
-     * `ready: true` with a fully enabled transport, no error notice, and a play
-     * button that did nothing; and `openPlayback`'s idempotency guard keys on
-     * `!state.error`, so leaving the screen and coming back took the
-     * early-return branch and could not retry. The only way out was the × on
-     * the docked bar.
-     */
-    // ON CHANGE, IN BOTH DIRECTIONS. `status.error` is a sticky field, so
-    // reporting it on every update re-rendered both surfaces at the status rate
-    // for as long as a failed session stayed open — and never told anyone when
-    // it cleared, which expo-audio documents as the normal end of a transient
-    // fault.
-    if (status.error !== sourceError) {
-      sourceError = status.error;
-      events.onError(sourceError);
-    }
-    if (status.currentTime != null) events.onProgress(status.currentTime * 1000);
-    // Only on a CHANGE: this fires several times a second.
-    if (status.playing !== playing) {
-      playing = status.playing;
-      events.onPlayingChanged(status.playing);
-    }
-    if (status.didJustFinish) events.onEnded();
-  });
-  const detach = () => sub.remove();
+  const subs = [
+    player.addListener('timeUpdate', ({ currentTime }) => events.onProgress(currentTime * 1000)),
+    player.addListener('playingChange', ({ isPlaying }) => events.onPlayingChanged(isPlaying)),
+    player.addListener('playToEnd', () => {
+      if (loaded) events.onEnded();
+    }),
+    // ON CHANGE, IN BOTH DIRECTIONS: an error is a state that clears when a
+    // source loads or playback resumes, and the session follows it.
+    player.addListener('statusChange', ({ status, error }) => {
+      const next = status === 'error' ? (error?.message ?? 'error') : null;
+      if (next !== sourceError) {
+        sourceError = next;
+        events.onError(next);
+      }
+    }),
+  ];
+  const detach = () => subs.forEach((s) => s.remove());
   current = { player, detach };
 
-  /** The last thing handed to `load`, and whether the OS is listening yet. */
-  let meta: { title: string; artist: string } | null = null;
-  let lockScreenActive = false;
-
-  void (async () => {
-    try {
-      /*
-       * `doNotMix` — EXCLUSIVE AUDIO FOCUS, and the default is not it.
-       *
-       * expo-audio defaults to `mixWithOthers`, which its own docs describe as
-       * "no audio focus is requested… best suited for sound effects, UI feedback,
-       * or short audio clips". A two-hour lecture is the opposite of that: it
-       * played over whatever else was going, did not duck or pause for a phone
-       * call, and had no claim on the transport the OS hands to the app that
-       * owns focus — which is the same focus `setActiveForLockScreen` needs for
-       * the lock-screen controls to bind.
-       */
-      await setAudioModeAsync({
-        shouldPlayInBackground: true,
-        playsInSilentMode: true,
-        interruptionMode: 'doNotMix',
-      });
-      /*
-       * THE METADATA HAS TO BE PASSED HERE TOO, not only in `load`.
-       *
-       * This setup is async and `load` is not ordered against it, so either can
-       * finish first. `updateLockScreenMetadata` documents itself as a no-op
-       * unless the player is already active for the lock screen — so a `load`
-       * that lands first would be silently discarded, which is the state this
-       * app shipped in: `dumpsys media_session` reported `metadata: null` and
-       * the notification drew transport controls over a blank title.
-       */
-      lockScreenActive = true;
-      player.setActiveForLockScreen(true, meta ?? undefined);
-    } catch (e) {
-      /*
-       * REPORTED, NOT SURFACED. Background playback or the lock-screen controls
-       * failing to configure does not stop the audio, and there is nothing the
-       * person can do — while `onError` puts a native message in a full-width
-       * red band and, since the transport follows it, refused to play a
-       * recording that had loaded perfectly. A source error is the only thing
-       * that channel is for.
-       *
-       * But it still has to leave evidence somewhere a person will look: this
-       * module's own header says missing any of the three setup calls fails
-       * QUIETLY, and a console line on somebody's phone is the definition of
-       * quiet. `captureError` is where every other invisible failure in this app
-       * goes.
-       */
-      captureError(e, { source: 'audioSetup' });
-    }
-  })();
-
   return {
-    async load(url, startMs, now: NowPlayingMeta) {
+    async load(url, startMs, now: NowPlayingMeta, keepPlaying = false) {
+      /*
+       * PAUSED BEFORE THE SWAP unless asked to keep going: `replaceAsync`
+       * carries on playing if the player was, which a version switch wants and
+       * opening a lecture does not.
+       */
+      if (!keepPlaying) player.pause();
       // The class is the "artist" line, which is where Android and the lock
       // screen put the second row under the title.
-      meta = { title: now.title, artist: now.courseName };
-      player.replace({ uri: url });
-      if (lockScreenActive) player.updateLockScreenMetadata(meta);
-      if (startMs > 0) await player.seekTo(startMs / 1000);
+      await player.replaceAsync({ uri: url, metadata: { title: now.title, artist: now.courseName } });
+      loaded = true;
+      if (startMs > 0) player.currentTime = startMs / 1000;
+      if (keepPlaying) player.play();
     },
     play: () => player.play(),
     pause: () => player.pause(),
-    seek: (ms) => void player.seekTo(ms / 1000),
-    setRate: (rate) => player.setPlaybackRate(rate),
+    seek: (ms) => {
+      player.currentTime = ms / 1000;
+    },
+    setRate: (rate) => {
+      player.playbackRate = rate;
+    },
     unload: () => {
       // If a newer player already replaced this one, just stop this stale
       // instance; otherwise clear the module handle too.

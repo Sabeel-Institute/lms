@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PROGRESS_WRITE_INTERVAL_MS } from '@sabeel/shared';
+import { PROGRESS_WRITE_INTERVAL_MS, type MediaItem, type MediaMap } from '@sabeel/shared';
 
 /**
  * The app-wide playback session.
@@ -122,6 +122,8 @@ interface Fake {
   startedAt: number | null;
   /** What `load` was told the OS should display. */
   announced: { title: string; courseName: string } | null;
+  /** Whether the last `load` was told to carry on playing. */
+  keptPlaying: boolean;
   unloaded: boolean;
   playing: boolean;
   /** Resolves a `load` held open by `holdLoad`. */
@@ -150,6 +152,7 @@ vi.mock('./player', () => ({
       events,
       loaded: null,
       announced: null,
+      keptPlaying: false,
       startedAt: null,
       unloaded: false,
       playing: false,
@@ -157,10 +160,11 @@ vi.mock('./player', () => ({
     };
     players.push(fake);
     return {
-      load: (url: string, startMs: number, meta: { title: string; courseName: string }) => {
+      load: (url: string, startMs: number, meta: { title: string; courseName: string }, keepPlaying = false) => {
         fake.loaded = url;
         fake.startedAt = startMs;
         fake.announced = meta;
+        fake.keptPlaying = keepPlaying;
         if (!holdLoad) return Promise.resolve();
         return new Promise<void>((resolve) => {
           fake.finishLoad = resolve;
@@ -230,13 +234,45 @@ const wait = (ms: number) => {
   nowMs += ms;
 };
 
-const recording = (id: string, studentUid: string | null = 'stu-1') => ({
+/** One file of a recording, ready, as an import or upload leaves it. */
+const file = (id: string, over: Partial<MediaItem> = {}): MediaItem => ({
+  id,
+  part: 1,
+  version: 'audio',
+  kind: 'audio',
+  label: null,
+  status: 'ready',
+  failReason: null,
+  hidden: false,
+  storageKey: `media/r/${id}`,
+  contentType: 'audio/mp4',
+  sizeBytes: 1,
+  durationSec: 3600,
+  width: null,
+  height: null,
+  source: 'zoom',
+  zoom: null,
+  addedAt: 1,
+  addedBy: 'adm',
+  ...over,
+});
+
+/**
+ * What a player screen opens: a one-part recording in two versions, audio (the
+ * default) and video. `audioSec` is the audio's length — null for one whose
+ * length could not be read, as a phone upload can be.
+ */
+const recording = (id: string, studentUid: string | null = 'stu-1', audioSec: number | null = 3600) => ({
   recordingId: id,
-  itemId: `${id}-audio`,
+  itemId: null as string | null,
   courseId: 'course-1',
   title: `Session ${id}`,
   courseName: 'Hikam Foundations',
-  durationMs: 3_600_000,
+  media: {
+    [`${id}-audio`]: file(`${id}-audio`, { durationSec: audioSec }),
+    [`${id}-video`]: file(`${id}-video`, { version: 'speaker', kind: 'video', contentType: 'video/mp4' }),
+  } as MediaMap,
+  defaultVersion: 'audio' as const,
   studentUid,
   dueDate: studentUid ? '2099-01-01' : null,
 });
@@ -787,7 +823,7 @@ describe('counting listening', () => {
   it('gives up on a seek target the player never reaches', async () => {
     const pb = await load();
     // No duration, so `skipForward` cannot clamp — a phone upload supplies none.
-    pb.openPlayback({ ...recording('rec-a'), durationMs: 0 });
+    pb.openPlayback(recording('rec-a', 'stu-1', null));
     await flush();
     players[0].events.onProgress(1_000);
     pb.playback.seek(9_999_000);
@@ -1019,7 +1055,7 @@ describe('the skip controls', () => {
 
   it('does not clamp to zero when the duration is unknown', async () => {
     const pb = await load();
-    pb.openPlayback({ ...recording('rec-a'), durationMs: 0 });
+    pb.openPlayback(recording('rec-a', 'stu-1', null));
     await flush();
     players[0].events.onProgress(600_000);
     pb.playback.skipForward();
@@ -1029,7 +1065,7 @@ describe('the skip controls', () => {
 
   it('never skips past the end of a recording whose duration is known', async () => {
     const pb = await load();
-    pb.openPlayback({ ...recording('rec-a'), durationMs: 20_000 });
+    pb.openPlayback(recording('rec-a', 'stu-1', 20));
     await flush();
     players[0].events.onProgress(10_000);
     pb.playback.skipForward();
@@ -1123,6 +1159,9 @@ describe('signed URLs', () => {
       }),
     );
     pb.openPlayback(recording('rec-a'));
+    // The listener's progress is read first; then the mint goes out and is held.
+    await flush();
+    expect(callable).toHaveBeenCalledTimes(1);
     pb.forgetPlaybackUrls();
     release({ data: { url: 'https://signed/stale.m4a', expiresAt: 1e15 } });
     await flush();
@@ -1175,6 +1214,108 @@ describe('formatClock', () => {
  * these assert through `toggle`, which is what the play/pause button on both
  * surfaces actually calls.
  */
+/**
+ * A class recorded in two stretches, each as slides-and-speaker video and
+ * audio — what a Zoom import of a restarted meeting makes.
+ */
+const twoParts = (id: string) => ({
+  ...recording(id),
+  media: {
+    p1a: file('p1a', { part: 1, durationSec: 3600 }),
+    p1v: file('p1v', { part: 1, version: 'speaker', kind: 'video', durationSec: 3600 }),
+    p2a: file('p2a', { part: 2, durationSec: 600 }),
+    p2v: file('p2v', { part: 2, version: 'speaker', kind: 'video', durationSec: 600 }),
+  } as MediaMap,
+});
+/** The file the session last asked a URL for. */
+const lastMinted = () => (callable.mock.calls.at(-1)?.[0] as { itemId: string } | undefined)?.itemId;
+
+describe('parts and versions', () => {
+  it('resumes in the part and version the student was in, at their place', async () => {
+    const pb = await load();
+    seedDoc('rec-a', { positionMs: 120_000, listenedMs: 3_700_000, part: 2, version: 'speaker', updatedAt: nowMs - 1000 });
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    expect(lastMinted()).toBe('p2v');
+    expect(players[0].startedAt).toBe(120_000);
+  });
+
+  it('resumes a place saved before parts existed in Part 1, as it always did', async () => {
+    const pb = await load();
+    seedDoc('rec-a', { positionMs: 120_000, listenedMs: 120_000, updatedAt: nowMs - 1000 });
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    expect(lastMinted()).toBe('p1a');
+    expect(players[0].startedAt).toBe(120_000);
+  });
+
+  it('switching version keeps the place, plays on, and counts no listening for the swap', async () => {
+    const pb = await load();
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    pb.playback.play();
+    players[0].events.onProgress(0);
+    wait(100_000);
+    players[0].events.onProgress(100_000);
+    pb.playback.selectItem('p1v');
+    await flush();
+    expect(lastMinted()).toBe('p1v');
+    // The same player, the same place, still playing.
+    expect(players).toHaveLength(1);
+    expect(players[0]).toMatchObject({ startedAt: 100_000, keptPlaying: true });
+    // A stale tick from the old source, and the new one's first, count nothing.
+    players[0].events.onProgress(100_500);
+    wait(1_000);
+    players[0].events.onProgress(101_500);
+    await pb.closePlayback();
+    await flush();
+    expect(docOf('rec-a')).toMatchObject({ part: 1, version: 'speaker', positionMs: 101_500, listenedMs: 101_000 });
+  });
+
+  it('goes on to the next part, in the same version, when a part ends', async () => {
+    const pb = await load();
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    pb.playback.selectItem('p1v');
+    await flush();
+    players[0].events.onEnded();
+    await flush();
+    expect(lastMinted()).toBe('p2v');
+    expect(players[0]).toMatchObject({ startedAt: 0, keptPlaying: true });
+  });
+
+  it('stops at the end of the last part, where the student marks it complete', async () => {
+    const pb = await load();
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    pb.playback.selectPart(2);
+    await flush();
+    const mints = callable.mock.calls.length;
+    players[0].events.onEnded();
+    await flush();
+    expect(callable.mock.calls.length).toBe(mints);
+  });
+
+  it('does not give a student a hidden file, though staff may play it', async () => {
+    const hidden = (uid: string | null) => {
+      const r = twoParts('rec-a');
+      return { ...r, studentUid: uid, media: { ...r.media, p1v: { ...r.media.p1v, hidden: true } } };
+    };
+    let pb = await load();
+    pb.openPlayback(hidden('stu-1'));
+    await flush();
+    pb.playback.selectItem('p1v');
+    await flush();
+    expect(lastMinted()).toBe('p1a');
+    pb = await load();
+    pb.openPlayback(hidden(null));
+    await flush();
+    pb.playback.selectItem('p1v');
+    await flush();
+    expect(lastMinted()).toBe('p1v');
+  });
+});
+
 describe('a transport change from outside the app', () => {
   it('leaves the next tap RESUMING after the player pauses itself', async () => {
     const pb = await load();
@@ -1264,8 +1405,8 @@ describe('a transport change from outside the app', () => {
   /*
    * AND IT COMES BACK WHEN THE FAULT DOES.
    *
-   * expo-audio documents `status.error` as transient — "cleared when a new
-   * source is loaded or playback resumes successfully" — so a network blip forty
+   * A player's error is transient — cleared when a new source loads or
+   * playback resumes successfully — so a network blip forty
    * minutes into a two-hour lecture sets it and then clears it. Latched, that
    * disabled the transport for good and, through the `!ready` gate on ticks,
    * stopped counting the remaining eighty minutes while the audio kept playing:

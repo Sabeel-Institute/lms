@@ -1,12 +1,13 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { createAudioPlayer } from 'expo-audio';
+import { createVideoPlayer } from 'expo-video';
 
 /**
  * Native side of the audio-picker seam (web sibling: filePicker.web.ts).
  *
  * Uploading from a phone is supported: expo-document-picker opens the system file
  * browser, the file is read into a Blob for the same signed upload the web uses,
- * and its duration is read with expo-audio so a phone upload stores the SAME
+ * and its duration is read with the player engine (expo-video) so a phone
+ * upload stores the SAME
  * `durationSec` a computer upload does. That matters: the player's scrubber,
  * remaining time and listened-% bar all read the stored duration, so a null one
  * would leave a phone-made recording playable but with a broken transport.
@@ -42,28 +43,29 @@ export async function pickAudioFile(): Promise<PickedAudio | null> {
 }
 
 /**
- * Read the file's duration by loading it once with expo-audio and taking the
- * first status that reports it (a local file loads in well under a second).
- * Resolves null — never throws — on anything odd, so a bad read does not block
- * the upload; the value is advisory.
+ * Read the file's duration by loading it once in a player and taking it when
+ * the source is ready (a local file loads in well under a second). Resolves
+ * null — never throws — on anything odd, so a bad read does not block the
+ * upload; the value is advisory.
  */
 function readDuration(uri: string): Promise<number | null> {
   return new Promise((resolve) => {
-    const player = createAudioPlayer({ uri });
+    const player = createVideoPlayer({ uri });
     let settled = false;
+    const ok = (d: number) => (Number.isFinite(d) && d > 0 ? Math.round(d) : null);
     const finish = (v: number | null) => {
       if (settled) return;
       settled = true;
       sub.remove();
       clearTimeout(timer);
-      player.remove();
+      player.release();
       resolve(v);
     };
-    const ok = (d: number) => (Number.isFinite(d) && d > 0 ? Math.round(d) : null);
-    const sub = player.addListener('playbackStatusUpdate', (s) => {
-      if (s.isLoaded && Number.isFinite(s.duration) && s.duration > 0) finish(ok(s.duration));
+    const sub = player.addListener('statusChange', ({ status }) => {
+      if (status === 'readyToPlay') finish(ok(player.duration));
+      else if (status === 'error') finish(null);
     });
-    // Fallback: if no status carried a duration, read it directly before giving up.
+    // Fallback: if the source never said it was ready, read what is there before giving up.
     const timer = setTimeout(() => finish(ok(player.duration)), 4000);
   });
 }

@@ -45,6 +45,9 @@ function build() {
       goldSoft: p.goldSoft,
       /** Sage-charactered fill for secondary buttons and neutral chips. */
       sage: p.bgSage,
+      /** Behind a video's picture, where it does not fill the frame: the
+       *  brand's darkest tone rather than a black the palette does not have. */
+      video: p.textPrimary,
     },
     text: {
       primary: p.textPrimary,

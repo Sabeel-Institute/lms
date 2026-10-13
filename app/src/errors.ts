@@ -35,8 +35,8 @@ export function errorText(e: unknown): string {
 /**
  * What a listener reads when the AUDIO itself fails.
  *
- * The transport's own words are a code — `audio error 2` from the web
- * element, "Source error" or "Response code: 400" from expo-audio — and they
+ * The transport's own words are a code — `media error 2` from the web
+ * element, "Source error" or "Response code: 400" from the native player — and they
  * were shown verbatim in the player's error band, while the mint failure two
  * lines away went through `errorText`. One sentence for a person, the raw
  * value logged for Sentry, like every other failure.

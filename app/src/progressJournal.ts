@@ -25,7 +25,7 @@ const PREFIX = 'sabeel.progressJournal.v1:';
 
 export type JournalEntry = Pick<
   ListeningProgressDoc,
-  'studentUid' | 'recordingId' | 'courseId' | 'positionMs' | 'listenedMs' | 'updatedAt'
+  'studentUid' | 'recordingId' | 'courseId' | 'positionMs' | 'part' | 'version' | 'listenedMs' | 'updatedAt'
 >;
 
 /** Record a save before it is sent. `id` is the progress document's id. */

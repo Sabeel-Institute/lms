@@ -32,9 +32,10 @@
     "plugins": [
       "@react-native-google-signin/google-signin",
       [
-        "expo-audio",
+        "expo-video",
         {
-          "recordAudioAndroid": false
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": true
         }
       ],
       "@sentry/react-native",

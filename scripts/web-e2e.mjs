@@ -36,6 +36,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { readXlsx } from '@sabeel/shared';
 import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
+import { putLocalObject } from './lib/media-store.mjs';
 
 const WEB = process.env.E2E_WEB ?? `http://127.0.0.1:${WEB_PORTS.e2e}/`;
 const FN = `http://127.0.0.1:${EMULATOR_PORTS.functions}/${EMULATOR_PROJECT_ID}/us-central1`;
@@ -72,6 +73,29 @@ function ensureAudioFixture() {
     );
   }
 }
+
+/**
+ * The same twelve minutes as video — a picture with a clock on it, and the
+ * fixture's audio — tiny, so a version switch is a real switch of source and
+ * not a download. Generated, like the audio, rather than committed.
+ */
+const VIDEO_FIXTURE = 'e2e-shots/test-lecture.mp4';
+function ensureVideoFixture() {
+  if (existsSync(VIDEO_FIXTURE)) return;
+  execFileSync('ffmpeg', [
+    '-f', 'lavfi', '-i', `testsrc=size=160x90:rate=1:duration=${AUDIO_SECONDS}`,
+    '-i', AUDIO_FIXTURE, '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+    '-c:a', 'copy', '-shortest', '-movflags', '+faststart', VIDEO_FIXTURE, '-y',
+  ], { stdio: 'ignore' });
+}
+
+/** A plain value as a Firestore REST value, for the out-of-band writes below. */
+const restValue = (v) =>
+  v === null ? { nullValue: null }
+    : typeof v === 'string' ? { stringValue: v }
+      : typeof v === 'boolean' ? { booleanValue: v }
+        : typeof v === 'number' ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v })
+          : { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, restValue(x)])) } };
 
 const failures = [];
 /**
@@ -289,6 +313,7 @@ const bodyText = async (page) =>
 rmSync(SHOTS, { recursive: true, force: true });
 mkdirSync(SHOTS, { recursive: true });
 ensureAudioFixture();
+ensureVideoFixture();
 await reset();
 
 // ---------------------------------------------------------------- identity --
@@ -847,6 +872,61 @@ check(
   `landed at ${seekedTo}s (~75% of 720s)`,
 );
 await tap(student, 'player-play'); // pause, so the saved position settles
+
+/*
+ * A VIDEO OF THE SAME STRETCH OF CLASS — a version, as a Zoom import of the
+ * meeting's slides and speaker would add it. Switching to it must keep the
+ * student's place, show the picture, and play; switching back must keep it
+ * again. Written out of band (the import itself is the integration suite's),
+ * and the open player picks it up from the live recording, as it would a file
+ * staff added while a student listened.
+ */
+const playedDoc = (await readCollection('recordings'))[0];
+const playedId = playedDoc.name.split('/').pop();
+const audioItemId = Object.keys(playedDoc.fields.media.mapValue.fields)[0];
+await putLocalObject(`media/${playedId}/e2evideo`, readFileSync(VIDEO_FIXTURE), 'video/mp4');
+const videoItem = {
+  id: 'e2evideo', part: 1, version: 'speaker', kind: 'video', label: null, status: 'ready',
+  failReason: null, hidden: false, storageKey: `media/${playedId}/e2evideo`, contentType: 'video/mp4',
+  sizeBytes: statSync(VIDEO_FIXTURE).size, durationSec: AUDIO_SECONDS, width: null, height: null,
+  source: 'zoom', zoom: null, addedAt: Date.now(), addedBy: 'e2e',
+};
+const patched = await fetch(`${FS_READ}/recordings/${playedId}?updateMask.fieldPaths=media.e2evideo`, {
+  method: 'PATCH',
+  headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+  body: JSON.stringify({ fields: { media: { mapValue: { fields: { e2evideo: restValue(videoItem) } } } } }),
+});
+if (!patched.ok) throw new Error(`adding the video version failed: ${patched.status} ${await patched.text()}`);
+await student.getByTestId('player-version-e2evideo').waitFor({ timeout: 15000 });
+const beforeSwitch = await elapsedSeconds(student);
+await tap(student, 'player-version-e2evideo');
+await student.getByTestId('player-video').waitFor({ timeout: 15000 });
+await student.waitForTimeout(2500);
+const afterSwitch = await elapsedSeconds(student);
+const picture = await student.evaluate(() => {
+  const v = document.querySelector('[data-testid="player-video"] video');
+  return v ? { w: v.videoWidth, src: v.currentSrc.includes('e2evideo') } : null;
+});
+check(
+  'switching to the video keeps the place and shows the picture',
+  Math.abs(afterSwitch - beforeSwitch) <= 2 && picture?.w === 160 && picture?.src === true,
+  `before ${beforeSwitch}s, after ${afterSwitch}s, picture ${JSON.stringify(picture)}`,
+);
+await shot(student, '12b-player-video');
+await tap(student, 'player-play');
+await student.waitForTimeout(4000);
+const videoPlayed = await elapsedSeconds(student);
+check('the video plays', videoPlayed >= afterSwitch + 2, `${afterSwitch}s → ${videoPlayed}s`);
+await tap(student, `player-version-${audioItemId}`);
+await student.waitForTimeout(2500);
+const backOnAudio = await elapsedSeconds(student);
+check(
+  'switching back to the audio keeps the place, and the picture goes',
+  Math.abs(backOnAudio - videoPlayed) <= 4 && (await student.getByTestId('player-video').count()) === 0,
+  `${videoPlayed}s → ${backOnAudio}s`,
+);
+await tap(student, 'player-play'); // pause again
+await student.waitForTimeout(1500);
 
 /*
  * THE DOCKED NOW-PLAYING BAR — leaving the player must not stop the audio.

@@ -5,9 +5,15 @@ import {
   COLLECTIONS,
   PROGRESS_WRITE_INTERVAL_MS,
   SIGNED_URL_REFRESH_MS,
+  mediaParts,
   mergeProgress,
   progressId,
+  startingItem,
+  isPlayable,
   type ListeningProgressDoc,
+  type MediaItem,
+  type MediaMap,
+  type MediaVersion,
 } from '@sabeel/shared';
 import { audioErrorText, errorText } from './errors';
 import { db, functions } from './firebase';
@@ -87,10 +93,19 @@ export interface NowPlaying {
   recordingId: string;
   /** The file being played: one media item of the recording. */
   itemId: string;
+  /**
+   * The recording's media as the caller last read it: what parts and versions
+   * there are to move between. Refreshed by every `openPlayback` for the same
+   * recording, so a file staff hide or add reaches a session already open.
+   */
+  media: MediaMap;
+  /** The version a student starts on, and falls back to between parts. */
+  defaultVersion: MediaVersion;
   /** The course, so any surface can re-check that it may still be played. */
   courseId: string;
   title: string;
   courseName: string;
+  /** The length of the file being played: a part, not the whole recording. */
   durationMs: number;
   /**
    * Whose deadline `dueDate` is, or null when staff are listening.
@@ -105,8 +120,17 @@ export interface NowPlaying {
   dueDate: string | null;
 }
 
+/**
+ * What `openPlayback` is asked for. `itemId` names a file — staff previewing it
+ * — or is null for wherever this listener left off: the part and version
+ * their progress says, else the recording's starting file.
+ */
+export type OpenRequest = Omit<NowPlaying, 'itemId' | 'durationMs'> & { itemId: string | null };
+
 export interface PlaybackState {
   ready: boolean;
+  /** The last part came to its end: the moment to offer marking it complete. */
+  ended: boolean;
   playing: boolean;
   positionMs: number;
   listenedMs: number;
@@ -125,6 +149,7 @@ export interface PlaybackState {
  */
 export const IDLE: PlaybackState = {
   ready: false,
+  ended: false,
   playing: false,
   positionMs: 0,
   listenedMs: 0,
@@ -219,11 +244,18 @@ interface Subject {
   courseId: string;
 }
 
+/** Where a listener is: a position in a part, in a version. */
+interface Place {
+  positionMs: number;
+  part: number;
+  version: MediaVersion;
+}
+
 /** One save, captured when it was asked for. */
 interface Save {
   gen: number;
   who: Subject;
-  positionMs: number;
+  place: Place;
   listenedMs: number;
   updatedAt: number;
 }
@@ -288,7 +320,9 @@ async function writeProgress(save: Save): Promise<void> {
   const id = progressId(who.studentUid, who.recordingId);
   const ref = doc(db, COLLECTIONS.listeningProgress, id);
   const mine = {
-    positionMs: Math.round(save.positionMs),
+    positionMs: Math.round(save.place.positionMs),
+    part: save.place.part,
+    version: save.place.version,
     listenedMs: Math.round(save.listenedMs),
     updatedAt: save.updatedAt,
   };
@@ -326,26 +360,35 @@ async function writeProgress(save: Save): Promise<void> {
 }
 
 /** Record a save on the device, then queue it for the server. */
-function save(gen: number, who: Subject, positionMs: number, listenedMs: number): Promise<void> {
+function save(gen: number, who: Subject, place: Place, listenedMs: number): Promise<void> {
   const updatedAt = Date.now();
   journalProgress(progressId(who.studentUid, who.recordingId), {
     ...who,
-    positionMs: Math.round(positionMs),
+    positionMs: Math.round(place.positionMs),
+    part: place.part,
+    version: place.version,
     listenedMs: Math.round(listenedMs),
     updatedAt,
   });
-  return enqueue({ gen, who, positionMs, listenedMs, updatedAt });
+  return enqueue({ gen, who, place, listenedMs, updatedAt });
+}
+
+/** Where the open session is, from the file it is playing. */
+function currentPlace(): Place | null {
+  const item = state.now ? state.now.media[state.now.itemId] : undefined;
+  return item ? { positionMs: position, part: item.part, version: item.version } : null;
 }
 
 /** Persist the CURRENT session, if it has anything to write. */
 function persist(): void {
-  if (!owner?.studentUid || !dirty) return;
+  const place = currentPlace();
+  if (!owner?.studentUid || !dirty || !place) return;
   dirty = false;
   lastWrite = Date.now();
   void save(
     generation,
     { studentUid: owner.studentUid, recordingId: owner.recordingId, courseId: owner.courseId },
-    position,
+    place,
     listened,
   );
 }
@@ -360,8 +403,9 @@ function persist(): void {
  */
 export async function drainProgressJournal(studentUid: string): Promise<void> {
   for (const [, entry] of await journaledFor(studentUid)) {
-    const { positionMs, listenedMs, updatedAt, ...who } = entry;
-    void enqueue({ gen: -1, who, positionMs, listenedMs, updatedAt });
+    const { positionMs, part, version, listenedMs, updatedAt, ...who } = entry;
+    // A record from before parts existed is a place in Part 1's audio.
+    void enqueue({ gen: -1, who, place: { positionMs, part: part ?? 1, version: version ?? 'audio' }, listenedMs, updatedAt });
   }
   return settled();
 }
@@ -378,7 +422,7 @@ export async function drainProgressJournal(studentUid: string): Promise<void> {
  * screen be opened, left and re-opened without interrupting the audio: arriving
  * at a screen for something already playing must not restart it at zero.
  */
-export function openPlayback(now: NowPlaying): void {
+export function openPlayback(req: OpenRequest): void {
   /*
    * Re-entering the screen for what is ALREADY PLAYING must not restart it —
    * and must not be mistaken for a session that cannot play.
@@ -389,13 +433,31 @@ export function openPlayback(now: NowPlaying): void {
    * loaded: without it, coming back to retry hits this branch and the transport
    * is disabled for good, with no way back but closing the docked bar.
    */
-  if (player && !state.error && owner?.recordingId === now.recordingId && state.now?.itemId === now.itemId) {
-    // Same recording — refresh only the metadata the caller may know better
-    // (a staff visit has no due date; the student's own grant does).
-    set({ now });
+  if (
+    player &&
+    !state.error &&
+    state.now &&
+    owner?.recordingId === req.recordingId &&
+    (req.itemId === null || req.itemId === state.now.itemId)
+  ) {
+    // Same recording, same file — refresh only what the caller may know
+    // better (a staff visit has no due date; the student's own grant does;
+    // staff may have hidden or added a file since).
+    set({ now: { ...req, itemId: state.now.itemId, durationMs: state.now.durationMs } });
     return;
   }
   closePlayback();
+
+  // A FILE TO SHOW AT ONCE: the one asked for, else the starting file. Where
+  // this listener left off can move it to another part or version once their
+  // progress has been read, before anything is loaded.
+  const provisional = req.itemId ? req.media[req.itemId] : startingItem(req.media, req.defaultVersion);
+  if (!provisional) {
+    state = { ...IDLE, error: 'Nothing in this recording can be played yet.' };
+    listeners.forEach((l) => l(state));
+    return;
+  }
+  const now: NowPlaying = { ...req, itemId: provisional.id, durationMs: itemMs(provisional) };
 
   const gen = ++generation;
   owner = { studentUid: now.studentUid, recordingId: now.recordingId, courseId: now.courseId };
@@ -458,6 +520,15 @@ export function openPlayback(now: NowPlaying): void {
       seekTarget = null;
       set({ playing: false });
       persist();
+      // ON TO THE NEXT PART, in the same version if it has one: one class
+      // recorded in two stretches plays as one class. At the last part, the
+      // recording has ended — the moment the player offers to mark it done.
+      const cur = state.now;
+      const item = cur ? cur.media[cur.itemId] : undefined;
+      const next = cur && item ? nextPart(cur.media, item.part) : null;
+      const target = cur && item && next !== null ? fileInPart(cur.media, next, item.version, cur.defaultVersion) : null;
+      if (target) switchTo(target, 0, true);
+      else set({ ended: true });
     },
     onError: (message) => {
       if (generation !== gen) return;
@@ -470,9 +541,9 @@ export function openPlayback(now: NowPlaying): void {
        * leave a fully enabled scrubber, two skips and four rate chips over a
        * source that never loaded.
        *
-       * And `ready` BACK when the error clears, because expo-audio's
-       * `status.error` is transient — "cleared when a new source is loaded or
-       * playback resumes successfully". Latched, a single network blip forty
+       * And `ready` BACK when the error clears, because a player's error is
+       * transient — cleared when a new source loads or playback resumes
+       * successfully. Latched, a single network blip forty
        * minutes into a two-hour lecture disabled the transport for good and, via
        * the `!state.ready` gate on ticks, stopped counting the remaining eighty
        * minutes while the audio kept playing.
@@ -505,8 +576,7 @@ export function openPlayback(now: NowPlaying): void {
   void (async () => {
     try {
       const id = now.studentUid ? progressId(now.studentUid, now.recordingId) : null;
-      const [url, saved, journaled] = await Promise.all([
-        playbackUrl(now.recordingId, now.itemId, now.durationMs),
+      const [saved, journaled] = await Promise.all([
         id ? getDoc(doc(db, COLLECTIONS.listeningProgress, id)) : Promise.resolve(null),
         id ? journaledProgress(id) : Promise.resolve(null),
       ]);
@@ -517,8 +587,18 @@ export function openPlayback(now: NowPlaying): void {
       // where the screen went off.
       const stored = saved?.data() as ListeningProgressDoc | undefined;
       const prior = stored && journaled ? mergeProgress(stored, journaled) : (stored ?? journaled);
+      // RESUME WHERE THEY WERE: their part, in their version if that part
+      // still has it — unless a particular file was asked for. A row from
+      // before parts existed is a place in Part 1.
+      let item = provisional;
+      if (!req.itemId && prior?.part !== undefined) {
+        item = fileInPart(now.media, prior.part, prior.version ?? now.defaultVersion, now.defaultVersion) ?? provisional;
+      }
+      if (item.id !== now.itemId) set({ now: { ...now, itemId: item.id, durationMs: itemMs(item) } });
       listened = prior?.listenedMs ?? 0;
-      position = prior?.positionMs ?? 0;
+      position = prior && (prior.part ?? 1) === item.part ? prior.positionMs : 0;
+      const url = await playbackUrl(now.recordingId, item.id, itemMs(item));
+      if (generation !== gen) return;
       await p.load(url, position, { title: now.title, courseName: now.courseName });
       if (generation !== gen) return;
       // THE SOURCE IS LOADED — remembered, so `onError` can put the transport
@@ -535,6 +615,79 @@ export function openPlayback(now: NowPlaying): void {
       // a lecture, or any unhandled throw in `getPlaybackUrl`, otherwise put the
       // bare word "internal" in a full-width red band on the student's player.
       if (generation === gen) set({ error: errorText(e) });
+    }
+  })();
+}
+
+/** A file's length, as the transport counts it. */
+const itemMs = (item: MediaItem) => (item.durationSec ?? 0) * 1000;
+
+/**
+ * The file to play in a part: the version asked for if the part has it ready
+ * and visible, else the recording's default, else its audio, else whatever it
+ * has. Null when nothing in the part can be played.
+ */
+function fileInPart(
+  media: MediaMap,
+  part: number,
+  version: MediaVersion,
+  defaultVersion: MediaVersion,
+): MediaItem | null {
+  const inPart = Object.values(media).filter((i) => i.part === part && isPlayable(i));
+  return (
+    inPart.find((i) => i.version === version) ??
+    inPart.find((i) => i.version === defaultVersion) ??
+    inPart.find((i) => i.version === 'audio') ??
+    inPart[0] ??
+    null
+  );
+}
+
+/** The part after the one being played, in play order, or null at the last. */
+function nextPart(media: MediaMap, part: number): number | null {
+  const parts = mediaParts(Object.values(media).filter(isPlayable)).map((p) => p.part);
+  const at = parts.indexOf(part);
+  return at >= 0 && at < parts.length - 1 ? parts[at + 1] : null;
+}
+
+/** Bumped on every switch of file; a switch overtaken by a newer one is dropped. */
+let switches = 0;
+
+/**
+ * Move the open session to another file of the same recording: another
+ * version of this part, keeping the place, or another part, from its start.
+ *
+ * The session stays the same session — same generation, same listened total —
+ * because it is the same recording and the same obligation. Only the source
+ * changes. The transport is not ready while the new source loads, which is
+ * also what stops the old file's last ticks being counted against the new one.
+ */
+function switchTo(item: MediaItem, startMs: number, play: boolean): void {
+  const now = state.now;
+  const p = player;
+  if (!now || !p) return;
+  // Save the place being left: it is the last word on the part it was in.
+  dirty = true;
+  persist();
+  const gen = generation;
+  const mine = ++switches;
+  position = startMs;
+  lastTick = null;
+  seekTarget = null;
+  set({ now: { ...now, itemId: item.id, durationMs: itemMs(item) }, positionMs: startMs, ready: false, ended: false });
+  void (async () => {
+    try {
+      const url = await playbackUrl(now.recordingId, item.id, itemMs(item));
+      if (generation !== gen || switches !== mine) return;
+      await p.load(url, startMs, { title: now.title, courseName: now.courseName }, play);
+      if (generation !== gen || switches !== mine) return;
+      if (state.error) return;
+      set({ ready: true, playing: play });
+      // The new file is where the listener now is.
+      dirty = true;
+      persist();
+    } catch (e) {
+      if (generation === gen && switches === mine) set({ error: errorText(e) });
     }
   })();
 }
@@ -557,7 +710,7 @@ export function openPlayback(now: NowPlaying): void {
 export function closePlayback(): Promise<void> {
   const p = player;
   const dying = owner;
-  const finalPosition = position;
+  const finalPlace = currentPlace();
   const finalListened = listened;
   /*
    * NOTHING HEARD, NOTHING WRITTEN — and this is the guard, not an optimisation.
@@ -597,14 +750,14 @@ export function closePlayback(): Promise<void> {
   // moment someone stops listening. It cannot write the wrong session's numbers:
   // `gen` is stale by construction, so nothing module-level is touched when it
   // lands.
-  if (!dying?.studentUid) return Promise.resolve();
+  if (!dying?.studentUid || !finalPlace) return Promise.resolve();
   // Nothing new since the last throttled save — but one may still be in flight,
   // and the caller that awaits this is about to drop the credential.
   if (!moved) return settled();
   return save(
     gen,
     { studentUid: dying.studentUid, recordingId: dying.recordingId, courseId: dying.courseId },
-    finalPosition,
+    finalPlace,
     finalListened,
   );
 }
@@ -637,7 +790,7 @@ export const playback = {
   play: () => {
     lastTick = Date.now();
     player?.play();
-    set({ playing: true });
+    set({ playing: true, ended: false });
   },
   pause: () => {
     player?.pause();
@@ -652,8 +805,34 @@ export const playback = {
     seekAt = Date.now();
     lastTick = Date.now();
     dirty = true;
-    set({ positionMs: ms });
+    set({ positionMs: ms, ended: false });
     persist();
+  },
+  /**
+   * Play another file of the open recording. Another version of the same part
+   * keeps the place and plays on if it was playing — switching from the video
+   * to its audio to save data loses nothing. Another part starts from its
+   * beginning. A file students may not see is refused here as the server would
+   * refuse its URL; staff may play any ready file, which is how they check one.
+   */
+  selectItem: (itemId: string) => {
+    const now = state.now;
+    if (!now || itemId === now.itemId) return;
+    const target = now.media[itemId];
+    const current = now.media[now.itemId];
+    if (!target || target.status !== 'ready' || (target.hidden && now.studentUid !== null)) return;
+    const samePart = current !== undefined && target.part === current.part;
+    const length = itemMs(target);
+    switchTo(target, samePart ? (length > 0 ? Math.min(position, length) : position) : 0, state.playing);
+  },
+  /** Play another part from its start, in the version being played if it has it. */
+  selectPart: (part: number) => {
+    const now = state.now;
+    if (!now) return;
+    const current = now.media[now.itemId];
+    const target = fileInPart(now.media, part, current?.version ?? now.defaultVersion, now.defaultVersion);
+    if (!target || target.id === now.itemId) return;
+    switchTo(target, 0, state.playing);
   },
   setRate: (rate: number) => {
     player?.setRate(rate);

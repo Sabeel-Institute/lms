@@ -3,27 +3,46 @@ import type { Player, PlayerEvents } from './playerTypes';
 /**
  * Web side of the player seam (native sibling: player.ts).
  *
- * A plain HTMLAudioElement: it streams over range requests, seeks without
- * re-downloading, and needs no dependency.
+ * A plain HTMLVideoElement for audio and video alike: it streams over range
+ * requests, seeks without re-downloading, needs no dependency, and an
+ * audio-only file simply has no picture. The element lives here, not in a
+ * view, so the sound outlives any one screen; `VideoSurface.web.tsx` borrows
+ * it to show the picture while the player screen is open.
  *
  * As on native, there must be AT MOST ONE player alive at a time — if a screen
  * remounts before its cleanup runs, two elements would play at once. A
  * module-level handle enforces it: creating a player stops its predecessor.
  */
-let current: HTMLAudioElement | null = null;
+let current: HTMLVideoElement | null = null;
 
-function stop(el: HTMLAudioElement) {
+function stop(el: HTMLVideoElement) {
   el.pause();
   el.removeAttribute('src');
   el.load();
+  el.remove();
+}
+
+/** The live element, for the surface that shows its picture. */
+export function currentVideoElement(): HTMLVideoElement | null {
+  return current;
 }
 
 export function createPlayer(events: PlayerEvents): Player {
   if (current) stop(current);
 
-  const el = new Audio();
+  const el = document.createElement('video');
   el.preload = 'metadata';
+  // Inline on a phone's browser rather than taking over the screen.
+  el.playsInline = true;
+  el.setAttribute('playsinline', '');
   current = el;
+  /*
+   * THE RATE IS THE SESSION'S, NOT THE SOURCE'S. A browser resets
+   * `playbackRate` to 1 whenever `src` changes, so a version switch at 1.5×
+   * would drop to 1× without a word (spike V0). Kept here and put back on
+   * every load.
+   */
+  let rate = 1;
   el.addEventListener('timeupdate', () => events.onProgress(el.currentTime * 1000));
   el.addEventListener('ended', () => events.onEnded());
   let sourceError: string | null = null;
@@ -34,17 +53,14 @@ export function createPlayer(events: PlayerEvents): Player {
     events.onError(message);
   };
   el.addEventListener('error', () => {
-    report(el.error ? `audio error ${el.error.code}` : 'audio error');
+    report(el.error ? `media error ${el.error.code}` : 'media error');
     /*
      * AND SAY IT STOPPED, which the element will not.
      *
      * A mid-stream `MEDIA_ERR_NETWORK` or `MEDIA_ERR_DECODE` sets `error` and
      * fires `error`, but leaves `paused` false and emits no `pause` event — so
      * the session, which takes `playing` from the transport, went on believing
-     * a dead stream was playing. Both surfaces then drew a greyed PAUSE glyph
-     * over silence, and the docked bar carries no error text at all. The native
-     * player reports `status.playing` false in the same situation; this is that
-     * signal, sent by the side that knows the semantics.
+     * a dead stream was playing.
      */
     events.onPlayingChanged(false);
   });
@@ -58,7 +74,8 @@ export function createPlayer(events: PlayerEvents): Player {
   el.addEventListener('pause', () => events.onPlayingChanged(false));
 
   return {
-    async load(url, startMs, now) {
+    async load(url, startMs, now, keepPlaying = false) {
+      if (!keepPlaying) el.pause();
       el.src = url;
       /*
        * The browser's own media panel and the hardware media keys read this,
@@ -85,15 +102,18 @@ export function createPlayer(events: PlayerEvents): Player {
         el.addEventListener('loadedmetadata', () => resolve(), { once: true });
         el.addEventListener('error', () => resolve(), { once: true });
       });
+      el.playbackRate = rate;
       if (startMs > 0 && el.readyState >= 1) el.currentTime = startMs / 1000;
+      if (keepPlaying) void el.play();
     },
     play: () => void el.play(),
     pause: () => el.pause(),
     seek: (ms) => {
       el.currentTime = ms / 1000;
     },
-    setRate: (rate) => {
-      el.playbackRate = rate;
+    setRate: (r) => {
+      rate = r;
+      el.playbackRate = r;
     },
     unload: () => {
       stop(el);

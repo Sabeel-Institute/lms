@@ -205,8 +205,14 @@ export interface ListeningProgressDoc {
   studentUid: string;
   recordingId: string;
   courseId: string;
-  /** Where to resume from. */
+  /** Where to resume from: a position in `part`, in `version`. */
   positionMs: number;
+  /**
+   * The part and version the student was in. Absent on rows written before a
+   * recording could have parts, which resume in Part 1 as they always did.
+   */
+  part?: number;
+  version?: MediaVersion;
   /** Total time actually listened, which is NOT the same as position — seeking
    *  forward must not manufacture listening that did not happen. */
   listenedMs: number;
@@ -220,23 +226,26 @@ export function progressId(studentUid: string, recordingId: string): string {
 /** How often progress is persisted while audio is playing. */
 export const PROGRESS_WRITE_INTERVAL_MS = 15_000;
 
+/** The fields of a progress row that two readings of it are merged on. */
+export type ProgressReading = Pick<ListeningProgressDoc, 'positionMs' | 'listenedMs' | 'updatedAt' | 'part' | 'version'>;
+
 /**
  * Merge a local progress reading with whatever the server already has.
  *
  * Two devices, or one device after a reinstall, will disagree. The rule is
- * **max listened, latest position wins**: total listening only ever grows,
- * while position follows whichever device reported most recently — that is the
- * one the person is actually using.
+ * **max listened, latest place wins**: total listening only ever grows, while
+ * the place — position, part and version together, since a position means
+ * nothing without its part — follows whichever device reported most recently:
+ * that is the one the person is actually using.
  */
-export function mergeProgress(
-  a: Pick<ListeningProgressDoc, 'positionMs' | 'listenedMs' | 'updatedAt'>,
-  b: Pick<ListeningProgressDoc, 'positionMs' | 'listenedMs' | 'updatedAt'>,
-): Pick<ListeningProgressDoc, 'positionMs' | 'listenedMs' | 'updatedAt'> {
+export function mergeProgress(a: ProgressReading, b: ProgressReading): ProgressReading {
   const newer = a.updatedAt >= b.updatedAt ? a : b;
   return {
     positionMs: newer.positionMs,
     listenedMs: Math.max(a.listenedMs, b.listenedMs),
     updatedAt: newer.updatedAt,
+    ...(newer.part !== undefined ? { part: newer.part } : {}),
+    ...(newer.version !== undefined ? { version: newer.version } : {}),
   };
 }
 

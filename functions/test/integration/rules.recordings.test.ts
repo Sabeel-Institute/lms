@@ -454,6 +454,13 @@ describe('listeningProgress', () => {
     await assertFails(setDoc(ref, { ...row(STUDENT), updatedAt: 'x' }));
   });
 
+  it('takes the part and version a student is in, and only real ones', async () => {
+    const ref = doc(student().firestore(), COLLECTIONS.listeningProgress, mineId());
+    await assertSucceeds(setDoc(ref, { ...row(STUDENT), part: 2, version: 'speaker' }));
+    await assertFails(setDoc(ref, { ...row(STUDENT), part: '2', version: 'speaker' }));
+    await assertFails(setDoc(ref, { ...row(STUDENT), part: 2, version: 'hd' }));
+  });
+
   /*
    * THE ID IS PART OF THE ROW, and the lockout is why.
    *

@@ -6,9 +6,9 @@ export interface PlayerEvents {
   /**
    * The CURRENT source error, or null when there is none.
    *
-   * NULLABLE BECAUSE IT IS A STATE, NOT AN EVENT. expo-audio documents
-   * `status.error` as "cleared when a new source is loaded or playback resumes
-   * successfully" — so a network blip mid-lecture sets it and then clears it,
+   * NULLABLE BECAUSE IT IS A STATE, NOT AN EVENT. A player's error is cleared
+   * when a new source loads or playback resumes successfully — so a network
+   * blip mid-lecture sets it and then clears it,
    * and treating the first as a one-way latch left a live session with a dead
    * transport and eighty minutes of listening uncounted. Report the change in
    * both directions and the session can recover with the player.
@@ -47,7 +47,12 @@ export interface NowPlayingMeta {
 }
 
 export interface Player {
-  load: (url: string, startMs: number, meta: NowPlayingMeta) => Promise<void>;
+  /**
+   * Swap in a source at `startMs`. Paused afterwards unless `keepPlaying`,
+   * which a version switch passes so the change is seamless: the same place,
+   * still playing.
+   */
+  load: (url: string, startMs: number, meta: NowPlayingMeta, keepPlaying?: boolean) => Promise<void>;
   play: () => void;
   pause: () => void;
   seek: (ms: number) => void;
