@@ -63,8 +63,12 @@ describe('the click on a page-shown banner', () => {
     expect(worker).toMatch(/if \(!data \|\| !data\.page\) return;/);
   });
 
-  it('focuses an open window or opens the app', () => {
+  it('focuses an open window and tells it where to go, or opens the app there', () => {
     expect(worker).toMatch(/clients\.matchAll\(\{ type: 'window'/);
     expect(worker).toMatch(/openWindow\(data\.link\)/);
+    // The open tab is sent the path; pushTaps.web.ts listens for exactly this.
+    expect(worker).toMatch(/postMessage\(\{ type: 'open-path', path: data\.path \}\)/);
+    const tab = readFileSync(resolve(ROOT, 'app', 'src', 'pushTaps.web.ts'), 'utf8');
+    expect(tab).toMatch(/d\?\.type === 'open-path'/);
   });
 });

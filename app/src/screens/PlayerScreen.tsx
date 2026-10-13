@@ -150,7 +150,7 @@ export function PlayerScreen({
           {!closed
             ? 'This course has been archived and its recordings are closed. Your record is kept — ask your teacher if you need access again.'
             : dueDate === null
-              ? `This recording has not been assigned to you. Your teacher marks who needs to ${playVerb(recording.media).toLowerCase()} when they take the register.`
+              ? `This recording is not open to you. Your teacher marks who needs to ${playVerb(recording.media).toLowerCase()} when they take the register.`
               : `This recording closed on ${dueDate}. Your record is kept — ask your teacher if you need it reopened.`}
         </Notice>
         {/* AND THE RECORD ITSELF, which "is kept" above promises and the screen

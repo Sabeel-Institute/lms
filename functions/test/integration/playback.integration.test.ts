@@ -141,9 +141,9 @@ describe('getPlaybackUrl', () => {
   });
 
   it('refuses a student with no grant, and one whose grant was withdrawn', async () => {
-    expect(await denialOf(await req(OTHER_STUDENT, 'student'))).toMatch(/not assigned/i);
+    expect(await denialOf(await req(OTHER_STUDENT, 'student'))).toMatch(/not open to you/i);
     await grant(OTHER_STUDENT, FUTURE, false);
-    expect(await denialOf(await req(OTHER_STUDENT, 'student'))).toMatch(/not assigned/i);
+    expect(await denialOf(await req(OTHER_STUDENT, 'student'))).toMatch(/not open to you/i);
   });
 
   it('refuses a student whose account is not active, grant or no grant', async () => {

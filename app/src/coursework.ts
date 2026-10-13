@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import {
   COLLECTIONS,
@@ -10,6 +10,7 @@ import {
   type Grade,
   type GradeDoc,
   type SubmissionDoc,
+  type SubmissionEventDoc,
 } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
@@ -106,12 +107,24 @@ export function useMyDraftState(uid: string | null, courseworkId: string) {
 /**
  * Save the answer on the student's draft — the one thing they write directly.
  * Markdown, from the formatting editor; the field is still called `note`.
+ *
  * An update when the draft exists (a file may have created it), a create
- * otherwise; the rules hold the create to an empty file list.
+ * otherwise; the rules hold the create to an empty file list. Whether it
+ * exists comes from the screen's live draft, NOT a read here: a read needs the
+ * network, so offline it failed and took the typed answer with it, where a
+ * write is queued by the SDK and goes when the connection does. If the live
+ * draft is a moment behind, the write is refused and the autosave keeps the
+ * answer to try again.
  */
-export async function saveDraftNote(uid: string, courseworkId: string, courseId: string, note: string): Promise<void> {
+export async function saveDraftNote(
+  uid: string,
+  courseworkId: string,
+  courseId: string,
+  note: string,
+  draftExists: boolean,
+): Promise<void> {
   const ref = doc(db, COLLECTIONS.drafts, submissionId(uid, courseworkId));
-  if ((await getDoc(ref)).exists()) {
+  if (draftExists) {
     await updateDoc(ref, { note, updatedAt: Date.now() });
     return;
   }
@@ -180,6 +193,34 @@ export function useCourseGradesState(courseId: string | null): GradeRow[] | null
   );
 }
 
+export interface SubmissionEventRow extends SubmissionEventDoc {
+  id: string;
+}
+
+/**
+ * One student's hand-ins and take-backs on one assignment, oldest first — the
+ * history staff see on the work. The course is in the query because the rule
+ * reads it: a staff list is allowed only for a course they manage.
+ */
+export function useSubmissionEventsState(courseId: string, courseworkId: string, studentUid: string): SubmissionEventRow[] | null {
+  return useLiveQuery<SubmissionEventRow[] | null>(
+    () =>
+      query(
+        collection(db, COLLECTIONS.submissionEvents),
+        where('courseId', '==', courseId),
+        where('courseworkId', '==', courseworkId),
+        where('studentUid', '==', studentUid),
+      ),
+    [courseId, courseworkId, studentUid],
+    {
+      label: 'submissionEvents',
+      map: (snap) =>
+        snap.docs.map((d) => ({ id: d.id, ...(d.data() as SubmissionEventDoc) })).sort((a, b) => a.at - b.at),
+      empty: null,
+    },
+  );
+}
+
 export type CourseworkInput = {
   title: string;
   instructions: string;
@@ -189,7 +230,14 @@ export type CourseworkInput = {
 };
 
 export const createCoursework = call<CourseworkInput & { courseId: string }, { id: string }>('createCoursework');
-export const updateCoursework = call<CourseworkInput & { courseworkId: string }, { id: string }>('updateCoursework');
+export const updateCoursework = call<
+  CourseworkInput & {
+    courseworkId: string;
+    /** What the form was opened with; the server refuses the save if the assignment no longer matches. */
+    ifUnchanged: CourseworkInput;
+  },
+  { id: string }
+>('updateCoursework');
 export const postCoursework = call<{ courseworkId: string }, { id: string; students: number }>('postCoursework');
 export const closeCoursework = call<{ courseworkId: string }, unknown>('closeCoursework');
 export const deleteCoursework = call<{ courseworkId: string }, unknown>('deleteCoursework');

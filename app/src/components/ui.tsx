@@ -512,7 +512,13 @@ export function Notice({ tone, children }: { tone: 'info' | 'error' | 'success';
   const fg =
     tone === 'error' ? t.text.danger : tone === 'success' ? t.feedback.success : t.text.secondary;
   return (
-    <View style={[styles.notice, { backgroundColor: bg }]}>
+    // An error is announced as one, and is what a check looks for when it
+    // asserts that nothing went wrong.
+    <View
+      role={tone === 'error' ? 'alert' : undefined}
+      testID={tone === 'error' ? 'notice-error' : undefined}
+      style={[styles.notice, { backgroundColor: bg }]}
+    >
       <Text style={[styles.noticeText, { color: fg }]}>{children}</Text>
     </View>
   );

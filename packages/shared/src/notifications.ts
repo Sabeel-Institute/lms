@@ -1,6 +1,5 @@
 /**
- * Push notifications: the three messages, the per-person switches, and the
- * copy.
+ * Push notifications: the messages, the per-person switches, and the copy.
  *
  * Everything here is PURE — no Firestore, no `admin.messaging()`, no clock — so
  * the decision "should this person get this message, and what does it say?" is
@@ -10,7 +9,7 @@
  */
 
 /**
- * The three messages, and deliberately no more.
+ * The messages, and deliberately no more: six switches and seven messages.
  *
  *  - `recordingReady` — a student was excused and the recording is published.
  *    Under the excused-only policy this is also "you now have access", so
@@ -19,21 +18,46 @@
  *    day-after reminder: once the deadline passes access has closed, so the
  *    message could only say "you missed it", which is a scolding with no action
  *    attached.
+ *  - `assignmentPosted` — a teacher posted an assignment the student has, or
+ *    moved its due date; the two share a switch because they are the same
+ *    question, "what is due, and when".
+ *  - `handInLastDay` — the morning an assignment is due, to each student with
+ *    nothing handed in, on their own date when they were given more time.
+ *  - `workReturned` — the work came back: returned, returned for another try,
+ *    or a returned grade changed. Never the grade itself: a lock screen is not
+ *    private.
  *  - `attendanceMissing` — staff, when a session's date has passed and
  *    attendance was never submitted. Load-bearing under this policy: no
  *    attendance means nobody is granted anything, so an un-taken sheet silently
- *    locks a whole class out of a published recording.
+ *    locks a whole class out of a published recording. Still the only message
+ *    staff get: a message per hand-in would be twenty for one assignment, and
+ *    Today carries the count.
  */
-export type NotificationKind = 'recordingReady' | 'lastDay' | 'attendanceMissing';
+export type NotificationKind =
+  | 'recordingReady'
+  | 'lastDay'
+  | 'assignmentPosted'
+  | 'handInLastDay'
+  | 'workReturned'
+  | 'attendanceMissing';
 
 export const NOTIFICATION_KINDS: NotificationKind[] = [
   'recordingReady',
   'lastDay',
+  'assignmentPosted',
+  'handInLastDay',
+  'workReturned',
   'attendanceMissing',
 ];
 
 /** Which kinds each population can receive, for rendering the settings screen. */
-export const STUDENT_KINDS: NotificationKind[] = ['recordingReady', 'lastDay'];
+export const STUDENT_KINDS: NotificationKind[] = [
+  'recordingReady',
+  'lastDay',
+  'assignmentPosted',
+  'handInLastDay',
+  'workReturned',
+];
 export const STAFF_KINDS: NotificationKind[] = ['attendanceMissing'];
 
 /**
@@ -60,7 +84,7 @@ export const STAFF_KINDS: NotificationKind[] = ['attendanceMissing'];
  * sat at DEFAULT, so this is the one deliberate change in how loud these are.
  */
 export const PUSH_CHANNEL_ID = 'sabeel-alerts';
-export const PUSH_CHANNEL_NAME = 'Recording alerts and deadlines';
+export const PUSH_CHANNEL_NAME = 'Class alerts and deadlines';
 
 /**
  * One person's switches. Document id is their uid; the only client-writable
@@ -74,6 +98,9 @@ export const PUSH_CHANNEL_NAME = 'Recording alerts and deadlines';
 export interface NotificationPrefsDoc {
   recordingReady?: boolean;
   lastDay?: boolean;
+  assignmentPosted?: boolean;
+  handInLastDay?: boolean;
+  workReturned?: boolean;
   attendanceMissing?: boolean;
   updatedAt?: number;
 }
@@ -124,18 +151,42 @@ export function sentNotificationId(kind: NotificationKind, targetId: string): st
 export interface PushMessage {
   title: string;
   body: string;
+  /**
+   * Where a tap lands: an app path (`work/<id>`), the same on both surfaces.
+   * Android opens it from the tapped notification's data; a browser can only
+   * open a URL, so the web link is the app's address plus this path. Built by
+   * `pushPaths`, which the app's route tables are tested against.
+   */
+  path: string;
 }
+
+/**
+ * The destinations a message can open. One builder for the server and the app,
+ * so a path the server sends is one the app has a screen for — the app's tests
+ * resolve each of these through its own route table.
+ */
+export const pushPaths = {
+  work: (courseworkId: string) => `work/${courseworkId}`,
+  recording: (recordingId: string) => `play/${recordingId}`,
+  session: (courseId: string, sessionId: string) => `courses/${courseId}/sessions/${sessionId}`,
+} as const;
 
 /** Human labels for the settings screen. */
 export const NOTIFICATION_LABEL: Record<NotificationKind, string> = {
   recordingReady: 'A recording is ready for me',
   lastDay: 'Last day for a recording',
+  assignmentPosted: 'New assignments',
+  handInLastDay: 'Last day to hand in',
+  workReturned: 'Work returned',
   attendanceMissing: 'Attendance still not taken',
 };
 
 export const NOTIFICATION_DESCRIPTION: Record<NotificationKind, string> = {
   recordingReady: 'When a class you were excused from has a recording for you.',
   lastDay: 'On the morning of the day a recording closes, if you have not finished it.',
+  assignmentPosted: 'When a teacher posts an assignment for you, or moves its due date.',
+  handInLastDay: 'On the morning an assignment is due, if you have not handed it in.',
+  workReturned: 'When your teacher returns your work, asks for another try, or changes a returned grade.',
   attendanceMissing:
     'When a class meeting has passed and its attendance has not been submitted, so nobody can open the recording yet.',
 };
@@ -147,19 +198,57 @@ export const NOTIFICATION_DESCRIPTION: Record<NotificationKind, string> = {
  * a nag but the day the recording disappears. Tone is the brief's: direct, adult,
  * never scolding — `check-text-sources` and the same review that governs screen
  * copy apply here, and a notification is the one piece of text that arrives
- * uninvited.
+ * uninvited. Each takes the same form: the class, then one plain sentence.
  */
-export function recordingReadyMessage(courseName: string, title: string, dueDate: string): PushMessage {
+export function recordingReadyMessage(courseName: string, title: string, dueDate: string, recordingId: string): PushMessage {
   return {
     title: `${courseName}: a recording is ready`,
     body: `${title} — you were excused, so it is open to you until ${dueDate}.`,
+    path: pushPaths.recording(recordingId),
   };
 }
 
-export function lastDayMessage(courseName: string, title: string, dueDate: string): PushMessage {
+export function lastDayMessage(courseName: string, title: string, dueDate: string, recordingId: string): PushMessage {
   return {
     title: `${courseName}: a recording closes today`,
     body: `${title} closes at the end of ${dueDate}.`,
+    path: pushPaths.recording(recordingId),
+  };
+}
+
+/** A title as the start of a sentence: its own full stop, or one added. */
+const asSentence = (title: string) => (/[.?!…]$/.test(title.trim()) ? title.trim() : `${title.trim()}.`);
+
+export function newAssignmentMessage(courseName: string, title: string, dueDate: string, courseworkId: string): PushMessage {
+  return {
+    title: `${courseName}: new assignment`,
+    body: `${asSentence(title)} Hand it in by ${dueDate}.`,
+    path: pushPaths.work(courseworkId),
+  };
+}
+
+export function dueDateMovedMessage(courseName: string, title: string, dueDate: string, courseworkId: string): PushMessage {
+  return {
+    title: `${courseName}: due date moved`,
+    body: `${title} is now due ${dueDate}.`,
+    path: pushPaths.work(courseworkId),
+  };
+}
+
+export function handInLastDayMessage(courseName: string, title: string, dueDate: string, courseworkId: string): PushMessage {
+  return {
+    title: `${courseName}: last day to hand in`,
+    body: `${title} is due by the end of ${dueDate}.`,
+    path: pushPaths.work(courseworkId),
+  };
+}
+
+/** Never the grade: the message only says the work is back. */
+export function workReturnedMessage(courseName: string, title: string, courseworkId: string): PushMessage {
+  return {
+    title: `${courseName}: work returned`,
+    body: `Your teacher returned ${title}.`,
+    path: pushPaths.work(courseworkId),
   };
 }
 
@@ -167,10 +256,13 @@ export function attendanceMissingMessage(
   courseName: string,
   title: string,
   date: string,
+  courseId: string,
+  sessionId: string,
 ): PushMessage {
   return {
     title: `${courseName}: attendance not taken`,
-    body: `${title} met on ${date} and its attendance has not been submitted. Nobody can hear its recording until it is.`,
+    body: `${title} met on ${date} and its attendance has not been submitted. Nobody can open its recording until it is.`,
+    path: pushPaths.session(courseId, sessionId),
   };
 }
 

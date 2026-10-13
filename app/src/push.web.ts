@@ -179,13 +179,15 @@ async function resolveToken(prompt: boolean): Promise<string | null> {
  * and two visible tabs of the same person into one banner, not two.
  */
 export async function showForegroundPush(payload: MessagePayload): Promise<void> {
-  const title = payload.notification?.title ?? payload.data?.title;
-  const body = payload.notification?.body ?? payload.data?.body;
+  const title = payload.notification?.title;
+  const body = payload.notification?.body;
   if (!title) return;
+  // Where the tap goes: the thing the message is about (`pushPaths`).
+  const path = typeof payload.data?.path === 'string' ? payload.data.path : '';
   const registration = await navigator.serviceWorker.ready;
   await registration.showNotification(title, {
     body,
     tag: `${title}|${body ?? ''}`,
-    data: { page: true, link: WEB_APP_URL },
+    data: { page: true, link: `${WEB_APP_URL}${path}`, path },
   });
 }

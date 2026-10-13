@@ -28,6 +28,7 @@ import { reportedCall } from './reported';
 import { isAdminCaller, requireCourseScope, requireStudent } from './guards';
 import { isCalendarDate } from './sessions';
 import { MEDIA_WRITE_SECRETS, deleteObject } from './mediaStore';
+import { notifyDueDateMoved, notifyPosted, notifyReturned } from './notifyCoursework';
 
 /**
  * Assignments: a teacher posts work to a whole class, each student hands in a
@@ -299,6 +300,7 @@ export const postCoursework = auditedCall('postCoursework', async (req, audit) =
   audit.courseId = cw.courseId;
   audit.targets = { courseworkId: id };
   const res = await postCourseworkRecord(uid, id);
+  await notifyPosted(db(), id);
   audit.detail = {
     title: cw.title,
     dueDate: cw.dueDate,
@@ -317,10 +319,34 @@ export const postCoursework = auditedCall('postCoursework', async (req, audit) =
  * time, whose own date stands. How it is graded cannot change once any grade
  * has been saved.
  */
+const FIELD_NAMES: (keyof CourseworkFields)[] = ['title', 'instructions', 'dueDate', 'lateUntil', 'grading'];
+
+/** A value as text with its keys sorted, so a map compares by content and not by key order. */
+const canonical = (v: unknown): string =>
+  JSON.stringify(v, (_k, x: unknown) =>
+    x && typeof x === 'object' && !Array.isArray(x)
+      ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : x,
+  );
+
+/**
+ * What the form was opened with, when the caller says. Only shape is checked
+ * here: the values are compared, never stored.
+ */
+function expectedFields(v: unknown): Partial<Record<keyof CourseworkFields, unknown>> | null {
+  if (v === undefined || v === null) return null;
+  if (typeof v !== 'object' || Array.isArray(v)) {
+    throw new HttpsError('invalid-argument', 'ifUnchanged is the fields the form was opened with.');
+  }
+  const o = v as Record<string, unknown>;
+  return Object.fromEntries(FIELD_NAMES.filter((k) => k in o).map((k) => [k, o[k]]));
+}
+
 export async function updateCourseworkRecord(id: string, d: Record<string, unknown>) {
-  const cw = await readCoursework(id);
-  const fields = validateCourseworkFields(d, today(), cw);
-  const gradingChanged = JSON.stringify(fields.grading) !== JSON.stringify(cw.grading);
+  const expected = expectedFields(d.ifUnchanged);
+  const before = await readCoursework(id);
+  const fields = validateCourseworkFields(d, today(), before);
+  const gradingChanged = JSON.stringify(fields.grading) !== JSON.stringify(before.grading);
   if (gradingChanged) {
     const graded = await db().collection(COLLECTIONS.grades).where('courseworkId', '==', id).limit(1).get();
     if (!graded.empty) {
@@ -328,12 +354,30 @@ export async function updateCourseworkRecord(id: string, d: Record<string, unkno
     }
   }
   const now = Date.now();
-  const datesMoved = fields.dueDate !== cw.dueDate || fields.lateUntil !== cw.lateUntil;
-  await cwRef(id).update({
-    ...fields,
-    updatedAt: now,
-    ...(cw.status === 'posted' ? { editedAt: now } : {}),
+  /*
+   * ANOTHER TEACHER'S EDIT IS NOT OVERWRITTEN UNSEEN. Two people can have the
+   * same assignment open; the form says what it was opened with, and a save is
+   * refused when any of that has changed since. Content only: posting, closing
+   * and files move the timestamps without touching what the form edits.
+   */
+  const cw = await db().runTransaction(async (tx) => {
+    const snap = await tx.get(cwRef(id));
+    if (!snap.exists) throw new HttpsError('not-found', 'No such assignment.');
+    const current = snap.data() as CourseworkDoc;
+    if (expected && Object.entries(expected).some(([k, v]) => canonical(current[k as keyof CourseworkFields]) !== canonical(v))) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Someone else changed this assignment while you were editing it. Your changes are not saved; open it again to see theirs.',
+      );
+    }
+    tx.update(cwRef(id), {
+      ...fields,
+      updatedAt: now,
+      ...(current.status === 'posted' ? { editedAt: now } : {}),
+    });
+    return current;
   });
+  const datesMoved = fields.dueDate !== cw.dueDate || fields.lateUntil !== cw.lateUntil;
   if (cw.status === 'posted' && datesMoved) {
     const subs = await db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id).get();
     await inBatches(
@@ -360,6 +404,7 @@ export const updateCoursework = auditedCall('updateCoursework', async (req, audi
   audit.courseId = cw.courseId;
   audit.targets = { courseworkId: id };
   const res = await updateCourseworkRecord(id, d);
+  if (res.changed.includes('dueDate')) await notifyDueDateMoved(db(), id);
   audit.noop = res.changed.length === 0;
   audit.detail = { changed: res.changed.join(', '), ...(res.changed.some((c) => c === 'dueDate' || c === 'lateUntil') ? res : {}) };
   return { id, changed: res.changed };
@@ -640,6 +685,10 @@ export const saveGrade = auditedCall('saveGrade', async (req, audit) => {
   audit.courseId = cw.courseId;
   audit.targets = { courseworkId: input.courseworkId, studentUid: input.studentUid };
   const res = await saveGradeRecord(uid, { ...input, grade: d.grade, feedback: d.feedback });
+  // A changed GRADE on returned work is a new return: the student is told.
+  if (res.returnedChanged && JSON.stringify(res.before) !== JSON.stringify(res.after)) {
+    await notifyReturned(db(), input.courseworkId, [input.studentUid]);
+  }
   // A draft grade changes constantly while a teacher works; only a change to
   // one the student has is a record.
   audit.noop = !res.returnedChanged;
@@ -666,6 +715,14 @@ export async function returnWorkRecord(
       const sub = await readSubmission(tx, studentUid, cwId);
       const graded = (await tx.get(gradeRef(studentUid, cwId))).data() as GradeDoc | undefined;
       if (sub.notRequired) throw new HttpsError('failed-precondition', 'This work is marked not required.');
+      /*
+       * ALREADY BACK IS DONE, not an error. Two teachers on one class can
+       * return the same work a moment apart, and a refusal here stopped the
+       * rest of a "return all graded" partway, behind an error over returns
+       * that had worked. Another try is different: it acts on returned work
+       * and is refused below if there is nothing to act on.
+       */
+      if (sub.state === 'returned' && !retry) return null;
       if (sub.state === 'returned') throw new HttpsError('failed-precondition', 'This work has already been returned.');
       if (!graded && !retry) throw new HttpsError('failed-precondition', 'Grade the work before returning it.');
       if (sub.state === 'open' && !graded?.withoutHandIn) {
@@ -702,7 +759,7 @@ export async function returnWorkRecord(
       }
       return { studentUid, grade: returned.grade };
     });
-    results.push(res);
+    if (res) results.push(res);
   }
   return results;
 }
@@ -723,6 +780,7 @@ export const returnWork = auditedCall('returnWork', async (req, audit) => {
   audit.courseId = cw.courseId;
   audit.targets = { courseworkId: cwId };
   const res = await returnWorkRecord(cwId, uids as string[], retry);
+  await notifyReturned(db(), cwId, res.map((r) => r.studentUid));
   audit.detail = { returned: res.map((r) => `${r.studentUid}: ${JSON.stringify(r.grade)}`).join('; '), retry: retry !== null };
   return { returned: res.length };
 });

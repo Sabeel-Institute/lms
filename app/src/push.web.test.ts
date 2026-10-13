@@ -26,6 +26,7 @@ vi.mock('./firebase', () => ({ app: {} }));
 vi.mock('./firebase-config', () => ({ VAPID_PUBLIC_KEY: 'test-vapid-public-key' }));
 
 import { getToken, isSupported, onMessage } from 'firebase/messaging';
+import { WEB_APP_URL } from '@sabeel/shared';
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
@@ -214,11 +215,18 @@ describe('a push while the tab is open', () => {
     const { devicePushToken } = await loadPush();
     await devicePushToken(false);
     const listener = asMock(onMessage).mock.calls[0][1] as (p: unknown) => void;
-    listener({ notification: { title: 'Hikam: a recording is ready', body: 'Session 3 — yours until 2026-09-30.' } });
+    listener({
+      notification: { title: 'Hikam: a recording is ready', body: 'Session 3 — yours until 2026-09-30.' },
+      data: { path: 'play/r1' },
+    });
     await new Promise((r) => setTimeout(r, 0));
+    // Marked as the page's, and pointing at the recording, not the home page.
     expect(showNotification).toHaveBeenCalledWith(
       'Hikam: a recording is ready',
-      expect.objectContaining({ body: 'Session 3 — yours until 2026-09-30.', data: expect.objectContaining({ page: true }) }),
+      expect.objectContaining({
+        body: 'Session 3 — yours until 2026-09-30.',
+        data: { page: true, link: `${WEB_APP_URL}play/r1`, path: 'play/r1' },
+      }),
     );
   });
 

@@ -3,7 +3,7 @@ import { ActivityIndicator, Platform, StyleSheet } from 'react-native';
 
 /*
  * THE FORMATTING EDITOR, LOADED WHEN A BOX THAT USES IT OPENS, not with the
- * app. On the web it is Lexical, 130 KB gzipped; a split chunk keeps it out
+ * app. On the web it is Lexical, 127 KB gzipped; a split chunk keeps it out
  * of the first load, which every page of the app pays for.
  *
  * A deploy replaces the chunk's hashed file, so a tab opened before it asks

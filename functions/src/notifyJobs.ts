@@ -96,7 +96,7 @@ export async function notifyRecordingReady(
     assignment.studentUid,
     'recordingReady',
     assignment.recordingId,
-    recordingReadyMessage(course.name, rec.title, assignment.dueDate),
+    recordingReadyMessage(course.name, rec.title, assignment.dueDate, assignment.recordingId),
   );
 }
 
@@ -111,7 +111,7 @@ export async function notifyRecordingReady(
  * every student after it their only reminder. Logged, not swallowed silently:
  * the run keeps going and the failure is still in the logs.
  */
-async function attempt(what: string, send: () => Promise<boolean>): Promise<boolean> {
+export async function attempt(what: string, send: () => Promise<boolean>): Promise<boolean> {
   try {
     return await send();
   } catch (e) {
@@ -166,7 +166,7 @@ export async function notifyLastDay(db: Firestore, today: string): Promise<numbe
     ).data() as RecordingDoc | undefined;
     if (!rec || rec.status !== 'published') continue;
 
-    const message = lastDayMessage(course.name, rec.title, a.dueDate);
+    const message = lastDayMessage(course.name, rec.title, a.dueDate, a.recordingId);
     /*
      * ONCE PER DEADLINE, not once per recording. Staff reopen a closed session
      * by moving its listen-by date forward — the documented way back in — and
@@ -220,7 +220,7 @@ export async function notifyAttendanceMissing(
     // An archived or finished course is not a reminder anyone wants.
     if (!course || !course.effectiveActive) continue;
 
-    const message = attendanceMissingMessage(course.name, s.title, s.date);
+    const message = attendanceMissingMessage(course.name, s.title, s.date, s.courseId, doc.id);
     for (const uid of course.managerUids) {
       const ok = await attempt(`attendanceMissing ${uid} ${doc.id}`, () =>
         notifyOnce(db, uid, 'attendanceMissing', doc.id, message),

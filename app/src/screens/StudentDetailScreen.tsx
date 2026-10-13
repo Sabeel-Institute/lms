@@ -18,6 +18,7 @@ import { useDecidedStaff } from '../staff';
 import { useStudentAudit, useStudentAuditIn } from '../ledger';
 import { studentHistory } from '../studentHistory';
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 import { exportStudentWorkbook } from '../workbookData';
 import {
   useAllCoursesState,
@@ -61,22 +62,20 @@ export function StudentDetailScreen({
 }) {
   const studentState = useStudentState(studentUid);
   const student = studentState.value;
-  const [busy, setBusy] = useState<string | null>(null);
+  const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  const run = async (key: string, fn: () => Promise<void>) => {
-    setBusy(key);
-    setError(null);
-    setInfo(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(null);
-    }
-  };
+  const run = (key: string, fn: () => Promise<void>) =>
+    once(key, async () => {
+      setError(null);
+      setInfo(null);
+      try {
+        await fn();
+      } catch (e) {
+        setError(errorText(e));
+      }
+    });
 
   const who = student?.displayName ?? '';
   const disabled = student?.status === 'disabled';

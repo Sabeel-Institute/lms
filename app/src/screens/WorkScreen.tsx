@@ -17,11 +17,14 @@ import {
 } from '@sabeel/shared';
 import { Button, Card, Notice, Screen, SectionTitle, inputLook } from '../components/ui';
 import { LazyRichEditor } from '../components/LazyRichEditor';
+import { useLeaveGuard } from '../components/LeaveGuard';
 import { Attachments } from '../components/Attachments';
 import { RichText } from '../components/RichText';
 import { handIn, saveDraftNote, takeBack, useMyDraftState, type CourseworkRow, type SubmissionRow } from '../coursework';
 import type { CourseRow } from '../structure';
 import { errorText } from '../errors';
+import { createAutosave, type AutosaveState } from '../autosave';
+import { useOneAtATime } from '../oneAtATime';
 import { gradingText } from './courseworkWords';
 import { getTheme, spacing } from '../theme';
 
@@ -55,20 +58,18 @@ export function WorkScreen({
   const handedIn = sub.state === 'handedIn' || sub.state === 'returned';
   const dueWord = isOverdue(sub.dueDate, today) ? 'Was due' : state === 'notRequired' ? 'Due' : 'Hand in by';
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'handIn' | 'takeBack' | null>(null);
-
+  // One at a time, so a double tap cannot hand in and then show the second
+  // call's refusal as an error over work that went in.
+  const { active, run: once } = useOneAtATime();
   const run = (key: 'handIn' | 'takeBack', fn: () => Promise<unknown>) =>
-    void (async () => {
-      setBusy(key);
+    void once(key, async () => {
       setError(null);
       try {
         await fn();
       } catch (e) {
         setError(errorText(e));
-      } finally {
-        setBusy(null);
       }
-    })();
+    });
 
   const instructions = (
     <>
@@ -96,7 +97,7 @@ export function WorkScreen({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {cw.editedAt ? <Text style={styles.quiet}>Updated {dayOf(cw.editedAt)}</Text> : null}
-      <StateNotice state={state} sub={sub} today={today} onTakeBack={() => run('takeBack', () => takeBack({ courseworkId: cw.id }))} busy={busy === 'takeBack'} />
+      <StateNotice state={state} sub={sub} today={today} onTakeBack={() => run('takeBack', () => takeBack({ courseworkId: cw.id }))} busy={active === 'takeBack'} />
 
       {sub.state === 'returned' && sub.returned ? <Returned returned={sub.returned} grading={cw.grading} /> : null}
 
@@ -116,8 +117,15 @@ export function WorkScreen({
               uid={uid}
               cw={cw}
               courseId={sub.courseId}
-              busy={busy === 'handIn'}
-              onHandIn={() => run('handIn', () => handIn({ courseworkId: cw.id }))}
+              busy={active === 'handIn'}
+              onHandIn={(saveAnswer) =>
+                run('handIn', async () => {
+                  // What is on the screen is what goes in: the answer is
+                  // stored first, or nothing is handed in.
+                  if (!(await saveAnswer())) throw new Error('Your answer is not saved yet. Check the connection, then hand in again.');
+                  await handIn({ courseworkId: cw.id });
+                })
+              }
             />
           ) : null}
         </>
@@ -252,7 +260,8 @@ function YourWork({
   cw: CourseworkRow;
   courseId: string;
   busy: boolean;
-  onHandIn: () => void;
+  /** Hand in, given the way to store the answer first. */
+  onHandIn: (saveAnswer: () => Promise<boolean>) => void;
 }) {
   const draftState = useMyDraftState(uid, cw.id);
   const draft = draftState.value;
@@ -265,33 +274,60 @@ function YourWork({
    */
   const seedKey = useRef('none');
   if (note === null) seedKey.current = draft ? 'draft' : 'none';
-  const [saving, setSaving] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [saveState, setSaveState] = useState<AutosaveState>({ kind: 'idle' });
   const [uploading, setUploading] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftExists = useRef(false);
+  draftExists.current = draft !== null;
+  const [saver] = useState(() =>
+    createAutosave<string>({
+      delayMs: 700,
+      save: (v) => saveDraftNote(uid, cw.id, courseId, v, draftExists.current),
+      onState: setSaveState,
+    }),
+  );
+  /*
+   * LEAVING SENDS WHAT IS WAITING. The save goes when typing pauses, and a
+   * student who types a sentence and taps Back inside that pause used to lose
+   * it. The write is the SDK's to deliver from here, offline included, so the
+   * screen does not have to stay for it.
+   */
+  useEffect(() => () => void saver.flush(), [saver]);
   const shown = note ?? draft?.note ?? '';
 
   const change = (v: string) => {
     // The editor reports what it was seeded with; that is not an edit.
     if (v === shown) return;
     setNote(v);
-    setSaving('saving');
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      saveDraftNote(uid, cw.id, courseId, v).then(
-        () => setSaving('saved'),
-        () => setSaving('failed'),
-      );
-    }, 700);
+    saver.queue(v);
   };
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
   const onBusyChange = useCallback((b: boolean) => setUploading(b), []);
+
+  const failed = saveState.kind === 'failed';
+  const guard = useLeaveGuard({
+    when: uploading || failed,
+    // A failed answer gets one more try before anyone is asked; a file on its
+    // way cannot be hurried, so that is asked at once.
+    settle: uploading ? undefined : () => saver.flush(),
+    prompt: uploading
+      ? {
+          title: 'A file is still uploading',
+          message: 'Leave now and it stops. Your answer and the files already up are kept.',
+          stay: 'Stay',
+          leave: 'Leave and stop it',
+        }
+      : {
+          title: 'Your answer is not saved',
+          message: 'The last change did not reach the server. Leave now and it is lost.',
+          stay: 'Stay',
+          leave: 'Leave without it',
+        },
+  });
 
   const files = draft?.files ?? {};
   const empty = !shown.trim() && Object.keys(files).length === 0;
   return (
     <>
+      {guard.element}
       <SectionTitle>Your work</SectionTitle>
       <Card>
         <Text style={inputLook.label}>Your answer</Text>
@@ -308,10 +344,10 @@ function YourWork({
           <ActivityIndicator style={styles.loading} />
         )}
         <Attachments target="work" courseworkId={cw.id} files={files} editable studentUid={uid} onBusyChange={onBusyChange} />
-        <Text testID="work-saved" style={styles.quiet}>
-          {saving === 'saving'
+        <Text testID="work-saved" style={[styles.quiet, failed ? styles.failed : null]}>
+          {saveState.kind === 'waiting' || saveState.kind === 'saving'
             ? 'Saving…'
-            : saving === 'failed'
+            : failed
               ? 'Not saved. Check the connection; your answer is still here.'
               : 'Saved. Only you can see this until you hand it in.'}
         </Text>
@@ -319,8 +355,8 @@ function YourWork({
           testID="work-hand-in"
           label="Hand in"
           busy={busy}
-          disabled={empty || uploading || saving === 'saving'}
-          onPress={onHandIn}
+          disabled={empty || uploading}
+          onPress={() => onHandIn(() => saver.flush())}
         />
         {uploading ? <Text style={styles.quiet}>Ready once every file is up.</Text> : null}
       </Card>
@@ -330,6 +366,7 @@ function YourWork({
 
 const styles = StyleSheet.create({
   quiet: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(2) },
+  failed: { color: t.feedback.danger },
   files: { marginTop: spacing(3) },
   grade: { fontSize: 32, fontWeight: '700', color: t.text.primary },
   feedback: { fontSize: 15, lineHeight: 22, color: t.text.primary, marginTop: spacing(2) },

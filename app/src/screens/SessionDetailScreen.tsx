@@ -44,6 +44,8 @@ import {
   type RecordingRow,
 } from '../recordings';
 import { UploadPanel, useUploads } from '../components/UploadPanel';
+import { useLeaveGuard } from '../components/LeaveGuard';
+import { useOneAtATime } from '../oneAtATime';
 import { MediaList } from '../components/MediaList';
 import { retryZoomImport } from '../zoom';
 import { sortByName, useRosterState, type EnrollmentRow } from '../structure';
@@ -139,7 +141,7 @@ function SessionHeader({ session, isAdmin }: { session: SessionRow; isAdmin: boo
   const [date, setDate] = useState(session.date);
   const [dueDate, setDueDate] = useState(session.dueDate);
   const [notes, setNotes] = useState(session.notes);
-  const [busy, setBusy] = useState<string | null>(null);
+  const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
 
   // Seed the form when the editor OPENS, not when the header mounts. Save writes
@@ -155,18 +157,15 @@ function SessionHeader({ session, isAdmin }: { session: SessionRow; isAdmin: boo
   };
 
   const run = (key: string, fn: () => Promise<unknown>) =>
-    void (async () => {
-      setBusy(key);
+    void once(key, async () => {
       setError(null);
       try {
         await fn();
         setEditing(false);
       } catch (e) {
         setError(errorText(e));
-      } finally {
-        setBusy(null);
       }
-    })();
+    });
 
   if (editing) {
     return (
@@ -284,13 +283,13 @@ function AttendanceSection({ session }: { session: SessionRow }) {
   const markAllExcused = () =>
     setMarks(Object.fromEntries(activeUids.map((uid) => [uid, 'excused' as AttendanceStatus])));
 
-  const [busy, setBusy] = useState(false);
+  const { active, run: once } = useOneAtATime();
+  const busy = active !== null;
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
   const submit = () =>
-    void (async () => {
-      setBusy(true);
+    void once('submit', async () => {
       setError(null);
       setInfo(null);
       try {
@@ -300,10 +299,8 @@ function AttendanceSection({ session }: { session: SessionRow }) {
         setInfo(`Attendance submitted for ${res.marked} student${res.marked === 1 ? '' : 's'}.`);
       } catch (e) {
         setError(errorText(e));
-      } finally {
-        setBusy(false);
       }
-    })();
+    });
 
   return (
     <>
@@ -319,7 +316,7 @@ function AttendanceSection({ session }: { session: SessionRow }) {
             : activeUids.length === 0
               ? 'Enrol students in this course first — attendance is taken from its roster.'
               : session.attendanceSubmittedAt
-              ? 'Submitted. Excused students are assigned the recording and can open it until the due date; present and absent students are not.'
+              ? 'Submitted. Excused students are given the recording and can open it until the due date; present and absent students are not.'
               : 'Everyone starts as Present — mark who was away, and excuse whoever should listen to the recording. Only excusing grants access, and nothing is granted until you submit.'}
         </Text>
         {rosterState === null ? null : activeUids.length === 0 ? (
@@ -411,22 +408,30 @@ function RecordingSection({
   onPlay: (recording: RecordingRow, session: SessionRow, itemId?: string) => void;
   onImportZoom: (session: SessionRow) => void;
 }) {
-  const [busy, setBusy] = useState<string | null>(null);
+  const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   const uploads = useUploads(session.id, recording);
+  // Leaving stops an upload (see `useUploads`), so it is asked first: an
+  // hour of video lost to a stray Back is not a thing to do silently.
+  const leaveGuard = useLeaveGuard({
+    when: uploads.busy,
+    prompt: {
+      title: 'A recording is still uploading',
+      message: 'Leave now and it stops. Files already added are kept; the one on its way is not.',
+      stay: 'Stay',
+      leave: 'Leave and stop it',
+    },
+  });
 
   const run = (key: string, fn: () => Promise<unknown>) =>
-    void (async () => {
-      setBusy(key);
+    void once(key, async () => {
       setError(null);
       try {
         await fn();
       } catch (e) {
         setError(errorText(e));
-      } finally {
-        setBusy(null);
       }
-    })();
+    });
 
   const uploading = uploads.busy;
   // While files are chosen or going, the panel is the card's one task.
@@ -434,6 +439,7 @@ function RecordingSection({
 
   return (
     <>
+      {leaveGuard.element}
       <SectionTitle>Recording</SectionTitle>
       <Card>
         {error ? <Notice tone="error">{error}</Notice> : null}

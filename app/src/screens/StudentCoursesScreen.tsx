@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Empty, Grid, Screen } from '../components/ui';
+import { Collapsible, Empty, Grid, Screen } from '../components/ui';
 import { useMyAttendanceState, type AttendanceRecordRow } from '../attendance';
 
 const NO_MARKS: AttendanceRecordRow[] = [];
-import { useCourse, useStudentEnrollmentsState } from '../structure';
+import { useCourseState, useStudentEnrollmentsState, type CourseRow } from '../structure';
 import { useMySubmissions, type SubmissionRow } from '../coursework';
 import { workTally } from './ClassAssignments';
 import { INSTITUTE_TIMEZONE, todayInZone } from '@sabeel/shared';
@@ -36,6 +36,30 @@ export function StudentCoursesScreen({
   );
   // One listener for every class's work, split per card.
   const work = useMySubmissions(uid);
+  /*
+   * Each course, as its own listener answers (see the note above). The list is
+   * shown once EVERY course has answered, because which section a class goes
+   * in depends on its course: shown sooner, a finished class appeared among
+   * the running ones and then jumped into the closed section under the reader.
+   */
+  const [courses, setCourses] = useState<ReadonlyMap<string, CourseRow | null>>(new Map());
+  const onCourse = useCallback((courseId: string, cls: CourseRow | null) => {
+    setCourses((m) => {
+      if (m.has(courseId) && m.get(courseId) === cls) return m;
+      const next = new Map(m);
+      next.set(courseId, cls);
+      return next;
+    });
+  }, []);
+  const answered = courseIds.every((id) => courses.has(id));
+  const known = courseIds.map((id) => courses.get(id)).filter((c): c is CourseRow => !!c);
+  // Running classes first; finished ones closed at the bottom, as archived
+  // courses are on the staff side.
+  const current = known.filter((c) => c.effectiveActive);
+  const finished = known.filter((c) => !c.effectiveActive);
+  const card = (cls: CourseRow) => (
+    <CourseCard key={cls.id} uid={uid} cls={cls} work={(work ?? []).filter((s) => s.courseId === cls.id)} onOpen={onOpen} />
+  );
 
   return (
     <Screen
@@ -44,49 +68,56 @@ export function StudentCoursesScreen({
       title="Your classes"
       subtitle="Your attendance, recordings and assignments, class by class"
     >
+      {courseIds.map((id) => (
+        <CourseProbe key={id} courseId={id} onCourse={onCourse} />
+      ))}
       {/* IN A GRID, like every other collection. Asking for the list width and
           then stacking full-width rows is the worst of both: a card holding a
           class name and one caption line ran to 1114px with 640px of it empty,
           beside staff cards of identical shape flowing two across. */}
-      {enrollments === null ? (
+      {enrollments === null || !answered ? (
         <Empty>Checking your classes…</Empty>
       ) : courseIds.length === 0 ? (
         <Empty>You are not enrolled in any classes yet.</Empty>
       ) : (
-        <Grid min={330}>
-          {courseIds.map((courseId) => (
-            <CourseCard
-              key={courseId}
-              uid={uid}
-              courseId={courseId}
-              work={(work ?? []).filter((s) => s.courseId === courseId)}
-              onOpen={onOpen}
-            />
-          ))}
-        </Grid>
+        <>
+          {current.length > 0 ? <Grid min={330}>{current.map(card)}</Grid> : <Empty>All your classes have finished.</Empty>}
+          {finished.length > 0 ? (
+            <Collapsible testID="classes-finished" title="Finished" count={finished.length}>
+              <Grid min={330}>{finished.map(card)}</Grid>
+            </Collapsible>
+          ) : null}
+        </>
       )}
     </Screen>
   );
 }
 
+/** One course's listener, reporting what it says. Renders nothing. */
+function CourseProbe({ courseId, onCourse }: { courseId: string; onCourse: (courseId: string, cls: CourseRow | null) => void }) {
+  const state = useCourseState(courseId);
+  useEffect(() => {
+    if (state.resolved) onCourse(courseId, state.value);
+  }, [courseId, onCourse, state.resolved, state.value]);
+  return null;
+}
+
 function CourseCard({
   uid,
-  courseId,
+  cls,
   work,
   onOpen,
 }: {
   uid: string;
-  courseId: string;
+  cls: CourseRow;
   work: SubmissionRow[];
   onOpen: (courseId: string) => void;
 }) {
-  const cls = useCourse(courseId);
   // The card answers the question the screen is for, so most visits need no tap
   // at all: how many meetings am I marked in, and how many did I miss. Read from
   // the student's OWN projected records — a student cannot read a session.
-  const marksState = useMyAttendanceState(uid, courseId);
+  const marksState = useMyAttendanceState(uid, cls.id);
   const marks = marksState ?? NO_MARKS;
-  if (!cls) return null;
   const present = marks.filter((m) => m.status === 'present').length;
   const excused = marks.filter((m) => m.status === 'excused').length;
   const absent = marks.filter((m) => m.status === 'absent').length;
@@ -95,7 +126,7 @@ function CourseCard({
       testID={`myclass-${cls.name}`}
       accessibilityRole="button"
       accessibilityLabel={`Open ${cls.name}`}
-      onPress={() => onOpen(courseId)}
+      onPress={() => onOpen(cls.id)}
       style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
     >
       <View style={{ flex: 1 }}>
@@ -108,7 +139,6 @@ function CourseCard({
           </Text>
         )}
         {work.length > 0 ? <AssignmentsLine work={work} cls={cls} /> : null}
-        {!cls.effectiveActive ? <Text style={styles.sub}>Finished</Text> : null}
       </View>
     </Pressable>
   );

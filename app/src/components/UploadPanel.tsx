@@ -79,16 +79,30 @@ export function useUploads(sessionId: string, recording: RecordingRow | null) {
   const patch = (key: string, p: Partial<UploadRow>) =>
     setRows((rs) => rs?.map((r) => (r.key === key ? { ...r, ...p } : r)) ?? null);
 
+  /*
+   * ONE PICK AND ONE RUN AT A TIME. `phase` is state, a frame late: a double
+   * tap on Upload started two runs over the same rows and sent every file
+   * twice, and a double tap on the picker opened two.
+   */
+  const picking = useRef(false);
+  const running = useRef(false);
   const pick = async () => {
-    const files = await pickMediaFiles();
-    if (!files) return;
-    setRows(files.map(toRow));
-    setPhase('choosing');
+    if (picking.current || running.current) return;
+    picking.current = true;
+    try {
+      const files = await pickMediaFiles();
+      if (!files) return;
+      setRows(files.map(toRow));
+      setPhase('choosing');
+    } finally {
+      picking.current = false;
+    }
   };
 
   const run = async () => {
     const queue = (rows ?? []).filter((r) => !r.problem);
-    if (queue.length === 0) return;
+    if (queue.length === 0 || running.current) return;
+    running.current = true;
     const ctrl = new AbortController();
     abort.current = ctrl;
     setPhase('running');
@@ -134,6 +148,7 @@ export function useUploads(sessionId: string, recording: RecordingRow | null) {
       // the next attempt (a session takes one recording) behind a delete.
       if (created && added === 0) await deleteRecording({ recordingId: created }).catch(() => undefined);
       abort.current = null;
+      running.current = false;
       setPhase('finished');
     }
   };

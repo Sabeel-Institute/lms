@@ -54,7 +54,7 @@ describe('notification preference keys', () => {
     // Guards the constant itself: a kind dropped from PREF_KEYS would still
     // satisfy the test above, because the rules would be "corrected" to match it.
     expect([...PREF_KEYS].sort()).toEqual(
-      ['attendanceMissing', 'lastDay', 'recordingReady', 'updatedAt'],
+      ['assignmentPosted', 'attendanceMissing', 'handInLastDay', 'lastDay', 'recordingReady', 'updatedAt', 'workReturned'],
     );
   });
 });

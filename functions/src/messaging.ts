@@ -51,19 +51,22 @@ const fcmSender: Sender = async (tokens, message) => {
   const res = await getMessaging().sendEachForMulticast({
     tokens,
     notification: { title: message.title, body: message.body },
-    // A data payload as well as a notification, so a foregrounded app can
-    // render its own banner rather than relying on the OS one it never sees.
-    data: { title: message.title, body: message.body },
+    // Where a tap lands, for the app to open. NOT `body` or `title` as data
+    // keys: expo-notifications reads a data key named `body` as the whole JS
+    // payload when it parses as JSON, and drops every key beside it (the
+    // skill's "`data.body` is intercepted"). The notification block above
+    // already carries the words.
+    data: { path: message.path },
     // Without this every push lands in FCM's fallback channel, which Android
     // shows as "Miscellaneous" — see PUSH_CHANNEL_ID. The app creates this
     // channel before it hands over a token, so it exists by the time anything
     // can be addressed to it.
     android: { notification: { channelId: PUSH_CHANNEL_ID } },
-    // Where a tapped banner lands in a browser. The service worker's click
-    // handler focuses or opens `fcmOptions.link`; with none set it closes the
-    // banner and does nothing, which for "a recording is ready" is a
-    // notification with no way to act on it.
-    webpush: { fcmOptions: { link: WEB_APP_URL } },
+    // Where a tapped banner lands in a browser, which can only open a URL: the
+    // app's address plus the same path, which the app's routes resolve. With
+    // no link FCM closes the banner and does nothing — a notification with no
+    // way to act on it.
+    webpush: { fcmOptions: { link: `${WEB_APP_URL}${message.path}` } },
   });
   const stale: string[] = [];
   res.responses.forEach((r, i) => {

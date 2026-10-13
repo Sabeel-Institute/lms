@@ -624,10 +624,12 @@ service cloud.firestore {
       // becoming a place to store anything.
       allow create: if isMine()
         && request.resource.data.keys().hasOnly(
-             ['recordingReady', 'lastDay', 'attendanceMissing', 'updatedAt']);
+             ['recordingReady', 'lastDay', 'assignmentPosted', 'handInLastDay', 'workReturned',
+              'attendanceMissing', 'updatedAt']);
       allow update: if isMine()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-             ['recordingReady', 'lastDay', 'attendanceMissing', 'updatedAt']);
+             ['recordingReady', 'lastDay', 'assignmentPosted', 'handInLastDay', 'workReturned',
+              'attendanceMissing', 'updatedAt']);
       allow delete: if false;
 
       // Keyed BY the token, so the send path can delete the exact row that

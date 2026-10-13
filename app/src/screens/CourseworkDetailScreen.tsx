@@ -4,12 +4,9 @@ import {
   INSTITUTE_TIMEZONE,
   courseworkCounts,
   gradeText,
-  isLate,
   isOverdue,
-  staffWorkState,
   todayInZone,
   unbreakableDate,
-  type StaffWorkState,
 } from '@sabeel/shared';
 import { Button, Card, Chips, Empty, Notice, Row, Screen, Segmented, StatusChip } from '../components/ui';
 import { RichText } from '../components/RichText';
@@ -20,41 +17,18 @@ import {
   useCourseSubmissionsState,
   type CourseworkRow,
   type GradeRow,
-  type SubmissionRow,
 } from '../coursework';
-import { useStudents } from '../students';
+import { useStudentsState, type StudentRow } from '../students';
 import type { CourseRow } from '../structure';
 import { gradingText } from './courseworkWords';
+import { inFilter, rowLine, staffRows, type WorkFilter } from '../courseworkRows';
+import { useWorkFilter } from '../courseworkFilter';
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
-
-type Filter = 'all' | 'toGrade' | 'pastDue' | 'returned';
-
-const dayOf = (ms: number) => unbreakableDate(todayInZone(INSTITUTE_TIMEZONE, ms));
-
-/** One student's row, in the words the proposal settled. */
-function rowLine(s: SubmissionRow, st: StaffWorkState): string {
-  const late = s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, INSTITUTE_TIMEZONE);
-  switch (st) {
-    case 'notRequired':
-      return `Not required · ${s.notRequired?.reason ?? ''}`;
-    case 'returned':
-      return `Returned ${s.returned ? dayOf(s.returned.at) : ''}`;
-    case 'toGrade':
-    case 'graded':
-      return s.handedInAt ? `Handed in ${dayOf(s.handedInAt)}${late ? ' · late' : ''}` : 'Graded without a hand-in';
-    case 'toDo':
-      return s.moreTime ? `More time, until ${unbreakableDate(s.dueDate)}` : 'Nothing handed in yet';
-    case 'pastDue':
-      return 'Nothing handed in';
-    case 'missed':
-      return 'Missed';
-    case 'closed':
-      return 'Closed, course archived';
-  }
-}
+const NO_STUDENTS: StudentRow[] = [];
 
 /**
  * One assignment's page: where is everyone? Laid out like the listening
@@ -77,10 +51,16 @@ export function CourseworkDetailScreen({
 }) {
   const subsAll = useCourseSubmissionsState(cls.id);
   const gradesAll = useCourseGradesState(cls.id);
-  const students = useStudents(true);
+  // Waited for, as on the grading screen: rows sorted by names not yet known
+  // reorder themselves under the reader when the directory answers.
+  const studentsState = useStudentsState(true);
+  const students = studentsState ?? NO_STUDENTS;
   const [tab, setTab] = useState<'students' | 'instructions'>('students');
-  const [filter, setFilter] = useState<Filter>('all');
-  const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useWorkFilter(cw.id);
+  // The students named when Return was first tapped: the confirmation sends
+  // exactly those, even if another grade is saved while it is open.
+  const [confirmReturn, setConfirmReturn] = useState<string[] | null>(null);
+  const { active, run } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   const today = todayInZone(INSTITUTE_TIMEZONE);
 
@@ -95,32 +75,24 @@ export function CourseworkDetailScreen({
   );
   const counts = courseworkCounts(cw.grading, subs, grades, today, cls.effectiveActive, INSTITUTE_TIMEZONE);
   const rows = useMemo(
-    () =>
-      subs
-        .filter((s) => s.active || s.state !== 'open')
-        .map((s) => ({ s, st: staffWorkState(s, grades.get(s.studentUid), today, cls.effectiveActive), g: grades.get(s.studentUid) }))
-        .sort((a, b) => nameOf(a.s.studentUid).localeCompare(nameOf(b.s.studentUid))),
+    () => staffRows(subs, grades, today, cls.effectiveActive, nameOf),
     [subs, grades, today, cls.effectiveActive, nameOf],
   );
-  const shown = rows.filter(({ st }) =>
-    filter === 'all' ? true : filter === 'toGrade' ? st === 'toGrade' : filter === 'pastDue' ? st === 'pastDue' : st === 'returned',
-  );
+  const shown = rows.filter(({ st }) => inFilter(st, filter));
   const toGrade = rows.filter((r) => r.st === 'toGrade').map((r) => r.s.studentUid);
   const toReturn = rows.filter((r) => r.st === 'graded' && r.g?.grade).map((r) => r.s.studentUid);
   const beforeDue = !isOverdue(cw.dueDate, today);
 
-  const returnGraded = () =>
-    void (async () => {
-      setBusy(true);
+  const returnGraded = (uids: string[]) =>
+    void run('return', async () => {
       setError(null);
       try {
-        await returnWork({ courseworkId: cw.id, studentUids: toReturn });
+        await returnWork({ courseworkId: cw.id, studentUids: uids });
+        setConfirmReturn(null);
       } catch (e) {
         setError(errorText(e));
-      } finally {
-        setBusy(false);
       }
-    })();
+    });
 
   return (
     <Screen
@@ -171,7 +143,7 @@ export function CourseworkDetailScreen({
             </View>
           ) : null}
         </Card>
-      ) : subsAll === null || gradesAll === null ? (
+      ) : subsAll === null || gradesAll === null || studentsState === null ? (
         <Empty>Checking the class’s work…</Empty>
       ) : rows.length === 0 ? (
         <Empty>{cw.status === 'draft' ? 'Nobody has it yet: it goes to the class when it is posted.' : 'Nobody in the class has this assignment.'}</Empty>
@@ -184,7 +156,7 @@ export function CourseworkDetailScreen({
             <Tile label="Missed" value={counts.missed} />
           </View>
           <View style={styles.filters}>
-            <Chips<Filter>
+            <Chips<WorkFilter>
               value={filter}
               testIdPrefix="coursework-filter"
               options={[
@@ -220,13 +192,33 @@ export function CourseworkDetailScreen({
           ))}
           {toReturn.length > 0 ? (
             <View style={styles.returnAll}>
-              <Button
-                testID="coursework-return-graded"
-                label={`Return ${toReturn.length} graded`}
-                busy={busy}
-                onPress={returnGraded}
-              />
-              <Text style={styles.quiet}>Sends back every grade not yet returned. Each student is told.</Text>
+              {/*
+                ASKED ONCE MORE. A return cannot be taken back — each student
+                sees their grade and is told — and this one goes to everyone
+                graded, so a stray tap here is the costliest in the app.
+              */}
+              {confirmReturn ? (
+                <Card>
+                  <Text style={styles.confirm}>
+                    Return {confirmReturn.length === 1 ? 'the 1 graded piece of work' : `all ${confirmReturn.length} graded`} now?
+                    Each student sees their grade and feedback and is told.
+                  </Text>
+                  <Row>
+                    <Button
+                      testID="coursework-return-graded-confirm"
+                      label={`Return ${confirmReturn.length}`}
+                      busy={active === 'return'}
+                      onPress={() => returnGraded(confirmReturn)}
+                    />
+                    <Button label="Cancel" variant="quiet" onPress={() => setConfirmReturn(null)} />
+                  </Row>
+                </Card>
+              ) : (
+                <>
+                  <Button testID="coursework-return-graded" label={`Return ${toReturn.length} graded`} onPress={() => setConfirmReturn(toReturn)} />
+                  <Text style={styles.quiet}>Sends back every grade not yet returned. Each student is told.</Text>
+                </>
+              )}
             </View>
           ) : null}
         </>
@@ -287,4 +279,5 @@ const styles = StyleSheet.create({
   onTeacher: { backgroundColor: t.bg.goldSoft },
   onStudents: { backgroundColor: t.bg.dangerSoft },
   returnAll: { marginTop: spacing(3) },
+  confirm: { fontSize: 15, lineHeight: 22, color: t.text.primary, marginBottom: spacing(3) },
 });

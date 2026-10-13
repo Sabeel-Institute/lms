@@ -21,7 +21,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const MESSAGE = { title: 't', body: 'b' };
+const MESSAGE = { title: 't', body: 'b', path: 'work/cw1' };
 
 async function freshMessaging() {
   vi.resetModules();
@@ -94,10 +94,10 @@ describe('sender selection', () => {
    * THE OTHER PLATFORM'S HALF. A web push with no `link` is a banner that
    * closes when tapped and opens nothing: the SDK's click handler in the
    * service worker focuses or opens `fcmOptions.link`, and with none it
-   * returns. Every message this app sends says "a recording is ready" or
-   * "last day to listen"; the tap has to land in the app.
+   * returns. Every message is about one thing — a recording, an assignment,
+   * a register — and the tap has to land on it, not on the home screen.
    */
-  it('gives a browser somewhere to go when the banner is tapped', async () => {
+  it('sends the tap to the thing the message is about, on both surfaces', async () => {
     vi.stubEnv('FUNCTIONS_EMULATOR', '');
     const sendEachForMulticast = vi.fn(async (_message: unknown) => ({
       responses: [] as { success: boolean; error?: { code: string } }[],
@@ -110,9 +110,11 @@ describe('sender selection', () => {
     const { send } = await freshMessaging();
     await send(['tok-a'], MESSAGE);
 
-    expect(sendEachForMulticast.mock.calls[0][0]).toMatchObject({
-      webpush: { fcmOptions: { link: WEB_APP_URL } },
-    });
+    const sent = sendEachForMulticast.mock.calls[0][0] as { data: Record<string, string>; webpush: unknown };
+    expect(sent).toMatchObject({ webpush: { fcmOptions: { link: `${WEB_APP_URL}work/cw1` } } });
+    // Android reads the path from the data — under any key but `body`, which
+    // expo-notifications takes as the whole payload when it parses as JSON.
+    expect(sent.data).toEqual({ path: 'work/cw1' });
     vi.doUnmock('firebase-admin/messaging');
   });
 

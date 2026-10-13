@@ -1029,6 +1029,7 @@ const TAB_ROOTS = new Set([
   'library',
   'library-filtered',
   'my-classes',
+  'my-classes-finished',
   // Reached by opening a recording and leaving it — which lands back on a tab
   // root, with the now-playing bar on it.
   'miniplayer',
@@ -1494,7 +1495,7 @@ async function tourManager(page, tag) {
     `${counter.seen}/${MANAGER_SCREENS}`);
 }
 
-const STUDENT_SCREENS = 12;
+const STUDENT_SCREENS = 13;
 
 async function tourStudent(page, tag) {
   const counter = { seen: 0 };
@@ -1511,6 +1512,16 @@ async function tourStudent(page, tag) {
       await byId(page, `group-${group}`).isVisible().catch(() => false));
   }
   await visit('my-classes', () => tap(byId(page, 'tab-classes')), 'myclass-Hikam Foundations');
+  // The closed Finished section, opened: the classes in it exist in no other
+  // state, so they are toured as a screen of their own.
+  await visit(
+    'my-classes-finished',
+    async () => {
+      await tap(byId(page, 'tab-classes'));
+      await tap(byId(page, 'classes-finished'));
+    },
+    'myclass-Seerah Survey',
+  );
   await visit('class-record', async () => {
     await tap(byId(page, 'tab-classes'));
     await tap(byId(page, 'myclass-Hikam Foundations'));
@@ -1520,6 +1531,9 @@ async function tourStudent(page, tag) {
   // control of its own to measure, and the sweep refuses a screen where its
   // geometric checks would be inert. A wording check, on the way past.
   await tap(byId(page, 'tab-classes'));
+  // A finished class waits in the closed Finished section; opening it is part
+  // of the way there.
+  await tap(byId(page, 'classes-finished'));
   await tap(byId(page, 'myclass-Seerah Survey'));
   // The row arrives with the marks and its listening line with the grants, a
   // second listener — so wait for the words, not the row.

@@ -24,6 +24,7 @@ import type { SessionRow } from '../sessions';
 import type { RecordingRow } from '../recordings';
 import { getTheme, spacing } from '../theme';
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 
 const t = getTheme();
 
@@ -54,7 +55,7 @@ export function RecordingLedgerScreen({
     today,
   );
   const [filter, setFilter] = useState<LedgerFilter>('notComplete');
-  const [busy, setBusy] = useState<string | null>(null);
+  const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
 
   const rows = useMemo(() => {
@@ -63,21 +64,20 @@ export function RecordingLedgerScreen({
     return accountable.filter((r) => !r.completed && isOverdue(r.dueDate, today));
   }, [accountable, filter, today]);
 
-  const run = async (key: string, fn: () => Promise<unknown>) => {
-    // One write at a time on this screen: the three buttons on an open editor
-    // each locked on their own key, so "Remove override" stayed live while
-    // "Mark complete" was in flight, and two callables raced on one override.
-    if (busy !== null) return;
-    setBusy(key);
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(null);
-    }
-  };
+  // One write at a time on this screen: the three buttons on an open editor
+  // each locked on their own key, so "Remove override" stayed live while
+  // "Mark complete" was in flight, and two callables raced on one override.
+  // The gate is a ref, not this render's `busy`, which a same-frame second
+  // tap would still read as free.
+  const run = (key: string, fn: () => Promise<unknown>) =>
+    once(key, async () => {
+      setError(null);
+      try {
+        await fn();
+      } catch (e) {
+        setError(errorText(e));
+      }
+    });
 
   return (
     <Screen

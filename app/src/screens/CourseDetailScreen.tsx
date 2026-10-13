@@ -31,6 +31,7 @@ import {
 } from '../structure';
 import { getTheme, spacing } from '../theme';
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 import { exportCourseWorkbook } from '../workbookData';
 
 const t = getTheme();
@@ -82,7 +83,7 @@ export function CourseDetailScreen({
   const today = todayInZone(INSTITUTE_TIMEZONE);
   const ledger = useCourseLedger(cls.id, today);
   const [name, setName] = useState(cls.name);
-  const [busy, setBusy] = useState<string | null>(null);
+  const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   /** Enrollment id whose removal is being confirmed, if any. */
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -136,17 +137,15 @@ export function CourseDetailScreen({
     });
   };
 
-  const run = async (key: string, fn: () => Promise<void>) => {
-    setBusy(key);
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(null);
-    }
-  };
+  const run = (key: string, fn: () => Promise<void>) =>
+    once(key, async () => {
+      setError(null);
+      try {
+        await fn();
+      } catch (e) {
+        setError(errorText(e));
+      }
+    });
 
   /*
    * ITS OWN SLOT, not a prefix on the shared one.
@@ -248,7 +247,7 @@ export function CourseDetailScreen({
       {!cls.effectiveActive ? (
         <Notice tone="info">
           {cls.archivedAccess
-            ? 'This course is archived. Students can still play what they were assigned.'
+            ? 'This course is archived. Students can still play the recordings they were given.'
             : 'This course is archived and its recordings are closed.'}
         </Notice>
       ) : null}

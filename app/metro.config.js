@@ -44,13 +44,14 @@ config.cacheStores = ({ FileStore }) => [
  * tree-shake, so the web bundle carried both: measured, about 990 KB of
  * Lexical in a 4.9 MB bundle. Every Lexical package also publishes the two
  * builds under the `development` and `production` export conditions, so ask
- * for the one this build is — for Lexical's packages only, since other
+ * for the one this build is — for Lexical's packages and their subpaths
+ * (`@lexical/react/LexicalComposer` is one), and for nothing else, since other
  * packages' meaning of those conditions is not this file's business.
  */
 const lexicalBuild = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 config.resolver.resolveRequest = (context, moduleName, platform) =>
   context.resolveRequest(
-    /^(lexical|@lexical\/[^/]+)$/.test(moduleName)
+    /^(lexical|@lexical\/[^/]+)(\/.*)?$/.test(moduleName)
       ? { ...context, unstable_conditionNames: [...context.unstable_conditionNames, lexicalBuild] }
       : context,
     moduleName,

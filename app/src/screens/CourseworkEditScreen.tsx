@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
   DEFAULT_DUE_DAYS,
   INSTITUTE_TIMEZONE,
   addDays,
   defaultLateUntil,
+  normalizeMarkdown,
   todayInZone,
   unbreakableDate,
   type CourseworkGrading,
@@ -13,6 +14,7 @@ import { Button, Card, Chips, ConfirmDanger, Field, Notice, Row, Screen, Section
 import { DateField } from '../components/DateField';
 import { Attachments } from '../components/Attachments';
 import { InstructionsEditor } from '../components/InstructionsEditor';
+import { useLeaveGuard } from '../components/LeaveGuard';
 import {
   closeCoursework,
   createCoursework,
@@ -24,6 +26,7 @@ import {
 } from '../coursework';
 import { useRosterState, type CourseRow } from '../structure';
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
@@ -66,8 +69,9 @@ export function CourseworkEditScreen({
   const [acceptLate, setAcceptLate] = useState(existing ? existing.lateUntil !== null : true);
   const [lateUntil, setLateUntil] = useState(existing?.lateUntil ?? defaultLateUntil(firstDue));
   const [lateEdited, setLateEdited] = useState(existing?.lateUntil != null);
-  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const onBusyChange = useCallback((b: boolean) => setUploading(b), []);
   const roster = useRosterState(cls.id);
   const students = roster?.filter((e) => e.active).length ?? null;
 
@@ -87,31 +91,106 @@ export function CourseworkEditScreen({
   });
   const ready = !!title.trim() && !!dueDate && outOfOk && (!acceptLate || !!lateUntil);
 
-  const run = (key: string, fn: () => Promise<void>) =>
-    void (async () => {
-      setBusy(key);
+  /*
+   * WHAT IS STORED, as far as this form knows: what it was opened with, then
+   * whatever it last saved. "Unsaved changes" is the form against this; and
+   * the server refuses a save when the assignment no longer matches it, which
+   * is how one teacher's edit is not overwritten by another's open form.
+   */
+  const stored = useRef<CourseworkInput>(
+    existing
+      ? {
+          title: existing.title,
+          instructions: existing.instructions,
+          dueDate: existing.dueDate,
+          lateUntil: existing.lateUntil,
+          grading: existing.grading,
+        }
+      : input(),
+  );
+  // The id a new assignment got, so a second Post after a failed one updates
+  // it rather than creating a second assignment.
+  const createdId = useRef<string | null>(null);
+  const now = input();
+  const dirty =
+    now.title !== stored.current.title ||
+    normalizeMarkdown(now.instructions) !== normalizeMarkdown(stored.current.instructions) ||
+    now.dueDate !== stored.current.dueDate ||
+    now.lateUntil !== stored.current.lateUntil ||
+    JSON.stringify(now.grading) !== JSON.stringify(stored.current.grading);
+
+  // One action at a time: a double-tapped Post must not create two assignments.
+  const { active, run: once } = useOneAtATime();
+  // The action on its way, for a Back pressed while it is: the screen waits
+  // for it, then goes where Back said rather than where the action would have.
+  const inFlight = useRef<Promise<boolean> | null>(null);
+  const leaveRequested = useRef(false);
+
+  const guard = useLeaveGuard({
+    when: dirty || active !== null || uploading,
+    settle: async () => {
+      const flight = inFlight.current;
+      if (uploading || !flight) return false;
+      leaveRequested.current = true;
+      return flight;
+    },
+    prompt: uploading
+      ? {
+          title: 'A file is still uploading',
+          message: `Leave now and it stops.${dirty ? ' Your other changes are not saved either.' : ''}`,
+          stay: 'Stay',
+          leave: 'Leave and stop it',
+        }
+      : {
+          title: 'Discard your changes?',
+          message: 'Your changes to this assignment are not saved.',
+          stay: 'Keep editing',
+          leave: 'Discard',
+        },
+  });
+
+  /** Run an action; what it returns is where to go after, unless Back came first. */
+  const act = (key: string, fn: () => Promise<(() => void) | void>) =>
+    void once(key, async () => {
       setError(null);
+      let done!: (ok: boolean) => void;
+      inFlight.current = new Promise<boolean>((resolve) => {
+        done = resolve;
+      });
       try {
-        await fn();
+        const then = await fn();
+        done(true);
+        if (then && !leaveRequested.current) {
+          guard.leaveFreely();
+          then();
+        }
       } catch (e) {
         setError(errorText(e));
+        done(false);
       } finally {
-        setBusy(null);
+        inFlight.current = null;
+        leaveRequested.current = false;
       }
-    })();
+    });
 
   /** Save what is on the form; returns the assignment's id. */
   const save = async (): Promise<string> => {
-    if (existing) {
-      await updateCoursework({ courseworkId: existing.id, ...input() });
-      return existing.id;
+    const data = input();
+    const id = existing?.id ?? createdId.current;
+    if (id) {
+      await updateCoursework({ courseworkId: id, ...data, ifUnchanged: stored.current });
+    } else {
+      createdId.current = (await createCoursework({ courseId: cls.id, ...data })).id;
     }
-    return (await createCoursework({ courseId: cls.id, ...input() })).id;
+    stored.current = data;
+    return id ?? (createdId.current as string);
   };
 
   const posted = existing?.status === 'posted';
+  const others = (key: string) => active !== null && active !== key;
   return (
     <Screen title={existing ? (posted ? 'Edit assignment' : 'Draft assignment') : 'New assignment'} subtitle={cls.name} width="read">
+      {guard.element}
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Card>
         <Field testID="coursework-title" label="Title" value={title} onChangeText={setTitle} autoCapitalize="words" />
@@ -121,7 +200,7 @@ export function CourseworkEditScreen({
       <SectionTitle>Files</SectionTitle>
       <Card>
         {existing ? (
-          <Attachments target="coursework" courseworkId={existing.id} files={existing.files} editable />
+          <Attachments target="coursework" courseworkId={existing.id} files={existing.files} editable onBusyChange={onBusyChange} />
         ) : (
           <Text style={styles.hint}>
             Files can be added once it is saved. Worksheets, scans, slides, pictures and audio; up to ten, 25 MB each.
@@ -182,13 +261,13 @@ export function CourseworkEditScreen({
             ? 'This deletes the assignment and everything on it, including any work students have handed in and their grades. It cannot be undone. Closing it keeps the record.'
             : 'This deletes the assignment and its files. Once any student has started it, only an admin can delete it; close it instead to keep the record.'
         }
-        busy={busy === 'delete'}
+        busy={active === 'delete'}
         testID="coursework-delete"
         confirmTestID="coursework-delete-confirm"
         onConfirm={() =>
-          run('delete', async () => {
+          act('delete', async () => {
             await deleteCoursework({ courseworkId: (existing as CourseworkRow).id });
-            onDeleted();
+            return onDeleted;
           })
         }
       >
@@ -197,22 +276,27 @@ export function CourseworkEditScreen({
             <Button
               testID="coursework-save"
               label="Save changes"
-              busy={busy === 'save'}
-              disabled={!ready}
-              onPress={() => run('save', async () => onSaved(await save()))}
+              busy={active === 'save'}
+              disabled={!ready || others('save')}
+              onPress={() =>
+                act('save', async () => {
+                  const id = await save();
+                  return () => onSaved(id);
+                })
+              }
             />
           ) : (
             <>
               <Button
                 testID="coursework-post"
                 label="Post"
-                busy={busy === 'post'}
-                disabled={!ready}
+                busy={active === 'post'}
+                disabled={!ready || others('post')}
                 onPress={() =>
-                  run('post', async () => {
+                  act('post', async () => {
                     const id = await save();
                     await postCoursework({ courseworkId: id });
-                    onSaved(id);
+                    return () => onSaved(id);
                   })
                 }
               />
@@ -220,9 +304,14 @@ export function CourseworkEditScreen({
                 testID="coursework-save-draft"
                 label={existing ? 'Save draft' : 'Save as draft'}
                 variant="secondary"
-                busy={busy === 'save'}
-                disabled={!ready}
-                onPress={() => run('save', async () => onSaved(await save()))}
+                busy={active === 'save'}
+                disabled={!ready || others('save')}
+                onPress={() =>
+                  act('save', async () => {
+                    const id = await save();
+                    return () => onSaved(id);
+                  })
+                }
               />
             </>
           )}
@@ -234,8 +323,13 @@ export function CourseworkEditScreen({
               testID="coursework-close"
               label="Stop taking work"
               variant="secondary"
-              busy={busy === 'close'}
-              onPress={() => run('close', async () => void (await closeCoursework({ courseworkId: existing.id })))}
+              busy={active === 'close'}
+              disabled={others('close')}
+              onPress={() =>
+                act('close', async () => {
+                  await closeCoursework({ courseworkId: existing.id });
+                })
+              }
             />
             <Text style={styles.hint}>Everyone with nothing handed in will show as missed. Work already in can still be graded.</Text>
           </View>

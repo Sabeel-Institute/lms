@@ -17,6 +17,7 @@ import { createCohort, useAllCourses, useCohortsState, type CohortRow } from '..
 const NO_COHORTS: CohortRow[] = [];
 import { courseLabel } from './CoursesScreen';
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 
 /**
  * Admin-only: the list of cohorts.
@@ -84,7 +85,7 @@ export function CohortsScreen({ onOpen }: { onOpen: (cohort: CohortRow) => void 
 function AddCohort() {
   const close = useAddAction();
   const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { active, run } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   return (
     <>
@@ -100,20 +101,21 @@ function AddCohort() {
       <Button
         testID="cohort-create"
         label="Create cohort"
-        busy={busy}
+        busy={active !== null}
         disabled={!name.trim()}
         block
-        onPress={() => {
-          setBusy(true);
-          setError(null);
-          void createCohort({ name: name.trim() })
-            .then(() => {
+        onPress={() =>
+          void run('create', async () => {
+            setError(null);
+            try {
+              await createCohort({ name: name.trim() });
               setName('');
               close();
-            })
-            .catch((e) => setError(errorText(e)))
-            .finally(() => setBusy(false));
-        }}
+            } catch (e) {
+              setError(errorText(e));
+            }
+          })
+        }
       />
     </>
   );

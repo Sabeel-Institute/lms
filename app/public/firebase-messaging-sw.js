@@ -42,7 +42,10 @@ firebase.initializeApp({
 // showForegroundPush) — so the click on THAT banner lands here too, and the
 // SDK's own click handler ignores it (no FCM_MSG in its data). This one acts
 // only on notifications the page shaped, marked `data.page`, and leaves the
-// SDK's to the SDK: focus a window of ours if one is open, else open the app.
+// SDK's to the SDK: a window of ours that is open is brought forward and told
+// where the message points (pushTaps.web.ts), so the tap opens the assignment
+// in the tab already open rather than a second copy of the app; with none
+// open, the link — the app's address plus that path — is opened.
 firebase.messaging();
 
 self.addEventListener('notificationclick', (event) => {
@@ -52,7 +55,10 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       const open = clients.find((c) => 'focus' in c);
-      return open ? open.focus() : self.clients.openWindow(data.link);
+      if (!open) return self.clients.openWindow(data.link);
+      return open.focus().then((tab) => {
+        if (data.path) (tab || open).postMessage({ type: 'open-path', path: data.path });
+      });
     }),
   );
 });

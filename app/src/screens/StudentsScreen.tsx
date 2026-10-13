@@ -21,6 +21,7 @@ import { useAllCourses, useCohorts, useMyCourses } from '../structure';
 import { CAN_CREATE_ACCOUNTS } from '../accountCreation';
 import { getTheme, spacing } from '../theme';
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 
 const t = getTheme();
 
@@ -171,38 +172,39 @@ function AddStudent({
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [courseId, setCourseId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { active, run } = useOneAtATime();
+  const busy = active !== null;
   const [error, setError] = useState<string | null>(null);
 
-  const create = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const address = email.trim();
-      // READ `emailSent`. The account and the email are two outcomes, not one:
-      // `createStudent` keeps the account when the send fails so staff can
-      // resend, and reporting a link that never went leaves someone waiting for
-      // an email that is not coming — with an account nobody can sign in to.
-      const { emailSent } = await createStudent({
-        displayName: displayName.trim(),
-        email: address.toLowerCase(),
-        courseId: courseId ?? undefined,
-      });
-      onCreated(
-        emailSent
-          ? `Account created. A set-password link has been emailed to ${address}.`
-          : `Account created, but the set-password link could not be emailed to ${address}. Open their page and use Resend password link.`,
-      );
-      setDisplayName('');
-      setEmail('');
-      setCourseId(null);
-      close();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+  // One at a time: a double tap created the account and then showed the
+  // second call's "already exists" over an account that was made.
+  const create = () =>
+    run('create', async () => {
+      setError(null);
+      try {
+        const address = email.trim();
+        // READ `emailSent`. The account and the email are two outcomes, not one:
+        // `createStudent` keeps the account when the send fails so staff can
+        // resend, and reporting a link that never went leaves someone waiting for
+        // an email that is not coming — with an account nobody can sign in to.
+        const { emailSent } = await createStudent({
+          displayName: displayName.trim(),
+          email: address.toLowerCase(),
+          courseId: courseId ?? undefined,
+        });
+        onCreated(
+          emailSent
+            ? `Account created. A set-password link has been emailed to ${address}.`
+            : `Account created, but the set-password link could not be emailed to ${address}. Open their page and use Resend password link.`,
+        );
+        setDisplayName('');
+        setEmail('');
+        setCourseId(null);
+        close();
+      } catch (e) {
+        setError(errorText(e));
+      }
+    });
 
   return (
     <>

@@ -19,6 +19,7 @@ import { createSession, useCourseSessionsState, type SessionRow } from '../sessi
 const NO_SESSIONS: SessionRow[] = [];
 import { getTheme, spacing } from '../theme';
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 
 const t = getTheme();
 
@@ -54,7 +55,8 @@ function AddSession({ courseId }: { courseId: string }) {
   // empty one would mean a recording that never closes.
   const [dueDate, setDueDate] = useState(() => dueFor(todayInZone(INSTITUTE_TIMEZONE)));
   const [dueEdited, setDueEdited] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const { active, run } = useOneAtATime();
+  const busy = active !== null;
   const [error, setError] = useState<string | null>(null);
 
   const changeDate = (next: string) => {
@@ -63,8 +65,7 @@ function AddSession({ courseId }: { courseId: string }) {
   };
 
   const add = () =>
-    void (async () => {
-      setBusy(true);
+    void run('add', async () => {
       setError(null);
       try {
         await createSession({
@@ -80,10 +81,8 @@ function AddSession({ courseId }: { courseId: string }) {
         close();
       } catch (e) {
         setError(errorText(e));
-      } finally {
-        setBusy(false);
       }
-    })();
+    });
 
   return (
     <>

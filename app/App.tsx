@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +13,8 @@ import {
   useNavigation,
   useRoute,
   StackActions,
+  getActionFromState,
+  getStateFromPath,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { APP_NAME, APP_SHORT_NAME, type Role } from '@sabeel/shared';
@@ -54,6 +56,8 @@ import { MoreSheet } from './src/components/MoreSheet';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { useWide } from './src/useWidth';
 import type { RootStackParamList } from './src/nav';
+import { STAFF_PATHS, STUDENT_PATHS } from './src/linkPaths';
+import { onPushTap } from './src/pushTaps';
 // Note the two senses of "session" in this file: `useSession` above is the AUTH
 // session; these resolve the documents a route names.
 import { useSessionState } from './src/sessions';
@@ -78,61 +82,6 @@ type Nav = NavigationProp<RootStackParamList>;
  * React Navigation's own answer to exactly this case.
  */
 const navRef = createNavigationContainerRef<RootStackParamList>();
-
-/**
- * What makes the browser's Back button work.
- *
- * React Navigation only touches browser history when a `linking` config is
- * present — with none, the whole app lives in one history entry and Back leaves
- * the site. Every screen therefore needs a path: a screen without one
- * contributes nothing to the URL, so navigating to it adds no history entry and
- * Back skips straight past it.
- *
- * WEB ONLY, deliberately. Native already has a working back gesture through the
- * stack, and enabling it there would mean an `expo-linking` dependency and a
- * scheme to register for no benefit.
- */
-const SHARED_PATHS = {
-  Home: '',
-  // Staff listen too — from the library and from a session's recording.
-  Player: 'play/:recordingId',
-  // Both populations get notifications, so both get the screen that turns them
-  // off. The switches it shows are role-dependent; the route is not.
-  Notifications: 'notifications',
-} as const;
-
-/** Everything only staff may reach. "My courses" is one of them: it is the
- *  courses a MANAGER is assigned, not anything a student has. */
-const STAFF_PATHS = {
-  ...SHARED_PATHS,
-  Students: 'students',
-  StudentDetail: 'students/:studentUid',
-  Cohorts: 'cohorts',
-  Courses: 'cohorts/:cohortId',
-  CourseDetail: 'courses/:courseId',
-  CourseAttendance: 'courses/:courseId/attendance',
-  Sessions: 'courses/:courseId/sessions',
-  SessionDetail: 'courses/:courseId/sessions/:sessionId',
-  StudentLedger: 'courses/:courseId/students/:studentUid',
-  Coursework: 'courses/:courseId/assignments',
-  CourseworkEdit: 'courses/:courseId/assignments/edit/:courseworkId?',
-  CourseworkDetail: 'courses/:courseId/assignments/:courseworkId',
-  Grade: 'courses/:courseId/assignments/:courseworkId/grade/:studentUid',
-  RecordingLedger: 'recordings/:recordingId/progress',
-  ZoomImport: 'sessions/:sessionId/import',
-  Library: 'library',
-  Audit: 'audit',
-  MyAudit: 'my-actions',
-  MyCourses: 'my-courses',
-  Tokens: 'tokens',
-} as const;
-
-const STUDENT_PATHS = {
-  ...SHARED_PATHS,
-  MyClasses: 'my-classes',
-  MyClassRecord: 'my-classes/:courseId',
-  Work: 'work/:courseworkId',
-} as const;
 
 /**
  * A URL is an ADDRESS, so the two populations cannot share one route table.
@@ -488,9 +437,41 @@ function Shell({
   // The NAME only. The chrome needs to know which tab to light and whether the
   // screen owns its own top inset; it has no business knowing a route's subject.
   const [routeName, setRouteName] = useState<keyof RootStackParamList>('Home');
+
+  /*
+   * A TAPPED NOTIFICATION OPENS WHAT IT IS ABOUT — the assignment, the
+   * recording, the register — not the home screen. The path comes with the
+   * message; it is opened through THIS person's route table, so a path to a
+   * place they have no screen for is ignored rather than thrown on. A tap
+   * that arrives before the navigator is ready — the one that launched the
+   * app — waits for it.
+   */
+  const pendingTap = useRef<string | null>(null);
+  const openTap = useCallback(
+    (path: string) => {
+      if (!navRef.isReady()) {
+        pendingTap.current = path;
+        return;
+      }
+      const config = { screens: role === 'student' ? STUDENT_PATHS : STAFF_PATHS };
+      const state = getStateFromPath(path, config);
+      const action = state ? getActionFromState(state, config) : undefined;
+      if (action) navRef.dispatch(action);
+    },
+    [role],
+  );
+  const latestOpenTap = useRef(openTap);
+  latestOpenTap.current = openTap;
+  useEffect(() => onPushTap(openTap), [openTap]);
+
   const onStateChange = useCallback(() => {
     const current = navRef.getCurrentRoute();
     if (current) setRouteName(current.name as keyof RootStackParamList);
+    const tap = pendingTap.current;
+    if (tap && navRef.isReady()) {
+      pendingTap.current = null;
+      latestOpenTap.current(tap);
+    }
   }, []);
 
   /**
@@ -808,7 +789,7 @@ function CourseAttendance() {
       cls={cls.value}
       // navigate, not goBack: a screen opened straight from its URL has nothing
       // beneath it, and the course is a destination in its own right either way.
-      onOpenCourse={() => navigation.navigate('CourseDetail', { courseId })}
+      onOpenCourse={() => up(navigation, 'CourseDetail', { courseId })}
       onOpenSession={(sessionId) => navigation.navigate('SessionDetail', { sessionId, courseId })}
       onOpenStudent={(studentUid) => navigation.navigate('StudentLedger', { studentUid, courseId })}
     />
@@ -825,12 +806,28 @@ function Sessions() {
       key={courseId}
       courseId={courseId}
       courseName={cls.value.name}
-      onOpenCourse={() => navigation.navigate('CourseDetail', { courseId })}
+      onOpenCourse={() => up(navigation, 'CourseDetail', { courseId })}
       onOpenSession={(session) =>
         navigation.navigate('SessionDetail', { sessionId: session.id, courseId })
       }
     />
   );
+}
+
+/**
+ * UP, NOT FORWARD. A parent link — the course named under a screen's title,
+ * the assignment above a student's work — goes back to that page when it is
+ * already under this one, and opens it fresh only when it is not (arriving
+ * from a link or a notification). React Navigation 7's plain `navigate` pushes
+ * a second copy instead, and Back from the copy came down again into the
+ * screen just left.
+ */
+function up<N extends 'CourseDetail' | 'Coursework' | 'CourseworkDetail'>(
+  navigation: Nav,
+  name: N,
+  params: RootStackParamList[N],
+) {
+  (navigation.navigate as (n: N, p: RootStackParamList[N], o: { pop: boolean }) => void)(name, params, { pop: true });
 }
 
 function Coursework() {
@@ -842,7 +839,7 @@ function Coursework() {
     <CourseworkListScreen
       key={courseId}
       cls={cls.value}
-      onOpenCourse={() => navigation.navigate('CourseDetail', { courseId })}
+      onOpenCourse={() => up(navigation, 'CourseDetail', { courseId })}
       onNew={() => navigation.navigate('CourseworkEdit', { courseId })}
       onOpen={(cw) => navigation.navigate('CourseworkDetail', { courseId, courseworkId: cw.id })}
     />
@@ -863,13 +860,16 @@ function CourseworkEdit({ isAdmin }: { isAdmin: boolean }) {
       existing={cw.value}
       isAdmin={isAdmin}
       onSaved={(id) =>
-        // A new one becomes the assignment it now is; an edit goes back to it.
-        courseworkId
+        // A new one becomes the assignment it now is; an edit goes back to it —
+        // or, opened from a link or a reload with nothing under it, to its page.
+        courseworkId && navigation.canGoBack()
           ? navigation.goBack()
           : navigation.dispatch(StackActions.replace('CourseworkDetail', { courseId, courseworkId: id }))
       }
-      onDeleted={() => navigation.navigate('Coursework', { courseId })}
-      onCancel={() => navigation.goBack()}
+      onDeleted={() => up(navigation, 'Coursework', { courseId })}
+      // Back where it came from; with nothing under it, up to the list, so
+      // Cancel is never a button that does nothing.
+      onCancel={() => (navigation.canGoBack() ? navigation.goBack() : up(navigation, 'Coursework', { courseId }))}
     />
   );
 }
@@ -886,7 +886,7 @@ function CourseworkDetail() {
       key={courseworkId}
       cls={cls.value}
       coursework={cw.value}
-      onOpenCourse={() => navigation.navigate('CourseDetail', { courseId })}
+      onOpenCourse={() => up(navigation, 'CourseDetail', { courseId })}
       onEdit={() => navigation.navigate('CourseworkEdit', { courseId, courseworkId })}
       onGrade={(studentUid) => navigation.navigate('Grade', { courseId, courseworkId, studentUid })}
     />
@@ -909,7 +909,7 @@ function GradeWork() {
       // Next REPLACES: walking a class of twenty must not stack twenty screens
       // under the back arrow.
       onOpenStudent={(uid) => navigation.setParams({ studentUid: uid })}
-      onBackToList={() => navigation.navigate('CourseworkDetail', { courseId, courseworkId })}
+      onBackToList={() => up(navigation, 'CourseworkDetail', { courseId, courseworkId })}
     />
   );
 }
@@ -925,7 +925,7 @@ function SessionDetail({ isAdmin }: { isAdmin: boolean }) {
       sessionId={sessionId}
       cls={cls.value}
       isAdmin={isAdmin}
-      onOpenCourse={() => navigation.navigate('CourseDetail', { courseId })}
+      onOpenCourse={() => up(navigation, 'CourseDetail', { courseId })}
       onOpenLedger={(recording) =>
         navigation.navigate('RecordingLedger', { recordingId: recording.id })
       }

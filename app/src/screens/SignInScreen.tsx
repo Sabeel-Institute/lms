@@ -9,6 +9,7 @@ import { devSignIn, devSignInAvailable } from '../auth/devSignIn';
 import { Button, Field, Notice, Screen } from '../components/ui';
 import { BUILD_LABEL } from '../buildInfo';
 import { getTheme, spacing } from '../theme';
+import { useOneAtATime } from '../oneAtATime';
 
 const t = getTheme();
 
@@ -22,22 +23,22 @@ const t = getTheme();
 export function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState<null | 'google' | 'student' | 'reset'>(null);
+  const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  const run = async (kind: 'google' | 'student' | 'reset', fn: () => Promise<void>) => {
-    setBusy(kind);
-    setError(null);
-    setInfo(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(signInMessage(e));
-    } finally {
-      setBusy(null);
-    }
-  };
+  // `fn` is called inside the press, before any await, so the Google popup
+  // still opens from the tap that asked for it.
+  const run = (kind: 'google' | 'student' | 'reset', fn: () => Promise<void>) =>
+    once(kind, async () => {
+      setError(null);
+      setInfo(null);
+      try {
+        await fn();
+      } catch (e) {
+        setError(signInMessage(e));
+      }
+    });
 
   return (
     <Screen title={APP_NAME}>

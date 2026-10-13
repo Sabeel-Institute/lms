@@ -9,6 +9,7 @@ import {
   type AssignmentDoc,
 } from '@sabeel/shared';
 import { notifyAttendanceMissing, notifyLastDay, notifyRecordingReady } from './notifyJobs';
+import { notifyHandInLastDay } from './notifyCoursework';
 import { reportError } from './sentry';
 import { SENTRY_DSN } from './reported';
 
@@ -150,7 +151,8 @@ export const onAssignmentWritten = onDocumentWritten(
 );
 
 /**
- * The morning sweep: last-day reminders, and attendance nobody has taken.
+ * The morning sweep: last-day reminders for recordings and for hand-ins, and
+ * attendance nobody has taken.
  *
  * 07:00 in the institute timezone, so "today" here is the same civil day the
  * due-date maths uses everywhere else — a UTC schedule would fire the reminder
@@ -167,8 +169,9 @@ export const onMorning = onSchedule(
       const db = getFirestore();
       const today = todayInZone(INSTITUTE_TIMEZONE);
       const lastDay = await notifyLastDay(db, today);
+      const handIn = await notifyHandInLastDay(db, today);
       const attendance = await notifyAttendanceMissing(db, today);
-      console.log(`morning sweep ${today}: ${lastDay} last-day, ${attendance} attendance`);
+      console.log(`morning sweep ${today}: ${lastDay} last-day, ${handIn} hand-in, ${attendance} attendance`);
     } catch (e) {
       await reportError(e, { source: 'onMorning' });
       throw e;

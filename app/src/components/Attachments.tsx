@@ -78,14 +78,42 @@ export function Attachments({
     }
   };
 
+  /*
+   * ONE PICKER AT A TIME, one removal per file. A second tap before the
+   * picker opened started a second pick, which the native picker refuses with
+   * an error; a second Remove ran after the first had gone and showed the
+   * server's refusal over a removal that worked.
+   */
+  const picking = useRef(false);
+  const removing = useRef(new Set<string>());
+  const [removingIds, setRemovingIds] = useState<string[]>([]);
   const add = async (pick: () => Promise<PickedFile[] | PickedFile | null>) => {
+    if (picking.current) return;
+    picking.current = true;
     setError(null);
     try {
       const picked = await pick();
+      picking.current = false;
       if (!picked) return;
       await Promise.all((Array.isArray(picked) ? picked : [picked]).map(send));
     } catch (e) {
       setError(errorText(e));
+    } finally {
+      picking.current = false;
+    }
+  };
+  const remove = async (fileId: string) => {
+    if (removing.current.has(fileId)) return;
+    removing.current.add(fileId);
+    setRemovingIds([...removing.current]);
+    setError(null);
+    try {
+      await removeAttachment({ courseworkId, fileId });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      removing.current.delete(fileId);
+      setRemovingIds([...removing.current]);
     }
   };
 
@@ -98,7 +126,8 @@ export function Attachments({
           file={f}
           courseworkId={courseworkId}
           studentUid={studentUid}
-          onRemove={editable ? () => void removeAttachment({ courseworkId, fileId: f.id }).catch((e) => setError(errorText(e))) : undefined}
+          onRemove={editable ? () => void remove(f.id) : undefined}
+          removing={removingIds.includes(f.id)}
         />
       ))}
       {pending.map((p) => (
@@ -138,11 +167,13 @@ function FileRow({
   courseworkId,
   studentUid,
   onRemove,
+  removing,
 }: {
   file: AttachmentFile;
   courseworkId: string;
   studentUid?: string;
   onRemove?: () => void;
+  removing?: boolean;
 }) {
   const kind = attachmentKind(file.contentType);
   const [url, setUrl] = useState<string | null>(null);
@@ -182,7 +213,7 @@ function FileRow({
       {error ? <Text style={[styles.meta, styles.failed]}>{error}</Text> : null}
       <Row>
         {kind === 'document' ? <Button label="Open" variant="secondary" hug onPress={() => void open()} /> : null}
-        {onRemove ? <Button testID={`attachment-remove-${file.name}`} label="Remove" variant="quiet" hug onPress={onRemove} /> : null}
+        {onRemove ? <Button testID={`attachment-remove-${file.name}`} label="Remove" variant="quiet" hug busy={removing} onPress={onRemove} /> : null}
       </Row>
     </View>
   );

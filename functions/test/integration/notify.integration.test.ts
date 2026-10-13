@@ -661,6 +661,8 @@ describe('lastDay', () => {
     expect(outbox[0].message).toEqual({
       title: 'Hikam Foundations: a recording closes today',
       body: `Session 3 — Patience closes at the end of ${TODAY}.`,
+      // The tap opens the recording, not the home screen.
+      path: `play/${ns('r1')}`,
     });
   });
 

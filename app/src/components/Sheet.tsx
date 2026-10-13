@@ -19,12 +19,14 @@ export function Sheet({
   title,
   onClose,
   closeLabel = 'Close',
+  closeTestID,
   children,
 }: {
   visible: boolean;
   title: string;
   onClose: () => void;
   closeLabel?: string;
+  closeTestID?: string;
   children: ReactNode;
 }) {
   if (!visible) return null;
@@ -48,7 +50,7 @@ export function Sheet({
           {/* Quiet, and deliberately: this is the sheet's way OUT, sitting
               under a form whose primary is the reason the sheet is open. Filled,
               full width, it outweighed a disabled "Create account" above it. */}
-          <Button label={closeLabel} variant="quiet" onPress={onClose} block />
+          <Button testID={closeTestID} label={closeLabel} variant="quiet" onPress={onClose} block />
         </Pressable>
       </Pressable>
     </Modal>

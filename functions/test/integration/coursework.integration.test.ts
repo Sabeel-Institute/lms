@@ -279,6 +279,20 @@ describe('grading and returning', () => {
     expect(workState(after, today, true)).toBe('toDo');
   });
 
+  it('WORK ALREADY BACK IS DONE: returning all graded goes on past one returned a moment earlier', async () => {
+    const id = await posted();
+    await handedIn(AMINAH, id);
+    await handedIn(BILAL, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 8 }, feedback: '' });
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, grade: { points: 9 }, feedback: '' });
+    // Another teacher returns Aminah's; this one then returns everything graded.
+    await returnWorkRecord(id, [AMINAH], null);
+    const res = await returnWorkRecord(id, [AMINAH, BILAL], null);
+    expect(res.map((r) => r.studentUid)).toEqual([BILAL]);
+    expect((await sub(BILAL, id))?.state).toBe('returned');
+    expect((await sub(AMINAH, id))?.returned?.seq).toBe(1);
+  });
+
   it('work done on paper can be graded and returned with nothing handed in', async () => {
     const id = await posted();
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, grade: { points: 10 }, feedback: 'Recited in class.' });
@@ -291,6 +305,26 @@ describe('grading and returning', () => {
     await handedIn(AMINAH, id);
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 5 }, feedback: '' });
     await expect(updateCourseworkRecord(id, fields({ grading: { kind: 'scale' } }))).rejects.toThrow(/cannot change/);
+  });
+
+  it('ANOTHER TEACHER’S EDIT IS NOT OVERWRITTEN: a form opened before it is refused', async () => {
+    const id = await posted();
+    // Two teachers open the same assignment; one saves first.
+    const opened = fields();
+    await updateCourseworkRecord(id, { ...fields({ title: 'Theirs' }), ifUnchanged: opened });
+    await expect(updateCourseworkRecord(id, { ...fields({ title: 'Mine' }), ifUnchanged: opened })).rejects.toThrow(
+      /Someone else changed/,
+    );
+    expect((await cw(id))?.title).toBe('Theirs');
+  });
+
+  it('posting and closing are not someone else’s edit: the form still saves', async () => {
+    const { id } = await createCourseworkRecord(TEACHER, courseId, fields() as never);
+    const opened = fields();
+    await postCourseworkRecord(TEACHER, id);
+    await closeCourseworkRecord(id);
+    await updateCourseworkRecord(id, { ...fields({ title: 'Mine' }), ifUnchanged: opened });
+    expect((await cw(id))?.title).toBe('Mine');
   });
 });
 

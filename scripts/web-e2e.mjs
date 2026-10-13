@@ -32,8 +32,8 @@
  */
 import { chromium } from 'playwright';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { readXlsx } from '@sabeel/shared';
-import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
+import { pushPaths, readXlsx } from '@sabeel/shared';
+import { EMULATOR_PORTS, MEDIA_STORE_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import {
   AUDIO_FIXTURE,
@@ -1455,6 +1455,33 @@ check(
   staleServed >= 2 && loads === 1,
   `chunk requests ${staleServed}, page loads ${loads}`,
 );
+/*
+ * LEAVING WITH UNSAVED CHANGES ASKS. A title typed, then the browser's Back:
+ * the form stays, words and all, until the teacher says to discard — and
+ * Discard leaves without creating anything.
+ */
+const ABANDONED = 'Typed then left';
+await admin.getByTestId('coursework-title').fill(ABANDONED);
+await admin.goBack();
+await admin.getByTestId('leave-confirm').waitFor({ timeout: 10000 });
+const typedStill = async () =>
+  (await admin.getByTestId('coursework-title').filter({ visible: true }).first().inputValue().catch(() => '')) === ABANDONED;
+check('Back on a form with unsaved changes asks first, and the form stays', await typedStill());
+await tap(admin, 'leave-stay');
+await admin.getByTestId('leave-confirm').waitFor({ state: 'detached', timeout: 10000 });
+// The address comes back with the form: a refresh would otherwise land on
+// the list, and the next Back would go one page too far.
+const addressBack = await admin.waitForURL(/\/assignments\/edit/, { timeout: 10000 }).then(() => true, () => false);
+check('Keep editing keeps the form, what was typed, and its address', (await typedStill()) && addressBack, admin.url());
+await admin.goBack();
+await tap(admin, 'leave-confirm');
+await admin.getByTestId('coursework-new').filter({ visible: true }).first().waitFor({ timeout: 15000 });
+check(
+  'Discard leaves, and nothing was created',
+  !(await readCollection('coursework')).some((c) => c.fields.title.stringValue === ABANDONED),
+);
+await tap(admin, 'coursework-new');
+await admin.getByTestId('coursework-instructions').waitFor({ timeout: 30000 });
 await admin.getByTestId('coursework-title').fill(CW);
 /*
  * Formatted instructions, typed the way a teacher types them: a toolbar
@@ -1490,10 +1517,16 @@ check(
   'before posting, the teacher is told who it goes to',
   /Goes to the \d+ students? in Hikam Foundations/.test(await admin.getByTestId('coursework-audience').innerText()),
 );
-await tap(admin, 'coursework-post');
+// DOUBLE-CLICKED, as a hurried teacher does: one assignment, not two.
+await admin.getByTestId('coursework-post').filter({ visible: true }).first().dblclick();
 // A new assignment becomes its own page once posted.
 await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
 check('a posted assignment opens on its page, as posted', (await screenTitle(admin)) === CW && (await showsText(admin, 'posted')));
+await admin.waitForTimeout(1500);
+check(
+  'a double-clicked Post posts one assignment',
+  (await readCollection('coursework')).filter((c) => c.fields.title.stringValue === CW).length === 1,
+);
 const storedInstructions = (await readCollection('coursework')).find((c) => c.fields.title.stringValue === CW)?.fields.instructions
   ?.stringValue;
 check(
@@ -1512,6 +1545,21 @@ await (await worksheetChooser).setFiles({
 });
 await admin.getByTestId(`attachment-${WORKSHEET}`).waitFor({ timeout: 30000 });
 check('a worksheet attaches to a posted assignment', await shows(admin, `attachment-${WORKSHEET}`));
+
+/*
+ * ANOTHER TEACHER'S EDIT IS NOT OVERWRITTEN. While this form is open the
+ * title is changed elsewhere; saving the form is refused and says why, and
+ * the other change stands.
+ */
+const cwId = (await readCollection('coursework')).find((c) => c.fields.title.stringValue === CW)?.name.split('/').pop();
+await patchField('coursework', cwId, 'title', 'Changed elsewhere');
+await tap(admin, 'coursework-save');
+await admin.getByTestId('notice-error').filter({ hasText: 'Someone else changed' }).waitFor({ timeout: 20000 });
+check(
+  'saving over another teacher’s edit is refused, and theirs stands',
+  (await readCollection('coursework')).find((c) => c.name.endsWith(`/${cwId}`))?.fields.title.stringValue === 'Changed elsewhere',
+);
+await patchField('coursework', cwId, 'title', CW);
 
 // The student: it is on To do, and the worksheet is on it.
 await goHome(student);
@@ -1550,13 +1598,49 @@ await tap(student, 'rich-bold');
 await student.keyboard.type('God');
 await tap(student, 'rich-bold');
 await student.keyboard.type(', not on what I did.');
+// LEFT AT ONCE — inside the pause before the save goes. The answer is kept.
+await student.goBack();
+await cwCard.waitFor({ timeout: 20000 });
+await cwCard.click();
+const answerKept = await student
+  .waitForFunction(() => document.querySelector('[data-testid="work-note"]')?.textContent.includes('not on what I did.'), null, { timeout: 15000 })
+  .then(() => true, () => false);
+const draftNote = (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue ?? '';
+check('an answer typed just before leaving is kept', answerKept && draftNote.includes('**God**'), JSON.stringify(draftNote));
+
+/*
+ * LEAVING MID-UPLOAD ASKS, because leaving stops it. The upload is slowed so
+ * there is a moment to leave in; Stay lets it finish.
+ */
+const mediaStore = new RegExp(`127\\.0\\.0\\.1:${MEDIA_STORE_PORTS.s3}/`);
+await student.route(mediaStore, async (route) => {
+  if (route.request().method() === 'PUT') await new Promise((r) => setTimeout(r, 4000));
+  return route.continue();
+});
 const pageChooser = student.waitForEvent('filechooser');
 await tap(student, 'attachments-add-work');
 await (await pageChooser).setFiles({ name: PAGE, mimeType: 'image/png', buffer: pagePhoto() });
+await student.getByText('Uploading…').filter({ visible: true }).first().waitFor({ timeout: 10000 });
+await student.goBack();
+await student.getByTestId('leave-confirm').waitFor({ timeout: 10000 });
+check('leaving while a file uploads asks first', await showsText(student, 'A file is still uploading'));
+await tap(student, 'leave-stay');
 await student.getByTestId(`attachment-${PAGE}`).waitFor({ timeout: 30000 });
-await tap(student, 'work-hand-in');
+await student.unroute(mediaStore);
+check('Stay lets the upload finish', await shows(student, `attachment-${PAGE}`));
+
+// DOUBLE-CLICKED: handed in once, and no refusal shown over work that went in.
+await student.getByTestId('work-hand-in').filter({ visible: true }).first().dblclick();
 await student.getByTestId('work-handed-in').waitFor({ timeout: 20000 });
-check('the student hands in', await shows(student, 'work-handed-in'));
+await student.waitForTimeout(1500);
+const handIns = (await readCollection('submissionEvents')).filter(
+  (e) => e.fields.courseworkId?.stringValue === cwId && e.fields.kind?.stringValue === 'handIn',
+).length;
+check(
+  'a double-clicked Hand in hands in once, with no error',
+  (await shows(student, 'work-handed-in')) && handIns === 1 && !(await shows(student, 'notice-error')),
+  `hand-ins recorded: ${handIns}`,
+);
 // The picture LOADS, from a link only a party to the work is given — a box
 // with nothing in it would pass a check that the row exists.
 const pictureLoads = (page) =>
@@ -1604,15 +1688,46 @@ check(
   (await showsText(admin, 'hope rests on')) && boldGod === '700' && (await pictureLoads(admin)),
   `bold: ${boldGod}`,
 );
+const handInHistory = await admin.getByTestId('grade-history').innerText().catch(() => '');
+check(
+  'the hand-in history shows each hand-in and the take-back',
+  (handInHistory.match(/Handed in/g) ?? []).length === 2 && /Taken back/.test(handInHistory),
+  handInHistory.replace(/\s+/g, ' '),
+);
+// LEFT AT ONCE: the grade typed a moment before Back is stored, not dropped.
 await admin.getByTestId('grade-points').fill('9');
-await admin.getByTestId('grade-feedback').fill('Clear, and in your own words.');
-await admin.getByTestId('grade-status').filter({ hasText: 'Saved' }).waitFor({ timeout: 20000 });
+await admin.goBack();
+await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
+const gradeOf = async (name) =>
+  (await readCollection('grades')).find((g) => g.fields.courseworkId?.stringValue === cwId && g.name.includes(name))?.fields;
+const fatimaUid = (await readCollection('students')).find((d) => d.fields.email?.stringValue === 'fatima@example.com')?.name.split('/').pop();
+check('a grade typed just before leaving is stored', (await gradeOf(fatimaUid))?.grade?.mapValue?.fields?.points?.integerValue === '9');
+await tap(admin, 'work-row-Fatima Ahmed');
+await admin.getByTestId('grade-points').waitFor({ timeout: 20000 });
+// J and K walk the class list; a key typed into a field is typing.
+await admin.evaluate(() => document.activeElement?.blur());
+const titleIs = (name) =>
+  admin
+    .waitForFunction(
+      (n) => [...document.querySelectorAll('[data-testid="screen-title"]')].some((e) => e.offsetParent !== null && e.textContent.trim().startsWith(n)),
+      name,
+      { timeout: 15000 },
+    )
+    .catch(() => {});
+await admin.keyboard.press('k');
+await titleIs('Bilal Khan');
+const afterK = await screenTitle(admin);
+await admin.evaluate(() => document.activeElement?.blur());
+await admin.keyboard.press('j');
+await titleIs('Fatima Ahmed');
+const afterJ = await screenTitle(admin);
+await admin.getByTestId('grade-points').filter({ visible: true }).first().waitFor({ timeout: 15000 });
+check('K and J step to the previous and next student', afterK === 'Bilal Khan' && afterJ === 'Fatima Ahmed', `${afterK} → ${afterJ}`);
 await shot(admin, '41-grade');
 
 // SAVED IS NOT RETURNED. The student's own screen, live, shows no grade; the
 // record they can read carries none either.
 await student.waitForTimeout(2000);
-const cwId = (await readCollection('coursework')).find((c) => c.fields.title.stringValue === CW)?.name.split('/').pop();
 const subBefore =
   (await readCollection('submissions')).find(
     (d) => d.fields.courseworkId?.stringValue === cwId && d.fields.state?.stringValue === 'handedIn',
@@ -1626,15 +1741,38 @@ check(
   JSON.stringify(subBefore.returned ?? null),
 );
 
-await tap(admin, 'grade-return');
+// Feedback typed and returned with Ctrl + Enter at once: what is on the
+// screen goes back, the feedback included, not what was stored a moment ago.
+await admin.getByTestId('grade-feedback').fill('Clear, and in your own words.');
+await admin.keyboard.press('Control+Enter');
 await student.getByTestId('work-returned').waitFor({ timeout: 20000 });
 const returnedText = await student.getByTestId('work-returned').innerText();
 check(
-  'once returned, the student sees the grade and the feedback',
+  'Ctrl + Enter returns at once, with the feedback just typed',
   /9\/10/.test(returnedText) && /in your own words/.test(returnedText),
   returnedText.replace(/\s+/g, ' '),
 );
 await shot(student, '42-work-returned');
+
+// A TAPPED NOTIFICATION'S WEB END is its link: the app's address plus the path
+// the message carries (pushPaths). Opened cold, it lands on the assignment.
+await student.goto(`${WEB}${pushPaths.work(cwId)}`, { waitUntil: 'domcontentloaded' });
+await student.getByTestId('work-returned').waitFor({ timeout: 30000 }).catch(() => {});
+check('a notification’s link opens the assignment it is about', (await screenTitle(student).catch(() => '')) === CW);
+
+// UP, NOT FORWARD: the course named under the assignment goes back to the
+// course page, and Back from there does not come down into the assignment.
+await admin.goBack();
+await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
+await tap(admin, 'up-to-course-from-assignment');
+await admin.getByTestId('nav-coursework').filter({ visible: true }).first().waitFor({ timeout: 15000 });
+await admin.goBack();
+await admin.waitForTimeout(1500);
+check(
+  'Back after a parent link does not return to the page left',
+  !(await shows(admin, 'coursework-tab-students')) && (await shows(admin, 'course-open-Hikam Foundations')),
+  await screenTitle(admin),
+);
 
 // ---------------------------------------------------------- archive cascade --
 console.log('\nArchive cascade');

@@ -27,6 +27,7 @@ import { getTheme, spacing } from '../theme';
 
 const NO_COURSES: CourseRow[] = [];
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 
 const t = getTheme();
 
@@ -34,7 +35,7 @@ const t = getTheme();
 function AddCourse({ cohortId }: { cohortId: string }) {
   const close = useAddAction();
   const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { active, run } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   return (
     <>
@@ -50,20 +51,21 @@ function AddCourse({ cohortId }: { cohortId: string }) {
       <Button
         testID="course-create"
         label="Create course"
-        busy={busy}
+        busy={active !== null}
         disabled={!name.trim()}
         block
-        onPress={() => {
-          setBusy(true);
-          setError(null);
-          void createCourse({ cohortId, name: name.trim() })
-            .then(() => {
+        onPress={() =>
+          void run('create', async () => {
+            setError(null);
+            try {
+              await createCourse({ cohortId, name: name.trim() });
               setName('');
               close();
-            })
-            .catch((e) => setError(errorText(e)))
-            .finally(() => setBusy(false));
-        }}
+            } catch (e) {
+              setError(errorText(e));
+            }
+          })
+        }
       />
     </>
   );
@@ -94,7 +96,7 @@ export function CoursesScreen({
   const cohort = cohortState.value;
   const coursesState = useCoursesInCohortState(cohortId);
   const courses = coursesState ?? NO_COURSES;
-  const [busy, setBusy] = useState<string | null>(null);
+  const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   const archived = cohort?.archived ?? false;
   /*
@@ -106,17 +108,15 @@ export function CoursesScreen({
   const current = archived ? courses : courses.filter((c) => c.effectiveActive);
   const past = archived ? [] : courses.filter((c) => !c.effectiveActive);
 
-  const run = async (key: string, fn: () => Promise<void>) => {
-    setBusy(key);
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(null);
-    }
-  };
+  const run = (key: string, fn: () => Promise<void>) =>
+    once(key, async () => {
+      setError(null);
+      try {
+        await fn();
+      } catch (e) {
+        setError(errorText(e));
+      }
+    });
 
   // A URL can name a cohort that does not exist. Say so rather than rendering a
   // settings card and an add-a-course form for nothing — the server would
