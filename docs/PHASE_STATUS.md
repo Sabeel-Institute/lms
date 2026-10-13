@@ -45,7 +45,10 @@ and commit messages, and renaming them would strand every one of those.
   recordings, and the workbook says Completed, Played and Due by. The
   notifications lost their "listen" verbs the same way. The manual covers
   versions, parts, the Zoom picker and the media list. Admin stats stay with
-  Phase 8.
+  Phase 8. The player's fullscreen control is an icon over the picture's
+  corner. Deployed (functions and hosting) the same day; the icon over
+  expo-video's native view is still to be seen on the AVD, which another
+  session held at the time.
 - 2026-10-13 — **Students watch and listen by part and version** (video plan
   V5). One engine, expo-video, plays audio and video on Android; the web uses
   a `<video>` element. Proven three ways: `playback.test.ts` (resume in the
