@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  PutObjectCommand,
   S3Client,
   UploadPartCommand,
 } from '@aws-sdk/client-s3';
@@ -120,6 +121,31 @@ export async function signGet(key: string, ttlMs: number): Promise<SignedUrl> {
     expiresIn: Math.floor(ttlMs / 1000),
   });
   return { url, expiresAt };
+}
+
+export interface SignedPut extends SignedUrl {
+  /** Headers the PUT must carry exactly, or the signature does not match. */
+  headers: Record<string, string>;
+}
+
+/**
+ * A URL that creates one object, once, with one content type: for files small
+ * enough to send whole, which are attachments (25 MB at most).
+ *
+ * WRITE-ONCE: `If-None-Match: *` is part of the signature, so the PUT fails
+ * with 412 when the object already exists and with 403 if the header is
+ * dropped. The content type is signed too. Size cannot be signed reliably on
+ * R2, so the caller checks it with `head` afterwards and deletes what is too
+ * large.
+ */
+export async function signPut(key: string, contentType: string, ttlMs: number): Promise<SignedPut> {
+  const expiresAt = Date.now() + ttlMs;
+  const url = await getSignedUrl(
+    client('write'),
+    new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType, IfNoneMatch: '*' }),
+    { expiresIn: Math.floor(ttlMs / 1000), signableHeaders: new Set(['content-type', 'if-none-match']) },
+  );
+  return { url, expiresAt, headers: { 'Content-Type': contentType, 'If-None-Match': '*' } };
 }
 
 // ------------------------------------------------------------- multipart --

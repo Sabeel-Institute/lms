@@ -37,6 +37,11 @@ const SPECS = {
     '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=3', '-f', 'lavfi', '-i', 'sine=duration=3',
     '-c:v', 'libx264', '-c:a', 'aac', '-shortest', '-f', 'mov', 'v.mov',
   ],
+  /** A picture, as a phone's photo of a worksheet would arrive after shrinking. */
+  png: ['-f', 'lavfi', '-i', 'testsrc=size=320x240:duration=1', '-frames:v', '1', 'page.png'],
+  /** Sixteen minutes of audio, over a teacher's 15-minute limit. 8 kHz WAV:
+   *  no encoder to wait for, and still under the 25 MB attachment cap. */
+  longAudio: ['-f', 'lavfi', '-i', 'sine=duration=960:sample_rate=8000', '-c:a', 'pcm_u8', '-ac', '1', 'long.wav'],
   /** H.264 + AAC, 20 s at a high bitrate: more than one upload part. */
   bigVideo: [
     '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=25:duration=20', '-f', 'lavfi', '-i', 'sine=duration=20',
@@ -45,6 +50,12 @@ const SPECS = {
 } as const;
 
 export type SampleName = keyof typeof SPECS;
+
+/** A one-page PDF and a plain-text note, which need no ffmpeg. */
+export const PDF = new TextEncoder().encode(
+  '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
+);
+export const TEXT = new TextEncoder().encode('Page 1 is the extra practice.\nمن علامة الاعتماد على العمل\n');
 
 /** The bytes of one sample, made the first time it is asked for. */
 export function sample(name: SampleName): Uint8Array {

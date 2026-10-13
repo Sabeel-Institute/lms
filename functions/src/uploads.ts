@@ -30,6 +30,7 @@ import {
 import { UnreadableMedia, judgeProbe, probeObject } from './mediaProbe';
 import { writeItem } from './mediaWrite';
 import { reportError } from './sentry';
+import { sweepAttachmentUploads } from './attachments';
 
 /**
  * Staff uploads: one or more audio or video files onto a recording, each a new
@@ -438,7 +439,8 @@ export const sweepAbandonedUploads = onSchedule(
   { schedule: '30 3 * * *', timeZone: INSTITUTE_TIMEZONE, secrets: [SENTRY_DSN, ...MEDIA_WRITE_SECRETS] },
   async () => {
     try {
-      console.log(`upload sweep: ${await sweepUploads(Date.now())} cleared`);
+      const now = Date.now();
+      console.log(`upload sweep: ${await sweepUploads(now)} uploads, ${await sweepAttachmentUploads(now)} attachments cleared`);
     } catch (e) {
       await reportError(e, { source: 'sweepAbandonedUploads' });
       throw e;

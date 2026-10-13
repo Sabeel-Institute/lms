@@ -239,6 +239,8 @@ const ACTION_LABELS: Record<string, string> = {
   returnWork: 'Returned work',
   giveMoreTime: 'Gave a student more time',
   setNotRequired: 'Marked/unmarked not required',
+  finalizeAttachment: 'Attached a file',
+  removeAttachment: 'Removed a file from an assignment',
   setStaffAccess: 'Changed staff access',
   overrideCompletion: 'Overrode completion',
   clearCompletionOverride: 'Removed override',

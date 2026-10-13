@@ -23,15 +23,8 @@ export interface Probe {
 /** A file the parser could not read at all. */
 export class UnreadableMedia extends Error {}
 
-/**
- * Probe one object.
- *
- * NO MIME TYPE IS PASSED TO THE PARSER. It picks its format from a hint before
- * it looks at the bytes, so a WAV declared as `video/mp4` was read as a broken
- * MP4 rather than a fine WAV. The content type is the uploader's claim; what is
- * inside is the question.
- */
-export async function probeObject(key: string, sizeBytes: number): Promise<Probe> {
+/** A tokenizer that reads one stored object a range at a time, for the parsers. */
+export function objectTokenizer(key: string, sizeBytes: number) {
   const client: IRangeRequestClient = {
     async getResponse(_method, range) {
       const [first, last] = range ?? [0, sizeBytes - 1];
@@ -46,10 +39,21 @@ export async function probeObject(key: string, sizeBytes: number): Promise<Probe
     },
     abort() {},
   };
+  return tokenizer(client, { avoidHeadRequests: true });
+}
+
+/**
+ * Probe one object.
+ *
+ * NO MIME TYPE IS PASSED TO THE PARSER. It picks its format from a hint before
+ * it looks at the bytes, so a WAV declared as `video/mp4` was read as a broken
+ * MP4 rather than a fine WAV. The content type is the uploader's claim; what is
+ * inside is the question.
+ */
+export async function probeObject(key: string, sizeBytes: number): Promise<Probe> {
   let format;
   try {
-    format = (await parseFromTokenizer(await tokenizer(client, { avoidHeadRequests: true }), { skipCovers: true }))
-      .format;
+    format = (await parseFromTokenizer(await objectTokenizer(key, sizeBytes), { skipCovers: true })).format;
   } catch (e) {
     throw new UnreadableMedia((e as Error).message);
   }

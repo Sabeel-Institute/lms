@@ -44,6 +44,9 @@ export const COLLECTIONS = {
   /** Grades as staff write them. Never student-readable; a grade reaches the
    *  student only as `submissions.returned`. */
   grades: 'grades',
+  /** Attachments on their way in, keyed by file id: where the finished file
+   *  goes and who sent it. Server-only; gone once finished or swept. */
+  attachmentUploads: 'attachmentUploads',
   /** Each hand-in and take-back, append-only. */
   submissionEvents: 'submissionEvents',
   /** Required-listening obligations, and the ONLY thing granting a student

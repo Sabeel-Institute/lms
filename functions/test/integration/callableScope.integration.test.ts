@@ -29,6 +29,7 @@ import {
   setNotRequired,
   updateCoursework,
 } from '../../src/coursework';
+import { finalizeAttachment, getAttachmentUrl, removeAttachment, startAttachmentUpload } from '../../src/attachments';
 
 /**
  * "Managers are scoped class by class" — proved against the CALLABLES, one row
@@ -221,6 +222,10 @@ const SCOPED: Array<{
   { name: 'returnWork', call: (r) => returnWork.run(r), data: { courseworkId: COURSEWORK, studentUids: [STUDENT] } },
   { name: 'giveMoreTime', call: (r) => giveMoreTime.run(r), data: { courseworkId: COURSEWORK, studentUid: STUDENT, dueDate: '2099-04-01', lateUntil: null, reason: 'Ill' } },
   { name: 'setNotRequired', call: (r) => setNotRequired.run(r), data: { courseworkId: COURSEWORK, studentUid: STUDENT, reason: 'Joined late' } },
+  { name: 'startAttachmentUpload', call: (r) => startAttachmentUpload.run(r), data: { target: 'coursework', courseworkId: COURSEWORK, name: 'Sheet.pdf', sizeBytes: 100 } },
+  { name: 'finalizeAttachment', call: (r) => finalizeAttachment.run(r), data: { courseworkId: COURSEWORK, fileId: 'file1' } },
+  { name: 'removeAttachment', call: (r) => removeAttachment.run(r), data: { courseworkId: COURSEWORK, fileId: 'file1' } },
+  { name: 'getAttachmentUrl', call: (r) => getAttachmentUrl.run(r), data: { courseworkId: COURSEWORK, fileId: 'file1' } },
   { name: 'importZoomFiles', call: (r) => importZoomFiles.run(r), data: { sessionId: SESSION, files: [{ meetingUuid: 'uuid', fileId: 'file' }] } },
   { name: 'retryZoomImport', call: (r) => retryZoomImport.run(r), data: { recordingId: RECORDING } },
 ];

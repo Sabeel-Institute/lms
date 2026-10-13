@@ -35,6 +35,7 @@ export {
   giveMoreTime,
   setNotRequired,
 } from './coursework';
+export { startAttachmentUpload, finalizeAttachment, removeAttachment, getAttachmentUrl } from './attachments';
 export {
   startRecordingUpload,
   signRecordingUploadParts,

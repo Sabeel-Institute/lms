@@ -428,11 +428,19 @@ export async function deleteCourseworkRecord(id: string, asAdmin: boolean) {
     );
   }
   const keys: string[] = filesOf(cw.files);
-  for (const collection of [COLLECTIONS.submissions, COLLECTIONS.drafts, COLLECTIONS.grades, COLLECTIONS.submissionEvents]) {
+  for (const collection of [
+    COLLECTIONS.submissions,
+    COLLECTIONS.drafts,
+    COLLECTIONS.grades,
+    COLLECTIONS.submissionEvents,
+    COLLECTIONS.attachmentUploads,
+  ]) {
     const snap = await db().collection(collection).where('courseworkId', '==', id).get();
     for (const d of snap.docs) {
-      const data = d.data() as Partial<SubmissionDoc>;
+      const data = d.data() as Partial<SubmissionDoc> & { storageKey?: string };
       if (data.files) keys.push(...filesOf(data.files));
+      // A file still on its way in.
+      if (data.storageKey) keys.push(data.storageKey);
       for (const a of data.attempts ?? []) keys.push(...filesOf(a.files));
     }
     await inBatches(snap.docs, (batch, d) => batch.delete(d.ref));
