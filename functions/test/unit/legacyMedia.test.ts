@@ -14,7 +14,6 @@ import { resolve } from 'node:path';
  */
 const REPO = resolve(import.meta.dirname, '../../..');
 const mod = (await import(resolve(REPO, 'scripts/lib/legacy-media.mjs'))) as {
-  LEGACY_ITEM_ID: string;
   convertRecording: (
     id: string,
     fields: Record<string, unknown>,
@@ -40,11 +39,14 @@ const legacy = {
 
 describe('convertRecording', () => {
   const { fields, claim, legacyFields } = mod.convertRecording('r1', legacy);
-  const item = (fields.media as { mapValue: { fields: Record<string, Record<string, unknown>> } }).mapValue.fields[
-    mod.LEGACY_ITEM_ID
-  ].mapValue as { fields: Record<string, Record<string, unknown>> };
+  const media = (fields.media as { mapValue: { fields: Record<string, Record<string, unknown>> } }).mapValue.fields;
+  // Exactly one item: the recording's one file.
+  const [itemId] = Object.keys(media);
+  const item = media[itemId].mapValue as { fields: Record<string, Record<string, unknown>> };
 
   it('keeps the file where it is, with its size and length as numbers', () => {
+    expect(Object.keys(media)).toHaveLength(1);
+    expect(item.fields.id).toEqual({ stringValue: itemId });
     expect(item.fields.storageKey).toEqual({ stringValue: 'recordings/r1/audio.m4a' });
     expect(item.fields.sizeBytes).toEqual({ integerValue: '53700000' });
     expect(item.fields.durationSec).toEqual({ doubleValue: 3333.5 });
@@ -68,7 +70,7 @@ describe('convertRecording', () => {
     expect(claim?.id).toBe('f1');
     expect(claim?.fields).toMatchObject({
       recordingId: { stringValue: 'r1' },
-      itemId: { stringValue: mod.LEGACY_ITEM_ID },
+      itemId: { stringValue: itemId },
       sessionId: { stringValue: 's1' },
       courseId: { stringValue: 'c1' },
       meetingUuid: { stringValue: 'u==' },

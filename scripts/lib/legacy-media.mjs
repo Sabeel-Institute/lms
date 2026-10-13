@@ -12,7 +12,7 @@ import { COLLECTIONS, mediaFromSingleAudio } from '@sabeel/shared';
 
 /** The item id a converted recording's one file gets. Deterministic, so a
  *  re-run converts to the same document. */
-export const LEGACY_ITEM_ID = 'audio1';
+const LEGACY_ITEM_ID = 'audio1';
 
 /** The fields that held the one file before parts existed. */
 const LEGACY_FIELDS = ['audioPath', 'sizeBytes', 'zoomUuid', 'zoomFileId'];
