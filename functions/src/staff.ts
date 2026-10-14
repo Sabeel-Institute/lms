@@ -88,6 +88,16 @@ export async function applyStaffAccess(callerUid: string, input: StaffAccessInpu
   if (next.status === 'disabled') await shutOutAccount(input.uid);
   else await getAuth().updateUser(input.uid, { disabled: false });
   await getAuth().setCustomUserClaims(input.uid, next);
+  /*
+   * AN ADMIN MADE A MANAGER IS SIGNED OUT, as a disabled account is. Every
+   * callable reads the role from the caller's token, which keeps its claims
+   * for up to an hour, so the new claim alone left them an admin for the rest
+   * of it: making a friend an admin, or themselves one again, which outlasts
+   * the token. Revoked after the claims are set, so the sign-in that follows
+   * is a manager's (`assertAccountLive` refuses the old token; the rules ask
+   * the staff record, written below). A promotion needs none of this.
+   */
+  if (current.role === 'admin' && next.role === 'manager') await getAuth().revokeRefreshTokens(input.uid);
 
   const update: Record<string, unknown> = { ...next };
   if (current.status === 'pending' && next.status === 'active') {

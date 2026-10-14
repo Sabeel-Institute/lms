@@ -3,7 +3,9 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, type StaffUserDoc } from '@sabeel/shared';
-import { applyStaffAccess, validateStaffAccess } from '../../src/staff';
+import type { CallableRequest } from 'firebase-functions/v2/https';
+import { applyStaffAccess, setStaffAccess, validateStaffAccess } from '../../src/staff';
+import { idTokenFor } from './emulatorToken';
 import {
   applyStudentAccess,
   createStudentAccount,
@@ -134,6 +136,39 @@ describe('applyStaffAccess', () => {
 
   it('rejects an unknown uid', async () => {
     await expect(applyStaffAccess(ADMIN, { uid: 'nobody', status: 'active' })).rejects.toThrow();
+  });
+
+  /*
+   * WHAT MAKING SOMEONE A MANAGER PROMISES: they are not an admin any more.
+   * Every callable reads the role from the caller's token, which keeps its
+   * claims for up to an hour, and nothing ended the token they held. With it a
+   * demoted admin went on acting as one: making a friend an admin, and making
+   * themselves one again, which outlives the token. Driven through the real
+   * callable, with the token they held before the change.
+   */
+  it('an admin made a manager can no longer act as an admin with the token they hold', async () => {
+    await seedStaff('demoted', 'admin', 'active');
+    await seedStaff('friend', 'manager', 'active');
+    const held = await idTokenFor('demoted');
+    // Revocation is stamped to the second; a token from the same second reads as after it.
+    await new Promise((r) => setTimeout(r, 1100));
+    await applyStaffAccess(ADMIN, { uid: 'demoted', role: 'manager' });
+
+    const asTheyWere = (data: unknown) =>
+      ({ auth: { uid: 'demoted', token: { role: 'admin', status: 'active' }, rawToken: held }, data }) as unknown as CallableRequest;
+    await expect(setStaffAccess.run(asTheyWere({ uid: 'friend', role: 'admin' }))).rejects.toMatchObject({ code: 'unauthenticated' });
+    await expect(setStaffAccess.run(asTheyWere({ uid: 'demoted', role: 'admin' }))).rejects.toMatchObject({ code: 'unauthenticated' });
+    expect(await claimsOf('friend')).toMatchObject({ role: 'manager' });
+    expect(await claimsOf('demoted')).toMatchObject({ role: 'manager', status: 'active' });
+  });
+
+  it('promoting a manager leaves their session alone', async () => {
+    await seedStaff('promoted', 'manager', 'active');
+    const held = await idTokenFor('promoted');
+    await new Promise((r) => setTimeout(r, 1100));
+    await applyStaffAccess(ADMIN, { uid: 'promoted', role: 'admin' });
+    const before = await getAuth().verifyIdToken(held, true);
+    expect(before.uid).toBe('promoted');
   });
 });
 
