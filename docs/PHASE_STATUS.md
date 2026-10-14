@@ -37,6 +37,21 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-14 — **Video and audio playback for testers** (Faisal: the test
+  students should be able to play a Zoom video and audio). The one Zoom
+  video here is on an unpublished draft in Tajweed QI 2026, its date gone,
+  and every published Zoom recording is audio only. Rather than publish a
+  teacher's draft, the test course, Arabic, holds two published demo
+  sessions due 4 November: "Video from Zoom", a copy of that shared-screen
+  file (1920×1080, 3 h 7 min) with its own AAC track copied out, not
+  re-encoded, as the Audio only version of the same part; and "Audio from
+  Zoom", a copy of Tafseer QI 2026's Session 4. The test students are
+  excused on both registers, so the real triggers granted them (10 grants,
+  10 attendance records). Played on the live site as a test student: the
+  video, Audio only from the same place, and the audio. The copies carry no
+  Zoom reference, so neither touches the originals' import claims; all are
+  flagged `demoSeed`, and the wipe removes them with their files.
+
 - 2026-10-14 — **The download page is open to testers** (Faisal: the links
   on his site must work; this is how testers get access). The site's index
   lists the LMS, and its page links the web app and both Android builds now
