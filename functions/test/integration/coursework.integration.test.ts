@@ -295,6 +295,20 @@ describe('grading and returning', () => {
     expect((await sub(AMINAH, id))?.returned).toMatchObject({ grade: { points: 8 }, seq: 2 });
   });
 
+  it('a returned grade can be changed but not taken away, and a save that changes nothing is no change', async () => {
+    const id = await posted();
+    await handedIn(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 9 }, feedback: 'Good' });
+    await returnWorkRecord(id, [AMINAH], null);
+    await expect(
+      saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: null, feedback: 'Good' }),
+    ).rejects.toThrow(/cannot be removed/);
+    expect((await sub(AMINAH, id))?.returned).toMatchObject({ grade: { points: 9 }, seq: 1 });
+    const same = await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 9 }, feedback: 'Good' });
+    expect(same.returnedChanged).toBe(false);
+    expect((await sub(AMINAH, id))?.returned).toMatchObject({ grade: { points: 9 }, feedback: 'Good', seq: 1 });
+  });
+
   it('another try keeps the first attempt and its feedback, and opens the work again with a new date', async () => {
     const id = await posted({ grading: { kind: 'scale' } });
     await handedIn(AMINAH, id);

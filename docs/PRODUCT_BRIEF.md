@@ -248,7 +248,7 @@ built: `docs/plans/ASSIGNMENTS.md`.
 
 - A grade is a draft that only staff see until the work is **returned**. A student never sees a grade before then, and the record they can read carries none.
 - A teacher returns work one student at a time, or everything graded at once, which asks once more first. Returning can ask for **another try** with a new date; the attempt, its grade and its feedback stay with the next one.
-- A change to a returned grade reaches the student at once, tells them, and is recorded.
+- A change to a returned grade is held on the form until the teacher sends it; then it reaches the student at once, tells them if the grade changed, and is recorded. A returned grade can be changed, never removed.
 - Work done on paper or recited in class can be graded with nothing handed in.
 - At a desk, the class list, the work and the grade sit side by side; **J** and **K** step through the list and **Ctrl + Enter** (**⌘ + Enter** on a Mac) returns. Nothing moves on, and nothing is returned, until what is typed is stored.
 - There is no course grade.

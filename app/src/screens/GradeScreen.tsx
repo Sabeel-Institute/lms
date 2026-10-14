@@ -103,13 +103,15 @@ export function GradeScreen({
   const settle = () => form.current?.flush() ?? Promise.resolve(true);
 
   const guard = useLeaveGuard({
-    when: formStatus.unsaved || formStatus.invalid !== null,
+    when: formStatus.unsaved || formStatus.invalid !== null || formStatus.staged,
     settle,
     prompt: {
-      title: 'This grade is not saved',
+      title: formStatus.staged ? 'This change is not sent' : 'This grade is not saved',
       message: formStatus.invalid
         ? `${formStatus.invalid} Leave now and it is not saved.`
-        : 'The last change did not reach the server. Leave now and it is lost.',
+        : formStatus.staged
+          ? 'The change to the returned grade has not been sent to the student. Leave now and it is lost.'
+          : 'The last change did not reach the server. Leave now and it is lost.',
       stay: 'Stay',
       leave: 'Leave without it',
     },
@@ -134,7 +136,9 @@ export function GradeScreen({
 
   const open = (uid: string) =>
     void run('next', async () => {
-      if (uid !== studentUid && (await settle())) onOpenStudent(uid);
+      if (uid === studentUid) return;
+      if (await settle()) onOpenStudent(uid);
+      else if (formStatus.staged) setReturnError('Send the change to the returned grade, or undo it, before moving on.');
     });
   const sendBack = (retryBy: string | null) =>
     void run(retryBy ? 'retry' : 'return', async () => {
@@ -281,7 +285,7 @@ export function GradeScreen({
             label="Next to grade ›"
             variant="secondary"
             busy={active === 'next'}
-            disabled={formStatus.invalid !== null}
+            disabled={formStatus.invalid !== null || formStatus.staged}
             onPress={() => open(next)}
           />
         ) : null}
@@ -374,9 +378,11 @@ interface GradeFormStatus {
   invalid: string | null;
   /** A grade is on the form — stored or about to be. */
   hasGrade: boolean;
+  /** A change to RETURNED work, held on the form until it is sent. */
+  staged: boolean;
 }
 
-const NOTHING_TYPED: GradeFormStatus = { unsaved: false, invalid: null, hasGrade: false };
+const NOTHING_TYPED: GradeFormStatus = { unsaved: false, invalid: null, hasGrade: false, staged: false };
 
 type Draft = { points: string; scale: ScaleMark | ''; feedback: string };
 
@@ -387,9 +393,13 @@ const draftOf = (g: { grade: Grade | null; feedback: string } | null | undefined
 });
 
 /**
- * The grade and feedback, saved as they are typed. A draft only staff see
- * until it is returned; on returned work, a change reaches the student at once
- * and is recorded.
+ * The grade and feedback, saved as they are typed: a draft only staff see
+ * until it is returned.
+ *
+ * RETURNED WORK IS NOT SAVED AS IT IS TYPED. What is saved there reaches the
+ * student, so every pause in typing was a new return: emptying a 9 to type 10
+ * took the grade away, then sent a 1, then the 10, each told and recorded. The
+ * change is held on the form and sent once, with Send the change.
  *
  * Saves go one at a time, in order, and leaving waits for them (see
  * `autosave.ts`). A grade that does not fit is never sent — not even the
@@ -427,6 +437,10 @@ function GradeForm({
   const [saveState, setSaveState] = useState<AutosaveState>({ kind: 'idle' });
   const [invalid, setInvalid] = useState<string | null>(null);
   const invalidNow = useRef<string | null>(null);
+  const isReturned = returned !== null;
+  const stagedNow = useRef(false);
+  const { active: sending, run: runSend } = useOneAtATime();
+  const [sendError, setSendError] = useState<string | null>(null);
   const [saver] = useState(() =>
     createAutosave<{ grade: Grade | null; feedback: string }>({
       delayMs: 600,
@@ -439,7 +453,7 @@ function GradeForm({
   const api = useRef(onApi);
   api.current = onApi;
   useEffect(() => {
-    api.current({ flush: () => (invalidNow.current ? Promise.resolve(false) : saver.flush()) });
+    api.current({ flush: () => (invalidNow.current || stagedNow.current ? Promise.resolve(false) : saver.flush()) });
     // The last resort for a way out the guard does not see, such as signing
     // out: what is waiting is still sent.
     return () => {
@@ -457,9 +471,14 @@ function GradeForm({
     return d.scale ? { scale: d.scale } : null;
   };
 
+  // Held on returned work: what the form says differs from what the student has.
+  const staged =
+    isReturned &&
+    (JSON.stringify(gradeOf(draft)) !== JSON.stringify(start?.grade ?? null) || draft.feedback !== (start?.feedback ?? ''));
+  stagedNow.current = staged;
   const unsaved = saveState.kind === 'waiting' || saveState.kind === 'saving' || saveState.kind === 'failed';
   const hasGrade = invalid === null && gradeOf(draft) !== null;
-  useEffect(() => onStatus({ unsaved, invalid, hasGrade }), [onStatus, unsaved, invalid, hasGrade]);
+  useEffect(() => onStatus({ unsaved, invalid, hasGrade, staged }), [onStatus, unsaved, invalid, hasGrade, staged]);
 
   // The latest draft, for two changes that land before a re-render.
   const latest = useRef(draft);
@@ -477,9 +496,37 @@ function GradeForm({
       saver.discard();
       return;
     }
+    if (isReturned) {
+      const why = grade === null ? 'A returned grade can be changed, but it cannot be removed.' : null;
+      invalidNow.current = why;
+      setInvalid(why);
+      return;
+    }
     invalidNow.current = null;
     setInvalid(null);
     saver.queue({ grade, feedback: d.feedback });
+  };
+  const send = () =>
+    void runSend('send', async () => {
+      setSendError(null);
+      const d = latest.current;
+      const grade = gradeOf(d);
+      if (grade === 'invalid' || grade === null) return;
+      try {
+        await saveGrade({ courseworkId: cw.id, studentUid, grade, feedback: d.feedback });
+        // The stored grade comes back round as `returned`, and replaces the form.
+        touched.current = false;
+      } catch (e) {
+        setSendError(errorText(e));
+      }
+    });
+  const undo = () => {
+    touched.current = false;
+    invalidNow.current = null;
+    setInvalid(null);
+    setSendError(null);
+    latest.current = draftOf(start);
+    setDraft(draftOf(start));
   };
 
   const failed = saveState.kind === 'failed';
@@ -515,9 +562,26 @@ function GradeForm({
               : saveState.kind === 'waiting' || saveState.kind === 'saving'
                 ? 'Saving…'
                 : returned
-                  ? 'Returned. A change to the grade reaches the student, and is recorded.'
+                  ? staged
+                    ? 'Not sent yet. The student sees the change when you send it; a changed grade is a new return, and is recorded.'
+                    : 'Returned. To change the grade or the feedback, edit it here, then send the change to the student.'
                   : `${saveState.kind === 'saved' || saved ? 'Saved · only' : 'Only'} staff see this until you return it. Feedback is optional.`}
         </Text>
+        {isReturned ? (
+          <>
+            {sendError ? <Notice tone="error">{sendError}</Notice> : null}
+            <Row>
+              <Button
+                testID="grade-send-change"
+                label="Send the change"
+                busy={sending === 'send'}
+                disabled={!staged || invalid !== null}
+                onPress={send}
+              />
+              {staged ? <Button testID="grade-undo-change" label="Undo" variant="quiet" onPress={undo} /> : null}
+            </Row>
+          </>
+        ) : null}
       </Card>
     </>
   );

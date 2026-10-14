@@ -1128,9 +1128,11 @@ screen says so and asks before you leave it.
 
 **Returning together.** Back on the assignment's page, **Return N graded** sends
 back every grade not yet returned, at once. The app asks once more first,
-because a return cannot be taken back. Changing a grade after it has been
-returned reaches the student at once, tells them, and is recorded in the audit
-history.
+because a return cannot be taken back. To change a grade or feedback after it
+has been returned, edit it on the grading screen and press **Send the change**:
+nothing reaches the student while you type. Sent, it reaches them at once, tells
+them if the grade changed, and is recorded in the audit history. A returned
+grade can be changed but not removed; **Undo** puts back what they have.
 
 ---
 

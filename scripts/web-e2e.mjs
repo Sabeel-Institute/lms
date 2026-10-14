@@ -2079,6 +2079,31 @@ check(
 );
 await shot(student, '42-work-returned');
 
+/*
+ * A RETURNED GRADE IS CHANGED ON PURPOSE. It used to go to the student as it
+ * was typed: emptying the 9 to type 10 took the grade away, then sent a 1,
+ * then the 10, each a new return, told and recorded. Now nothing leaves the
+ * form until Send the change, and then once.
+ */
+const returnedPoints = admin.getByTestId('grade-points').filter({ visible: true }).first();
+await returnedPoints.fill('');
+await returnedPoints.fill('1');
+await returnedPoints.fill('10');
+await admin.waitForTimeout(2000);
+const midway = (await student.getByTestId('work-returned').innerText()).replace(/\s+/g, ' ');
+await tap(admin, 'grade-send-change');
+await student.getByText('10/10').first().waitFor({ timeout: 20000 }).catch(() => {});
+const sentText = (await student.getByTestId('work-returned').innerText()).replace(/\s+/g, ' ');
+const returnedSeq = Number(
+  (await readCollection('submissions')).find((d) => d.fields.courseworkId?.stringValue === cwId && d.fields.returned?.mapValue)
+    ?.fields.returned.mapValue.fields.seq.integerValue,
+);
+check(
+  'a change to a returned grade reaches the student once, when it is sent',
+  /9\/10/.test(midway) && /10\/10/.test(sentText) && returnedSeq === 2,
+  `${midway} → ${sentText}, return ${returnedSeq}`,
+);
+
 // A TAPPED NOTIFICATION'S WEB END is its link: the app's address plus the path
 // the message carries (pushPaths). Opened cold, it lands on the assignment.
 await student.goto(`${WEB}${pushPaths.work(cwId)}`, { waitUntil: 'domcontentloaded' });

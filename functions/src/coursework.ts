@@ -703,8 +703,9 @@ async function readSubmission(tx: Transaction, uid: string, cwId: string): Promi
  * Save a grade and feedback. Until the work is returned this is a draft only
  * staff see. On returned work it changes what the student sees at once, and
  * the change is recorded; a changed GRADE is a new return, so the student is
- * told (`seq` moves on). Work done on paper can be graded with nothing handed
- * in.
+ * told (`seq` moves on). A returned grade can be changed, never taken away,
+ * and a save that changes nothing the student has is no change at all. Work
+ * done on paper can be graded with nothing handed in.
  */
 export async function saveGradeRecord(staffUid: string, input: StudentWorkInput & { grade: unknown; feedback: unknown }) {
   const cw = await readCoursework(input.courseworkId);
@@ -713,6 +714,14 @@ export async function saveGradeRecord(staffUid: string, input: StudentWorkInput 
   return db().runTransaction(async (tx) => {
     const sub = await readSubmission(tx, input.studentUid, input.courseworkId);
     if (sub.notRequired) throw new HttpsError('failed-precondition', 'This work is marked not required.');
+    if (sub.state === 'returned' && sub.returned) {
+      if (grade === null && sub.returned.grade !== null) {
+        throw new HttpsError('failed-precondition', 'A returned grade can be changed, but it cannot be removed.');
+      }
+      if (JSON.stringify(sub.returned.grade) === JSON.stringify(grade) && sub.returned.feedback === feedback) {
+        return { returnedChanged: false, before: sub.returned.grade, after: grade };
+      }
+    }
     const doc: GradeDoc = {
       studentUid: input.studentUid,
       courseworkId: input.courseworkId,
