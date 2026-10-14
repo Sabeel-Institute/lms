@@ -14,6 +14,7 @@ import {
   isLate,
   nextDeadline,
   receivesOnJoining,
+  returnsOnComingBack,
   staffWorkState,
   workTally,
   workBucket,
@@ -183,6 +184,7 @@ describe('what a teacher sees', () => {
     closedEarly: false,
     handedInAt: null,
     returned: null,
+    attempts: [],
     ...over,
   });
   const at = (date: string) => Date.parse(`${date}T12:00:00-05:00`);
@@ -219,5 +221,44 @@ describe('what a teacher sees', () => {
     // Returned grades only: 80% and 100%, not the 90% still in draft.
     expect(c.average).toBeCloseTo(0.9);
     expect(courseworkCounts({ kind: 'points', outOf: 10 }, subs, grades, '2026-10-21', true, INSTITUTE_TIMEZONE).missed).toBe(1);
+  });
+
+  it('still counts a student who left during another try: they handed in first', () => {
+    const graded4 = { grade: { points: 4 }, feedback: '', at: 1, seq: 1, retry: true };
+    const subs = [
+      // Left while on another try, due on their own date: attempt 1 was in and graded.
+      sub({ studentUid: 'h', active: false, dueDate: '2026-10-24', lateUntil: null, returned: graded4, attempts: [{ attempt: 1, note: 'first', files: {}, handedInAt: at('2026-10-12'), returned: graded4 }] }),
+      // Left with nothing in: counts nowhere.
+      sub({ studentUid: 'g', active: false }),
+    ];
+    const c = courseworkCounts({ kind: 'points', outOf: 10 }, subs, new Map(), '2026-10-15', true, INSTITUTE_TIMEZONE);
+    expect(c).toMatchObject({ expected: 1, notInYet: 1 });
+  });
+});
+
+describe('coming back to the class', () => {
+  const sub = (over: Partial<SubmissionDoc>) => ({
+    state: 'open' as const,
+    attempts: [],
+    dueDate: '2026-10-13',
+    closedEarly: false,
+    ...over,
+  });
+  const graded = { grade: { points: 4 }, feedback: '', at: 1, seq: 1, retry: true };
+
+  it('brings back open work by the student\'s own date: more time, or another try', () => {
+    // The class's date passed on the 13th; theirs is the 24th.
+    expect(returnsOnComingBack(sub({ dueDate: '2026-10-24' }), '2026-10-15')).toBe(true);
+    expect(returnsOnComingBack(sub({}), '2026-10-15')).toBe(false);
+  });
+
+  it('brings back an earlier attempt even once the new date has gone by', () => {
+    const tried = sub({ dueDate: '2026-10-14', attempts: [{ attempt: 1, note: '', files: {}, handedInAt: 1, returned: graded }] });
+    expect(returnsOnComingBack(tried, '2026-10-20')).toBe(true);
+  });
+
+  it('brings back anything handed in, and no open work the teacher stopped taking', () => {
+    expect(returnsOnComingBack(sub({ state: 'handedIn' }), '2026-10-20')).toBe(true);
+    expect(returnsOnComingBack(sub({ dueDate: '2026-10-24', closedEarly: true }), '2026-10-15')).toBe(false);
   });
 });

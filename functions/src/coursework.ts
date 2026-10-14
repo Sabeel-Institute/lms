@@ -14,6 +14,7 @@ import {
   isLate,
   normalizeMarkdown,
   receivesOnJoining,
+  returnsOnComingBack,
   submissionId,
   todayInZone,
   workState,
@@ -204,9 +205,8 @@ async function inBatches<T>(items: T[], write: (batch: FirebaseFirestore.WriteBa
  * enrolment: called when they join or come back.
  *
  * WHO GETS WHAT: a student joining gets every posted assignment not yet past
- * its due date. Coming back restores the work they had — handed in, returned,
- * or still due — but not open work whose date went by while they were away;
- * nobody comes back to an obligation they had no chance to meet.
+ * its due date. Coming back restores the work they had, by their own dates
+ * (`returnsOnComingBack`).
  */
 export async function reconcileStudentCoursework(courseId: string, studentUid: string): Promise<void> {
   const todayIs = today();
@@ -223,7 +223,7 @@ export async function reconcileStudentCoursework(courseId: string, studentUid: s
       const sub = snap.data() as SubmissionDoc | undefined;
       if (!sub) {
         if (receivesOnJoining(cw, todayIs)) tx.set(ref, freshSubmission(doc.id, cw, studentUid));
-      } else if (!sub.active && (sub.state !== 'open' || receivesOnJoining(cw, todayIs))) {
+      } else if (!sub.active && returnsOnComingBack(sub, todayIs)) {
         tx.update(ref, { active: true });
       }
     });

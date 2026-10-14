@@ -1,6 +1,7 @@
 import {
   INSTITUTE_TIMEZONE,
   isLate,
+  leftWithNothingIn,
   staffWorkState,
   todayInZone,
   unbreakableDate,
@@ -24,8 +25,8 @@ export interface StaffRow {
 
 /**
  * The rows, by name. A student who left the class with nothing handed in is
- * not listed; one who left after handing in still is, because their work
- * still needs a grade.
+ * not listed (`leftWithNothingIn`); one who left after handing in still is,
+ * because their work still needs a grade or stands as their record.
  */
 export function staffRows(
   subs: readonly SubmissionRow[],
@@ -35,7 +36,7 @@ export function staffRows(
   nameOf: (uid: string) => string,
 ): StaffRow[] {
   return subs
-    .filter((s) => s.active || s.state !== 'open')
+    .filter((s) => !leftWithNothingIn(s))
     .map((s) => ({ s, st: staffWorkState(s, grades.get(s.studentUid), today, courseOpen), g: grades.get(s.studentUid) }))
     .sort((a, b) => nameOf(a.s.studentUid).localeCompare(nameOf(b.s.studentUid)));
 }

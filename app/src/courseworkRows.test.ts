@@ -37,6 +37,12 @@ describe('the class list for one assignment', () => {
     expect(rows.map((r) => r.s.studentUid)).toEqual(['a', 'b', 'z']);
   });
 
+  it('lists a student who left during another try, whose first attempt was handed in', () => {
+    const graded = { grade: { points: 4 }, feedback: '', at: 1, seq: 1, retry: true };
+    const left = sub('h', { active: false, returned: graded, attempts: [{ attempt: 1, note: '', files: {}, handedInAt: 1, returned: graded }] });
+    expect(staffRows([sub('a'), left], none, today, true, nameOf).map((r) => r.s.studentUid)).toEqual(['a', 'h']);
+  });
+
   it('filters by where each student stands', () => {
     const rows = staffRows([sub('a'), sub('b', { state: 'handedIn', handedInAt: 1 })], none, today, true, nameOf);
     expect(rows.filter((r) => inFilter(r.st, 'toGrade')).map((r) => r.s.studentUid)).toEqual(['b']);

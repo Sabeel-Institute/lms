@@ -364,6 +364,30 @@ export function receivesOnJoining(cw: Pick<CourseworkDoc, 'status' | 'dueDate' |
   return cw.status === 'posted' && cw.closedAt === null && !isOverdue(cw.dueDate, today);
 }
 
+/**
+ * Whether a student coming back to the course gets this work back: anything
+ * they handed in, an earlier attempt included, and open work they can still
+ * meet by THEIR date, which more time or another try made their own. Open work
+ * whose date went by while they were away stays gone: nobody comes back to an
+ * obligation they had no chance to meet.
+ */
+export function returnsOnComingBack(
+  sub: Pick<SubmissionDoc, 'state' | 'attempts' | 'dueDate' | 'closedEarly'>,
+  today: string,
+): boolean {
+  return sub.state !== 'open' || sub.attempts.length > 0 || (!sub.closedEarly && !isOverdue(sub.dueDate, today));
+}
+
+/**
+ * Work that counts nowhere and is listed nowhere: never handed in, by a
+ * student who has since left the class. An earlier attempt is something
+ * handed in, so a student who left during another try is still counted and
+ * listed, as is one who left after handing in.
+ */
+export function leftWithNothingIn(sub: Pick<SubmissionDoc, 'active' | 'state' | 'attempts'>): boolean {
+  return !sub.active && sub.state === 'open' && sub.attempts.length === 0;
+}
+
 // ------------------------------------------------------------------ To do --
 
 /**
@@ -461,20 +485,19 @@ export interface WorkTally {
 
 /**
  * Where one student's work on one assignment stands, for the figures: null
- * when it counts nowhere, which is work never handed in by a student who has
- * since left the class. Every count of assignments adds these up, an
+ * when it counts nowhere (`leftWithNothingIn`). Every count of assignments adds these up, an
  * assignment's (`courseworkCounts`) and a student's across a course (the
  * workbook's Grades tab), so the two cannot disagree.
  */
 export function workTally(
   grading: CourseworkGrading,
-  sub: Pick<SubmissionDoc, 'active' | 'state' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly' | 'handedInAt' | 'returned'>,
+  sub: Pick<SubmissionDoc, 'active' | 'state' | 'attempts' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly' | 'handedInAt' | 'returned'>,
   grade: Pick<GradeDoc, 'grade' | 'withoutHandIn'> | undefined,
   today: string,
   courseOpen: boolean,
   timeZone: string,
 ): WorkTally | null {
-  if (!sub.active && sub.state === 'open') return null;
+  if (leftWithNothingIn(sub)) return null;
   const state = staffWorkState(sub, grade, today, courseOpen);
   // Graded on paper counts as handed in, on paper: as the student's page has
   // always counted it, and as the comment above says.
@@ -526,7 +549,7 @@ export function tallyCounts(tallies: (WorkTally | null)[]): CourseworkCounts {
  */
 export function courseworkCounts(
   grading: CourseworkGrading,
-  subs: Pick<SubmissionDoc, 'studentUid' | 'active' | 'state' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly' | 'handedInAt' | 'returned'>[],
+  subs: Pick<SubmissionDoc, 'studentUid' | 'active' | 'state' | 'attempts' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly' | 'handedInAt' | 'returned'>[],
   grades: Map<string, Pick<GradeDoc, 'grade' | 'withoutHandIn'>>,
   today: string,
   courseOpen: boolean,

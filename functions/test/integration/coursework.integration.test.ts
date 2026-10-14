@@ -164,9 +164,34 @@ describe('who receives an assignment', () => {
   it('coming back does not revive open work whose date passed while away', async () => {
     const id = await posted();
     await applyEnrollmentActive({ studentUid: BILAL, courseId, active: false });
-    await db().collection(COLLECTIONS.coursework).doc(id).update({ dueDate: inDays(-1), lateUntil: null });
+    await classTimePasses(id, { dueDate: inDays(-1), lateUntil: null });
+    await timePasses(BILAL, id, { dueDate: inDays(-1), lateUntil: null });
     await applyEnrollmentActive({ studentUid: BILAL, courseId, active: true });
     expect((await sub(BILAL, id))?.active).toBe(false);
+  });
+
+  it('coming back keeps the more time a teacher gave, after the class\'s date has gone by', async () => {
+    const id = await posted();
+    await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, dates: { dueDate: inDays(10), lateUntil: inDays(14) }, reason: 'Travel' });
+    await classTimePasses(id, { dueDate: inDays(-1), lateUntil: null });
+    await applyEnrollmentActive({ studentUid: BILAL, courseId, active: false });
+    await applyEnrollmentActive({ studentUid: BILAL, courseId, active: true });
+    expect(await sub(BILAL, id)).toMatchObject({ active: true, dueDate: inDays(10) });
+    expect(await stateOf(BILAL, id)).toBe('toDo');
+  });
+
+  it('coming back keeps another try, and the attempt before it, after the class\'s date has gone by', async () => {
+    const id = await posted();
+    await writeNote(AMINAH, id, 'First go');
+    await handInWork(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 4 }, feedback: 'Again, slowly.' });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(10), lateUntil: null });
+    await classTimePasses(id, { dueDate: inDays(-1), lateUntil: null });
+    await applyEnrollmentActive({ studentUid: AMINAH, courseId, active: false });
+    await applyEnrollmentActive({ studentUid: AMINAH, courseId, active: true });
+    const back = (await sub(AMINAH, id))!;
+    expect(back).toMatchObject({ active: true, state: 'open', dueDate: inDays(10) });
+    expect(back.attempts[0]).toMatchObject({ attempt: 1, returned: { grade: { points: 4 } } });
   });
 });
 
