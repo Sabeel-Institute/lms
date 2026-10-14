@@ -2321,11 +2321,19 @@ check(
  */
 const feedbackNamed = await admin.getByRole('textbox', { name: 'Feedback' }).filter({ visible: true }).count();
 const statusLive = await admin.getByTestId('grade-status').filter({ visible: true }).first().getAttribute('aria-live');
-const openRows = await admin.locator('[data-testid^="grade-list-"][aria-current="true"]').count();
+// The class list sits beside the work only on a desk-wide screen; on a
+// phone's width it is not drawn, and there is nothing to mark.
+await admin.setViewportSize({ width: 1280, height: 900 });
+await admin.locator('[data-testid^="grade-list-"]').filter({ visible: true }).first().waitFor({ timeout: 15000 }).catch(() => {});
+const openRows = await admin
+  .locator('[data-testid^="grade-list-"][aria-current="true"]')
+  .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-testid')));
+const gradedName = await screenTitle(admin);
+await admin.setViewportSize({ width: 390, height: 844 });
 check(
   'the grading form names its feedback box, announces its saves, and marks whose work is open',
-  feedbackNamed >= 1 && statusLive === 'polite' && openRows === 1,
-  JSON.stringify({ feedbackNamed, statusLive, openRows }),
+  feedbackNamed >= 1 && statusLive === 'polite' && openRows.length === 1 && openRows[0] === `grade-list-${gradedName}`,
+  JSON.stringify({ feedbackNamed, statusLive, openRows, gradedName }),
 );
 
 // Feedback typed and returned with Ctrl + Enter at once: what is on the
