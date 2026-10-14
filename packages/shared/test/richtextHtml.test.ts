@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { htmlToMarkdown, markdownToHtml } from '../src/richtextHtml';
-import { normalizeMarkdown, toPlainText } from '../src/richtext';
+import { normalizeMarkdown, parseRich, toPlainText } from '../src/richtext';
 
 /**
  * The seam both editors speak.
@@ -152,5 +152,31 @@ describe('Arabic through the seam', () => {
   it('round-trips a mixed paragraph with marks', () => {
     const md = `**${line}**\n\nRecite it *slowly*.`;
     expect(trip(md)).toBe(md);
+  });
+});
+
+/*
+ * A LINE BREAK INSIDE A LIST ITEM STAYS IN IT. Lexical exports Shift+Enter in
+ * an item as <br>; stored as a bare newline it ended the list, so a numbered
+ * vocabulary list of a word and its meaning came back as three lists all
+ * numbered 1, and opening the answer again saved that.
+ */
+describe('a list item with a line break', () => {
+  const editorHtml =
+    '<ol><li><span>كتاب</span><br><span>book</span></li><li><span>قلم</span><br><span>pen</span></li><li><span>باب</span><br><span>door</span></li></ol>';
+
+  it('stays one numbered list of three items, stored and read back', () => {
+    const stored = htmlToMarkdown(editorHtml);
+    const doc = parseRich(stored);
+    expect(doc.map((b) => b.kind)).toEqual(['numbers']);
+    expect(doc[0].kind === 'numbers' && doc[0].items.length).toBe(3);
+    expect(toPlainText(stored)).toContain('book');
+  });
+
+  it('is canonical as stored, and the editor draws it back as written', () => {
+    const stored = htmlToMarkdown(editorHtml);
+    expect(normalizeMarkdown(stored)).toBe(stored);
+    expect(htmlToMarkdown(markdownToHtml(stored))).toBe(stored);
+    expect(markdownToHtml(stored)).toMatch(/^<ol><li>[^<]*<br>book<\/li>/);
   });
 });

@@ -339,6 +339,15 @@ export function parseRich(markdown: string): RichDoc {
       continue;
     }
 
+    // A line indented under a list item is more of that item: a line break
+    // typed inside it, as `serializeRich` writes one. Read as a paragraph, it
+    // ended the list there, and the next item started again at 1.
+    if (items !== null && /^[ \t]/.test(line)) {
+      const list: string[] = items;
+      list[list.length - 1] += `\n${line.replace(/^[ \t]+/, '')}`;
+      continue;
+    }
+
     flushItems();
     para.push(line);
   }
@@ -346,6 +355,14 @@ export function parseRich(markdown: string): RichDoc {
   flushItems();
   return out;
 }
+
+/**
+ * An item's line breaks as continuation lines, indented under its text, which
+ * `parseRich` reads back into the item. A blank line cannot live inside an
+ * item (it ends the list), so breaks in a row come out as one.
+ */
+const itemText = (item: RichInline[], indent: string) =>
+  serializeInline(item).replace(/\n{2,}/g, '\n').split('\n').join(`\n${indent}`);
 
 /** Typed blocks → canonical markdown. Ordered lists always renumber from 1. */
 export function serializeRich(doc: RichDoc): string {
@@ -355,9 +372,9 @@ export function serializeRich(doc: RichDoc): string {
         case 'paragraph':
           return serializeInline(b.content);
         case 'bullets':
-          return b.items.map((i) => `- ${serializeInline(i)}`).join('\n');
+          return b.items.map((i) => `- ${itemText(i, '  ')}`).join('\n');
         case 'numbers':
-          return b.items.map((i, n) => `${n + 1}. ${serializeInline(i)}`).join('\n');
+          return b.items.map((i, n) => `${n + 1}. ${itemText(i, '   ')}`).join('\n');
       }
     })
     .join('\n\n');

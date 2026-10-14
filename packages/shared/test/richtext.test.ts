@@ -197,6 +197,14 @@ describe('round trip under fuzz', () => {
     return { kind: 'link', href: 'https://x.test/a(b)', content: [gen(rnd, depth + 1)] };
   };
 
+  // A list item, sometimes with a line break typed inside it (Shift+Enter).
+  const item = (rnd: () => number): RichInline[] =>
+    rnd() < 0.35 ? [gen(rnd), { kind: 'text', text: '\n' }, gen(rnd)] : [gen(rnd)];
+
+  /** What a reader counts: the blocks, and how many items each list has. */
+  const shape = (doc: RichDoc) =>
+    doc.map((b) => (b.kind === 'paragraph' ? 'paragraph' : `${b.kind} of ${b.items.length}`));
+
   it('parse(serialize(doc)) equals doc for 400 seeded documents', () => {
     let checked = 0;
     for (let seed = 1; seed <= 400; seed += 1) {
@@ -207,10 +215,12 @@ describe('round trip under fuzz', () => {
         const r = rnd();
         const inlines = [gen(rnd), gen(rnd)];
         if (r < 0.6) blocks.push({ kind: 'paragraph', content: inlines });
-        else if (r < 0.8) blocks.push({ kind: 'bullets', items: [[gen(rnd)], [gen(rnd)]] });
-        else blocks.push({ kind: 'numbers', items: [[gen(rnd)], [gen(rnd)]] });
+        else if (r < 0.8) blocks.push({ kind: 'bullets', items: [item(rnd), item(rnd)] });
+        else blocks.push({ kind: 'numbers', items: [item(rnd), item(rnd)] });
       }
       const md = serializeRich(blocks);
+      // A break inside an item neither ends its list nor starts a new one.
+      expect(shape(parseRich(md)), `seed ${seed} shape: ${JSON.stringify(md)}`).toEqual(shape(blocks));
       // `***x***` is ambiguous in markdown — bold-in-italic and italic-in-bold
       // render identically — so the contract is stated over the CANONICAL form
       // rather than over raw AST equality, which markdown cannot deliver.
