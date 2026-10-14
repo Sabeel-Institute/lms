@@ -529,7 +529,9 @@ export function ListRow({
             {ident}
           </Pressable>
         ) : (
-          <View style={[styles.rowIdent, actionsPinned ? styles.rowIdentPinned : null]}>
+          // The row is still named for tests when it opens nothing: a list
+          // of names alone (deleted colleagues) is found by it as well.
+          <View testID={testID} style={[styles.rowIdent, actionsPinned ? styles.rowIdentPinned : null]}>
             {ident}
           </View>
         )}

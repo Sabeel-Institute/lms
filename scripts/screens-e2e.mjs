@@ -1117,7 +1117,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 52;
+const STAFF_SCREENS = 57;
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
