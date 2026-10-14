@@ -274,6 +274,18 @@ function AttendanceSection({ session }: { session: SessionRow }) {
   const busy = active !== null;
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // MARKS NOT YET SUBMITTED ARE WORK. Back or a tab dropped them without a
+  // word, and the register came back with everyone as they were.
+  const unsubmitted = Object.entries(marks).some(([uid, s]) => s !== registerMark(session, {}, uid));
+  const leaveGuard = useLeaveGuard({
+    when: unsubmitted,
+    prompt: {
+      title: 'The register is not submitted',
+      message: 'The marks you have made here are not saved until you submit them.',
+      stay: 'Stay',
+      leave: 'Leave without them',
+    },
+  });
 
   const submit = () =>
     void once('submit', async () => {
@@ -291,6 +303,7 @@ function AttendanceSection({ session }: { session: SessionRow }) {
 
   return (
     <>
+      {leaveGuard.element}
       <SectionTitle>Attendance</SectionTitle>
       <Card>
         {error ? <Notice tone="error">{error}</Notice> : null}

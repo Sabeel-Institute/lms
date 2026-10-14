@@ -765,6 +765,21 @@ await tap(admin, 'session-open-Session 1');
 // is no published recording.
 await admin.getByTestId('att-Fatima Ahmed-excused').waitFor({ timeout: 15000 });
 await tap(admin, 'att-Fatima Ahmed-excused');
+/*
+ * MARKS NOT SUBMITTED ARE HELD. Back dropped them without a word, and the
+ * register came back with everyone Present. Held, Stay keeps them.
+ */
+await admin.goBack();
+const registerHeld = await admin
+  .getByTestId('leave-confirm')
+  .waitFor({ timeout: 10000 })
+  .then(() => true, () => false);
+if (registerHeld) await tap(admin, 'leave-stay');
+check(
+  'Back over unsubmitted register marks asks first, and Stay keeps them',
+  registerHeld &&
+    (await admin.getByTestId('att-Fatima Ahmed-excused').filter({ visible: true }).first().getAttribute('aria-checked')) === 'true',
+);
 await tap(admin, 'att-submit');
 await admin.waitForTimeout(2000);
 check(
