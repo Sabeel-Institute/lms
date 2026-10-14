@@ -81,6 +81,12 @@ export async function createEnrollmentRecord(callerUid: string, input: Enrollmen
       // Preserve the original enrolment date across a re-enrolment.
       enrolledAt: existing.exists ? (existing.data() as EnrollmentDoc).enrolledAt : Date.now(),
       enrolledBy: callerUid,
+      // And when they last left, as coming back through `setEnrollmentActive`
+      // keeps it: the workbook reads it to tell a recording whose date passed
+      // while they were away (closed) from one they missed.
+      ...(existing.exists && (existing.data() as EnrollmentDoc).unenrolledAt !== undefined
+        ? { unenrolledAt: (existing.data() as EnrollmentDoc).unenrolledAt }
+        : {}),
     };
     tx.set(ref, next);
     return { doc: next, reenrolled: existing.exists };
