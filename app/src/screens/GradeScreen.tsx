@@ -20,6 +20,7 @@ import { Button, Card, Chips, Field, InlineNumber, Notice, Row, Screen, SectionT
 import { useLeaveGuard } from '../components/LeaveGuard';
 import { DateField } from '../components/DateField';
 import { Attachments } from '../components/Attachments';
+import { PlainLines } from '../components/PlainLines';
 import { RichText } from '../components/RichText';
 import {
   giveMoreTime,
@@ -252,7 +253,9 @@ export function GradeScreen({
                 {a.handedInAt ? ` · handed in ${dayOf(a.handedInAt)}` : ''}
                 {a.returned.grade ? ` · ${gradeText(a.returned.grade, cw.grading)}` : ''}
               </Text>
-              {a.returned.feedback ? <Text style={styles.note}>{a.returned.feedback}</Text> : null}
+              {a.returned.feedback ? (
+                <PlainLines text={a.returned.feedback} textStyle={styles.noteLine} style={styles.noteBlock} />
+              ) : null}
               {a.note ? (
                 <View style={styles.answer}>
                   <RichText markdown={a.note} />
@@ -709,7 +712,8 @@ function StudentOptions({
 const styles = StyleSheet.create({
   quiet: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(2) },
   failed: { color: t.feedback.danger },
-  note: { fontSize: 15, lineHeight: 22, color: t.text.primary, marginBottom: spacing(3) },
+  noteLine: { fontSize: 15, lineHeight: 22, color: t.text.primary },
+  noteBlock: { marginBottom: spacing(3) },
   answer: { marginBottom: spacing(3) },
   returnNow: { marginTop: spacing(2) },
   options: { marginTop: spacing(4) },

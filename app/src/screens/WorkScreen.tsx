@@ -20,6 +20,7 @@ import { Button, Card, Notice, Screen, SectionTitle, inputLook } from '../compon
 import { LazyRichEditor } from '../components/LazyRichEditor';
 import { useLeaveGuard } from '../components/LeaveGuard';
 import { Attachments } from '../components/Attachments';
+import { PlainLines } from '../components/PlainLines';
 import { RichText } from '../components/RichText';
 import { handIn, saveDraftNote, takeBack, useMyDraftState, type CourseworkRow, type SubmissionRow } from '../coursework';
 import type { CourseRow } from '../structure';
@@ -248,7 +249,7 @@ function Returned({ returned, grading }: { returned: ReturnedGrade; grading: Cou
       <View testID="work-returned">
         <Text style={styles.quiet}>Returned {dayOf(returned.at)}</Text>
         {returned.grade ? <Text style={styles.grade}>{gradeText(returned.grade, grading)}</Text> : null}
-        {returned.feedback ? <Text style={styles.feedback}>{returned.feedback}</Text> : null}
+        {returned.feedback ? <PlainLines text={returned.feedback} textStyle={styles.feedback} style={styles.feedbackBlock} /> : null}
       </View>
     </Card>
   );
@@ -275,7 +276,9 @@ function Attempt({ attempt, grading, courseworkId, uid }: { attempt: PastAttempt
         {attempt.handedInAt ? ` · handed in ${dayOf(attempt.handedInAt)}` : ''}
         {attempt.returned.grade ? ` · ${gradeText(attempt.returned.grade, grading)}` : ''}
       </Text>
-      {attempt.returned.feedback ? <Text style={styles.feedback}>{attempt.returned.feedback}</Text> : null}
+      {attempt.returned.feedback ? (
+        <PlainLines text={attempt.returned.feedback} textStyle={styles.feedback} style={styles.feedbackBlock} />
+      ) : null}
       <HandedIn note={attempt.note} files={attempt.files} courseworkId={courseworkId} uid={uid} />
     </Card>
   );
@@ -472,7 +475,8 @@ const styles = StyleSheet.create({
   failed: { color: t.feedback.danger },
   files: { marginTop: spacing(3) },
   grade: { fontSize: 32, fontWeight: '700', color: t.text.primary },
-  feedback: { fontSize: 15, lineHeight: 22, color: t.text.primary, marginTop: spacing(2) },
+  feedback: { fontSize: 15, lineHeight: 22, color: t.text.primary },
+  feedbackBlock: { marginTop: spacing(2) },
   answer: { marginBottom: spacing(3) },
   loading: { minHeight: 184 },
 });
