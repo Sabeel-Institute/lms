@@ -190,6 +190,45 @@ if (bundleSrc) {
   check(false, 'found the bundle script tag, to ask for its .map');
 }
 
+/*
+ * EVERY CALLABLE ANSWERS FOR ITSELF. A callable needs the public invoker on its
+ * Cloud Run service; without it Cloud Run's front end refuses every call with
+ * an HTML 401 before the code runs. A deploy that created one without it
+ * (signRecordingUploadParts, 2026-10-13) broke every staff upload on the live
+ * site, and nothing else looked wrong. Signed out, a callable answers JSON (its
+ * own "Sign in required.", or a refusal of the empty request); Cloud Run's
+ * refusal is HTML. The callables are read from the functions' index.
+ */
+const NOT_CALLABLES = new Set([
+  'copyZoomFile', // the copy queue's, private by design: only the queue's account calls it
+  'sweepAbandonedUploads', // scheduled
+  'bootstrapAdmin', // the emulator's only
+]);
+const indexSrc = readFileSync(`${ROOT}functions/src/index.ts`, 'utf8');
+const exported = [
+  ...[...indexSrc.matchAll(/export\s*\{([^}]*)\}/gs)].flatMap((m) =>
+    m[1].split(',').map((n) => n.trim().split(/\s+as\s+/).pop().trim()),
+  ),
+  ...[...indexSrc.matchAll(/^export const (\w+)/gm)].map((m) => m[1]),
+].filter(Boolean);
+const callables = exported.filter((n) => !/^on[A-Z]/.test(n) && !NOT_CALLABLES.has(n));
+const unanswered = [];
+await Promise.all(
+  callables.map(async (name) => {
+    const r = await fetch(`https://us-central1-${PROJECT_ID}.cloudfunctions.net/${name}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"data":{}}',
+    });
+    const type = r.headers.get('content-type') ?? '';
+    if (!/json/.test(type)) unanswered.push(`${name} (${r.status} ${type.split(';')[0] || 'no type'})`);
+  }),
+);
+check(
+  unanswered.length === 0,
+  `every callable answers for itself, ${callables.length} asked${unanswered.length ? `; Cloud Run refused ${unanswered.join(', ')}` : ''}`,
+);
+
 await page.screenshot({ path: 'e2e-shots/prod-01-signin.png', fullPage: true });
 await browser.close();
 

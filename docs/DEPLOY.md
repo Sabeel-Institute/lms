@@ -364,7 +364,9 @@ hit on 2026-10-12 and all apply to any new project here (a test project too):
   for every callable (every function whose name does not start with `on`).
   It takes a few minutes to spread: until then a call carrying a Firebase ID
   token gets an HTML 401, "The access token could not be verified", from Cloud
-  Run's front end rather than JSON from the function.
+  Run's front end rather than JSON from the function. `npm run smoke:prod`
+  calls every callable signed out and fails on any such HTML answer: a new
+  callable once shipped without the binding and broke every staff upload.
 
 - **The Zoom copy queue (`copyZoomFile`) needs Cloud Tasks and three grants**,
   made once on 2026-10-13: the Cloud Tasks API enabled; the runtime account
