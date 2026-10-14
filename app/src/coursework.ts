@@ -181,6 +181,37 @@ export function useCourseSubmissionsState(courseId: string | null): SubmissionRo
   );
 }
 
+/**
+ * One assignment's work, across its class: the grading desk's list. Not the
+ * course's: a term's worth of every assignment's work was read again on each
+ * step from one student to the next.
+ */
+export function useAssignmentSubmissionsState(courseId: string, courseworkId: string): SubmissionRow[] | null {
+  return useLiveQuery<SubmissionRow[] | null>(
+    () =>
+      query(collection(db, COLLECTIONS.submissions), where('courseId', '==', courseId), where('courseworkId', '==', courseworkId)),
+    [courseId, courseworkId],
+    {
+      label: 'assignmentSubmissions',
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('submissions', d) })),
+      empty: null,
+    },
+  );
+}
+
+/** One assignment's grades as staff are writing them, for the grading desk. */
+export function useAssignmentGradesState(courseId: string, courseworkId: string): GradeRow[] | null {
+  return useLiveQuery<GradeRow[] | null>(
+    () => query(collection(db, COLLECTIONS.grades), where('courseId', '==', courseId), where('courseworkId', '==', courseworkId)),
+    [courseId, courseworkId],
+    {
+      label: 'assignmentGrades',
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('grades', d) })),
+      empty: null,
+    },
+  );
+}
+
 /** Grades in a course as staff are writing them. Never student-readable. */
 export function useCourseGradesState(courseId: string | null): GradeRow[] | null {
   return useLiveQuery<GradeRow[] | null>(

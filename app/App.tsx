@@ -930,7 +930,11 @@ function GradeWork() {
   if (gate || !cls.value || !cw.value) return gate;
   return (
     <GradeScreen
-      key={`${courseworkId}_${studentUid}`}
+      // KEYED BY THE ASSIGNMENT, NOT THE STUDENT: stepping to the next student
+      // keeps the screen and its subscriptions (the form inside is keyed per
+      // student). Keyed per student, every J or Next tore down and re-made the
+      // class's listeners, and showed Loading for two seconds on a phone.
+      key={courseworkId}
       cls={cls.value}
       coursework={cw.value}
       studentUid={studentUid}

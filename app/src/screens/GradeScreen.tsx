@@ -26,8 +26,8 @@ import {
   returnWork,
   saveGrade,
   setNotRequired,
-  useCourseGradesState,
-  useCourseSubmissionsState,
+  useAssignmentGradesState,
+  useAssignmentSubmissionsState,
   useSubmissionEventsState,
   type CourseworkRow,
   type GradeRow,
@@ -77,8 +77,8 @@ export function GradeScreen({
   onOpenStudent: (studentUid: string) => void;
   onBackToList: () => void;
 }) {
-  const subs = useCourseSubmissionsState(cls.id);
-  const grades = useCourseGradesState(cls.id);
+  const subs = useAssignmentSubmissionsState(cls.id, cw.id);
+  const grades = useAssignmentGradesState(cls.id, cw.id);
   const events = useSubmissionEventsState(cls.id, cw.id, studentUid);
   // The directory's own state, not an empty list while it loads: until it
   // answers every student is "Unknown student", the title says so, and J and K
@@ -100,6 +100,9 @@ export function GradeScreen({
   const [formStatus, setFormStatus] = useState<GradeFormStatus>(NOTHING_TYPED);
   const [filter, setFilter] = useWorkFilter(cw.id);
   const [returnError, setReturnError] = useState<string | null>(null);
+  // The screen stays as the teacher steps from one student to the next (the
+  // form below is the per-student part), so an error is the last student's.
+  useEffect(() => setReturnError(null), [studentUid]);
   // Store the grade on the screen before anything that moves on or sends it.
   const settle = () => form.current?.flush() ?? Promise.resolve(true);
 
