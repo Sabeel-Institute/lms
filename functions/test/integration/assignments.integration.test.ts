@@ -1,9 +1,9 @@
-import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest';
+import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest';
 import { setBackgroundTriggers } from '../backgroundTriggers';
 import { withAudio } from '../mediaFixtures';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { DocumentReference, Firestore, Query, Transaction, getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
@@ -138,17 +138,9 @@ const countActive = async (recId: string) =>
       .get()
   ).size;
 
-/** Reconcile a session by id, reading the current session + recording docs. */
+/** Reconcile a session by id; the reconcile reads the session and recording itself. */
 async function reconcile(sessionId: string) {
-  const session = (await db().collection(COLLECTIONS.sessions).doc(ns(sessionId)).get()).data() as
-    | SessionDoc
-    | undefined;
-  const rec = session?.recordingId
-    ? ((await db().collection(COLLECTIONS.recordings).doc(session.recordingId).get()).data() as
-        | RecordingDoc
-        | undefined)
-    : undefined;
-  await reconcileSessionAssignments(db(), ns(sessionId), session, rec);
+  await reconcileSessionAssignments(db(), ns(sessionId));
 }
 
 let cohortId: string;
@@ -397,10 +389,10 @@ describe('unenrolment', () => {
    * in a hundred on a loaded machine; a 1.5-second wait for the queue to drain
    * made that rarer, and only rarer. Each step below reconciles explicitly,
    * through the same functions the triggers call, so with the triggers off
-   * every write is one the test made, in the order it made them. Production
-   * has the same window, when a staff edit to a session and the unenrolment
-   * of one of its students land within one reconcile of each other; the next
-   * write to the session corrects it.
+   * every write is one the test made, in the order it made them. In
+   * production the reconcile is one transaction, which closes that window: a
+   * reconcile holding the enrolment it read makes an unenrolment wait for it,
+   * or starts again after it.
    */
   beforeAll(() => setBackgroundTriggers(false));
   afterAll(() => setBackgroundTriggers(true));
@@ -740,5 +732,56 @@ describe('reconcileAttendanceRecords — the student-visible projection', () => 
       .where('sessionId', '==', ns('sess'))
       .get();
     expect(all.size).toBe(2);
+  });
+});
+
+/*
+ * ONE RECONCILE, ONE TRANSACTION. Two reconciles of one session at once — the
+ * recording trigger after a publish, the session trigger after an attendance
+ * submit — each read and then wrote, and the one that read first could write
+ * last, switching off grants the other had just made. That interleaving cannot
+ * be staged deterministically from here: inside a transaction, a write from
+ * outside waits on its locks. What is asserted is what makes it impossible:
+ * every read the reconcile decides from happens inside its one transaction,
+ * so Firestore commits it only if what it read still holds.
+ */
+describe('reconcileSessionAssignments in one transaction', () => {
+  it('reads nothing outside its transaction', async () => {
+    await seedSession('sess', { attendance: { s1: 'excused', s2: 'absent' }, submitted: true });
+    await seedRecording('r1', 'sess', 'published');
+    const outside = [
+      vi.spyOn(Query.prototype, 'get'),
+      vi.spyOn(DocumentReference.prototype, 'get'),
+      vi.spyOn(Firestore.prototype, 'getAll'),
+    ];
+    const transactions = vi.spyOn(Firestore.prototype, 'runTransaction');
+    try {
+      await reconcile('sess');
+      expect(transactions).toHaveBeenCalledTimes(1);
+      for (const read of outside) expect(read).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(await getAssignment('s1', 'r1')).toMatchObject({ active: true });
+    expect(await getAssignment('s2', 'r1')).toBeUndefined();
+  });
+
+  /*
+   * Watched at the writes themselves: Firestore keeps a document's update
+   * time for a write that changes nothing, so the stored grant cannot tell a
+   * rewrite from none.
+   */
+  it('writes nothing for a grant already as it should be', async () => {
+    await seedSession('sess', { attendance: { s1: 'excused' }, submitted: true });
+    await seedRecording('r1', 'sess', 'published');
+    await reconcile('sess');
+    const writes = [vi.spyOn(Transaction.prototype, 'set'), vi.spyOn(Transaction.prototype, 'update')];
+    try {
+      await reconcile('sess');
+      for (const write of writes) expect(write).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(await getAssignment('s1', 'r1')).toMatchObject({ active: true });
   });
 });
