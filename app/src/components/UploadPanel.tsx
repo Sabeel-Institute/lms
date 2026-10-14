@@ -3,7 +3,6 @@ import { StyleSheet, Text, View } from 'react-native';
 import {
   isVideoContentType,
   maxUploadBytes,
-  mediaParts,
   uploadContentType,
   type UploadContentType,
   type UploadPlacement,
@@ -14,6 +13,7 @@ import type { PickedFile } from '../mediaFileTypes';
 import { UploadCancelled, uploadMedia } from '../upload';
 import { createRecording, deleteRecording, uploadApi, type RecordingRow } from '../recordings';
 import { errorText } from '../errors';
+import { placementOptions } from '../uploadPlacement';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
@@ -169,19 +169,6 @@ export function useUploads(sessionId: string, recording: RecordingRow | null) {
   };
 }
 
-/** Where a file of this type may go: a new part, or a version of a part that has no file of its kind yet. */
-function placementOptions(recording: RecordingRow | null, contentType: UploadContentType | null) {
-  const version = contentType && isVideoContentType(contentType) ? 'video' : 'audio';
-  const live = Object.values(recording?.media ?? {}).filter((i) => i.status !== 'failed');
-  return [
-    { value: 'part', label: 'New part' },
-    ...mediaParts(live)
-      .map((p, index) => ({ part: p.part, index, taken: p.items.some((i) => i.version === version) }))
-      .filter((p) => !p.taken)
-      .map((p) => ({ value: `v${p.part}`, label: `Version of Part ${p.index + 1}` })),
-  ];
-}
-
 const STATE_TEXT: Record<RowState, (r: UploadRow) => string> = {
   waiting: () => 'Waiting',
   sending: (r) => `Sending ${Math.round(r.progress * 100)}%`,
@@ -224,11 +211,11 @@ export function UploadPanel({
           </Text>
           {/* Only when there is a choice: a lone "New part" pill is a
               question with one answer. */}
-          {phase === 'choosing' && !r.problem && placementOptions(recording, r.contentType).length > 1 ? (
+          {phase === 'choosing' && !r.problem && placementOptions(recording?.media ?? {}, r.contentType).length > 1 ? (
             <Chips<string>
               value={r.placement.as === 'part' ? 'part' : `v${r.placement.part}`}
               testIdPrefix={`upload-place-${i}`}
-              options={placementOptions(recording, r.contentType)}
+              options={placementOptions(recording?.media ?? {}, r.contentType)}
               onChange={(v) =>
                 uploads.setPlacement(r.key, v === 'part' ? { as: 'part' } : { as: 'version', part: Number(v.slice(1)) })
               }
