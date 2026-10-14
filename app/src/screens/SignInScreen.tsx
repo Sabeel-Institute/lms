@@ -29,7 +29,7 @@ export function SignInScreen() {
 
   // `fn` is called inside the press, before any await, so the Google popup
   // still opens from the tap that asked for it.
-  const run = (kind: 'google' | 'student' | 'reset', fn: () => Promise<void>) =>
+  const run = (kind: 'google' | 'student' | 'reset' | 'dev', fn: () => Promise<void>) =>
     once(kind, async () => {
       setError(null);
       setInfo(null);
@@ -118,7 +118,7 @@ export function SignInScreen() {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {info ? <Notice tone="info">{info}</Notice> : null}
 
-      {devSignInAvailable ? <DevRow busy={busy !== null} /> : null}
+      {devSignInAvailable ? <DevRow busy={busy !== null} run={(fn) => void run('dev', fn)} /> : null}
 
       {/* Every Sabeel app shows its version + build commit here, so a screenshot
           of a problem always identifies the exact build. See buildInfo.ts. */}
@@ -138,16 +138,12 @@ export function SignInScreen() {
  * strings survive minification; `npm run smoke:prod` proves it does not RENDER
  * on the live site (no `dev-signin-*` rows).
  */
-function DevRow({ busy }: { busy: boolean }) {
-  const [pending, setPending] = useState(false);
-  const as = (localPart: string) => async () => {
-    setPending(true);
-    try {
-      await devSignIn(localPart);
-    } finally {
-      setPending(false);
-    }
-  };
+function DevRow({ busy, run }: { busy: boolean; run: (fn: () => Promise<void>) => void }) {
+  // Through the screen's own `run`, as the Google door is: one press at a
+  // time, and a refusal shown in the error band. Awaited on its own, the
+  // outsider's — whose account the trigger deletes as it signs in — reached
+  // the top of the page unhandled.
+  const as = (localPart: string) => () => run(() => devSignIn(localPart).then(() => undefined));
   return (
     <View style={styles.devRow}>
       <Text style={styles.devLabel}>Emulator sign-in (dev only)</Text>
@@ -155,22 +151,22 @@ function DevRow({ busy }: { busy: boolean }) {
         testID="dev-signin-first-admin"
         label={`as ${FIRST_ADMIN_LOCAL_PART} (first admin)`}
         variant="secondary"
-        disabled={busy || pending}
-        onPress={() => void as(FIRST_ADMIN_LOCAL_PART)()}
+        disabled={busy}
+        onPress={as(FIRST_ADMIN_LOCAL_PART)}
       />
       <Button
         testID="dev-signin-manager"
         label="as manager"
         variant="secondary"
-        disabled={busy || pending}
-        onPress={() => void as('manager')()}
+        disabled={busy}
+        onPress={as('manager')}
       />
       <Button
         testID="dev-signin-outsider"
         label="as outsider (gets deleted)"
         variant="secondary"
-        disabled={busy || pending}
-        onPress={() => void as('someone@gmail.com')()}
+        disabled={busy}
+        onPress={as('someone@gmail.com')}
       />
     </View>
   );

@@ -28,6 +28,15 @@ export function signInMessage(e: unknown): string {
        * `google.ts`.
        */
       return "This account isn't set up for the app yet. Contact your administrator.";
+    case 'auth/user-token-expired':
+      /*
+       * THE ACCOUNT WENT AS IT SIGNED IN. The auth trigger deletes an account
+       * this app does not accept — a Google account outside the staff domain —
+       * moments after it is created, and when that lands inside the sign-in
+       * itself, this is how the sign-in fails. "Try again in a moment" sent the
+       * person round the same loop.
+       */
+      return "That account can't sign in here. Staff use their Sabeel Google account.";
     case 'auth/user-disabled':
       // Staff are disabled the same way, and a manager has no teacher to ask.
       return 'That account has been disabled. Contact your teacher or an administrator.';

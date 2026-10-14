@@ -23,6 +23,15 @@ describe('the sign-in screen\'s words for a failure', () => {
       .toBe('That sign-in could not be verified.');
   });
 
+  it('tells someone whose account went as it signed in which account to use, not to try again', () => {
+    // An off-domain Google account, deleted by the auth trigger inside the
+    // sign-in itself: the SDK's reload of the new user finds nobody.
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const text = signInMessage({ code: 'auth/user-token-expired', message: 'Firebase: Error (auth/user-token-expired).' });
+    expect(text).toMatch(/Sabeel Google account/);
+    expect(text).not.toMatch(/try again/i);
+  });
+
   it('says the same thing for a wrong password and an unknown address', () => {
     expect(signInMessage({ code: 'auth/wrong-password' })).toBe(signInMessage({ code: 'auth/user-not-found' }));
   });

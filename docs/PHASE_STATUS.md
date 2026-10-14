@@ -1746,6 +1746,19 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-14 — **A sign-in refused as it lands said "try again"**. An
+  off-domain Google account is deleted by the auth trigger moments after it
+  is created; when that lands inside the sign-in itself, the SDK's reload of
+  the new user finds nobody and the sign-in rejects with
+  `auth/user-token-expired`, which the screen showed as "Something went
+  wrong. Try again in a moment." It now says which account staff use. The
+  emulator's dev sign-in row let the same rejection reach the top of the
+  page (the stack ran from `_signInWithCredential` through
+  `_logoutIfInvalidated`); it goes through the screen's handler now, and the
+  browser suite no longer excuses the outsider's page. Caught twice in eight
+  runs of a probe before the fix and handled in every run after. When the
+  deletion lands after the sign-in instead — the usual case — the person is
+  returned to the sign-in screen with no message, as before.
 - 2026-10-14 — **The unenrolment tests run without the emulator's
   triggers.** "Does not hand back an obligation whose deadline passed" failed
   now and then on a loaded machine: a trigger from the test's own seed read

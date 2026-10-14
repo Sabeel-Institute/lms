@@ -2947,11 +2947,12 @@ check(
 );
 // An exception or rejection that reached the top of ANY page is a defect,
 // whatever else passed — it was collected and printed for months without
-// failing anything. The outsider's page is the one exception: its account is
-// deleted under it by design, and the SDK's reaction to that is the point.
-const unhandled = consoleErrors.filter((e) => /UNHANDLED/.test(e) && !e.startsWith('[outsider]'));
+// failing anything. The outsider's page included: its account is deleted as
+// it signs in, and the sign-in that fails for it is caught and answered on the
+// sign-in screen like any other.
+const unhandled = consoleErrors.filter((e) => /UNHANDLED/.test(e));
 check(
-  'nothing reached the top of a page unhandled, except on the outsider\'s',
+  'nothing reached the top of any page unhandled',
   unhandled.length === 0,
   unhandled.slice(0, 3).join(' | '),
 );
