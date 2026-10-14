@@ -7,6 +7,7 @@ import {
   MAX_POINTS,
   canHandIn,
   canTakeBack,
+  closesOn,
   gradeFits,
   hasOwnDates,
   isLate,
@@ -843,11 +844,25 @@ export const returnWork = auditedCall('returnWork', async (req, audit) => {
   return { returned: res.length };
 });
 
-/** A later date for one student, before or after theirs has passed, with a reason they see. */
+/**
+ * A later date for one student, before or after theirs has passed, with a
+ * reason they see. MORE TIME IS MORE: never a due date before the class's,
+ * and, for work not in yet, never a last day before the class's last day for
+ * late work, so a teacher's slip cannot leave a student less time than their
+ * classmates. Work already in may close sooner: more time there is how late
+ * work is forgiven, and nothing is left to hand in.
+ */
 export async function giveMoreTimeRecord(staffUid: string, input: StudentWorkInput & { dates: { dueDate: string; lateUntil: string | null }; reason: string }) {
+  const cw = await readCoursework(input.courseworkId);
   return db().runTransaction(async (tx) => {
     const sub = await readSubmission(tx, input.studentUid, input.courseworkId);
     if (sub.state === 'returned') throw new HttpsError('failed-precondition', 'This work has been returned.');
+    if (input.dates.dueDate < cw.dueDate || (sub.state === 'open' && closesOn(input.dates) < closesOn(cw))) {
+      throw new HttpsError(
+        'invalid-argument',
+        `More time cannot end before the class's dates: due ${cw.dueDate}${cw.lateUntil ? `, late work until ${cw.lateUntil}` : ''}.`,
+      );
+    }
     tx.update(subRef(input.studentUid, input.courseworkId), {
       ...input.dates,
       closedEarly: false,

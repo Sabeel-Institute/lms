@@ -4,6 +4,7 @@ import { useIsFocused } from '@react-navigation/native';
 import {
   INSTITUTE_TIMEZONE,
   addDays,
+  daysUntilDue,
   gradeFits,
   gradeText,
   isLate,
@@ -561,7 +562,14 @@ function StudentOptions({
   run: Gate['run'];
 }) {
   const [open, setOpen] = useState(false);
-  const [date, setDate] = useState(addDays(todayInZone(INSTITUTE_TIMEZONE), 7));
+  // A week past the later of today and the class's own date: more time is
+  // more, and the server refuses a date earlier than the class's. Late work
+  // keeps the gap the class has, so a student given more time does not lose it.
+  const [date, setDate] = useState(() => {
+    const today = todayInZone(INSTITUTE_TIMEZONE);
+    return addDays(today > cw.dueDate ? today : cw.dueDate, 7);
+  });
+  const lateUntil = cw.lateUntil === null ? null : addDays(date, daysUntilDue(cw.lateUntil, cw.dueDate));
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const act = (key: string, fn: () => Promise<unknown>) =>
@@ -597,13 +605,16 @@ function StudentOptions({
           {error ? <Notice tone="error">{error}</Notice> : null}
           <Field testID="grade-reason" label="Reason (the student sees it)" value={reason} onChangeText={setReason} />
           <DateField label="New date" value={date} onChange={setDate} />
+          {lateUntil ? (
+            <Text style={styles.quiet}>Late work then until {unbreakableDate(lateUntil)}, the same gap the class has.</Text>
+          ) : null}
           <Row>
             <Button
               testID="grade-more-time"
               label="Give more time"
               busy={active === 'time'}
               disabled={!reason.trim()}
-              onPress={() => act('time', () => giveMoreTime({ courseworkId: cw.id, studentUid, dueDate: date, lateUntil: null, reason: reason.trim() }))}
+              onPress={() => act('time', () => giveMoreTime({ courseworkId: cw.id, studentUid, dueDate: date, lateUntil, reason: reason.trim() }))}
             />
             <Button
               testID="grade-not-required"

@@ -102,6 +102,11 @@ async function timePasses(uid: string, cwId: string, dates: { dueDate: string; l
   await db().collection(COLLECTIONS.submissions).doc(submissionId(uid, cwId)).update(dates);
 }
 
+/** The class's own dates, moved the same way. */
+async function classTimePasses(cwId: string, dates: { dueDate: string; lateUntil: string | null }) {
+  await db().collection(COLLECTIONS.coursework).doc(cwId).update(dates);
+}
+
 const stateOf = async (uid: string, cwId: string) => workState((await sub(uid, cwId))!, today, true);
 
 describe('who receives an assignment', () => {
@@ -368,6 +373,7 @@ describe('grading and returning', () => {
 describe('one student at a time', () => {
   it('moving a date re-judges late: more time makes late work on time', async () => {
     const id = await posted();
+    await classTimePasses(id, { dueDate: inDays(-2), lateUntil: inDays(5) });
     await timePasses(AMINAH, id, { dueDate: inDays(-2), lateUntil: inDays(5) });
     await writeNote(AMINAH, id, 'Was ill');
     await handInWork(AMINAH, id);
@@ -386,6 +392,7 @@ describe('one student at a time', () => {
 
   it('more time reopens missed work, and survives the class’s date moving', async () => {
     const id = await posted();
+    await classTimePasses(id, { dueDate: inDays(-9), lateUntil: inDays(-2) });
     await timePasses(BILAL, id, { dueDate: inDays(-9), lateUntil: inDays(-2) });
     expect(await stateOf(BILAL, id)).toBe('missed');
     await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, dates: { dueDate: inDays(3), lateUntil: null }, reason: 'Travel' });
@@ -407,6 +414,22 @@ describe('one student at a time', () => {
     expect(await sub(AMINAH, id)).toMatchObject({ dueDate: inDays(20), lateUntil: null });
     expect(await stateOf(AMINAH, id)).toBe('toDo');
     expect(await sub(BILAL, id)).toMatchObject({ dueDate: inDays(8), lateUntil: null });
+  });
+
+  /*
+   * MORE TIME IS MORE. The form offered a week from today and no late work,
+   * and the server took any date not in the past, so "more time" could leave a
+   * student less time than their classmates.
+   */
+  it('more time never ends before the class’s due date or its last day for late work', async () => {
+    const id = await posted(); // due in 7 days, late work for 14
+    const give = (dueDate: string, lateUntil: string | null) =>
+      giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, dates: { dueDate, lateUntil }, reason: 'Travel' });
+    await expect(give(inDays(5), null)).rejects.toThrow(/cannot end before the class/);
+    await expect(give(inDays(9), null)).rejects.toThrow(/cannot end before the class/);
+    expect(await sub(AMINAH, id)).toMatchObject({ dueDate: inDays(7), lateUntil: inDays(14), moreTime: null });
+    await give(inDays(9), inDays(16));
+    expect(await sub(AMINAH, id)).toMatchObject({ dueDate: inDays(9), lateUntil: inDays(16) });
   });
 
   it('not required counts nowhere and can be undone', async () => {

@@ -199,9 +199,10 @@ describe('returned work', () => {
 describe('the last day to hand in, at 7 AM', () => {
   it('tells those with nothing in, on their own date — not anyone let off, nor twice', async () => {
     const id = await postedThroughTheApp();
-    // Time has passed: the class's work is due today.
+    // Time has passed: the class's work is due today, with no late work.
+    await db().collection(COLLECTIONS.coursework).doc(id).update({ dueDate: today, lateUntil: null });
     for (const uid of [AMINAH, BILAL, CAROL]) {
-      await db().collection(COLLECTIONS.submissions).doc(submissionId(uid, id)).update({ dueDate: today });
+      await db().collection(COLLECTIONS.submissions).doc(submissionId(uid, id)).update({ dueDate: today, lateUntil: null });
     }
     await setNotRequiredRecord(TEACHER, { courseworkId: id, studentUid: BILAL, reason: 'Joined late' });
     await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: CAROL, dates: { dueDate: inDays(3), lateUntil: null }, reason: 'Ill' });
