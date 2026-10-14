@@ -479,6 +479,28 @@ A message is shown whether the app is open, in the background, or closed — on 
 - Course grades, quizzes, discussion and messaging.
 - Video in assignment files.
 
+## Future ideas
+
+Considered and set aside for now (2026-10-15), with what each would solve and
+cost, so the reasoning is not lost.
+
+- **Long recordings that start at once on a slow phone.** A player cannot
+  play until it has a file's whole index, which for a 3-hour Zoom video is
+  about 3.5 MB: some 20 seconds on a slow connection before the first word
+  (a 1-hour audio, about 5). Rewriting each file into small fragments, each
+  with its own small index, would let it start in a second or two. Nothing
+  is re-encoded: the same sound and picture, rearranged. The cost: a
+  processing job (ffmpeg) that reads every new file from the bucket,
+  rewrites it and puts it back, a few minutes before a new file is final,
+  about $0.12 per GB sent back to the bucket, an overall index of the
+  fragments so that seeking stays quick, and upload checks that read the
+  fragmented layout. Today the player says "Loading…" and points a video at
+  its Audio only version.
+- **Warm functions for the taps people wait on.** After a quiet spell the
+  first tap on Play, Hand in, Save grade, Return or Submit attendance waits
+  3-8 seconds while its function starts. Keeping one instance of each
+  always running answers that tap at once, for roughly $3-8 a month each.
+
 ## Feature checklist
 
 ### Student
