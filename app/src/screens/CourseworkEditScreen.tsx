@@ -77,6 +77,9 @@ export function CourseworkEditScreen({
   const [lateEdited, setLateEdited] = useState(existing?.lateUntil != null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  // ASKED ONCE MORE, as Return all is: it closes the work for the whole class
+  // in one tap, and every student with nothing in shows as missed.
+  const [confirmClose, setConfirmClose] = useState(false);
   const onBusyChange = useCallback((b: boolean) => setUploading(b), []);
   const roster = useRosterState(cls.id);
   const students = roster?.filter((e) => e.active).length ?? null;
@@ -355,19 +358,41 @@ export function CourseworkEditScreen({
         {uploading ? <Text style={styles.waiting}>Ready once every file is up.</Text> : null}
         {posted && existing && existing.closedAt === null ? (
           <View style={styles.close}>
-            <Button
-              testID="coursework-close"
-              label="Stop taking work"
-              variant="secondary"
-              busy={active === 'close'}
-              disabled={others('close')}
-              onPress={() =>
-                act('close', async () => {
-                  await closeCoursework({ courseworkId: existing.id });
-                })
-              }
-            />
-            <Text style={styles.hint}>Everyone with nothing handed in will show as missed. Work already in can still be graded.</Text>
+            {confirmClose ? (
+              <Card>
+                <Text style={styles.confirm}>
+                  Stop taking work for the whole class now? Everyone with nothing handed in will show as missed. Work
+                  already in can still be graded.
+                </Text>
+                <Row>
+                  <Button
+                    testID="coursework-close-confirm"
+                    label="Stop taking work"
+                    variant="secondary"
+                    busy={active === 'close'}
+                    disabled={others('close')}
+                    onPress={() =>
+                      act('close', async () => {
+                        await closeCoursework({ courseworkId: existing.id });
+                        setConfirmClose(false);
+                      })
+                    }
+                  />
+                  <Button label="Cancel" variant="quiet" onPress={() => setConfirmClose(false)} />
+                </Row>
+              </Card>
+            ) : (
+              <>
+                <Button
+                  testID="coursework-close"
+                  label="Stop taking work"
+                  variant="secondary"
+                  disabled={others('close')}
+                  onPress={() => setConfirmClose(true)}
+                />
+                <Text style={styles.hint}>Everyone with nothing handed in will show as missed. Work already in can still be graded.</Text>
+              </>
+            )}
           </View>
         ) : null}
       </ConfirmDanger>
@@ -380,4 +405,5 @@ const styles = StyleSheet.create({
   waiting: { fontSize: 13, color: t.text.secondary, marginTop: spacing(2) },
   label: { fontSize: 13, fontWeight: '600', color: t.text.secondary, marginBottom: spacing(1) },
   close: { marginTop: spacing(4) },
+  confirm: { fontSize: 15, lineHeight: 22, color: t.text.primary, marginBottom: spacing(3) },
 });

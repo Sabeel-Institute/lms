@@ -172,7 +172,9 @@ export function WorkScreen({
                 })
               }
             />
-          ) : null}
+          ) : (
+            <UnsentWork uid={uid} courseworkId={cw.id} />
+          )}
         </>
       )}
 
@@ -240,6 +242,24 @@ function StateNotice({
     case 'returned':
       return null;
   }
+}
+
+/**
+ * WHAT THEY HAD WRITTEN, once the work closed under it: an answer and files
+ * never handed in stay on the server, and the page went on as if there were
+ * none. Shown as it stands, to read and keep.
+ */
+function UnsentWork({ uid, courseworkId }: { uid: string; courseworkId: string }) {
+  const draft = useMyDraftState(uid, courseworkId).value;
+  if (!draft || (!draft.note.trim() && Object.keys(draft.files).length === 0)) return null;
+  return (
+    <>
+      <SectionTitle>Your work, not handed in</SectionTitle>
+      <Card>
+        <HandedIn note={draft.note} files={draft.files} courseworkId={courseworkId} uid={uid} />
+      </Card>
+    </>
+  );
 }
 
 /** The grade and feedback, which exist for the student only once returned. */
