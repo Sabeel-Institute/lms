@@ -2,7 +2,7 @@ import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { COLLECTIONS, EMULATOR_PROJECT_ID, type StaffUserDoc } from '@sabeel/shared';
+import { COLLECTIONS, EMULATOR_PROJECT_ID, INSTITUTE_TIMEZONE, todayInZone, type StaffUserDoc } from '@sabeel/shared';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import { applyStaffAccess, setStaffAccess, validateStaffAccess } from '../../src/staff';
 import { onUserCreate } from '../../src/authTrigger';
@@ -190,6 +190,10 @@ describe('onUserCreate delivered twice', () => {
   });
   const deliver = (event: unknown) =>
     (onUserCreate as unknown as { run: (e: unknown, ctx: unknown) => Promise<void> }).run(event, { eventId: 'evt-1' });
+  /** The day's count of rejected sign-ups, as the admin's history shows it. */
+  const rejectedToday = async () =>
+    ((await getFirestore().collection(COLLECTIONS.auditLog).doc(`authReject-${todayInZone(INSTITUTE_TIMEZONE)}`).get()).data()?.detail
+      ?.attempts as number | undefined) ?? 0;
   const auditRows = async (uid: string, action: string) =>
     (await getFirestore().collection(COLLECTIONS.auditLog).where('targets.uid', '==', uid).get()).docs.filter(
       (d) => d.data().action === action,
@@ -218,8 +222,31 @@ describe('onUserCreate delivered twice', () => {
     await deliver(googleSignUp(uid, email));
     await expect(getAuth().getUser(uid)).rejects.toMatchObject({ code: 'auth/user-not-found' });
 
+    const before = await rejectedToday();
     await expect(deliver(googleSignUp(uid, email))).resolves.toBeUndefined();
     expect(await auditRows(uid, 'authReject')).toBe(1);
+    expect(await rejectedToday()).toBe(before);
+  });
+
+  /*
+   * A FLOOD OF SIGN-UPS IS ONE ROW. Anyone with the site's public key can
+   * attempt them, and a row each buried every real entry of the admin's
+   * history, which shows the latest 200.
+   */
+  it('rejected sign-ups are counted in one row a day, not written one by one', async () => {
+    const before = await rejectedToday();
+    const rowsBefore = (await getFirestore().collection(COLLECTIONS.auditLog).where('action', '==', 'authReject').get()).size;
+    for (let i = 0; i < 5; i++) {
+      const uid = `prober-${i}-${Date.now()}`;
+      await getAuth().createUser({ uid, email: `${uid}@example.com`, emailVerified: true });
+      await deliver(googleSignUp(uid, `${uid}@example.com`));
+    }
+    const rowsAfter = (await getFirestore().collection(COLLECTIONS.auditLog).where('action', '==', 'authReject').get()).size;
+    // Five attempts add the day's row at most, and it counts all five.
+    expect(rowsAfter - rowsBefore).toBeLessThanOrEqual(1);
+    expect(await rejectedToday()).toBe(before + 5);
+    const today = (await getFirestore().collection(COLLECTIONS.auditLog).doc(`authReject-${todayInZone(INSTITUTE_TIMEZONE)}`).get()).data();
+    expect(today?.detail).toMatchObject({ email: expect.stringMatching(/^prober-4-/), reason: 'bad-domain' });
   });
 });
 

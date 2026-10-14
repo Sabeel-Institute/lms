@@ -1207,6 +1207,10 @@ date, so the two are comparable wherever you are reading from. The screen
 shows a fixed number of the most recent changes and says how many when it is
 full; nothing is deleted, and older history is still in the record.
 
+Sign-ups the app refused — someone signing in with an address outside
+oursabeel.com, or trying to make an account of their own — are one entry a
+day, **Rejected sign-up**, with how many there were and the latest address.
+
 ## 3.4 Disable and archive — don't delete
 
 The app is built around **reversible** actions:

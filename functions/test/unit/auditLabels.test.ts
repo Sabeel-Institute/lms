@@ -30,12 +30,13 @@ const REPO = resolve(import.meta.dirname, '../../..');
 /**
  * What the server writes into `auditLog.action`.
  *
- * Two shapes, and both are real: `auditedCall('name', …)` wraps a callable, and
+ * Three shapes, and all are real: `auditedCall('name', …)` wraps a callable;
  * the auth trigger — which has no callable to wrap — hands `writeAudit` an
- * entry carrying its own `action`. The second is matched against `writeAudit`
- * rather than against a bare `action:` key: `action` is also a Cloud Storage
- * signed-URL option and a discriminant in `provision.ts`, and matching those
- * would have this test demand English for `read` and `ignore`.
+ * entry carrying its own `action`; and it counts rejected sign-ups in one row
+ * a day, written to the log by id. The last two are matched against their
+ * writes rather than against a bare `action:` key: `action` is also a Cloud
+ * Storage signed-URL option and a discriminant in `provision.ts`, and matching
+ * those would have this test demand English for `read` and `ignore`.
  */
 function serverActions(): Set<string> {
   const dir = resolve(REPO, 'functions/src');
@@ -44,6 +45,9 @@ function serverActions(): Set<string> {
     const src = readFileSync(resolve(dir, file), 'utf8');
     for (const m of src.matchAll(/auditedCall\(\s*'([A-Za-z]+)'/g)) out.add(m[1]);
     for (const m of src.matchAll(/writeAudit\(\{[\s\S]*?action:\s*'([A-Za-z]+)'/g)) out.add(m[1]);
+    for (const m of src.matchAll(/collection\(COLLECTIONS\.auditLog\)\s*\.doc\([^)]*\)\s*\.set\(\s*\{[\s\S]*?action:\s*'([A-Za-z]+)'/g)) {
+      out.add(m[1]);
+    }
   }
   return out;
 }

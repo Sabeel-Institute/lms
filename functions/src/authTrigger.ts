@@ -1,8 +1,8 @@
 import './setup';
 import * as functionsV1 from 'firebase-functions/v1';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
-import { COLLECTIONS, REGION, type StaffUserDoc } from '@sabeel/shared';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { COLLECTIONS, INSTITUTE_TIMEZONE, REGION, todayInZone, type StaffUserDoc } from '@sabeel/shared';
 import { decideProvision } from './provision';
 import { reportError } from './sentry';
 import { writeAudit } from './audited';
@@ -32,6 +32,32 @@ import { writeAudit } from './audited';
  * the approval queue, so the admin's list is never padded with junk that has to
  * be mentally filtered.
  */
+/**
+ * REJECTED SIGN-UPS ARE COUNTED, ONE ROW A DAY. Anyone holding the site's
+ * public key can attempt a sign-up, and a row for each let a few hundred
+ * attempts push every real entry off the admin's history, which shows the
+ * latest 200. The day's row says how many there were, and the latest address
+ * and why it was refused.
+ */
+async function countRejected(uid: string, email: string | null, reason: string): Promise<void> {
+  const day = todayInZone(INSTITUTE_TIMEZONE);
+  await getFirestore()
+    .collection(COLLECTIONS.auditLog)
+    .doc(`authReject-${day}`)
+    .set(
+      {
+        at: Date.now(),
+        actorUid: uid,
+        actorRole: 'system',
+        action: 'authReject',
+        courseId: null,
+        targets: { uid },
+        detail: { attempts: FieldValue.increment(1), email, reason },
+      },
+      { merge: true },
+    );
+}
+
 /** gRPC ALREADY_EXISTS: the directory row an earlier delivery created. */
 const ALREADY_EXISTS = 6;
 
@@ -68,15 +94,7 @@ export const onUserCreate = functionsV1
           if ((e as { code?: string }).code === 'auth/user-not-found') return;
           throw e;
         }
-        await writeAudit({
-          at: Date.now(),
-          actorUid: user.uid,
-          actorRole: 'system',
-          action: 'authReject',
-          courseId: null,
-          targets: { uid: user.uid },
-          detail: { reason: decision.reason, email: decision.email },
-        });
+        await countRejected(user.uid, decision.email, decision.reason);
         return;
       }
 
