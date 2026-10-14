@@ -158,16 +158,23 @@ function useTodayQueue(
    * seeing a query is worse than the duplication.
    */
   /*
-   * WORK TO GRADE, across the same scope: the assignments, the work handed in
-   * and not yet returned, and the grades being written. Rows are shown only
-   * for the courses the reader manages by name — see `gradingRows`.
+   * WORK TO GRADE: the assignments, the work handed in and not yet returned,
+   * and the grades being written, in the courses the reader MANAGES by name,
+   * the only courses `gradingRows` shows a row for. Not the queue's whole
+   * scope: an admin's is every live course, and an admin who taught nothing
+   * downloaded every grade in all of them, a megabyte on a phone, on sign-in.
    */
+  const gradingKey = useMemo(
+    () => scope.filter((id) => (courses ?? []).some((c) => c.id === id && (c.managerUids ?? []).includes(uid))).join(','),
+    [scope, courses, uid],
+  );
+  const gradingScope = useMemo(() => (gradingKey ? gradingKey.split(',') : []), [gradingKey]);
   const coursework = useLiveQuery<(CourseworkDoc & { id: string })[] | null>(
     () =>
-      scope.length > 0
-        ? query(collection(db, COLLECTIONS.coursework), where('courseId', 'in', scope))
+      gradingScope.length > 0
+        ? query(collection(db, COLLECTIONS.coursework), where('courseId', 'in', gradingScope))
         : null,
-    [scope],
+    [gradingScope],
     {
       label: 'todayCoursework',
       map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('coursework', d) })),
@@ -178,14 +185,14 @@ function useTodayQueue(
   );
   const handedIn = useLiveQuery<SubmissionDoc[] | null>(
     () =>
-      scope.length > 0
+      gradingScope.length > 0
         ? query(
             collection(db, COLLECTIONS.submissions),
-            where('courseId', 'in', scope),
+            where('courseId', 'in', gradingScope),
             where('state', '==', 'handedIn'),
           )
         : null,
-    [scope],
+    [gradingScope],
     {
       label: 'todayHandedIn',
       map: (snap) => snap.docs.map((d) => read('submissions', d)),
@@ -196,8 +203,8 @@ function useTodayQueue(
   );
   const grades = useLiveQuery<GradeDoc[] | null>(
     () =>
-      scope.length > 0 ? query(collection(db, COLLECTIONS.grades), where('courseId', 'in', scope)) : null,
-    [scope],
+      gradingScope.length > 0 ? query(collection(db, COLLECTIONS.grades), where('courseId', 'in', gradingScope)) : null,
+    [gradingScope],
     {
       label: 'todayGrades',
       map: (snap) => snap.docs.map((d) => read('grades', d)),

@@ -12,7 +12,7 @@ import {
   type StaffWorkState,
 } from '@sabeel/shared';
 import { Empty, RowList, useGridCell } from '../components/ui';
-import { useCourseCourseworkState, useCourseGradesState, useCourseSubmissionsState } from '../coursework';
+import { useCourseCourseworkState, useStudentCourseGradesState, useStudentCourseSubmissionsState } from '../coursework';
 import type { CourseRow } from '../structure';
 import { getTheme, spacing } from '../theme';
 
@@ -44,8 +44,9 @@ export function StaffStudentWork({
   onOpenWork: (courseworkId: string) => void;
 }) {
   const coursework = useCourseCourseworkState(cls.id);
-  const subs = useCourseSubmissionsState(cls.id);
-  const grades = useCourseGradesState(cls.id);
+  // Theirs only, not every student's work in the course.
+  const subs = useStudentCourseSubmissionsState(cls.id, studentUid);
+  const grades = useStudentCourseGradesState(cls.id, studentUid);
   const today = todayInZone(INSTITUTE_TIMEZONE);
   const rows = useMemo(() => {
     const titles = new Map((coursework ?? []).map((c) => [c.id, c]));

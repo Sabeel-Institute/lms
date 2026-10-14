@@ -26,8 +26,8 @@ import { RichText } from '../components/RichText';
 import { Attachments } from '../components/Attachments';
 import {
   returnWork,
-  useCourseGradesState,
-  useCourseSubmissionsState,
+  useAssignmentGradesState,
+  useAssignmentSubmissionsState,
   type CourseworkRow,
   type GradeRow,
 } from '../coursework';
@@ -63,8 +63,10 @@ export function CourseworkDetailScreen({
   /** Open one student's work; with no student, the first still to grade. */
   onGrade: (studentUid: string, order: string[]) => void;
 }) {
-  const subsAll = useCourseSubmissionsState(cls.id);
-  const gradesAll = useCourseGradesState(cls.id);
+  // This assignment's work and grades only, not the course's every one: a
+  // term's worth was read and re-sorted to show one assignment's page.
+  const subsAll = useAssignmentSubmissionsState(cls.id, cw.id);
+  const gradesAll = useAssignmentGradesState(cls.id, cw.id);
   // Waited for, as on the grading screen: rows sorted by names not yet known
   // reorder themselves under the reader when the directory answers.
   const studentsState = useStudentsState(true);
