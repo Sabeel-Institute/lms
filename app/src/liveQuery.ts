@@ -98,7 +98,9 @@ function forgetListener(key: string) {
  *
  * Narrow on purpose. It suppresses ONLY permission errors, and only while the
  * app knows the account cannot read: a denial to a signed-in, active user is
- * the interesting kind and still reports.
+ * the interesting kind and still reports. And `aborted`, the end of every
+ * listener still attached when the web app ends Firestore itself, at sign-out
+ * and for Try again (`firestoreInit.web.ts`), each of which clears this first.
  */
 let sessionCanRead = false;
 
@@ -115,7 +117,7 @@ function reportListenerError(
   extra?: Record<string, unknown>,
 ) {
   const code = e.code ?? '';
-  if (!sessionCanRead && (code === 'permission-denied' || code === 'unauthenticated')) {
+  if (!sessionCanRead && (code === 'permission-denied' || code === 'unauthenticated' || code === 'aborted')) {
     // Still logged, and marked — the e2e counts unmarked listener warnings and
     // must not be blinded by this, but neither should it fail on a denial we
     // deliberately expect.

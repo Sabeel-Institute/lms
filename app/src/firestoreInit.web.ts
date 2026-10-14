@@ -57,7 +57,7 @@ export async function afterSignOut(db: Firestore, drained: boolean): Promise<voi
  * the server. When something is (offline, listening not yet sent), it stays,
  * and the screen is only redrawn: false.
  */
-export async function reloadFromServer(db: Firestore): Promise<boolean> {
+export async function reloadFromServer(db: Firestore, beforeEnding: () => void): Promise<boolean> {
   const drained = await Promise.race([
     waitForPendingWrites(db).then(
       () => true,
@@ -66,6 +66,7 @@ export async function reloadFromServer(db: Firestore): Promise<boolean> {
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000)),
   ]);
   if (!drained) return false;
+  beforeEnding();
   await dropCache(db);
   window.location.reload();
   return true;

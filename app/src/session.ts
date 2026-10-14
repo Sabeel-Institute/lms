@@ -81,6 +81,11 @@ export async function signOut(): Promise<void> {
   // the same account with no way to switch users.
   await googleSignOut().catch(() => undefined);
   await fbSignOut(auth);
+  // The web app may end Firestore next (`afterSignOut`), under any listener
+  // still attached. Reads are marked as ended, so those endings are expected,
+  // and the auth observer gets a turn to detach the profile listener first.
+  setLiveDataSession(false);
+  await new Promise((resolve) => setTimeout(resolve, 0));
   await afterSignOut(db, drained);
 }
 

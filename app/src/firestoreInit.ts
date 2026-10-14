@@ -24,6 +24,6 @@ export function initDb(app: FirebaseApp): Firestore {
 export async function afterSignOut(_db: Firestore, _drained: boolean): Promise<void> {}
 
 /** A phone redraws the screen (see the web sibling): nothing of a migration outlives the process. */
-export async function reloadFromServer(_db: Firestore): Promise<boolean> {
+export async function reloadFromServer(_db: Firestore, _beforeEnding: () => void): Promise<boolean> {
   return false;
 }

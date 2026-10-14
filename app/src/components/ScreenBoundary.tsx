@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { captureError } from '../sentry';
 import { db } from '../firebase';
 import { reloadFromServer } from '../firestoreInit';
+import { setLiveDataSession } from '../liveQuery';
 import { Button } from './ui';
 import { getTheme, spacing } from '../theme';
 
@@ -51,7 +52,10 @@ export class ScreenBoundary extends Component<{ where: 'screen' | 'app'; childre
           label="Try again"
           variant="secondary"
           hug
-          onPress={() => void reloadFromServer(db).then((reloading) => !reloading && this.setState({ failed: false }))}
+          // Ending Firestore ends every listener with it: expected, not a fault.
+          onPress={() =>
+            void reloadFromServer(db, () => setLiveDataSession(false)).then((reloading) => !reloading && this.setState({ failed: false }))
+          }
         />
       </View>
     );
