@@ -21,6 +21,7 @@ import {
   handInWork,
   postCoursework,
   returnWork,
+  returnWorkRecord,
   saveGrade,
   saveGradeRecord,
   setNotRequiredRecord,
@@ -157,6 +158,18 @@ describe('a due date that moves', () => {
     await updateCoursework.run(await as(TEACHER, { courseworkId: id, ...FIELDS, dueDate: inDays(10), lateUntil: inDays(16) }));
     await updateCoursework.run(await as(TEACHER, { courseworkId: id, ...FIELDS, title: 'Memorize it', dueDate: inDays(10), lateUntil: inDays(16) }));
     expect(told()).toEqual([CAROL, CAROL]);
+  });
+
+  it('a date moved back to one already announced is announced again; another try is not told', async () => {
+    const id = await postedThroughTheApp();
+    await handIn(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 4 }, feedback: 'Again' });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(20), lateUntil: null });
+    outbox = [];
+    await updateCoursework.run(await as(TEACHER, { courseworkId: id, ...FIELDS, dueDate: inDays(9) }));
+    await updateCoursework.run(await as(TEACHER, { courseworkId: id, ...FIELDS }));
+    expect(told().sort()).toEqual([BILAL, BILAL, CAROL, CAROL].sort());
+    expect(outbox.map((o) => o.message.body).filter((b) => b.endsWith(`now due ${inDays(7)}.`))).toHaveLength(2);
   });
 });
 

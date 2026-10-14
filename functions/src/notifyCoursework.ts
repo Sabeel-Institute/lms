@@ -27,10 +27,11 @@ import { attempt } from './notifyJobs';
  * Best effort: a failed push never fails the teacher's action, which has
  * already happened. `attempt` logs the failure and the rest are still sent.
  *
- * The "sent once" key of each is the proposal's: an assignment's date for
- * posting and moving it, so a NEW date is a new message and a retry is not;
- * the return's `seq` for a return, so another return (another try, a changed
- * grade) is not swallowed as a repeat of the first.
+ * The "sent once" key of each: the assignment's date for posting it and for
+ * the last day, so a retry is not a second message; the edit for moving it
+ * (`editedAt`), so a date moved back to one already announced is announced
+ * again; the return's `seq` for a return, so another return (another try, a
+ * changed grade) is not swallowed as a repeat of the first.
  */
 
 /** Sends at a time: a class gets its message in a second or two, FCM unhurried. */
@@ -63,12 +64,13 @@ function toEach(
   subs: SubmissionDoc[],
   kind: 'assignmentPosted' | 'handInLastDay',
   message: (s: SubmissionDoc) => PushMessage,
+  key: (s: SubmissionDoc) => string = (s) => `${s.courseworkId}_${s.dueDate}`,
 ) {
   return sendAll(
     subs.map((s) => ({
       uid: s.studentUid,
       what: `${kind} ${s.studentUid} ${s.courseworkId}`,
-      send: () => notifyOnce(db, s.studentUid, kind, `${s.courseworkId}_${s.dueDate}`, message(s)),
+      send: () => notifyOnce(db, s.studentUid, kind, key(s), message(s)),
     })),
   );
 }
@@ -104,6 +106,7 @@ export async function notifyDueDateMoved(db: Firestore, courseworkId: string): P
     subs.docs.map((d) => d.data() as SubmissionDoc).filter((s) => stillWorking(s) && !hasOwnDates(s) && s.dueDate === cw.dueDate),
     'assignmentPosted',
     (s) => dueDateMovedMessage(course.name, cw.title, s.dueDate, courseworkId),
+    () => `${courseworkId}_moved_${cw.editedAt}`,
   );
 }
 
