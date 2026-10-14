@@ -218,7 +218,7 @@ const SAMPLES: { [C in StoredCollection]: Required<StoredDocs[C]> } = {
     attendanceMissing: true,
     updatedAt: 1,
   },
-  auditLog: { at: 1, actorUid: 's1', actorRole: 'admin', action: 'publishRecording', courseId: 'k1', targets: { recordingId: 'r1' }, detail: {} },
+  auditLog: { at: 1, actorUid: 's1', actorRole: 'admin', action: 'setRecordingStatus', courseId: 'k1', targets: { recordingId: 'r1' }, detail: {} },
   config: { minVersionCode: 30 },
 };
 
@@ -269,5 +269,16 @@ describe('a document that lacks a field its type requires', () => {
   it('an optional field left out is not reported', () => {
     const { part: _p, version: _v, ...stored } = SAMPLES.listeningProgress;
     expect(checkStored('listeningProgress', stored)).toEqual([]);
+  });
+});
+
+describe('an audit entry whose action has no words', () => {
+  it('fails its check, as data to migrate rather than a name to label', () => {
+    const [words] = SCREEN_CHECKS.auditLog ?? [];
+    expect(() => words({ ...SAMPLES.auditLog, action: 'importZoomRecording' }, TODAY)).toThrow(
+      /no words for the action importZoomRecording/,
+    );
+    // Inherited names are not words either.
+    expect(() => words({ ...SAMPLES.auditLog, action: 'constructor' }, TODAY)).toThrow(/no words/);
   });
 });

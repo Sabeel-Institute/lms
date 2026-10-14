@@ -21,7 +21,7 @@ import type {
   SubmissionEventDoc,
 } from './coursework';
 import { closesOn, nextDeadline, workState } from './coursework';
-import type { AuditEntryDoc } from './audit';
+import { AUDIT_ACTION_LABELS, type AuditEntryDoc } from './audit';
 import type { CompletionOverrideDoc } from './ledger';
 import { effectiveCompletion } from './ledger';
 import type { NotificationPrefsDoc } from './notifications';
@@ -363,8 +363,10 @@ export function storedDoc<C extends StoredCollection>(_collection: C, stored: Re
 /**
  * What the screens do with a document of each kind, run over every document
  * in the shape tests and by `npm run check:documents`: a document the code
- * can read but a screen cannot draw is a crash waiting for whoever opens it.
- * Collections without a shared helper are read and nothing more.
+ * can read but a screen cannot draw is a crash waiting for whoever opens it,
+ * and an audit entry it cannot put into words is a function name on the one
+ * screen people read to establish what happened. Collections without a shared
+ * helper are read and nothing more.
  */
 export const SCREEN_CHECKS: { [C in StoredCollection]?: ((doc: StoredDocs[C], today: string) => unknown)[] } = {
   recordings: [
@@ -389,4 +391,9 @@ export const SCREEN_CHECKS: { [C in StoredCollection]?: ((doc: StoredDocs[C], to
     (s) => s.attempts.flatMap((a) => Object.values(a.files).map((f) => f.name)),
   ],
   drafts: [(d) => Object.values(d.files).map((f) => f.name)],
+  auditLog: [
+    (e) => {
+      if (!Object.hasOwn(AUDIT_ACTION_LABELS, e.action)) throw new Error(`no words for the action ${e.action}`);
+    },
+  ],
 };

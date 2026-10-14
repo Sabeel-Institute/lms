@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { AUDIT_PAGE, INSTITUTE_TIMEZONE, stampInZone } from '@sabeel/shared';
+import { AUDIT_ACTION_LABELS, AUDIT_PAGE, INSTITUTE_TIMEZONE, stampInZone } from '@sabeel/shared';
 import { useDecidedStaff } from '../staff';
 import { useStudents } from '../students';
 import { Empty, Grid, Notice, Screen, useGridCell } from '../components/ui';
@@ -223,7 +223,7 @@ function AuditCard({
   return (
     <View style={[styles.row, inGrid]}>
       <View style={styles.head}>
-        <Text style={styles.action}>{ACTION_LABELS[e.action] ?? RETIRED_ACTION_LABELS[e.action] ?? e.action}</Text>
+        <Text style={styles.action}>{AUDIT_ACTION_LABELS[e.action] ?? e.action}</Text>
         {/* The institute's clock, not the reader's — see `stampInZone`. This
             log is the record of when something happened, and a manager abroad
             reading their own zone dates an override to the wrong day. */}
@@ -234,72 +234,6 @@ function AuditCard({
     </View>
   );
 }
-
-/**
- * Friendlier labels; unknown actions fall back to the raw name.
- *
- * EVERY action a callable writes needs an entry, or the fallback prints a
- * camelCase function name in a list of English sentences — `submitAttendance`
- * sat between "Created course" and "Changed recording status" for exactly that
- * reason. Adding an `auditedCall` means adding a line here.
- *
- * CHECKED, because the rule above was already broken in both directions and
- * nothing noticed: every Zoom import rendered as `importZoomRecording`, while
- * `assignCatchup` and `updateRecording` labelled actions no callable had
- * written since the catch-up concept was removed.
- * `functions/test/unit/auditLabels.test.ts` compares this map with the actions
- * the server actually writes, in both directions.
- */
-const ACTION_LABELS: Record<string, string> = {
-  createCohort: 'Created cohort',
-  setCohortArchived: 'Archived/unarchived cohort',
-  renameCohort: 'Renamed cohort',
-  createCourse: 'Created course',
-  updateCourse: 'Updated course',
-  setCourseManagers: 'Set course managers',
-  createStudent: 'Created student',
-  setStudentAccess: 'Changed student access',
-  createEnrollment: 'Enrolled student',
-  setEnrollmentActive: 'Changed enrollment',
-  createSession: 'Created session',
-  updateSession: 'Edited session',
-  deleteSession: 'Deleted session',
-  submitAttendance: 'Submitted attendance',
-  createRecording: 'Created recording',
-  deleteRecording: 'Deleted recording',
-  finalizeRecordingUpload: 'Uploaded a file',
-  setRecordingStatus: 'Changed recording status',
-  removeRecordingMedia: 'Removed a file',
-  editRecordingMedia: 'Changed a recording’s files',
-  importZoomFiles: 'Imported from Zoom',
-  retryZoomImport: 'Retried a Zoom import',
-  createCoursework: 'Created assignment',
-  updateCoursework: 'Edited assignment',
-  postCoursework: 'Posted assignment',
-  closeCoursework: 'Stopped taking work',
-  deleteCoursework: 'Deleted assignment',
-  saveGrade: 'Changed a returned grade',
-  returnWork: 'Returned work',
-  giveMoreTime: 'Gave a student more time',
-  setNotRequired: 'Marked/unmarked not required',
-  finalizeAttachment: 'Attached a file',
-  removeAttachment: 'Removed a file from an assignment',
-  setStaffAccess: 'Changed staff access',
-  overrideCompletion: 'Overrode completion',
-  clearCompletionOverride: 'Removed override',
-  authProvision: 'Staff account created',
-  authReject: 'Rejected sign-up',
-};
-
-/**
- * Actions no callable writes any more, which the log still holds from before a
- * rename. Kept apart from `ACTION_LABELS` so that map stays exactly the set the
- * server writes today, which is what the test above checks.
- */
-const RETIRED_ACTION_LABELS: Record<string, string> = {
-  clearRecordingAudio: 'Removed audio',
-  importZoomRecording: 'Imported from Zoom',
-};
 
 const styles = StyleSheet.create({
   row: {

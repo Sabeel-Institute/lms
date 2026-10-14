@@ -5,7 +5,8 @@
  *
  *   - a field its type requires that a document LACKS: data to migrate;
  *   - a helper that THROWS on a document: a screen that crashes for whoever
- *     opens it.
+ *     opens it, or an audit entry under an action the audit screen has no
+ *     words for, a retired name to migrate.
  *
  *     npm run check:documents
  *
@@ -106,7 +107,7 @@ for (const collection of Object.keys(DOCUMENT_SHAPES)) {
 }
 console.log(
   failures
-    ? `\n${failures} problem(s): documents lack fields their type requires (migrate them), or a screen would crash on one.`
+    ? `\n${failures} problem(s): documents lack fields their type requires, or a screen cannot draw them or say what they are. Migrate them.`
     : '\nEvery document reads, and every screen check runs on it.',
 );
 process.exit(failures ? 1 : 0);

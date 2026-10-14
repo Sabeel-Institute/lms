@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { AUDIT_ACTION_LABELS } from '@sabeel/shared';
 
 /**
  * Every action the server audits has a sentence, and every sentence has an
@@ -9,22 +10,22 @@ import { resolve } from 'node:path';
  * The audit screen maps an action name to English and falls back to the name
  * itself, so a missing entry is not an error anywhere — it is one camelCase
  * function name sitting in a list of sentences, on the screen people consult to
- * establish what happened. `AuditScreen`'s own docblock has said "adding an
- * `auditedCall` means adding a line here" since the map was written, and by the
- * time anyone checked it was wrong in BOTH directions: every Zoom import
+ * establish what happened. The map's own docblock said "adding an
+ * `auditedCall` means adding a line here" from the day it was written, and by
+ * the time anyone checked it was wrong in BOTH directions: every Zoom import
  * rendered as `importZoomRecording`, while `assignCatchup` and `updateRecording`
  * labelled actions no callable had written since the catch-up concept was
  * removed. A rule stated in a comment is not a rule.
  *
- * BY TEXT, because the two sides are in different workspaces and one of them is
- * a `.tsx` the functions runner cannot import. What matters is that both lists
- * are read from the files that define them, not restated here.
+ * The server's side BY TEXT: what matters is that the list is read from the
+ * files that write the actions, not restated here. The words are
+ * `AUDIT_ACTION_LABELS` in @sabeel/shared, which `check:documents` also holds
+ * every stored entry to.
  *
  * Lives in `functions/test/unit` because that workspace is the only one here
  * with a runner wired up — same reasoning as `emulatorPorts.test.ts` next door.
  */
 const REPO = resolve(import.meta.dirname, '../../..');
-const read = (p: string) => readFileSync(resolve(REPO, p), 'utf8');
 
 /**
  * What the server writes into `auditLog.action`.
@@ -47,13 +48,8 @@ function serverActions(): Set<string> {
   return out;
 }
 
-/** The keys of `ACTION_LABELS` in the audit screen. */
-function labelledActions(): Set<string> {
-  const src = read('app/src/screens/AuditScreen.tsx');
-  const block = src.match(/const ACTION_LABELS: Record<string, string> = \{([\s\S]*?)\n\};/);
-  if (!block) throw new Error('ACTION_LABELS not found — this test is reading the wrong shape');
-  return new Set([...block[1].matchAll(/^\s{2}([A-Za-z]+):/gm)].map((m) => m[1]));
-}
+/** The actions the audit screen has words for. */
+const labelledActions = () => new Set(Object.keys(AUDIT_ACTION_LABELS));
 
 describe('audit action labels', () => {
   // A guard on the guard: if either reader stops matching, both sets go empty

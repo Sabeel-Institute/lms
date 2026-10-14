@@ -26,7 +26,9 @@
  *    And EXCEPT recordings, which the live app stores as one audio file and
  *    this project as media items: each is converted on the way
  *    (`scripts/lib/legacy-media.mjs`), and a Zoom import gets its
- *    `zoomImports` claim so the picker knows the file is here.
+ *    `zoomImports` claim so the picker knows the file is here. And EXCEPT the
+ *    audit entries the live app writes under action names this app has
+ *    replaced, which are renamed on the way (`scripts/lib/legacy-audit.mjs`).
  *  - Every object under `recordings/` in the source's Storage bucket, into the
  *    R2 media bucket at the same key, with the R2 write key.
  *
@@ -38,6 +40,7 @@ import { Readable } from 'node:stream';
 import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 import { r2Config, s3For } from './lib/r2.mjs';
 import { ZOOM_IMPORTS, convertRecording, isLegacyRecording } from './lib/legacy-media.mjs';
+import { convertAuditEntry } from './lib/legacy-audit.mjs';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -244,9 +247,10 @@ for (let i = 0; i < srcUsers.length; i += 1000) {
   if (r.error?.length) throw new Error(`account import: ${JSON.stringify(r.error.slice(0, 3))}`);
 }
 
-// 3. Firestore, recordings converted on the way.
+// 3. Firestore, recordings converted and retired audit actions renamed on the way.
 const docName = (rel) => `projects/${TARGET}/databases/(default)/documents/${rel}`;
 const writes = [];
+let renamed = 0;
 for (const d of srcDocs) {
   const rel = relPath(d.name);
   const fields = d.fields ?? {};
@@ -254,11 +258,15 @@ for (const d of srcDocs) {
     const conv = convertRecording(rel.split('/')[1], fields);
     writes.push({ update: { name: docName(rel), fields: conv.fields } });
     if (conv.claim) writes.push({ update: { name: docName(`${ZOOM_IMPORTS}/${conv.claim.id}`), fields: conv.claim.fields } });
+  } else if (shape(rel) === 'auditLog') {
+    const entry = convertAuditEntry(fields);
+    if (entry !== fields) renamed++;
+    writes.push({ update: { name: docName(rel), fields: entry } });
   } else {
     writes.push({ update: { name: docName(rel), fields } });
   }
 }
-console.log(`3/5  ${srcDocs.length} documents, and ${writes.length - srcDocs.length} Zoom claims`);
+console.log(`3/5  ${srcDocs.length} documents, ${writes.length - srcDocs.length} Zoom claims, ${renamed} audit entries renamed`);
 await batchWrite(writes);
 
 // 4. Media.
