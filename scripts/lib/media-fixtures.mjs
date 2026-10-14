@@ -6,7 +6,8 @@
  * identically in a second. Each is made once and then reused.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { crc32 } from 'node:zlib';
 
 /** The audio fixture's length. A substitute supplied via E2E_AUDIO must match it. */
@@ -14,7 +15,15 @@ export const AUDIO_SECONDS = 720;
 export const AUDIO_FIXTURE = process.env.E2E_AUDIO ?? 'e2e-shots/test-lecture.m4a';
 export const VIDEO_FIXTURE = 'e2e-shots/test-lecture.mp4';
 
-const ffmpeg = (args) => execFileSync('ffmpeg', [...args, '-y'], { stdio: 'ignore' });
+/**
+ * ffmpeg, writing to the path its arguments end with — into a folder made
+ * first. A fresh checkout has no e2e-shots/ until a suite makes one, and the
+ * sweep never did: on CI its first film failed as if ffmpeg were missing.
+ */
+const ffmpeg = (args) => {
+  mkdirSync(dirname(args[args.length - 1]), { recursive: true });
+  execFileSync('ffmpeg', [...args, '-y'], { stdio: 'ignore' });
+};
 
 /**
  * A real 12-minute 32 kbps mono M4A — the shape of an actual class recording
