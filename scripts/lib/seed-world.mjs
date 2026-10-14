@@ -21,10 +21,20 @@
  * minted that way (see `provisionStaff`).
  */
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 
 import { EMULATOR_PROJECT_ID as PROJECT } from './project.mjs';
 import { putLocalObject } from './media-store.mjs';
-import { INSTITUTE_TIMEZONE, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey, todayInZone } from '@sabeel/shared';
+import { VIDEO_FIXTURE, ensureVideoFixture } from './media-fixtures.mjs';
+import {
+  HELP_VARIANTS,
+  INSTITUTE_TIMEZONE,
+  deriveDurationSec,
+  helpVideoKey,
+  mediaFromSingleAudio,
+  mediaStorageKey,
+  todayInZone,
+} from '@sabeel/shared';
 
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
@@ -739,6 +749,19 @@ export async function seedWorld({ db, auth, browser, base }) {
    *  courses they run and the final row is in a course they do not. */
   const HISTORY_ROW = `sw-history-${history.length - 1}`;
   const HISTORY_ROW_MANAGED = `sw-history-${history.findLastIndex(([, courseId]) => courseId === COURSE)}`;
+
+  // Stand-in help films, one for each population's tour, so the film screen
+  // draws its picture rather than its not-ready notice — each with captions,
+  // as every published film has.
+  ensureVideoFixture();
+  const film = readFileSync(VIDEO_FIXTURE);
+  const captions = Buffer.from('WEBVTT\n\n1\n00:00:00.000 --> 00:00:02.000\nA stand-in film.\n');
+  for (const id of ['student-to-do', 'staff-today']) {
+    for (const variant of HELP_VARIANTS) {
+      await putLocalObject(helpVideoKey(id, variant, 'video'), film, 'video/mp4');
+      await putLocalObject(helpVideoKey(id, variant, 'captions'), captions, 'text/vtt');
+    }
+  }
 
   // WHAT A TOUR NEEDS TO NAME A THING, and nothing else. Twelve handles were
   // returned and four were read; the rest were a standing invitation to reach

@@ -37,6 +37,26 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-14 — **Help films, in the app** (Faisal: a library of short
+  tutorial videos for every teacher and student workflow, narrated, two
+  versions each — phone and desktop — kept locally and played in the app
+  under More → Help). Nineteen films, one per thing a person does, listed in
+  `HELP_VIDEOS` (`@sabeel/shared`): seven for students, nine for teachers,
+  three for administrators. Each is scripted in `scripts/tutorials` against
+  the guide world and recorded at a phone's 390 px with touches drawn and at
+  a computer's 1440 px with the pointer drawn, narrated by a built-in voice
+  of Qwen3-TTS run on this machine (CustomVoice 1.7B, "Aiden", a calm
+  instruction — a built-in voice rather than a clone of Faisal's own, at
+  Faisal's choice; the speaker is mine, for review: Aiden placed the pauses
+  where the script did, and Ryan's sample is kept beside it), captioned in
+  WebVTT. They live in the media bucket under `help/`, private like the
+  recordings, and play on twelve-hour links `getHelpVideoUrl` signs for a
+  person's own role's films only (a student the students', a manager the
+  teachers', an admin those and the administrators'). A film opens on the cut
+  for the screen it is watched on and is drawn whole in the room under its
+  title, controls and all: a standing film at the column's width ran past a
+  phone's bar. Staff sign-in is not filmed: a Google sign-in cannot be
+  recorded.
 - 2026-10-14 — **Room for what a screen is for** (Faisal approved all
   twenty-one proposals of an app-wide sweep, with the defects it found, as one
   batch). Collections draw as a phone draws a list: on one column a list of
@@ -1746,6 +1766,39 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-14 — **The help films, made and checked** (nineteen films, a
+  phone and a computer cut each, 8.4 minutes of phone cut in all). Every
+  line of narration transcribed by Whisper against its script: four lines
+  flagged, three of them transcription quirks ("15" for "fifteen", "Not
+  complete" and "People lists" each heard as one word), the fourth the
+  natural "who's handed in", which two takes said alike; and six re-rendered
+  on a closer reading of what passed ("Attendant", "we're moved", "you are",
+  "rescinds", "the Great Cross" — the last two reworded), clean after.
+  Every film reviewed frame by frame at both cuts, and its last frame
+  checked for the state it promises. The review found, and the films now
+  show: an answer typed onto a saved draft without a space ("deeds.I");
+  a long-title step that showed nothing on a computer (now the phone's
+  alone); Progress ending on a spinning override (now on the row that says
+  Completed, with its reason); Submit attendance with no sign it worked
+  (now its confirmation); To do ending on "Preparing…"; a student's
+  Notifications screen filmed as blocked — Playwright's headless shell
+  answers every notification permission "denied", so the films come from
+  the browser itself, headless, where a student meets the app's offer to
+  turn them on, as on a phone; and a development build's menu row and label
+  in More. Recording found three things outside the films: a production
+  export filmed against the emulators reported two events to the live
+  Sentry project (resolved there; `record.mjs` now films only the dev
+  server, checked at start), a development export reloaded the page under
+  the first formatting editor (its chunks load through the dev server's
+  hot-reload socket), and forty reseeds filled the local media store
+  (`putLocalObject` now skips bytes already stored). The guide seed's
+  waiting staff member is now a real pending account, which the
+  administrators' film approves. Suites: unit, `test:emulator` 597 passed
+  and 2 skipped (with `help.integration`), browser 215 checks — a film
+  plays with its captions, a standing film is drawn whole above the bar,
+  and nothing reaches the top of any page unhandled, the outsider's
+  included — and the sweep 1963 of 1963, the help list and a film open
+  among its screens at all five widths.
 - 2026-10-14 — **A sign-in refused as it lands said "try again"**. An
   off-domain Google account is deleted by the auth trigger moments after it
   is created; when that lands inside the sign-in itself, the SDK's reload of
@@ -1772,7 +1825,8 @@ and commit messages, and renaming them would strand every one of those.
   `check:queries`, `check:documents` (482 audit entries and every other
   document read, every screen check run) and `check:push` green against the
   live project; hosting only (no function changed), `smoke:prod` green at
-  `v0.1.1 · 57160d8`, no new Sentry issue. Device pass, debug build against
+  `v0.1.1 · 57160d8`, no new Sentry issue; CI, run by hand on `57160d8`,
+  green (run 38535194655). Device pass, debug build against
   the seeded emulators: Today, a cohort, a course, the roster's picker, a
   session's files, the ledger and its override, the library, People and a
   student's menu, a colleague's menu, an assignment, grading, the assignment

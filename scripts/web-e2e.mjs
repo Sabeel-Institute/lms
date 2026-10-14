@@ -32,7 +32,7 @@
  */
 import { chromium } from 'playwright';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { pushPaths, readXlsx } from '@sabeel/shared';
+import { helpVideoKey, pushPaths, readXlsx } from '@sabeel/shared';
 import { EMULATOR_PORTS, MEDIA_STORE_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import {
@@ -46,6 +46,7 @@ import {
   pagePhoto,
   wordFile,
 } from './lib/media-fixtures.mjs';
+import { putLocalObject } from './lib/media-store.mjs';
 
 const WEB = process.env.E2E_WEB ?? `http://127.0.0.1:${WEB_PORTS.e2e}/`;
 const FN = `http://127.0.0.1:${EMULATOR_PORTS.functions}/${EMULATOR_PROJECT_ID}/us-central1`;
@@ -2688,6 +2689,75 @@ check(
   /not assigned to any class/i.test(adminNotify) &&
     !/Attendance still not taken/.test(adminNotify) &&
     (await admin.getByTestId('notify-attendanceMissing').count()) === 0,
+);
+
+// ------------------------------------------------------------------- help --
+console.log('\nHelp');
+/*
+ * A PERSON'S OWN FILMS, ON LINKS THAT PLAY. The list is the role's, and a film
+ * opens on a link the server signed for this person — which plays only if the
+ * signature is right, against a stand-in film in the local media store.
+ */
+ensureVideoFixture();
+await putLocalObject(helpVideoKey('student-to-do', 'phone', 'video'), readFileSync(VIDEO_FIXTURE), 'video/mp4');
+await putLocalObject(
+  helpVideoKey('student-to-do', 'phone', 'captions'),
+  Buffer.from('WEBVTT\n\n1\n00:00:00.000 --> 00:00:02.000\nA stand-in film.\n'),
+  'text/vtt',
+);
+await goHome(student);
+await more(student, 'more-help');
+await student.getByTestId('help-film-student-to-do').waitFor({ timeout: 20000 });
+const studentFilms = await student
+  .locator('[data-testid^="help-film-"]')
+  .evaluateAll((els) => els.filter((e) => e.checkVisibility()).map((e) => e.getAttribute('data-testid')));
+check(
+  'a student’s Help lists the students’ films, and no teacher’s or administrator’s',
+  studentFilms.includes('help-film-student-to-do') &&
+    !studentFilms.some((id) => id.startsWith('help-film-staff-') || id.startsWith('help-film-admin-')),
+  studentFilms.join(', '),
+);
+await tap(student, 'help-film-student-to-do');
+await tap(student, 'help-cut-phone');
+// The captions too: a track from another origin loads only under the
+// bucket's CORS, which the film's `crossOrigin` asks for.
+const filmPlays = await student
+  .waitForFunction(
+    () => {
+      const video = document.querySelector('[data-testid="help-video"]');
+      const track = video?.textTracks?.[0];
+      if (track && track.mode === 'disabled') track.mode = 'hidden';
+      return (video?.readyState ?? 0) >= 1 && (track?.cues?.length ?? 0) > 0;
+    },
+    null,
+    { timeout: 20000 },
+  )
+  .then(() => true, () => false);
+check('a film opens on a signed link that plays, with its captions', filmPlays);
+// WHOLE, controls and all: drawn at the column's width, a standing film ran
+// 200px past a phone's bar, its controls and the foot of the app it shows
+// below the fold.
+const filmFits = await student.evaluate(() => {
+  const shown = (id) => [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.checkVisibility());
+  const film = shown('help-film')?.getBoundingClientRect();
+  const bar = shown('tab-more')?.getBoundingClientRect();
+  return film && bar ? { filmBottom: Math.round(film.bottom), barTop: Math.round(bar.top) } : null;
+});
+check('a standing film is drawn whole, above the bar', !!filmFits && filmFits.filmBottom <= filmFits.barTop, JSON.stringify(filmFits));
+await shot(student, '26b-help-film');
+
+await goHome(admin);
+await more(admin, 'more-help');
+await admin.getByTestId('help-film-staff-today').waitFor({ timeout: 20000 });
+const adminFilms = await admin
+  .locator('[data-testid^="help-film-"]')
+  .evaluateAll((els) => els.filter((e) => e.checkVisibility()).map((e) => e.getAttribute('data-testid')));
+check(
+  'an admin’s Help lists the teachers’ films and the administrators’, and no student’s',
+  adminFilms.includes('help-film-staff-today') &&
+    adminFilms.includes('help-film-admin-audit') &&
+    !adminFilms.some((id) => id.startsWith('help-film-student-')),
+  adminFilms.join(', '),
 );
 
 // ------------------------------------------------------------ the library --

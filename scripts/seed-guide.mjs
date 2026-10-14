@@ -7,7 +7,7 @@ import { EMULATOR_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { putLocalObject } from './lib/media-store.mjs';
 import { AUDIO_FIXTURE, ensureAudioFixture, ensureSlideVideo } from './lib/media-fixtures.mjs';
-import { deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
+import { NEW_STAFF_ACCESS, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
 process.env.FIRESTORE_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.auth}`;
 admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
@@ -270,10 +270,16 @@ await db.collection('submissions').doc(`${uids[0]}_g-cw2`).update({
 // A PENDING staff account, so the approvals figure in the manual can show the
 // two approve buttons the prose names. Without one the screen photographs as
 // "Nobody is waiting" — a true state, and the one state that documents nothing
-// about the page it illustrates.
-await db.collection('staffUsers').doc('guide-pending').set({
-  email:'nadia.karim@oursabeel.com', displayName:'Nadia Karim',
-  role:null, status:'pending', createdAt:now-2*day,
+// about the page it illustrates. Made as a first Google sign-in makes one — an
+// account carrying the new-staff claims, and the document `onUserCreate`
+// writes beside it — so that approving her works: the admin's help film does.
+// A document with no account behind it could be photographed but not approved.
+const pendingUser=await auth.createUser({ email:'nadia.karim@oursabeel.com', displayName:'Nadia Karim', emailVerified:true });
+await new Promise(r=>setTimeout(r,300));
+await auth.setCustomUserClaims(pendingUser.uid,{ ...NEW_STAFF_ACCESS });
+await db.collection('staffUsers').doc(pendingUser.uid).set({
+  email:'nadia.karim@oursabeel.com', displayName:'Nadia Karim', photoUrl:null,
+  ...NEW_STAFF_ACCESS, createdAt:now-2*day,
 });
 // And a DISABLED one, so the same figure shows the closed Disabled section the
 // prose describes, opened the way the students figure opens its own.

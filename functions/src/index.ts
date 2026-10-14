@@ -44,6 +44,7 @@ export {
 } from './uploads';
 export { listZoomRecordings, importZoomFiles, retryZoomImport, copyZoomFile } from './zoomImport';
 export { getPlaybackUrl } from './playback';
+export { getHelpVideoUrl } from './help';
 export { accountExists } from './accountExists';
 export { onRecordingWritten, onSessionWritten } from './assignmentsTrigger';
 export { onAssignmentWritten, onDeviceRegistered, onMorning } from './notifyTrigger';

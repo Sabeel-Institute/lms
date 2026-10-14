@@ -37,6 +37,7 @@ import { StudentLedgerScreen } from './src/screens/StudentLedgerScreen';
 import { LibraryScreen } from './src/screens/LibraryScreen';
 import { ZoomImportScreen } from './src/screens/ZoomImportScreen';
 import { AuditScreen, MyAuditScreen } from './src/screens/AuditScreen';
+import { HelpFilmScreen, HelpScreen } from './src/screens/HelpScreen';
 import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { StudentAttendanceScreen } from './src/screens/StudentAttendanceScreen';
 import { StudentCoursesScreen } from './src/screens/StudentCoursesScreen';
@@ -242,6 +243,12 @@ export default function App() {
               </Stack.Screen>
               <Stack.Screen name="Notifications" options={screenOptions('Notifications', 'Notifications')}>
                 {() => <NotificationsScreen uid={user.uid} isStudent={isStudent} />}
+              </Stack.Screen>
+              <Stack.Screen name="Help" options={screenOptions('Help', 'Help')}>
+                {() => <Help role={role} />}
+              </Stack.Screen>
+              <Stack.Screen name="HelpFilm" options={screenOptions('HelpFilm', 'Help')}>
+                {() => <HelpFilm />}
               </Stack.Screen>
               {/* THE ROLE SPLIT IS THE BOUNDARY, not a tidy-up. A screen registered
                   here is addressable by URL, and a browser tab outlives the person
@@ -1136,6 +1143,21 @@ function Audit({ isAdmin }: { isAdmin: boolean }) {
       title={courseId ? (cls?.name ?? '') : 'All courses'}
     />
   );
+}
+
+function Help({ role }: { role: Role }) {
+  const navigation = useNavigation<Nav>();
+  return (
+    <HelpScreen
+      role={role === 'student' ? 'student' : role === 'admin' ? 'admin' : 'manager'}
+      onOpen={(id) => navigation.navigate('HelpFilm', { id })}
+    />
+  );
+}
+
+function HelpFilm() {
+  const { id } = useRoute<RouteProp<RootStackParamList, 'HelpFilm'>>().params;
+  return <HelpFilmScreen key={id} id={id} />;
 }
 
 function MyAudit({ uid }: { uid: string }) {

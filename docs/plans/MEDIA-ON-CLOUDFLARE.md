@@ -195,14 +195,14 @@ and honouring `Range`. **No Zoom credential leaves Google.**
   work on the S3 endpoint `<account>.r2.cloudflarestorage.com`, which is fine).
 - **Object keys:** `media/{recordingId}/{mediaId}.{m4a|mp4|mp3|wav}`. The
   extension is for humans; `Content-Type` is what players read.
-- **CORS** (`cloudflare/r2-cors.json`, applied with
-  `npx wrangler r2 bucket cors set oursabeel-lms-media --file …`):
+- **CORS** (`cloudflare/media-bucket/cors.json`, applied with
+  `npm run bucket-config -w @sabeel/media-copier`):
   origins are the hosting domain(s) only; methods `GET`, `HEAD`, `PUT`;
   allowed headers `Content-Type`, `If-None-Match`, `Range`; exposed headers
   `ETag` (the client needs each part's ETag to finish a multipart upload),
   `Content-Length`, `Content-Range`, `Accept-Ranges`. A plain `<audio>` or
   `<video>` element without `crossOrigin` does not need CORS to play; uploads
-  do.
+  do, and so does a help film, whose captions are a track from the bucket.
 - **Lifecycle:** abort incomplete multipart uploads after 1 day.
 
 ### R2 credentials

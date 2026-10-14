@@ -16,6 +16,9 @@ export type RootStackParamList = {
   Home: undefined;
   /** Both populations have one; the switches shown depend on the role. */
   Notifications: undefined;
+  Help: undefined;
+  /** One help film, by its id in `HELP_VIDEOS`. */
+  HelpFilm: { id: string };
   Students: undefined;
   /** The screen reads the student live, and their courses depend on who is
    *  looking (an admin queries; a manager walks their own courses). */

@@ -734,7 +734,8 @@ const escapes = (page) =>
  *
  * The container is found structurally, as the scroll view's only child:
  * `contentContainerStyle` lands on a node React Native gives no way to label,
- * so there is no testID to ask for.
+ * so there is no testID to ask for. A screen held still has one
+ * (`screen-fill`), being a view of its own.
  */
 const contentColumn = (page) =>
   page.evaluate(() => {
@@ -763,6 +764,18 @@ const contentColumn = (page) =>
         left: box.left,
         width: box.width,
       };
+    }
+    /*
+     * A SCREEN HELD STILL (`Screen fill`, a help film) has no scroll view: its
+     * column is the labelled content view, measured against the canvas it
+     * fills, by the same rules.
+     */
+    const still = [...document.querySelectorAll('[data-testid="screen-fill"]')].find((el) => el.checkVisibility());
+    if (still) {
+      const canvas = still.parentElement;
+      const box = canvas.getBoundingClientRect();
+      const inner = still.getBoundingClientRect();
+      return { outerLeft: box.left + canvas.clientLeft, outerWidth: canvas.clientWidth, left: inner.left, width: inner.width };
     }
     const scrollers = [...document.querySelectorAll('div')].filter((el) => {
       const cs = getComputedStyle(el);
@@ -1101,7 +1114,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 50;
+const STAFF_SCREENS = 52;
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
@@ -1469,6 +1482,12 @@ async function tourStaff(page, tag) {
   // nav shell, it is a modal panel inside a 320px viewport, and the tours all
   // passed straight through it to an option — so nothing had ever measured it.
   await visit('more', () => tap(byId(page, 'tab-more')), 'more-privacy');
+  // Help: the list, and a film open — its player exists in no other state.
+  await visit('help', () => more('more-help'), 'help-film-staff-today');
+  await visit('help-film', async () => {
+    await more('more-help');
+    await tap(byId(page, 'help-film-staff-today'));
+  }, 'help-film');
   await visit('audit', () => more('more-audit'), 'audit-list');
   /*
    * AN ADMIN'S NOTIFICATIONS SCREEN HAS NO SWITCHES.
@@ -1584,7 +1603,7 @@ async function tourManager(page, tag) {
     `${counter.seen}/${MANAGER_SCREENS}`);
 }
 
-const STUDENT_SCREENS = 13;
+const STUDENT_SCREENS = 15;
 
 async function tourStudent(page, tag) {
   const counter = { seen: 0 };
@@ -1673,6 +1692,15 @@ async function tourStudent(page, tag) {
     await tap(byId(page, 'more-notifications'));
   }, 'notify-recordingReady');
   await checkDeviceState(page, tag);
+  await visit('help', async () => {
+    await tap(byId(page, 'tab-more'));
+    await tap(byId(page, 'more-help'));
+  }, 'help-film-student-to-do');
+  await visit('help-film', async () => {
+    await tap(byId(page, 'tab-more'));
+    await tap(byId(page, 'more-help'));
+    await tap(byId(page, 'help-film-student-to-do'));
+  }, 'help-film');
 
   /*
    * NOT toured: the player with access closed. A missed card is deliberately

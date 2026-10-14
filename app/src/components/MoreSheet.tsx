@@ -79,6 +79,12 @@ export function MoreSheet({
         />
       ) : null}
       <SheetOption
+        label="Help"
+        detail="Short films of how to use the app"
+        testID="more-help"
+        onPress={() => onNavigate('Help')}
+      />
+      <SheetOption
         label="Notifications"
         detail="Choose which messages this device receives"
         testID="more-notifications"

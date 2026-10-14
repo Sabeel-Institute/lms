@@ -53,3 +53,6 @@ zoom-api-info.txt
 
 # Metro transform cache, kept in-repo (see app/metro.config.js)
 app/.metro-cache/
+
+# Python bytecode from the help films' scripts (scripts/tutorials)
+__pycache__/

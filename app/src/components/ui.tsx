@@ -52,7 +52,7 @@ export const ScreenOwnsTopInset = createContext(false);
  * Page wrapper. Renders the latest live-data error above the content — a
  * rejected listener otherwise dies as a console warning nobody sees on a phone.
  */
-export function Screen({ title, titleLink, subtitle, status, parent, width = 'read', actions, children }: {
+export function Screen({ title, titleLink, subtitle, status, parent, width = 'read', actions, fill = false, children }: {
   title?: string;
   /**
    * Makes the title itself the way to the thing it names — a student's name
@@ -90,6 +90,13 @@ export function Screen({ title, titleLink, subtitle, status, parent, width = 're
    * through, not the course. Both are useful and they do different things.
    */
   parent?: { label: string; testID: string; onPress: () => void };
+  /**
+   * The screen's area held still: no scrolling, and the content fills it, so a
+   * child with `flex: 1` is exactly the room left under the heading — between
+   * it and the bar, and the docked player when one is up. For a screen that
+   * sizes one thing to the window: a help film has to fit, controls and all.
+   */
+  fill?: boolean;
   children: ReactNode;
 }) {
   const listenerError = useListenerError();
@@ -157,16 +164,14 @@ export function Screen({ title, titleLink, subtitle, status, parent, width = 're
         {actions ? <View style={styles.headActions}>{actions}</View> : null}
       </View>
     ) : null;
-  return (
-    <KbScroll
-      style={styles.canvas}
-      contentContainerStyle={[
-        styles.content,
-        wide ? styles.contentWide : null,
-        ownsTopInset ? { paddingTop: insets.top + spacing(8) } : null,
-        { maxWidth: max },
-      ]}
-    >
+  const content = [
+    styles.content,
+    wide ? styles.contentWide : null,
+    ownsTopInset ? { paddingTop: insets.top + spacing(8) } : null,
+    { maxWidth: max },
+  ];
+  const body = (
+    <>
       {/* Chrome is ivory with a dark title, never a raspberry app bar: a
           brand-coloured bar on every screen puts raspberry far past its share. */}
       {heading}
@@ -176,6 +181,20 @@ export function Screen({ title, titleLink, subtitle, status, parent, width = 're
         </View>
       ) : null}
       {children}
+    </>
+  );
+  if (fill) {
+    return (
+      <View style={styles.canvas}>
+        <View style={[content, styles.contentFill]} testID="screen-fill">
+          {body}
+        </View>
+      </View>
+    );
+  }
+  return (
+    <KbScroll style={styles.canvas} contentContainerStyle={content}>
+      {body}
     </KbScroll>
   );
 }
@@ -1379,6 +1398,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   contentWide: { paddingHorizontal: spacing(8), paddingTop: spacing(7) },
+  // Held still, the content is the screen's height, and its foot needs only a
+  // margin: the room a scrolling page leaves to clear the bar is not wanted.
+  contentFill: { flex: 1, paddingBottom: spacing(5) },
   headActions: { flexDirection: 'row', gap: spacing(2), alignItems: 'flex-start', flexShrink: 0 },
   h1: { fontSize: 26, fontWeight: '700', color: t.text.primary },
   // Hugs the name rather than spanning the row, so the press target is the

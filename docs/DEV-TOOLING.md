@@ -36,6 +36,11 @@ emulator — not your diff.
 | `node scripts/s3-conformance.mjs local\|r2` | The 18 S3 behaviours the media code relies on (signatures, expiry, write-once PUT, signed type, `Range`, multipart ETags, a completed upload taking no more parts, CORS, read key cannot write), against SeaweedFS or **against the REAL R2 bucket** with the real keys from Secret Manager. Writes and deletes a few objects under `conformance/`. Run after changing either |
 | `npm run bucket-config -w @sabeel/media-copier` | **Against the REAL R2 bucket.** Applies `cloudflare/media-bucket/cors.json` and `lifecycle.json`; `wrangler r2 bucket cors list` / `lifecycle list` read them back |
 | `npm test -w @sabeel/media-copier` | The copier Worker's tests, inside workerd with a local R2 |
+| `node scripts/tutorials/lines.mjs` | The help films' narration, one line per step, as `tts.py` reads it (see "The help films") |
+| `uv run scripts/tutorials/tts.py --model 1.7B --speaker aiden --lines <json> --out <dir>` | Renders the narration on this machine's CPU with Qwen3-TTS, a built-in voice; resumable, and renders a line again when its words change |
+| `uv run scripts/tutorials/asr_check.py --lines <json> --wav <dir>` | Transcribes the rendered narration (Whisper) and flags a line that does not say what its script says |
+| `node scripts/tutorials/record.mjs --wav <dir> --out <dir> [--only …] [--variant …]` | Records the help films against the guide world: MP4 + WebVTT per film and cut. Needs the emulators and the dev server on the e2e port |
+| `node scripts/tutorials/publish.mjs --from <dir> [--only …]` | **Into the REAL media bucket**, under `help/`, through wrangler: every film and its captions, both cuts, or nothing |
 | `node scripts/send-test-push.mjs <fcm-token> [title] [body]` | **Against the REAL project's FCM.** One real push to one device token, in the shape `fcmSender` sends; writes nothing. The device check for "a push is shown" with the app open and then closed — no emulator delivers a push. The token is in the `devices` collection of whichever Firestore the device registered with |
 
 The last two are **pre-release checks, not part of the loop**: both authenticate
@@ -216,6 +221,13 @@ test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
   `scripts/lib/ports.mjs` and bound to 127.0.0.1.
 - **Each run starts empty**, in a fresh temp directory removed on exit. The
   bucket is created and its CORS set (the dev servers' origins) at start.
+- **It holds about 1 GB** (16 volumes of 64 MB), and its volumes are
+  append-only: an object written again keeps its old copy until a vacuum.
+  `putLocalObject` therefore skips a write when the same bytes are already
+  stored (the ETag of a single-part put is their MD5). Before it did, the help
+  films' forty reseeds filled the store, and every seed after that failed
+  with "failed to find writable volumes" in the store's log. A store that
+  fills anyway is cleared by restarting the emulators.
 - **Keys:** three identities. An admin used only to create the bucket, and the
   read and write keys the functions use, with the same split as the two R2
   tokens. Their values, the endpoint and the bucket are in
@@ -552,6 +564,56 @@ npx serve -s app/dist-web -l 4601
 ```
 
 Confirmed absent on 2026-07-21 against a production export.
+
+## The help films
+
+More → Help plays short narrated films of the app at work, one per thing a
+student, a teacher or an administrator does, each made twice: at a phone's
+390 px (touches drawn as ripples) and at a computer's 1440 px (the pointer
+drawn as a dot that travels to what it clicks). The list is `HELP_VIDEOS` in
+`@sabeel/shared`; `scripts/tutorials/tutorials.mjs` scripts each one — who it
+signs in as, where it starts, and for every step the line said and what is
+done while it is said — and `record.mjs` refuses to run if the two lists
+disagree.
+
+1. `node scripts/tutorials/lines.mjs > lines.json`, then render it with
+   `tts.py` (Qwen3-TTS 1.7B CustomVoice, speaker Aiden, a calm instruction; a
+   built-in voice, nothing cloned, nothing sent anywhere) and check it with
+   `asr_check.py`: the model occasionally drops or garbles a phrase, and a
+   line whose transcript strays from its script is rendered again (delete its
+   WAV). Each WAV keeps the words it was rendered from beside it (`<id>.txt`):
+   a reworded line is rendered again on the next run, and `record.mjs`
+   refuses narration that is not its step's words. **Run the two one at a
+   time, and not beside a recording**: the 1.7B model holds about 8 GB, the
+   transcript model 2.6 GB, and with the emulators and a dev server up as
+   well they ran a 15 GB machine out of memory — earlyoom stopped the
+   Firestore emulator, and every emulator with it.
+2. Start the emulators and a dev server for them on the e2e port, as the
+   browser suite does: `EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web
+   --port 61311` in `app/`. **Not an export.** A production export reports to
+   the live Sentry project and draws no emulator sign-in for staff, and
+   `record.mjs` refuses one. A development export (`--dev`) loads its split
+   chunks through the dev server's hot-reload socket, which a static server
+   cannot answer, so the first formatting editor a film opens reloads the
+   page under it. Edit nothing under `app/` while it films: the dev server
+   reloads the page on every change.
+3. `record.mjs` seeds a fresh guide world before every film (`seed-guide.mjs`),
+   so what one film changes is not in the next, and times every step to its
+   line. A step marked `cut: 'phone'` is in the phone's cut alone, for what a
+   computer's wider column never shows. **The phone cut is filmed from a
+   browser launched at `--force-device-scale-factor=2`**: a context's own
+   `deviceScaleFactor` sharpens screenshots, not video — Playwright films at
+   CSS pixels, and the film came out as a 390 px page in the corner of a
+   780 px frame. **Both are the browser itself, headless (`channel:
+   'chromium'`)**, not Playwright's headless shell, which answers every
+   notification permission "denied": the student's Notifications screen
+   filmed as blocked. A failed step leaves `.failed-<film>-<cut>.png` beside
+   the films.
+4. `publish.mjs` puts them in the bucket under `help/`. They stay private; the
+   app plays them on links `getHelpVideoUrl` signs, for that person's films
+   only.
+
+Re-record a film whenever a screen it shows changes.
 
 ## A student can't set a password
 

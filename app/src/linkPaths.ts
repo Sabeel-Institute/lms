@@ -28,6 +28,10 @@ const SHARED_PATHS = {
   // Both populations get notifications, so both get the screen that turns them
   // off. The switches it shows are role-dependent; the route is not.
   Notifications: 'notifications',
+  // Both get help films too; which films a list shows is the role's, and the
+  // server signs only those.
+  Help: 'help',
+  HelpFilm: 'help/:id',
 } as const;
 
 /** Everything only staff may reach. "My courses" is one of them: it is the

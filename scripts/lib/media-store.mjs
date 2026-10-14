@@ -18,6 +18,7 @@
  * it cannot disagree. Each run gets a fresh data directory; nothing persists.
  */
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,7 +27,7 @@ import { MEDIA_STORE_PORTS as P } from './ports.mjs';
 import { EMULATOR_PROJECT_ID } from './project.mjs';
 
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
-const { S3Client, CreateBucketCommand, PutBucketCorsCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, CreateBucketCommand, HeadObjectCommand, PutBucketCorsCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 /** The pinned release (docs/DEV-TOOLING.md); `WEED_BIN` overrides, CI sets it. */
 const WEED_BIN = process.env.WEED_BIN ?? join(homedir(), 'opt', 'seaweedfs-4.47', 'weed');
@@ -85,7 +86,19 @@ function localS3(access = 'write') {
 /** Put one object into the running local store, as the seed scripts need. */
 export async function putLocalObject(key, body, contentType) {
   const { bucket } = localMediaConfig();
-  await localS3('write').send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
+  const s3 = localS3('write');
+  /*
+   * NOT AGAIN WHEN THE SAME BYTES ARE THERE. The store's volumes are
+   * append-only: an object written again keeps its old copy until a vacuum.
+   * The help films' recorder reseeds the guide world once per film and cut,
+   * every reseed wrote its videos again, and forty of them filled the store —
+   * "failed to find writable volumes", and every seed after it failed. The
+   * stored ETag of a single-part put is the MD5 of its bytes.
+   */
+  const md5 = createHash('md5').update(body).digest('hex');
+  const stored = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key })).catch(() => null);
+  if (stored?.ETag === `"${md5}"` && stored.ContentType === contentType) return;
+  await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
 }
 
 async function waitForPort(url, child, ms) {

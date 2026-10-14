@@ -55,9 +55,15 @@ is always there — so wherever you are, you are one tap from anywhere else.
 Students have **To do**, **Classes** and **More**. Staff have **Today**,
 **Courses**, **Library**, **People** and **More**.
 
-**More** holds the things you need occasionally rather than daily: notification
-settings, the privacy policy, signing out, and — for students — changing your
-password. Admins also reach the audit history there.
+**More** holds the things you need occasionally rather than daily: **Help**,
+notification settings, the privacy policy, signing out, and — for students —
+changing your password. Admins also reach the audit history there.
+
+**Help** is short films of the app at work, narrated, with captions: each thing
+you do, shown on a phone and on a computer. A student sees the students'
+films; staff see the teachers', and admins the administrators' too. A film
+opens on the version for the screen you are using, and the other is one tap
+away.
 
 When something is playing, a slim bar shows what it is with a play/pause button
 — above the tabs on a phone, along the foot of the window on a computer. You can
