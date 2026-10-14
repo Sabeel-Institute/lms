@@ -1,5 +1,6 @@
 import { describe, it, beforeAll, beforeEach, afterEach, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import {
@@ -84,6 +85,11 @@ beforeEach(async () => {
   ({ id: courseId } = await createCourseRecord(TEACHER, { cohortId, name: 'Hikam' }));
   await db().collection(COLLECTIONS.courses).doc(courseId).update({ managerUids: [TEACHER] });
   for (const uid of [AMINAH, BILAL, CAROL]) {
+    // The account the sender asks about, fresh each test.
+    await getAuth()
+      .deleteUser(uid)
+      .catch(() => undefined);
+    await getAuth().createUser({ uid, email: `${uid}@example.com` });
     await db().collection(COLLECTIONS.students).doc(uid).set({ displayName: uid, email: `${uid}@example.com`, status: 'active' });
     await createEnrollmentRecord(TEACHER, { studentUid: uid, courseId });
     await db()

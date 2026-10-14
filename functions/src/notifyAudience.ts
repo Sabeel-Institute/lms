@@ -1,4 +1,4 @@
-import { getAuth } from 'firebase-admin/auth';
+import { getAuth, type UserRecord } from 'firebase-admin/auth';
 import { defineString } from 'firebase-functions/params';
 import type { TokenClaims } from '@sabeel/shared';
 
@@ -57,18 +57,29 @@ function parseAudience(raw: string): Audience {
   };
 }
 
-/** May this person be notified by this deployment? */
+/**
+ * May this person be notified by this deployment?
+ *
+ * NOT IF THEIR ACCOUNT IS DISABLED, whoever the audience. Disabling removes
+ * the account's device registrations, but the token a phone still holds can
+ * register it again for up to an hour, and the morning sweep then reminded a
+ * disabled student of a recording they could no longer open. So the account
+ * itself is asked, at the moment of sending; one that no longer exists hears
+ * nothing either.
+ */
 export async function inNotifyAudience(uid: string): Promise<boolean> {
   const audience = parseAudience(NOTIFY_AUDIENCE.value());
-  if (audience.everyone) return true;
-  if (!audience.staff && audience.emails.size === 0) return false;
+  if (!audience.everyone && !audience.staff && audience.emails.size === 0) return false;
+  let user: UserRecord;
   try {
-    const user = await getAuth().getUser(uid);
-    const role = (user.customClaims as TokenClaims | undefined)?.role;
-    if (audience.staff && (role === 'admin' || role === 'manager')) return true;
-    return !!user.email && audience.emails.has(user.email.toLowerCase());
+    user = await getAuth().getUser(uid);
   } catch (e) {
     if ((e as { code?: string }).code === 'auth/user-not-found') return false;
     throw e;
   }
+  if (user.disabled) return false;
+  if (audience.everyone) return true;
+  const role = (user.customClaims as TokenClaims | undefined)?.role;
+  if (audience.staff && (role === 'admin' || role === 'manager')) return true;
+  return !!user.email && audience.emails.has(user.email.toLowerCase());
 }

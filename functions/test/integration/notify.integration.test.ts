@@ -84,6 +84,9 @@ beforeEach(async () => {
   ]) {
     await db().recursiveDelete(db().collection(c));
   }
+  // And the accounts: one disabled here stays disabled into the next test.
+  const { users } = await getAuth().listUsers();
+  await getAuth().deleteUsers(users.map((u) => u.uid));
 
   const course: CourseDoc = {
     cohortId: COHORT,
@@ -113,6 +116,11 @@ afterEach(() => {
 let registrationClock = 1;
 
 async function withDevice(uid: string, token = `tok-${uid}`, registeredAt = (registrationClock += 1)) {
+  // A device belongs to an account, as every one in production does; the
+  // sender asks the account whether it is disabled.
+  await getAuth()
+    .getUser(uid)
+    .catch(() => getAuth().createUser({ uid, email: `${uid}@example.com` }));
   await db()
     .collection(COLLECTIONS.notifications)
     .doc(uid)
@@ -456,6 +464,17 @@ describe('recordingReady', () => {
     await seedRecording('r1', 'sess1', 'published');
     const edge = await seedGrant('s1', 'r1');
     await applyStudentAccess({ uid: 's1', status: 'disabled' });
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(false);
+    expect(outbox).toHaveLength(0);
+  });
+
+  it('says nothing to a disabled student whose phone has registered itself again', async () => {
+    await seedStudentAccount('s1');
+    await seedRecording('r1', 'sess1', 'published');
+    const edge = await seedGrant('s1', 'r1');
+    await applyStudentAccess({ uid: 's1', status: 'disabled' });
+    // The token the phone still holds registers it again, for up to an hour.
+    await withDevice('s1');
     expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(false);
     expect(outbox).toHaveLength(0);
   });
