@@ -18,7 +18,7 @@ import {
 } from '@sabeel/shared';
 import { createCohortRecord } from '../../src/cohorts';
 import { applyCourseUpdate, createCourseRecord } from '../../src/courses';
-import { applyEnrollmentActive, createEnrollmentRecord } from '../../src/enrollments';
+import { applyEnrollmentActive, createEnrollmentRecord, enrol } from '../../src/enrollments';
 import {
   closeCourseworkRecord,
   createCourseworkRecord,
@@ -159,6 +159,22 @@ describe('who receives an assignment', () => {
     expect(typeof leftAt).toBe('number');
     await createEnrollmentRecord(TEACHER, { studentUid: BILAL, courseId });
     expect((await enrolment()).data()).toMatchObject({ active: true, unenrolledAt: leftAt });
+  });
+
+  /*
+   * THE ENROLMENT COMMITS BEFORE WHAT FOLLOWS IT. When giving the student the
+   * class's work then failed, trying again was refused as "already in this
+   * course", and nothing would ever give it to them.
+   */
+  it('trying again after the work was not given gives it, though they are in the class', async () => {
+    const id = await posted();
+    // Enrolled, as a first call left it, and nothing given.
+    await db().collection(COLLECTIONS.enrollments).doc(enrollmentId(LATECOMER, courseId)).set({
+      studentUid: LATECOMER, courseId, cohortId: 'c', active: true, enrolledAt: 1, enrolledBy: TEACHER,
+    });
+    expect(await sub(LATECOMER, id)).toBeUndefined();
+    await expect(enrol(TEACHER, { studentUid: LATECOMER, courseId })).rejects.toThrow(/already in this course/);
+    expect(await stateOf(LATECOMER, id)).toBe('toDo');
   });
 
   it('coming back does not revive open work whose date passed while away', async () => {

@@ -555,6 +555,7 @@ export async function deleteCourseworkRecord(id: string, asAdmin: boolean) {
     );
   }
   const keys: string[] = filesOf(cw.files);
+  const records: FirebaseFirestore.QueryDocumentSnapshot[] = [];
   for (const collection of [
     COLLECTIONS.submissions,
     COLLECTIONS.drafts,
@@ -573,10 +574,13 @@ export async function deleteCourseworkRecord(id: string, asAdmin: boolean) {
     // A FILE ON ITS WAY KEEPS ITS RECORD: its link stays good for half an
     // hour, so its bytes can land after this, and the daily sweep, which
     // finds them by the record, deletes them then. Confirming it is refused.
-    if (collection === COLLECTIONS.attachmentUploads) continue;
-    await inBatches(snap.docs, (batch, d) => batch.delete(d.ref));
+    if (collection !== COLLECTIONS.attachmentUploads) records.push(...snap.docs);
   }
+  // THE BYTES FIRST: refused by the store, nothing is destroyed and the delete
+  // can simply be tried again. Records first, a store failure left the work,
+  // grades and history gone, an empty assignment, and nothing in the audit.
   await Promise.all(keys.map((k) => deleteObject(k)));
+  await inBatches(records, (batch, d) => batch.delete(d.ref));
   await cwRef(id).delete();
   return { id, title: cw.title, files: keys.length };
 }

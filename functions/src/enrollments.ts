@@ -109,11 +109,30 @@ export async function createEnrollmentRecord(callerUid: string, input: Enrollmen
   return { id, ...doc, reenrolled };
 }
 
+/**
+ * Enrol, and if the student is in the class already, see they have what the
+ * class gives before saying so. The enrolment commits before what follows it,
+ * so a failure there left a student enrolled without the class's recordings
+ * or assignments, and trying again was refused as "already in this course":
+ * nothing would ever give them. Both follow-ups are safe to run again.
+ */
+export async function enrol(callerUid: string, input: EnrollmentInput) {
+  try {
+    return await createEnrollmentRecord(callerUid, input);
+  } catch (e) {
+    if (e instanceof HttpsError && e.code === 'already-exists') {
+      await reconcileCourseAssignments(getFirestore(), input.courseId);
+      await reconcileStudentCoursework(input.courseId, input.studentUid);
+    }
+    throw e;
+  }
+}
+
 export const createEnrollment = auditedCall('createEnrollment', async (req, audit) => {
   const input = validateEnrollment(req.data);
   const uid = await requireCourseScope(req, input.courseId);
   audit.courseId = input.courseId;
-  const created = await createEnrollmentRecord(uid, input);
+  const created = await enrol(uid, input);
   // A return through "Add a student" is a re-enrolment, and the student's
   // history reads it as one; a first enrolment says nothing extra.
   if (created.reenrolled) audit.detail = { reenrolled: true };

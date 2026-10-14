@@ -443,12 +443,17 @@ export const removeAttachment = auditedCall(
       const draft = (await draftRef(uid, cwId).get()).data() as DraftDoc | undefined;
       removed = draft?.files[fileId];
       if (!removed) throw new HttpsError('not-found', 'No such file on your work.');
+      // THE BYTES FIRST: refused by the store, nothing has changed, and trying
+      // again is the whole of the recovery. Taken off the page first, a store
+      // failure left the file gone from it with no record of the removal.
+      await deleteObject(removed.storageKey);
       await draftRef(uid, cwId).update({ [`files.${fileId}`]: FieldValue.delete(), updatedAt: Date.now() });
       audit.noop = true;
     } else {
       await requireCourseScope(req, cw.courseId);
       removed = cw.files[fileId];
       if (!removed) throw new HttpsError('not-found', 'No such file on the assignment.');
+      await deleteObject(removed.storageKey);
       await cwRef(cwId).update({
         [`files.${fileId}`]: FieldValue.delete(),
         updatedAt: Date.now(),
@@ -456,7 +461,6 @@ export const removeAttachment = auditedCall(
       });
       audit.detail = { file: removed.name };
     }
-    await deleteObject(removed.storageKey);
     return { removed: fileId };
   },
   MEDIA_WRITE_SECRETS,
