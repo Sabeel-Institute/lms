@@ -305,8 +305,14 @@ async function finalizeAttachmentRecord(input: FinalizeInput, callerUid: string)
   };
   try {
     await db().runTransaction(async (tx) => {
+      // CONFIRMED ALREADY, by another call for the same file: sent twice. It is
+      // where it belongs, and refusing it now (at the ten, say) deleted the
+      // bytes the first call had just attached.
+      const mine = (await tx.get(uploadRef(input.fileId))).data() as AttachmentUploadDoc | undefined;
+      if (mine?.held) return;
       if (up.target === 'coursework') {
         const cw = (await tx.get(cwRef(up.courseworkId))).data() as CourseworkDoc | undefined;
+        if (cw?.files[input.fileId]) return;
         if (!cw && up.reserved) {
           // HELD for the assignment its form will save at this id, counted
           // against the ten with the others held for it.
@@ -329,9 +335,10 @@ async function finalizeAttachmentRecord(input: FinalizeInput, callerUid: string)
         });
       } else {
         const uid = up.studentUid as string;
+        const draft = (await tx.get(draftRef(uid, up.courseworkId))).data() as DraftDoc | undefined;
+        if (draft?.files[input.fileId]) return;
         const sub = (await tx.get(subRef(uid, up.courseworkId))).data() as SubmissionDoc | undefined;
         if (sub?.state !== 'open' || !sub.active) throw new HttpsError('failed-precondition', 'This work is not open for changes.');
-        const draft = (await tx.get(draftRef(uid, up.courseworkId))).data() as DraftDoc | undefined;
         if (Object.keys(draft?.files ?? {}).length >= MAX_ATTACHMENTS) {
           throw new HttpsError('failed-precondition', `There can be ${MAX_ATTACHMENTS} files at most.`);
         }

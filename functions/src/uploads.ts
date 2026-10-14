@@ -362,6 +362,10 @@ export async function finalizeUpload(input: FinalizeUploadInput) {
     const fresh = (await tx.get(ref)).data() as RecordingDoc | undefined;
     const current = fresh?.media[input.itemId];
     tx.delete(uploadRef(input.itemId));
+    // CONFIRMED ALREADY, by another call for the same upload: a client, or
+    // the HTTP layer under it, sending finalize twice. The file is in place;
+    // read as removed, its bytes were deleted from under a ready file.
+    if (current?.status === 'ready' && current.storageKey === upload.storageKey) return false;
     if (!fresh || current?.status !== 'uploading') return true;
     writeItem(tx, ref, fresh, input.itemId, {
       ...current,

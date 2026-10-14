@@ -193,6 +193,21 @@ describe('a student’s files', () => {
     await expect(attach(AMINAH, 'student', 'eleven.txt', TEXT)).rejects.toThrow(/10 files at most/);
   });
 
+  /*
+   * THE TENTH, CONFIRMED TWICE AT ONCE. The second call found ten files, the
+   * tenth its own, refused, and deleted the bytes the first had attached.
+   */
+  it('the tenth confirmed twice at once stays, bytes and all', async () => {
+    for (let i = 0; i < 9; i++) await attach(AMINAH, 'student', `page ${i}.txt`, TEXT);
+    const start = await startAttachmentUpload.run(await as(AMINAH, 'student', { target: 'work', courseworkId: cwId, name: 'page 9.txt', sizeBytes: TEXT.length }));
+    expect((await fetch(start.url, { method: 'PUT', headers: start.headers, body: TEXT })).status).toBe(200);
+    const confirm = async () => finalizeAttachment.run(await as(AMINAH, 'student', { courseworkId: cwId, fileId: start.fileId }));
+    await Promise.allSettled([confirm(), confirm()]);
+    const files = (await draft(AMINAH))?.files ?? {};
+    expect(Object.keys(files)).toHaveLength(10);
+    expect(await open(AMINAH, 'student', start.fileId, AMINAH)).toEqual(TEXT);
+  });
+
   it('are listed in the order they were chosen, whatever order they arrive in', async () => {
     // A recitation chosen first and a page second; the page, being small,
     // arrives first.

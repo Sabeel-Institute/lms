@@ -225,6 +225,22 @@ describe('a file phones cannot play', () => {
 });
 
 describe('write once', () => {
+  /*
+   * CONFIRMED TWICE AT ONCE: a client retrying, or the HTTP layer under it
+   * sending the POST again. The second read the ready file as removed and
+   * deleted its bytes; every link to it then answered 404.
+   */
+  it('confirmed twice at once, it is ready and its bytes stay', async () => {
+    const id = await newDraft();
+    const { itemId, parts } = await uploadFile(ADMIN, id, sample('m4a'), 'audio/mp4', { finalize: false });
+    await Promise.allSettled([
+      finalizeUpload({ recordingId: id, itemId, parts }),
+      finalizeUpload({ recordingId: id, itemId, parts }),
+    ]);
+    expect((await item(id, itemId))?.status).toBe('ready');
+    expect(await objectExists(`media/${id}/${itemId}`)).toBe(true);
+  });
+
   it('once a file is finished, no part URL can change it and no new one is signed', async () => {
     const id = await newDraft();
     const bytes = sample('m4a');
