@@ -97,6 +97,7 @@ export function CourseDetailScreen({
   );
   const today = todayInZone(INSTITUTE_TIMEZONE);
   const ledger = useCourseLedger(cls.id, today);
+  const assignmentsCaption = useAssignmentsCaption(cls);
   const { active: busy, run: once } = useOneAtATime();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -287,7 +288,7 @@ export function CourseDetailScreen({
           }
           onPress={onOpenSessions}
         />
-        <NavRow testID="nav-coursework" label="Assignments" caption={<AssignmentsCounts cls={cls} />} onPress={onOpenCoursework} />
+        <NavRow testID="nav-coursework" label="Assignments" caption={assignmentsCaption} onPress={onOpenCoursework} />
         <NavRow testID="nav-attendance" label="Attendance report" onPress={onOpenAttendance} />
         <NavRow testID="nav-audit" label="Audit history" onPress={onOpenAudit} />
       </RowList>
@@ -557,13 +558,15 @@ export function CourseDetailScreen({
 
 /**
  * The course's assignments at a glance, under its row: what is posted, what
- * waits on the teacher, and what waits on students. Nothing until the figures
- * arrive — four zeros would be an answer.
+ * waits on the teacher, and what waits on students. Until the figures arrive
+ * it says it is counting, as the Sessions row does: four zeros would be an
+ * answer, and a line appearing from nothing pushed the rows below it down
+ * under a finger already on its way to "Audit history".
  */
-function AssignmentsCounts({ cls }: { cls: CourseRow }) {
+function useAssignmentsCaption(cls: CourseRow): ReactNode {
   const coursework = useCourseCourseworkState(cls.id);
   const figures = useCourseworkFigures(cls);
-  if (coursework === null || figures === null) return null;
+  if (coursework === null || figures === null) return 'Counting the work…';
   const posted = coursework.filter((c) => c.status === 'posted');
   const sum = (k: 'toGrade' | 'pastDue' | 'missed') => posted.reduce((n, c) => n + figures(c)[k], 0);
   return (
