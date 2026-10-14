@@ -1678,6 +1678,21 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-13 — **The browser's media notification: ⏪ ⏩ did nothing**
+  (Faisal's phone, v0.1.0 on the web, Chrome). Play and pause worked — the
+  browser pauses the element itself — and the skips spun and stopped: the web
+  player gave the browser a title and nothing else, and a browser draws its
+  skip buttons whether or not the page answers them. `player.web.ts` now
+  answers `seekbackward`, `seekforward` and `seekto` through the session's own
+  skip and seek, 30 seconds on and 15 back as the app's buttons do. Red first
+  in a browser with the page's handlers captured (none were set), green after;
+  the browser suite calls them as the notification would. Android's native
+  notification is expo-video's, and seeks ten seconds as its icons say.
+  **The lock screen asked for a fingerprint before any control acted**, on the
+  same phone. On stock Android 15 with a PIN set (tb_emu, Chrome 124), pause
+  and the seek bar act from the lock screen without unlocking, so the prompt
+  is the phone's own; nothing in the page decides it.
+
 - 2026-10-13 — **v0.1.0, the first release of this app, shipped to every
   surface** (build commit `30fbac0`, versionCode 35): indexes → rules →
   functions (15 new, the assignment callables; none removed) → hosting;

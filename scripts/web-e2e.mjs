@@ -949,6 +949,40 @@ await tap(student, 'player-play'); // pause again
 await student.waitForTimeout(1500);
 
 /*
+ * THE NOTIFICATION'S ⏪ ⏩. A browser draws them in its media notification and
+ * on the lock screen whether or not the page answers them, and answered by
+ * nobody they spun and did nothing on a phone (v0.1.0) while pause worked. What
+ * the OS calls is the handler the page gives the media session, so the suite
+ * keeps every handler the page sets (installed before the next load) and calls
+ * it as the notification would. Paused, so the moves are exact.
+ */
+await student.addInitScript(() => {
+  window.__mediaActions = {};
+  if (!('mediaSession' in navigator)) return;
+  const real = navigator.mediaSession.setActionHandler.bind(navigator.mediaSession);
+  navigator.mediaSession.setActionHandler = (action, handler) => {
+    window.__mediaActions[action] = handler;
+    return real(action, handler);
+  };
+});
+await goHome(student);
+await tap(student, 'next-up-Session 1');
+await student.getByTestId('player-play').waitFor({ timeout: 25000 });
+await student.waitForTimeout(1500);
+const remoteFrom = await elapsedSeconds(student);
+await student.evaluate(() => window.__mediaActions.seekforward?.({ action: 'seekforward' }));
+await student.waitForTimeout(1200);
+const remoteForward = await elapsedSeconds(student);
+await student.evaluate(() => window.__mediaActions.seekbackward?.({ action: 'seekbackward' }));
+await student.waitForTimeout(1200);
+const remoteBack = await elapsedSeconds(student);
+check(
+  'the notification’s forward and back move the recording 30 seconds on and 15 back, as the app’s buttons do',
+  remoteForward - remoteFrom === 30 && remoteForward - remoteBack === 15,
+  `${remoteFrom}s → ${remoteForward}s → ${remoteBack}s`,
+);
+
+/*
  * SIGNING OUT ENDS THE SESSION, and this is the only place that says so.
  *
  * Playback is app-wide now, so nothing unmounts it: `signOut` has to stop the

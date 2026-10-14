@@ -80,6 +80,37 @@ export function createPlayer(events: PlayerEvents): Player {
     startedPlaying(sound);
     events.onPlayingChanged(true);
   });
+
+  /*
+   * THE NOTIFICATION'S AND THE LOCK SCREEN'S ⏪ ⏩, a headset's and a
+   * keyboard's media keys, and the notification's position bar. A browser draws
+   * the buttons whether or not the page answers them, and answered by nobody
+   * they spun and did nothing while pause worked, because the browser pauses
+   * the element itself (Faisal's phone, v0.1.0). They go to the session, which
+   * moves the place as the app's own buttons do. An action a browser does not
+   * know throws, and a missing button must not stop a lecture loading.
+   */
+  const remote: [MediaSessionAction, MediaSessionActionHandler][] = [
+    ['seekbackward', () => events.onRemoteSkip('back')],
+    ['seekforward', () => events.onRemoteSkip('forward')],
+    [
+      'seekto',
+      (details) => {
+        if (details.seekTime !== undefined) events.onRemoteSeek(details.seekTime * 1000);
+      },
+    ],
+  ];
+  const answerRemote = (on: boolean) => {
+    if (!('mediaSession' in navigator)) return;
+    for (const [action, handler] of remote) {
+      try {
+        navigator.mediaSession.setActionHandler(action, on ? handler : null);
+      } catch {
+        // Not an action this browser offers.
+      }
+    }
+  };
+  answerRemote(true);
   el.addEventListener('pause', () => events.onPlayingChanged(false));
 
   return {
@@ -126,7 +157,11 @@ export function createPlayer(events: PlayerEvents): Player {
     },
     unload: () => {
       stop(mine);
-      if (current === mine) current = null;
+      // A newer player has answered with its own; this one only clears its own.
+      if (current === mine) {
+        current = null;
+        answerRemote(false);
+      }
     },
   };
 }

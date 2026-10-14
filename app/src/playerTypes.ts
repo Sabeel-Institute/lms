@@ -31,6 +31,15 @@ export interface PlayerEvents {
    * player — a no-op — so resuming took two.
    */
   onPlayingChanged: (playing: boolean) => void;
+  /**
+   * The OS asked to skip, or to go to a place: a browser's media notification
+   * and lock screen, a headset, a keyboard's media keys. Answered by the
+   * session, so they move exactly as the app's own buttons do. Web only: on
+   * Android the media notification is expo-video's, which seeks the player
+   * itself (ten seconds, as its icons say), and the session follows the place.
+   */
+  onRemoteSkip: (direction: 'back' | 'forward') => void;
+  onRemoteSeek: (ms: number) => void;
 }
 
 /**

@@ -570,6 +570,12 @@ export function openPlayback(req: OpenRequest): void {
         if (!playing) persist();
       }
     },
+    onRemoteSkip: (direction) => {
+      if (generation === gen) (direction === 'back' ? playback.skipBack : playback.skipForward)();
+    },
+    onRemoteSeek: (ms) => {
+      if (generation === gen) playback.seek(ms);
+    },
   });
   player = p;
 
