@@ -8,6 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID } from '@sabeel/shared';
+import { seedStaffRecords } from './staffRecords';
 
 let testEnv: RulesTestEnvironment;
 
@@ -64,6 +65,7 @@ const LEDGER_COLLECTIONS = [
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  await seedStaffRecords(testEnv, { admin1: 'admin', [MINE]: 'manager', [THEIRS]: 'manager' });
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await setDoc(doc(db, COLLECTIONS.courses, CLASS_MINE), { cohortId: 'c1', managerUids: [MINE] });

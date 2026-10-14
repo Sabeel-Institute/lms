@@ -1151,6 +1151,8 @@ in **Waiting for approval**. For each, you choose the role as you approve:
 
 Below, **Staff** lists everyone with access, one line each with their address
 and role. The **⋮** at the end of a row changes their role or disables them.
+Either takes effect at once: someone disabled is signed out on every device,
+and an admin you make a manager is too, then signs in again as a manager.
 Your own row is marked *(you)* and has no ⋮ — you can't change your own role or
 access, which stops an admin from accidentally locking themselves out. Staff
 you've disabled move out of that list into a **Disabled** section at the

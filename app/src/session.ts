@@ -83,14 +83,19 @@ function profileCollection(role: Role | undefined): string {
  */
 let pushRegisteredFor: string | null = null;
 
-/** True once the account is approved and usable — the only state that leaves the gate. */
-function isReady(claims: TokenClaims, profile: Profile | null): boolean {
-  return !!profile && claims.status === 'active';
-}
-
-/** Has the token fallen behind the document? */
+/** Do the token and the document disagree? One of them is behind the other. */
 function isStale(claims: TokenClaims, profile: Profile): boolean {
   return claims.status !== profile.doc.status || claims.role !== profile.doc.role;
+}
+
+/**
+ * True once the account is approved and usable — the only state that leaves
+ * the gate. The token AND the document must say so: the rules ask a staff
+ * member's record as well as their token, and an approval writes the claims a
+ * moment before the record, so in between every staff read is refused.
+ */
+export function isReady(claims: TokenClaims, profile: Profile | null): boolean {
+  return !!profile && claims.status === 'active' && !isStale(claims, profile);
 }
 
 /**

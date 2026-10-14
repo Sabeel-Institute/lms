@@ -8,6 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, submissionId } from '@sabeel/shared';
+import { seedStaffRecords } from './staffRecords';
 
 /**
  * Who reads and writes assignments (docs/plans/ASSIGNMENTS.md). The promises:
@@ -106,6 +107,7 @@ const draftOf = (studentUid: string, courseworkId: string, note = 'Half written'
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  await seedStaffRecords(testEnv, { [ADMIN]: 'admin', [MINE]: 'manager', [THEIRS]: 'manager' });
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await Promise.all([

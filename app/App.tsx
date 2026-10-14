@@ -19,7 +19,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { APP_NAME, APP_SHORT_NAME, type Role } from '@sabeel/shared';
 import { useMinVersion } from './src/minVersion';
-import { useSession } from './src/session';
+import { isReady, useSession } from './src/session';
 import { liveDueDate, useMyAssignmentState } from './src/completion';
 import { SignInScreen } from './src/screens/SignInScreen';
 import { DisabledScreen, PendingScreen, ProvisioningScreen, UpdateScreen } from './src/screens/GateScreens';
@@ -219,6 +219,16 @@ export default function App() {
       content = <DisabledScreen email={email} />;
     } else if (claims.status !== 'active') {
       content = <PendingScreen email={email} />;
+    } else if (!isReady(claims, profile)) {
+      // The token and the record disagree, for a moment: an approval writes the
+      // claims just before the record, and a removal reaches the record before
+      // this token refreshes. `useSession` is already polling, and the rules
+      // would refuse the screens.
+      content = (
+        <View style={styles.centre}>
+          <ActivityIndicator size="large" color={t.accent.base} />
+        </View>
+      );
     } else {
       headerless = false;
       const role = claims.role as Role;

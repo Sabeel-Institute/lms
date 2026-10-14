@@ -17,6 +17,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, enrollmentId } from '@sabeel/shared';
+import { seedStaffRecords } from './staffRecords';
 
 /**
  * Rules for cohorts, courses and enrollments.
@@ -75,6 +76,7 @@ const COHORT = 'cohort1';
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  await seedStaffRecords(testEnv, { [ADMIN]: 'admin', [MINE]: 'manager', [THEIRS]: 'manager' });
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await setDoc(doc(db, COLLECTIONS.cohorts, COHORT), {

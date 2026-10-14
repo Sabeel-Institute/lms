@@ -4,9 +4,11 @@ rules_version = '2';
 // clients get only the narrow paths spelled out below.
 //
 // Role and status live in CUSTOM CLAIMS, set exclusively by Cloud Functions. The
-// user documents mirror them so the UI can render a name and a state, but the
-// token is what these rules trust — a stale or tampered mirror must never grant
-// anything. Every predicate reads request.auth.token, never resource.data.
+// user documents mirror them so the UI can render a name and a state. The token
+// is what these rules trust, and a stale or tampered mirror never grants
+// anything: staff need the token AND their staff record to agree, so the
+// record can only take away. Every predicate reads request.auth.token, plus that
+// one record for staff, never resource.data.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -26,13 +28,27 @@ service cloud.firestore {
       return request.auth.token.get('role', '');
     }
 
+    /*
+     * THE STAFF RECORD STILL SAYS SO. A token keeps its claims until it expires,
+     * up to an hour, and these rules cannot ask whether it was revoked. On the
+     * claim alone, a manager disabled a minute ago, or an admin just made a
+     * manager, went on reading every student's name and address for the rest of
+     * that hour. `setStaffAccess` writes the staff record as part of the change,
+     * so asking it too ends both at once. Only a token with a staff role gets
+     * this far, so students never pay for the read.
+     */
+    function staffRecordAgrees() {
+      let rec = get(/databases/$(database)/documents/staffUsers/$(request.auth.uid)).data;
+      return rec.status == 'active' && rec.role == role();
+    }
+
     function isStaff() {
-      return isActive() && role() in ['manager', 'admin'];
+      return isActive() && role() in ['manager', 'admin'] && staffRecordAgrees();
     }
 
     // Admins alone approve staff, change roles, and manage student access.
     function isAdmin() {
-      return isActive() && role() == 'admin';
+      return isActive() && role() == 'admin' && staffRecordAgrees();
     }
 
     function isStudent() {

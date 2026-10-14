@@ -9,6 +9,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, QUEUE_SCOPE, enrollmentId } from '@sabeel/shared';
+import { seedStaffRecords } from './staffRecords';
 
 let testEnv: RulesTestEnvironment;
 
@@ -57,6 +58,7 @@ const SESS_THEIRS = 'sessTheirs';
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  await seedStaffRecords(testEnv, { [ADMIN]: 'admin', [MINE]: 'manager' });
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     const course = (id: string, managerUids: string[]) =>

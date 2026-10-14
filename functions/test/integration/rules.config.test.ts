@@ -8,6 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { APP_CONFIG_DOC, COLLECTIONS, EMULATOR_PROJECT_ID } from '@sabeel/shared';
+import { seedStaffRecords } from './staffRecords';
 
 /**
  * `config/app` — the oldest Android build allowed to run — is read by the app
@@ -38,6 +39,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  await seedStaffRecords(testEnv, { adm: 'admin' });
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), COLLECTIONS.config, APP_CONFIG_DOC), { minVersionCode: 32 });
   });

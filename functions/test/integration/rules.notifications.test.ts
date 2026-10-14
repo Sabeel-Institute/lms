@@ -8,6 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID } from '@sabeel/shared';
+import { seedStaffRecords } from './staffRecords';
 
 /**
  * `notifications/{uid}` — the first document either population may write.
@@ -60,6 +61,7 @@ const MANAGER = 'mgr1';
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  await seedStaffRecords(testEnv, { [MANAGER]: 'manager' });
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await setDoc(doc(db, COLLECTIONS.notifications, STUDENT), { lastDay: false, updatedAt: 1 });

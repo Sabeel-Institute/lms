@@ -14,6 +14,7 @@ import {
   assignmentId,
   enrollmentId,
 } from '@sabeel/shared';
+import { seedStaffRecords } from './staffRecords';
 
 let testEnv: RulesTestEnvironment;
 
@@ -97,6 +98,7 @@ beforeEach(async () => {
   THEIR_REC = `recTheirs-run${run}`;
   CLOSED = `recClosed-run${run}`;
   await testEnv.clearFirestore();
+  await seedStaffRecords(testEnv, { [ADMIN]: 'admin', [MINE]: 'manager' });
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     const cls = (id: string, managerUids: string[]) =>

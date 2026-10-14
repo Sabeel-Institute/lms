@@ -8,6 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, attendanceRecordId } from '@sabeel/shared';
+import { seedStaffRecords } from './staffRecords';
 
 /**
  * `attendanceRecords` — each student's own copy of their attendance mark.
@@ -82,6 +83,7 @@ const SESS_THEIRS = 'attSessTheirs';
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  await seedStaffRecords(testEnv, { [ADMIN]: 'admin', [MINE]: 'manager', [THEIRS]: 'manager' });
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     const cls = (id: string, managerUids: string[]) =>
