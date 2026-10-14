@@ -113,7 +113,7 @@ function useScopedMap<C extends StoredCollection, V>(
  *
  * "Missed", never "overdue": once the deadline passes access has closed, so the
  * work is not still outstanding. The word matches the course detail, the
- * student's own home and the CSV export.
+ * student's own home and the workbooks.
  */
 export type LedgerFilter = 'all' | 'notComplete' | 'missed';
 

@@ -407,7 +407,7 @@ The ledger should help staff find action items without inspecting every student 
 1. **Recording ledger:** split by the session's attendance — the **excused**, shown with completion and missed state; the **present** and the **absent**, neither required nor able to open it, listed so the ledger still accounts for the whole submitted roster. A residual "also listened" catches listening from someone who holds no current grant (excused, listened, then corrected to present).
 2. **Student ledger:** all assigned recordings for a student, filterable by course and status.
 3. **Course-level views:** grouped by cohort/course with incomplete and missed counts.
-4. **Attendance report:** per course, a toggle between a by-session summary (present/absent/excused counts, un-taken sessions flagged) and a by-student summary (attendance tallies + catch-up status: of the sessions each student was excused from, how many recordings are complete/missed). CSV export per cut. The by-student cut lists **everyone the submitted registers name**, not only the current roster: a student unenrolled mid-term keeps their marks, those marks keep counting in the by-session totals, and they are shown flagged *no longer enrolled* so the two cuts of one report reconcile.
+4. **Attendance report:** per course, a toggle between a by-session summary (present/absent/excused counts, un-taken sessions flagged) and a by-student summary (attendance tallies + catch-up status: of the sessions each student was excused from, how many recordings are complete/missed). The by-student cut lists **everyone the submitted registers name**, not only the current roster: a student unenrolled mid-term keeps their marks, those marks keep counting in the by-session totals, and they are shown flagged *no longer enrolled* so the two cuts of one report reconcile.
 
 ### Recording ledger fields
 
@@ -427,16 +427,19 @@ Staff can manually override a student's completion status only with a required r
 
 ### Exports
 
-CSV export is required for:
+Two workbooks, each one `.xlsx` file with several tabs, are every export the app
+has (the manual's section 2.13 lists the tabs and defines every term):
 
-- Recording ledger views
-- Student ledger views
-- Both cuts of the attendance report — the class-level view of who owes what
+- **The course workbook**, from a course's page: the roster and enrolment, the
+  register, required listening and its outcomes, sessions, recordings and
+  assignments with grades, and the definitions.
+- **The student workbook**, from a student's page: that student across every
+  course the reader may see, their sessions, recordings, assignments and
+  history. A manager's covers the courses they manage, and says so.
 
-Exports reflect the same filters used on screen. The recording ledger's export is
-therefore the **accountable** list — the students the session excused — matching
-what the filter shows; the present, absent and "also listened" sections account
-for the roster on screen and are not part of a file about who owes listening.
+A workbook is the record as it stands when the button is pressed, not a copy of
+the filters on screen. Its figures come from the same counts the screens use, so
+a tab and the screen it mirrors cannot disagree.
 
 ## Notifications
 
@@ -516,7 +519,7 @@ A message is shown whether the app is open, in the background, or closed — on 
 - Post, edit, close and delete assignments, with files and formatted instructions.
 - Grade and return work, together or one at a time; ask for another try; give one student more time; mark work not required.
 - Grade at a desk with the class list beside the work, and keys for moving on and returning.
-- Export CSV reports.
+- Export the course and student workbooks.
 - View audit history within assigned scopes.
 
 ### Admin
