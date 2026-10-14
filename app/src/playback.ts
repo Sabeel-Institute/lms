@@ -132,6 +132,8 @@ export interface PlaybackState {
   /** The last part came to its end: the moment to offer marking it complete. */
   ended: boolean;
   playing: boolean;
+  /** Meant to be playing, and waiting for data: on a slow link, for seconds. */
+  buffering: boolean;
   positionMs: number;
   listenedMs: number;
   rate: number;
@@ -151,6 +153,7 @@ export const IDLE: PlaybackState = {
   ready: false,
   ended: false,
   playing: false,
+  buffering: false,
   positionMs: 0,
   listenedMs: 0,
   rate: 1,
@@ -597,6 +600,9 @@ export function openPlayback(req: OpenRequest): void {
         else if (state.ready && !urlLasts(position)) renew(position, true);
       }
     },
+    onBuffering: (buffering) => {
+      if (generation === gen && state.buffering !== buffering) set({ buffering });
+    },
     onRemoteSkip: (direction) => {
       if (generation === gen) (direction === 'back' ? playback.skipBack : playback.skipForward)();
     },
@@ -733,6 +739,7 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
     ready: false,
     ended: false,
     playing: false,
+    buffering: false,
     error: null,
   });
   void (async () => {

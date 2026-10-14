@@ -87,6 +87,9 @@ export function createPlayer(events: PlayerEvents): Player {
         sourceError = next;
         events.onError(next);
       }
+      // `loading` is the player waiting for data, at a load and on a slow
+      // link mid-play alike; the session shows it only while playing.
+      events.onBuffering(status === 'loading');
     }),
   ];
   const detach = () => subs.forEach((s) => s.remove());

@@ -103,6 +103,13 @@ export function createPlayer(events: PlayerEvents): Player {
   };
   answerRemote(true);
   el.addEventListener('pause', () => events.onPlayingChanged(false));
+  // WAITING FOR DATA: `waiting` is the element stopped for want of it while
+  // meant to play; `playing` is it moving again. A pause, a new source or a
+  // failure ends the wait as far as anyone looking is concerned.
+  el.addEventListener('waiting', () => events.onBuffering(true));
+  for (const done of ['playing', 'pause', 'emptied', 'error'] as const) {
+    el.addEventListener(done, () => events.onBuffering(false));
+  }
 
   return {
     async load(url, startMs, now, keepPlaying = false) {

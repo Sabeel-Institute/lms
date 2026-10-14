@@ -292,6 +292,16 @@ export function PlayerScreen({
       />
 
       {preparing && playable ? <Text style={styles.preparing}>Preparing…</Text> : null}
+      {/* WAITING FOR DATA mid-play, said rather than shown as Pause over
+          silence. A video is where that happens, and its audio is the way
+          round it. */}
+      {state.ready && state.playing && state.buffering ? (
+        <Text testID="player-loading" style={styles.preparing}>
+          {current?.kind === 'video' && versions.some((i) => i.kind === 'audio')
+            ? 'Loading… On a slow connection, Audio only needs far less data.'
+            : 'Loading…'}
+        </Text>
+      ) : null}
 
       {/* THE PARTS, when the class was recorded in more than one stretch. At
           the end of one the next starts by itself; these are for jumping.

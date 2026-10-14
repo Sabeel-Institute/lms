@@ -32,6 +32,12 @@ export interface PlayerEvents {
    */
   onPlayingChanged: (playing: boolean) => void;
   /**
+   * Waiting for data while meant to be playing, and the data back. On a slow
+   * link the transport showed Pause over silence with the clock frozen, and
+   * nothing said why.
+   */
+  onBuffering: (buffering: boolean) => void;
+  /**
    * The OS asked to skip, or to go to a place: a browser's media notification
    * and lock screen, a headset, a keyboard's media keys. Answered by the
    * session, so they move exactly as the app's own buttons do. Web only: on

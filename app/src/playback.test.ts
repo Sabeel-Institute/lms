@@ -144,6 +144,7 @@ interface Fake {
     onEnded: () => void;
     onError: (m: string | null) => void;
     onPlayingChanged: (playing: boolean) => void;
+    onBuffering: (buffering: boolean) => void;
   };
   loaded: string | null;
   /** The position `load` was asked to start at. */
@@ -683,6 +684,37 @@ describe('before the file has loaded', () => {
     await flush();
     await flush();
     expect(shown).toMatchObject({ ready: false, listenedMs: 290_000, error: 'Cannot reach the server. Check your connection and try again.' });
+  });
+});
+
+/*
+ * WAITING FOR DATA. On a slow link the player sat on Pause over silence with
+ * the clock frozen, saying nothing; the session now says it is loading, and
+ * only for the file it is playing.
+ */
+describe('waiting for data', () => {
+  it('says so while the file waits, and stops saying so when it plays again', async () => {
+    const pb = await load();
+    pb.usePlayback();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.playback.play();
+    players[0].events.onBuffering(true);
+    expect(shown).toMatchObject({ playing: true, buffering: true });
+    players[0].events.onBuffering(false);
+    expect(shown).toMatchObject({ buffering: false });
+  });
+
+  it('a player already replaced says nothing about the one playing now', async () => {
+    const pb = await load();
+    pb.usePlayback();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    const stale = players[0].events;
+    pb.openPlayback(recording('rec-b'));
+    await flush();
+    stale.onBuffering(true);
+    expect(shown).toMatchObject({ buffering: false });
   });
 });
 
