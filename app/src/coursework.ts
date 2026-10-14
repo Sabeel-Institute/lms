@@ -318,7 +318,8 @@ export const saveGrade = call<
 >('saveGrade');
 export const returnWork = call<
   { courseworkId: string; studentUids: string[]; retry?: { dueDate: string; lateUntil: string | null } },
-  { returned: number }
+  /** `refused`: students whose work could not go back, and why; the rest went. */
+  { returned: number; refused: { studentUid: string; reason: string }[] }
 >('returnWork');
 export const giveMoreTime = call<
   { courseworkId: string; studentUid: string; dueDate: string; lateUntil: string | null; reason: string },

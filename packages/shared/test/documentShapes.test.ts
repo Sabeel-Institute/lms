@@ -282,3 +282,12 @@ describe('an audit entry whose action has no words', () => {
     expect(() => words({ ...SAMPLES.auditLog, action: 'constructor' }, TODAY)).toThrow(/no words/);
   });
 });
+
+describe('an audit entry whose detail the screen cannot print', () => {
+  it('fails its check: a map, or a list of anything but ids', () => {
+    const [, flat] = SCREEN_CHECKS.auditLog ?? [];
+    expect(() => flat({ ...SAMPLES.auditLog, detail: { before: { dueDate: '2026-10-21' } } }, TODAY)).toThrow(/before/);
+    expect(() => flat({ ...SAMPLES.auditLog, detail: { grades: [{ points: 7 }] } }, TODAY)).toThrow(/grades/);
+    expect(() => flat({ ...SAMPLES.auditLog, detail: { dueDate: '2026-10-21 → 2026-10-23', returned: ['u1'], retry: false, n: 2 } }, TODAY)).not.toThrow();
+  });
+});

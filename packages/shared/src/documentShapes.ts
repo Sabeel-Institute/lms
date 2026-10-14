@@ -395,5 +395,14 @@ export const SCREEN_CHECKS: { [C in StoredCollection]?: ((doc: StoredDocs[C], to
     (e) => {
       if (!Object.hasOwn(AUDIT_ACTION_LABELS, e.action)) throw new Error(`no words for the action ${e.action}`);
     },
+    // The audit screen prints each detail as "key: value", so a value is a
+    // word, a number or a list of ids it can name: a map printed as
+    // [object Object].
+    (e) => {
+      for (const [k, v] of Object.entries(e.detail ?? {})) {
+        const flat = v === null || ['string', 'number', 'boolean'].includes(typeof v) || (Array.isArray(v) && v.every((x) => typeof x === 'string'));
+        if (!flat) throw new Error(`the detail ${k} is not something the audit screen can print`);
+      }
+    },
   ],
 };

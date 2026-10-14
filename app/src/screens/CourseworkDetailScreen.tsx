@@ -103,8 +103,14 @@ export function CourseworkDetailScreen({
     void run('return', async () => {
       setError(null);
       try {
-        await returnWork({ courseworkId: cw.id, studentUids: uids });
+        const res = await returnWork({ courseworkId: cw.id, studentUids: uids });
         setConfirmReturn(null);
+        // The rest went back: say who did not, and why, beside the ones that did.
+        if (res.refused.length > 0) {
+          setError(
+            `Returned ${res.returned}. Not returned: ${res.refused.map((r) => `${nameOf(r.studentUid)} (${r.reason})`).join('; ')}`,
+          );
+        }
       } catch (e) {
         setError(errorText(e));
       }

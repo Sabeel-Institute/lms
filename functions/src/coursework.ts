@@ -9,6 +9,7 @@ import {
   canTakeBack,
   closesOn,
   gradeFits,
+  gradeText,
   hasOwnDates,
   isLate,
   normalizeMarkdown,
@@ -328,16 +329,24 @@ export const createCoursework = auditedCall('createCoursework', async (req, audi
  * assignment never goes back to being a draft.
  */
 export async function postCourseworkRecord(callerUid: string, id: string): Promise<{ id: string; students: number }> {
-  const cw = await readCoursework(id);
-  if (cw.status !== 'draft') throw new HttpsError('failed-precondition', 'That assignment is already posted.');
-  if (cw.dueDate < today()) {
-    throw new HttpsError('failed-precondition', 'Its due date has passed. Move it before posting.');
-  }
-  const course = await readCourse(cw.courseId);
+  const course = await readCourse((await readCoursework(id)).courseId);
   if (!course.effectiveActive) throw new HttpsError('failed-precondition', 'This course is archived.');
   const now = Date.now();
+  // ONE POST, whoever presses it. Two posts of one draft at once both read
+  // 'draft', both fanned out, and both were recorded; the flip is now a
+  // transaction that refuses anything already posted.
+  const cw = await db().runTransaction(async (tx) => {
+    const snap = await tx.get(cwRef(id));
+    if (!snap.exists) throw new HttpsError('not-found', 'No such assignment.');
+    const current = snap.data() as CourseworkDoc;
+    if (current.status !== 'draft') throw new HttpsError('failed-precondition', 'That assignment is already posted.');
+    if (current.dueDate < today()) {
+      throw new HttpsError('failed-precondition', 'Its due date has passed. Move it before posting.');
+    }
+    tx.update(cwRef(id), { status: 'posted', postedAt: now, postedBy: callerUid, updatedAt: now });
+    return current;
+  });
   const posted: CourseworkDoc = { ...cw, status: 'posted', postedAt: now, postedBy: callerUid, updatedAt: now };
-  await cwRef(id).update({ status: 'posted', postedAt: now, postedBy: callerUid, updatedAt: now });
   const students = await activeStudents(cw.courseId);
   await inBatches(students, (batch, uid) => batch.set(subRef(uid, id), freshSubmission(id, posted, uid)));
   return { id, students: students.length };
@@ -398,8 +407,17 @@ export async function updateCourseworkRecord(id: string, d: Record<string, unkno
   const fields = validateCourseworkFields(d, today(), before);
   const gradingChanged = JSON.stringify(fields.grading) !== JSON.stringify(before.grading);
   if (gradingChanged) {
+    // A grade saved, or one already given back: another try deletes the grade
+    // being written, but the attempt it returned keeps its grade, which a new
+    // scale would misread (8/10 shown as 8/100).
     const graded = await db().collection(COLLECTIONS.grades).where('courseworkId', '==', id).limit(1).get();
-    if (!graded.empty) {
+    const returned =
+      graded.empty &&
+      (await db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id).get()).docs.some((s) => {
+        const sub = s.data() as SubmissionDoc;
+        return sub.returned !== null || sub.attempts.length > 0;
+      });
+    if (!graded.empty || returned) {
       throw new HttpsError('failed-precondition', 'How it is graded cannot change once a grade has been saved.');
     }
   }
@@ -456,7 +474,13 @@ export const updateCoursework = auditedCall('updateCoursework', async (req, audi
   const res = await updateCourseworkRecord(id, d);
   if (res.changed.includes('dueDate')) await notifyDueDateMoved(db(), id);
   audit.noop = res.changed.length === 0;
-  audit.detail = { changed: res.changed.join(', '), ...(res.changed.some((c) => c === 'dueDate' || c === 'lateUntil') ? res : {}) };
+  // Worded, not the result spread in: the audit screen printed its nested maps as [object Object].
+  const moved = (from: string | null, to: string | null) => `${from ?? 'no late work'} → ${to ?? 'no late work'}`;
+  audit.detail = {
+    changed: res.changed.join(', '),
+    ...(res.changed.includes('dueDate') ? { dueDate: moved(res.before.dueDate, res.after.dueDate) } : {}),
+    ...(res.changed.includes('lateUntil') ? { lateUntil: moved(res.before.lateUntil, res.after.lateUntil) } : {}),
+  };
   return { id, changed: res.changed };
 });
 
@@ -780,7 +804,8 @@ export const saveGrade = auditedCall('saveGrade', async (req, audit) => {
   // A draft grade changes constantly while a teacher works; only a change to
   // one the student has is a record.
   audit.noop = !res.returnedChanged;
-  audit.detail = { before: JSON.stringify(res.before), after: JSON.stringify(res.after) };
+  const worded = (g: Grade | null) => (g ? gradeText(g, cw.grading) : 'none');
+  audit.detail = { grade: `${worded(res.before)} → ${worded(res.after)}` };
   return { saved: true };
 });
 
@@ -797,7 +822,16 @@ export async function returnWorkRecord(
   studentUids: string[],
   retry: { dueDate: string; lateUntil: string | null } | null,
 ) {
+  /*
+   * ONE STUDENT'S REFUSAL STOPS NOBODY ELSE'S RETURN. A student who took their
+   * work back while Return all was being confirmed made the call fail after
+   * the students before them were returned: those returns were never audited,
+   * the students never told, and the teacher saw an error over work that had
+   * gone back. Each refusal is now collected and reported beside the returns;
+   * only when nothing at all was returned is the call refused.
+   */
   const results: { studentUid: string; grade: Grade | null }[] = [];
+  const refused: { studentUid: string; reason: string }[] = [];
   for (const studentUid of studentUids) {
     const res = await db().runTransaction(async (tx) => {
       const sub = await readSubmission(tx, studentUid, cwId);
@@ -850,10 +884,15 @@ export async function returnWorkRecord(
         tx.update(subRef(studentUid, cwId), { state: 'returned', returned });
       }
       return { studentUid, grade: returned.grade };
+    }).catch((e: unknown) => {
+      if (!(e instanceof HttpsError)) throw e;
+      refused.push({ studentUid, reason: e.message });
+      return null;
     });
     if (res) results.push(res);
   }
-  return results;
+  if (results.length === 0 && refused.length > 0) throw new HttpsError('failed-precondition', refused[0].reason);
+  return { returned: results, refused };
 }
 
 export const returnWork = auditedCall('returnWork', async (req, audit) => {
@@ -872,9 +911,15 @@ export const returnWork = auditedCall('returnWork', async (req, audit) => {
   audit.courseId = cw.courseId;
   audit.targets = { courseworkId: cwId };
   const res = await returnWorkRecord(cwId, uids as string[], retry);
-  await notifyReturned(db(), cwId, res.map((r) => r.studentUid));
-  audit.detail = { returned: res.map((r) => `${r.studentUid}: ${JSON.stringify(r.grade)}`).join('; '), retry: retry !== null };
-  return { returned: res.length };
+  await notifyReturned(db(), cwId, res.returned.map((r) => r.studentUid));
+  audit.noop = res.returned.length === 0;
+  audit.detail = {
+    // A list of uids, which the audit screen names; the grades beside them in the same order.
+    returned: res.returned.map((r) => r.studentUid),
+    grades: res.returned.map((r) => (r.grade ? gradeText(r.grade, cw.grading) : 'none')).join(', '),
+    retry: retry !== null,
+  };
+  return { returned: res.returned.length, refused: res.refused };
 });
 
 /**
@@ -924,11 +969,10 @@ export async function setNotRequiredRecord(staffUid: string, input: StudentWorkI
   return db().runTransaction(async (tx) => {
     const sub = await readSubmission(tx, input.studentUid, input.courseworkId);
     if (sub.state === 'returned') throw new HttpsError('failed-precondition', 'This work has been returned.');
-    const was = sub.notRequired !== null;
     tx.update(subRef(input.studentUid, input.courseworkId), {
       notRequired: input.reason === null ? null : { reason: input.reason, by: staffUid, at: Date.now() },
     });
-    return { changed: was !== (input.reason !== null) || input.reason !== sub.notRequired?.reason };
+    return { changed: (sub.notRequired?.reason ?? null) !== input.reason };
   });
 }
 

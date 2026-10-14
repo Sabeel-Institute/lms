@@ -6,6 +6,7 @@ import {
   EMULATOR_PROJECT_ID,
   INSTITUTE_TIMEZONE,
   addDays,
+  enrollmentId,
   isLate,
   submissionId,
   staffWorkState,
@@ -120,6 +121,13 @@ describe('who receives an assignment', () => {
     expect(await stateOf(BILAL, id)).toBe('toDo');
   });
 
+  it('two posts of one draft at once post it once', async () => {
+    const { id } = await createCourseworkRecord(TEACHER, courseId, fields() as never);
+    const outcomes = await Promise.allSettled([postCourseworkRecord(TEACHER, id), postCourseworkRecord(TEACHER, id)]);
+    expect(outcomes.map((o) => o.status).sort()).toEqual(['fulfilled', 'rejected']);
+    expect(String((outcomes.find((o) => o.status === 'rejected') as PromiseRejectedResult).reason)).toMatch(/already posted/);
+  });
+
   it('a student joining by the due date gets it', async () => {
     const id = await posted({ dueDate: today, lateUntil: null });
     await createEnrollmentRecord(TEACHER, { studentUid: LATECOMER, courseId });
@@ -142,6 +150,15 @@ describe('who receives an assignment', () => {
     expect(await sub(AMINAH, id)).toMatchObject({ active: false, state: 'handedIn', note: 'My reflection' });
     await applyEnrollmentActive({ studentUid: AMINAH, courseId, active: true });
     expect((await sub(AMINAH, id))?.active).toBe(true);
+  });
+
+  it('coming back through Add a student keeps the day they left, which the workbook reads', async () => {
+    const enrolment = () => db().collection(COLLECTIONS.enrollments).doc(enrollmentId(BILAL, courseId)).get();
+    await applyEnrollmentActive({ studentUid: BILAL, courseId, active: false });
+    const leftAt = (await enrolment()).data()?.unenrolledAt;
+    expect(typeof leftAt).toBe('number');
+    await createEnrollmentRecord(TEACHER, { studentUid: BILAL, courseId });
+    expect((await enrolment()).data()).toMatchObject({ active: true, unenrolledAt: leftAt });
   });
 
   it('coming back does not revive open work whose date passed while away', async () => {
@@ -358,9 +375,26 @@ describe('grading and returning', () => {
     // Another teacher returns Aminah's; this one then returns everything graded.
     await returnWorkRecord(id, [AMINAH], null);
     const res = await returnWorkRecord(id, [AMINAH, BILAL], null);
-    expect(res.map((r) => r.studentUid)).toEqual([BILAL]);
+    expect(res.returned.map((r) => r.studentUid)).toEqual([BILAL]);
+    expect(res.refused).toEqual([]);
     expect((await sub(BILAL, id))?.state).toBe('returned');
     expect((await sub(AMINAH, id))?.returned?.seq).toBe(1);
+  });
+
+  it('returning several goes on past one that cannot be returned, and says which', async () => {
+    const id = await posted();
+    await handedIn(AMINAH, id);
+    await handedIn(BILAL, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 9 }, feedback: '' });
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, grade: { points: 7 }, feedback: '' });
+    // Bilal takes his work back while the teacher is confirming Return all.
+    await takeBackWork(BILAL, id);
+    const res = await returnWorkRecord(id, [AMINAH, BILAL], null);
+    expect(res.returned.map((r) => r.studentUid)).toEqual([AMINAH]);
+    expect(res.refused).toEqual([{ studentUid: BILAL, reason: expect.stringMatching(/Grade the work|Nothing has been handed in/) }]);
+    expect((await sub(AMINAH, id))?.state).toBe('returned');
+    // With nothing at all to return, the call is refused, as before.
+    await expect(returnWorkRecord(id, [BILAL], null)).rejects.toThrow();
   });
 
   it('another try on an assignment that stopped taking work opens it for that student', async () => {
@@ -380,6 +414,14 @@ describe('grading and returning', () => {
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, grade: { points: 10 }, feedback: 'Recited in class.' });
     await returnWorkRecord(id, [BILAL], null);
     expect(await sub(BILAL, id)).toMatchObject({ state: 'returned', returned: { grade: { points: 10 } } });
+  });
+
+  it('how it is graded cannot change once a grade went back with another try, either', async () => {
+    const id = await posted();
+    await handedIn(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 8 }, feedback: '' });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(10), lateUntil: null });
+    await expect(updateCourseworkRecord(id, fields({ grading: { kind: 'points', outOf: 100 } }))).rejects.toThrow(/cannot change/);
   });
 
   it('how it is graded cannot change once a grade is saved', async () => {
@@ -470,6 +512,13 @@ describe('one student at a time', () => {
     expect(await sub(AMINAH, id)).toMatchObject({ dueDate: inDays(7), lateUntil: inDays(14), moreTime: null });
     await give(inDays(9), inDays(16));
     expect(await sub(AMINAH, id)).toMatchObject({ dueDate: inDays(9), lateUntil: inDays(16) });
+  });
+
+  it('making required a student never let off is no change, so nothing is recorded', async () => {
+    const id = await posted();
+    expect((await setNotRequiredRecord(TEACHER, { courseworkId: id, studentUid: BILAL, reason: null })).changed).toBe(false);
+    expect((await setNotRequiredRecord(TEACHER, { courseworkId: id, studentUid: BILAL, reason: 'Away' })).changed).toBe(true);
+    expect((await setNotRequiredRecord(TEACHER, { courseworkId: id, studentUid: BILAL, reason: 'Away' })).changed).toBe(false);
   });
 
   it('not required counts nowhere and can be undone', async () => {
