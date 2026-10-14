@@ -5,7 +5,6 @@ import {
   INSTITUTE_TIMEZONE,
   buildXlsx,
   courseWorkbook,
-  enrollmentId,
   studentWorkbook,
   todayInZone,
   workbookFilename,
@@ -37,6 +36,17 @@ const rows = async <C extends StoredCollection>(coll: C, q: Query<DocumentData>)
   (await getDocs(q)).docs.map((d) => ({ id: d.id, ...read(coll, d) }));
 const byCourse = (name: string, courseId: string) =>
   query(collection(db, name), where('courseId', '==', courseId));
+/**
+ * One student's enrolment in one course, ASKED, not fetched by id: the
+ * student's page asks it this way, and a manager may. A get of the document
+ * by id is refused outright when the student was never in the course, since
+ * there is no document for the rules to read the course from.
+ */
+const enrolment = (studentUid: string, courseId: string) =>
+  rows(
+    COLLECTIONS.enrollments,
+    query(collection(db, COLLECTIONS.enrollments), where('courseId', '==', courseId), where('studentUid', '==', studentUid)),
+  );
 
 /** Everyone's name and address: the two directories every staff member may read. */
 async function directory(): Promise<Pick<WorkbookContext, 'names' | 'emails'>> {
@@ -69,11 +79,7 @@ async function courseData(course: CourseDoc & { id: string }, forStudent?: strin
       cohortName(course.cohortId),
       rows(COLLECTIONS.sessions, byCourse(COLLECTIONS.sessions, course.id)),
       rows(COLLECTIONS.recordings, byCourse(COLLECTIONS.recordings, course.id)),
-      forStudent
-        ? getDoc(doc(db, COLLECTIONS.enrollments, enrollmentId(forStudent, course.id))).then((s) =>
-            s.exists() ? [{ id: s.id, ...read('enrollments', s) }] : [],
-          )
-        : rows(COLLECTIONS.enrollments, byCourse(COLLECTIONS.enrollments, course.id)),
+      forStudent ? enrolment(forStudent, course.id) : rows(COLLECTIONS.enrollments, byCourse(COLLECTIONS.enrollments, course.id)),
       rows(COLLECTIONS.assignments, pin(COLLECTIONS.assignments)),
       rows(COLLECTIONS.completions, pin(COLLECTIONS.completions)),
       rows(COLLECTIONS.completionOverrides, pin(COLLECTIONS.completionOverrides)),
@@ -124,8 +130,9 @@ export async function exportCourseWorkbook(course: CourseDoc & { id: string }, b
  * The student workbook: every course the file may cover.
  *
  * An admin's covers every course the student is or was in; a manager's the
- * courses they run, read one enrolment document at a time — the only shape
- * a manager may issue — and the Summary's Scope line says so.
+ * courses they run that the student is or was in, each asked first
+ * (`enrolment`), so a course the student never joined costs one query rather
+ * than the whole course's reads. The Summary's Scope line says which.
  */
 export async function exportStudentWorkbook(
   student: StudentDoc & { uid: string },
@@ -142,10 +149,12 @@ export async function exportStudentWorkbook(
     const snaps = await Promise.all(enrolled.map((e) => getDoc(doc(db, COLLECTIONS.courses, e.courseId))));
     courses = snaps.flatMap((s) => (s.exists() ? [{ id: s.id, ...read('courses', s) }] : []));
   } else {
-    courses = await rows(
+    const managed = await rows(
       COLLECTIONS.courses,
       query(collection(db, COLLECTIONS.courses), where('managerUids', 'array-contains', byUid)),
     );
+    const theirs = await Promise.all(managed.map(async (c) => ((await enrolment(student.uid, c.id)).length ? c : null)));
+    courses = theirs.filter((c): c is (typeof managed)[number] => c !== null);
   }
   const data = (await Promise.all(courses.map((c) => courseData(c, student.uid)))).filter((d) =>
     d.enrollments.some((e) => e.studentUid === student.uid),

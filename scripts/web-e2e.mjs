@@ -3024,10 +3024,22 @@ check(
 check('…without a single refused read', !mgrHistory.includes('live data error'));
 
 // The manager's student workbook is the one export whose reads are NOT the
-// admin's: a course list by managerUids, one enrolment document per course,
-// and audit rows pinned to those courses. A refusal anywhere means no file.
+// admin's: a course list by managerUids, the student's enrolment asked course
+// by course, and audit rows pinned to those courses. A refusal anywhere means
+// no file. The manager also runs Arabic I here, which Fatima is not in: an
+// enrolment fetched there by id is a document that does not exist, which the
+// rules refuse, and that is how the export failed for nearly every manager.
+const arabicDoc = (await readCollection('courses')).find((d) => d.fields.name.stringValue === 'Arabic I');
+const arabicId = arabicDoc.name.split('/').pop();
+const arabicManagers = arabicDoc.fields.managerUids?.arrayValue?.values ?? [];
+const managerUid = (await readCollection('staffUsers'))
+  .find((d) => d.fields.email.stringValue === 'manager@oursabeel.com')
+  .name.split('/')
+  .pop();
+await patchField('courses', arabicId, 'managerUids', { values: [...arabicManagers, { stringValue: managerUid }] }, 'arrayValue');
 await tap(mgr, 'student-actions');
 const mgrBook = await readDownload(mgr, 'student-export-workbook').catch((e) => ({ name: String(e), sheets: [] }));
+await patchField('courses', arabicId, 'managerUids', { values: arabicManagers }, 'arrayValue');
 const mgrSummary = tabOf(mgrBook, 'Summary');
 check(
   'a manager can export the student, and the file says which courses it covers',
