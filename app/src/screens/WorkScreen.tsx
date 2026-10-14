@@ -56,8 +56,12 @@ export function WorkScreen({
   const today = todayInZone(INSTITUTE_TIMEZONE);
   const state = workState(sub, today, cls.effectiveActive);
   const open = canHandIn(state);
-  const handedIn = sub.state === 'handedIn' || sub.state === 'returned';
-  const dueWord = isOverdue(sub.dueDate, today) ? 'Was due' : state === 'notRequired' ? 'Due' : 'Hand in by';
+  // Something they handed in: work graded on paper and given back has a grade
+  // and no hand-in, and a heading over an empty card said otherwise.
+  const handedIn = (sub.state === 'handedIn' || sub.state === 'returned') && sub.handedInAt !== null;
+  // "Hand in by" only while they can: beside "Your teacher has stopped taking
+  // work" it told them to do what they could not.
+  const dueWord = isOverdue(sub.dueDate, today) ? 'Was due' : open ? 'Hand in by' : 'Due';
   // Which action was refused, so its words appear beside its button: at the
   // top of a page with a long answer they were out of sight, and a refused
   // hand-in looked like one that had gone in.
@@ -421,7 +425,7 @@ function YourWork({
                 ? (saveState.error as { code?: string } | null)?.code === 'permission-denied'
                   ? 'Not saved: this work is no longer open to changes. Your answer is still here.'
                   : 'Not saved. Check the connection; your answer is still here.'
-                : `${followed ? 'Brought up to date with what you wrote on another device. ' : ''}Saved. Only you can see this until you hand it in.${
+                : `${followed ? 'Brought up to date with what you wrote on another device. ' : ''}${empty ? '' : 'Saved. '}Only you can see this until you hand it in.${
                     shown.length > MAX_ANSWER_CHARS * 0.9
                       ? ` ${shown.length.toLocaleString('en')} of ${MAX_ANSWER_CHARS.toLocaleString('en')} characters.`
                       : ''

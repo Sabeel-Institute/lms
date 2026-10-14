@@ -438,11 +438,16 @@ export async function updateCourseworkRecord(id: string, d: Record<string, unkno
         'Someone else changed this assignment while you were editing it. Your changes are not saved; open it again to see theirs.',
       );
     }
-    tx.update(cwRef(id), {
-      ...fields,
-      updatedAt: now,
-      ...(current.status === 'posted' ? { editedAt: now } : {}),
-    });
+    // A SAVE THAT CHANGES NOTHING WRITES NOTHING: on a posted assignment
+    // every student reads "Updated <date>", which would then be untrue.
+    const differs = FIELD_NAMES.some((k) => canonical(fields[k]) !== canonical(current[k]));
+    if (differs) {
+      tx.update(cwRef(id), {
+        ...fields,
+        updatedAt: now,
+        ...(current.status === 'posted' ? { editedAt: now } : {}),
+      });
+    }
     return current;
   });
   const datesMoved = fields.dueDate !== cw.dueDate || fields.lateUntil !== cw.lateUntil;
@@ -490,7 +495,9 @@ export async function closeCourseworkRecord(id: string) {
   if (cw.status !== 'posted') throw new HttpsError('failed-precondition', 'Only a posted assignment can be closed.');
   if (cw.closedAt !== null) return { id, changed: false };
   const now = Date.now();
-  await cwRef(id).update({ closedAt: now, updatedAt: now, editedAt: now });
+  // Not `editedAt`: what the students read did not change, and the page says
+  // the work is closed in its own words.
+  await cwRef(id).update({ closedAt: now, updatedAt: now });
   const subs = await db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id).get();
   await inBatches(subs.docs, (batch, s) => batch.update(s.ref, { closedEarly: true }));
   return { id, changed: true };

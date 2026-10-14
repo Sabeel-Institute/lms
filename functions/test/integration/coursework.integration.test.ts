@@ -467,6 +467,21 @@ describe('grading and returning', () => {
     expect((await cw(id))?.title).toBe('Theirs');
   });
 
+  /*
+   * "UPDATED <date>" IS FOR A CHANGE. Every student of the class reads it on
+   * their assignment page, and a Save that changed nothing, or stopping taking
+   * work, said the assignment had been changed when it had not.
+   */
+  it('a save that changes nothing, or stopping taking work, tells no student it was updated', async () => {
+    const id = await posted();
+    await updateCourseworkRecord(id, fields());
+    expect((await cw(id))?.editedAt).toBeNull();
+    await closeCourseworkRecord(id);
+    expect((await cw(id))?.editedAt).toBeNull();
+    await updateCourseworkRecord(id, fields({ title: 'Memorize the second hikma' }));
+    expect(typeof (await cw(id))?.editedAt).toBe('number');
+  });
+
   it('posting and closing are not someone else’s edit: the form still saves', async () => {
     const { id } = await createCourseworkRecord(TEACHER, courseId, fields() as never);
     const opened = fields();
