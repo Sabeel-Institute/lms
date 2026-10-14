@@ -121,7 +121,7 @@ Manual upload exists for exceptions — a class Zoom did not record, a phone vid
 - Staff upload one or more files from a computer or a phone: audio as M4A, MP3 or WAV (300 MB each), video as MP4 (8 GB each). Each becomes a new part, or another version of a part already on the recording; a part takes one uploaded video and one audio file.
 - The first file on a session creates its draft recording. Files can be added to a recording in any state; students see one only once it is ready.
 - Every upload goes in 16 MiB pieces straight to the bucket, each retried on its own, so a dropped connection costs a piece rather than the file.
-- On arrival the server reads the file's own headers: anything but AAC, MP3 or PCM audio, or an MP4 of H.264 video, is deleted with a sentence saying how to export it instead. The length stored is the file's own, not the uploader's device's.
+- On arrival the server reads the file's own headers: anything but AAC, MP3 or PCM audio, or an MP4 of 8-bit 4:2:0 H.264 video (Baseline, Main or High: what phones decode) with AAC or MP3 sound or none, is deleted with a sentence saying how to export it instead. The length stored is the file's own, not the uploader's device's: for a video, the movie's, not its sound track's.
 - Leaving the page, or stopping, removes the unfinished file; anything still unfinished a day later is swept.
 
 ## Recording lifecycle

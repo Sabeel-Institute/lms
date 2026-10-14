@@ -119,6 +119,23 @@ describe('a file that plays', () => {
     expect(await item(id, itemId)).toMatchObject({ kind: 'video', status: 'ready', durationSec: 3 });
   });
 
+  /*
+   * A VIDEO'S LENGTH IS THE MOVIE'S. The probe took it from the sound track:
+   * a screen recording made with the microphone off had none and was
+   * refused, and a sound track shorter than the picture shortened the file.
+   */
+  it('takes a video with no sound, as long as its picture', async () => {
+    const id = await newDraft();
+    const { itemId } = await uploadFile(ADMIN, id, sample('silentVideo'), 'video/mp4');
+    expect(await item(id, itemId)).toMatchObject({ kind: 'video', status: 'ready', durationSec: 3 });
+  });
+
+  it('a video whose sound stops early is as long as its picture', async () => {
+    const id = await newDraft();
+    const { itemId } = await uploadFile(ADMIN, id, sample('shortSound'), 'video/mp4');
+    expect(await item(id, itemId)).toMatchObject({ status: 'ready', durationSec: 20 });
+  });
+
   it('joins a video sent in several parts, in order, into the file that was sent', async () => {
     const id = await newDraft();
     const bytes = sample('bigVideo');
@@ -186,6 +203,16 @@ describe('a file phones cannot play', () => {
 
   it('an iPhone’s HEVC video is deleted, with how to export it instead', () =>
     refused(sample('hevc'), 'video/mp4', /Export it as MP4 \(H\.264\)/));
+
+  /*
+   * H.264 THAT PHONES CANNOT DECODE. A 10-bit or 4:4:4 file plays in a
+   * computer's browser, so a staff preview looked fine, and failed on the
+   * phones students use.
+   */
+  it('10-bit and 4:4:4 H.264 are refused, with how to export it instead', async () => {
+    await refused(sample('high10'), 'video/mp4', /standard 8-bit H\.264/);
+    await refused(sample('high444'), 'video/mp4', /standard 8-bit H\.264/);
+  });
 
   it('H.264 in a QuickTime file is refused the same way', () =>
     refused(sample('mov'), 'video/mp4', /Export it as MP4 \(H\.264\)/));

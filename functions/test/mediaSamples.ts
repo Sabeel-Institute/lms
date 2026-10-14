@@ -13,15 +13,17 @@ import { join } from 'node:path';
  * "never add a binary" rule. Each is a few seconds long, except `bigVideo`,
  * which is over one upload part so that the join of several parts is tested.
  */
-const DIR = join(tmpdir(), 'sabeel-lms-media-samples-v1');
+const DIR = join(tmpdir(), 'sabeel-lms-media-samples-v2');
 
 /** A small file handed to ffmpeg inline, so a sample stays one command. */
 const inline = (text: string) => `data:text/plain;base64,${Buffer.from(text).toString('base64')}`;
 const CHAPTERS = inline(';FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1500\ntitle=One\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=3000\ntitle=Two\n');
 // The whole three seconds: `-shortest` ends the file with its shortest track.
 const SUBTITLES = inline('1\n00:00:00,000 --> 00:00:03,000\nAs-salamu alaykum\n');
-/** Three seconds of H.264 and AAC, the inputs every video sample starts from. */
+/** Three seconds of picture and sound, the inputs most video samples start from. */
 const PICTURE_AND_SOUND = ['-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=3', '-f', 'lavfi', '-i', 'sine=duration=3'] as const;
+/** H.264 as phones play it, 8-bit 4:2:0: from testsrc's RGB, libx264 would make 4:4:4. */
+const H264 = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p'] as const;
 
 const SPECS = {
   /** AAC in M4A, 3 s: an ordinary class recording. */
@@ -30,23 +32,33 @@ const SPECS = {
   wav: ['-f', 'lavfi', '-i', 'sine=duration=3', 'a.wav'],
   /** FLAC: audio phones play, but not a format the app accepts. */
   flac: ['-f', 'lavfi', '-i', 'sine=duration=3', '-c:a', 'flac', 'a.flac'],
-  /** H.264 + AAC in MP4, 3 s. */
-  mp4: [
-    '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=3', '-f', 'lavfi', '-i', 'sine=duration=3',
-    '-c:v', 'libx264', '-c:a', 'aac', '-shortest', 'v.mp4',
+  /** H.264 (High, 8-bit 4:2:0) + AAC in MP4, 3 s. */
+  mp4: [...PICTURE_AND_SOUND, ...H264, '-c:a', 'aac', '-shortest', 'v.mp4'],
+  /** The same, with its movie box first, as a web export writes it. */
+  faststart: [...PICTURE_AND_SOUND, ...H264, '-c:a', 'aac', '-shortest', '-movflags', '+faststart', 'fast.mp4'],
+  /** H.264 with no sound at all, as a screen recorder left with its microphone off makes. */
+  silentVideo: ['-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=3', ...H264, 'silent.mp4'],
+  /** Twenty seconds of picture and five of sound. */
+  shortSound: [
+    '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=20', '-f', 'lavfi', '-i', 'sine=duration=5',
+    ...H264, '-c:a', 'aac', 'shortsound.mp4',
   ],
+  /** 10-bit H.264 (High 10), which phones cannot decode. */
+  high10: [...PICTURE_AND_SOUND, '-c:v', 'libx264', '-pix_fmt', 'yuv420p10le', '-c:a', 'aac', '-shortest', 'hi10.mp4'],
+  /** 4:4:4 H.264 (High 4:4:4 Predictive), which phones cannot decode either. */
+  high444: [...PICTURE_AND_SOUND, '-c:v', 'libx264', '-pix_fmt', 'yuv444p', '-c:a', 'aac', '-shortest', 'h444.mp4'],
   /** H.264 + AAC with a chapter track, as an editor that writes markers exports it. */
   chapters: [
     ...PICTURE_AND_SOUND, '-f', 'ffmetadata', '-i', CHAPTERS,
-    '-map', '0', '-map', '1', '-map_chapters', '2', '-c:v', 'libx264', '-c:a', 'aac', '-shortest', 'chapters.mp4',
+    '-map', '0', '-map', '1', '-map_chapters', '2', ...H264, '-c:a', 'aac', '-shortest', 'chapters.mp4',
   ],
   /** H.264 + AAC with a subtitle track (mov_text, "tx3g"). */
   subtitles: [
     ...PICTURE_AND_SOUND, '-f', 'srt', '-i', SUBTITLES,
-    '-map', '0', '-map', '1', '-map', '2', '-c:v', 'libx264', '-c:a', 'aac', '-c:s', 'mov_text', '-shortest', 'subtitles.mp4',
+    '-map', '0', '-map', '1', '-map', '2', ...H264, '-c:a', 'aac', '-c:s', 'mov_text', '-shortest', 'subtitles.mp4',
   ],
   /** H.264 + AAC with a timecode track ("tmcd"), as cameras and editors keep it. */
-  timecode: [...PICTURE_AND_SOUND, '-c:v', 'libx264', '-c:a', 'aac', '-timecode', '01:00:00:00', '-shortest', 'tmcd.mp4'],
+  timecode: [...PICTURE_AND_SOUND, ...H264, '-c:a', 'aac', '-timecode', '01:00:00:00', '-shortest', 'tmcd.mp4'],
   /** HEVC in MP4: what an iPhone records. */
   hevc: [
     '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=3', '-f', 'lavfi', '-i', 'sine=duration=3',
@@ -55,7 +67,7 @@ const SPECS = {
   /** H.264 in a QuickTime container. */
   mov: [
     '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=3', '-f', 'lavfi', '-i', 'sine=duration=3',
-    '-c:v', 'libx264', '-c:a', 'aac', '-shortest', '-f', 'mov', 'v.mov',
+    ...H264, '-c:a', 'aac', '-shortest', '-f', 'mov', 'v.mov',
   ],
   /** A picture, as a phone's photo of a worksheet would arrive after shrinking. */
   png: ['-f', 'lavfi', '-i', 'testsrc=size=320x240:duration=1', '-frames:v', '1', 'page.png'],
