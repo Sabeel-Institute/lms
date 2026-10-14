@@ -694,7 +694,9 @@ function RecordingCard({
               bare
               label="More actions for this recording"
               busy={busy === `status-${r.id}`}
-              disabled={uploading}
+              // Off while a delete is being confirmed: a confirmation that
+              // leaves Archive and Unpublish operable beside it is not one.
+              disabled={uploading || confirmDelete}
               onPress={() => setMenuOpen(true)}
             />
           </View>

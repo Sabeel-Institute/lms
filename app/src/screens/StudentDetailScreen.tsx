@@ -123,7 +123,9 @@ export function StudentDetailScreen({
             <SheetOption
               testID="student-resend"
               label="Resend password link"
-              detail={`Emails ${student.email} a link to set a password.`}
+              // "Them", not the address: it is under their name already, and
+              // in a sentence a long one broke across lines at a dot.
+              detail="Emails them a link to set their password."
               onPress={() =>
                 choose('resend', async () => {
                   await resendPasswordSetup(student.email);

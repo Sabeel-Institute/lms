@@ -2511,6 +2511,20 @@ await tap(admin, 'recording-actions');
 await tap(admin, 'recording-archived');
 // Archived shows Publish as its only move, which is what says the write landed.
 await admin.getByTestId('recording-published').waitFor({ timeout: 20000 });
+// Delete waits in the same menu, and its confirmation takes the card over —
+// the menu beside it included: while "delete permanently?" is open, nothing
+// else on the recording can be acted on.
+await tap(admin, 'recording-actions');
+await tap(admin, 'recording-delete');
+await admin.getByTestId('recording-delete-confirm').waitFor({ timeout: 10000 });
+check(
+  'deleting from the menu asks first, and nothing else on the recording works meanwhile',
+  (await shows(admin, 'recording-delete-confirm')) &&
+    (await admin.getByTestId('recording-actions').getAttribute('aria-disabled')) === 'true' &&
+    (await admin.getByTestId('recording-published').count()) === 0,
+);
+await admin.getByText('Cancel', { exact: true }).filter({ visible: true }).first().click();
+await admin.getByTestId('recording-published').waitFor({ timeout: 10000 });
 check(
   'an archived recording still offers its listening progress',
   await shows(admin, 'recording-ledger'),

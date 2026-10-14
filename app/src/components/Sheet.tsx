@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, IconButton } from './ui';
+import { SheetKeyboard } from './SheetKeyboard';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
@@ -40,6 +41,7 @@ export function Sheet({
   if (!visible) return null;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <SheetKeyboard style={styles.shade}>
       <Pressable style={styles.backdrop} onPress={onClose} focusable={false}>
         {/* Absorbs taps so a press inside does not dismiss via the backdrop.
             The testID is what the layout sweep scopes to: RNW portals a Modal
@@ -70,6 +72,7 @@ export function Sheet({
           ) : null}
         </Pressable>
       </Pressable>
+      </SheetKeyboard>
     </Modal>
   );
 }
@@ -125,12 +128,13 @@ export function SheetSection({ label }: { label: string }) {
 }
 
 const styles = StyleSheet.create({
+  // The shade, under the backdrop: the room the keyboard takes is shaded too.
+  shade: { flex: 1, backgroundColor: t.effect.overlay },
   backdrop: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing(4),
-    backgroundColor: t.effect.overlay,
   },
   panel: {
     width: '100%',
