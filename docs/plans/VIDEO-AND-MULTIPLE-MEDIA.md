@@ -383,7 +383,7 @@ the view, and for video only the sound continues until they return.
 | Very long video (> 4.9 GiB) | Multipart for staff uploads. A Zoom import that large is refused with a reason (the Worker copies in one put; spike M1 in MEDIA-ON-CLOUDFLARE.md); the largest Zoom file so far is 1.2 GB |
 | Part added to a published recording | Visible when ready; no new notification; completion unaffected |
 | Part hidden after students started it | Resume falls back to the first visible part; history kept |
-| Due date passes mid-playback | The current URL plays to its expiry; switching version or part needs a new URL and is refused, with the usual "listening closed" message |
+| Due date passes mid-playback | At midnight in the institute's timezone, by the device's clock, the player stops and the screen says the recording closed (the docked bar too). The URL itself still works to its expiry, as the threat model allows; a new one (a switch of version or part, a resume after a night) is refused |
 | A student switches version | No double counting of listened time; position kept |
 | Staff preview | Plays any item including drafts; writes no progress (as now) |
 | `notRecorded` session | No media can be added (as now) |
@@ -436,7 +436,7 @@ as recordings being open or closed, not listening being on or off.
 | V2 | Zoom listing of all files, segments, processing state; picker with formats, quick picks, totals; async import | Integration tests with a fake Zoom of multi-segment, multi-meeting fixtures; screens sweep at 320 px with expanded meetings — **built 2026-10-12**; the course's default pick is deferred: the picker starts with nothing chosen and a quick pick is one tap per meeting |
 | V3 | Upload of several files, part or version choice, probe | Browser e2e with a small MP4 and an M4A; AVD upload — **built 2026-10-13**: parts are 16 MiB rather than 100 (a phone holds three in memory), bare `.aac` is not taken (ADTS has no length without reading the whole file), WAV is, and QuickTime `.mov` is refused like HEVC |
 | V4 | Staff media list, hide, reorder, publish blockers | Integration tests per lifecycle row above — **built 2026-10-13**; renaming a file is deferred (labels are generated) |
-| V5 | Player: versions, parts, auto-advance, listen only, resume, docked bar | `playback.test.ts` extended; web e2e plays video and switches version keeping position; AVD for background, lock screen, fullscreen, PiP — **built 2026-10-13**; "Audio only" is the version chip rather than a separate button, and starting on audio over a metered connection is deferred |
+| V5 | Player: versions, parts, auto-advance, listen only, resume, docked bar | `playback.test.ts` extended; web e2e plays video and switches version keeping position; AVD for background, lock screen, fullscreen, PiP — **built 2026-10-13**; "Audio only" is the version chip rather than a separate button. Deferred: starting on audio over a metered connection; the resume line ("Continue Part 2 at 13:05"); and each part's own progress ("watched to", "not started"), which needs a place per part where the data keeps one per recording |
 | V6 | Wording, manual, workbook and admin stats | Text-source checks; workbook tests — **built 2026-10-13** for wording, manual and workbook; the admin stats wait for Phase 8, which has not started, and are built there by kind and course |
 
 Each step is shown working in the browser first, and on the AVD for audio,
