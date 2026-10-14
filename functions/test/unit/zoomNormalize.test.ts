@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { dateWindows, meetingListing } from '../../src/zoom';
+import { fileSegmentStart, meetingListing } from '@sabeel/shared';
+import { dateWindows } from '../../src/zoom';
 
 const audio = (over = {}) => ({
   id: 'aud',
@@ -126,5 +127,22 @@ describe('dateWindows', () => {
 
   it('asks for nothing when the range ends before it starts', () => {
     expect(dateWindows('2026-09-11', '2026-09-10')).toEqual([]);
+  });
+});
+
+describe('fileSegmentStart', () => {
+  it('gives a file the segment start an import records for it, and null for a file the meeting no longer lists', () => {
+    const m = {
+      uuid: 'u',
+      start_time: '2026-08-13T18:00:00Z',
+      recording_files: [
+        audio({ id: 'a1', recording_start: '2026-08-13T18:05:00Z', recording_end: '2026-08-13T19:07:30Z' }),
+        audio({ id: 'a2', recording_start: '2026-08-13T19:10:00Z', recording_end: '2026-08-13T19:11:30Z' }),
+      ],
+    };
+    const listed = meetingListing(m);
+    expect(fileSegmentStart(m, 'a1')).toBe(listed?.segments[0].startTime);
+    expect(fileSegmentStart(m, 'a2')).toBe(listed?.segments[1].startTime);
+    expect(fileSegmentStart(m, 'gone')).toBeNull();
   });
 });

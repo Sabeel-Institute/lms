@@ -23,7 +23,8 @@ import {
   validateImport,
   type CopyTask,
 } from '../../src/zoomImport';
-import type { ZoomClient, ZoomFileInfo, ZoomMeetingListing } from '../../src/zoom';
+import type { ZoomFileInfo, ZoomMeetingListing } from '@sabeel/shared';
+import type { ZoomClient } from '../../src/zoom';
 import { clearPrefix, objectExists, objectInfo, putObject } from './mediaObjects';
 
 /**

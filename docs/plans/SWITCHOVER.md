@@ -189,7 +189,10 @@ download page alongside the first Android release of
 1. Announce the date and the new app to staff and students a week ahead.
 2. **Freeze legacy:** deploy a legacy release whose server refuses writes
    with a plain message, and whose app shows that the institute has moved.
-3. Final seed, count check, smoke test on the new address. Set
+3. Final seed, then `node scripts/backfill-zoom-segments.mjs --yes` (the seed
+   copies Zoom files without the segment start an import keys parts by, so
+   the same class's video would otherwise land as a second part), count check,
+   smoke test on the new address. Set
    `NOTIFY_AUDIENCE=everyone` in `functions/.env.oursabeel-lms` and deploy
    functions, so the new app notifies everyone from here on. Point the legacy
    `sabeel-recording-app/` page at `sabeel-institute-lms/`, which is already

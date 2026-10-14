@@ -1,9 +1,12 @@
 import { defineSecret } from 'firebase-functions/params';
 import {
-  ZOOM_RECORDING_TYPES,
   addDays,
+  meetingListing,
+  zoomFileInfo,
   zoomRecordingDate,
-  type ZoomFormat,
+  type ZoomFileInfo,
+  type ZoomMeeting,
+  type ZoomMeetingListing,
 } from '@sabeel/shared';
 import { copyThroughWorker } from './mediaCopier';
 
@@ -23,29 +26,6 @@ export const ZOOM_SECRETS = [ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET
 
 /** The single central Sabeel Zoom user whose recordings we import (locked decision). */
 const ZOOM_SOURCE_EMAIL = 'marketing@oursabeel.com';
-
-/** One importable file, as Zoom reports it now. */
-export interface ZoomFileInfo {
-  meetingUuid: string;
-  topic: string;
-  fileId: string;
-  format: ZoomFormat;
-  sizeBytes: number;
-  durationSec: number;
-  /** When its segment began (ISO 8601): the file's own `recording_start`. */
-  segmentStart: string;
-  /** False while Zoom is still processing it. */
-  ready: boolean;
-}
-
-/** A meeting's importable files, grouped into segments. */
-export interface ZoomMeetingListing {
-  meetingUuid: string;
-  topic: string;
-  startTime: string;
-  durationSec: number;
-  segments: { startTime: string; durationSec: number; files: ZoomFileInfo[] }[];
-}
 
 export interface ZoomClient {
   /**
@@ -67,25 +47,6 @@ export interface ZoomClient {
   copyToMediaStore(downloadUrl: string, key: string, sizeBytes: number, contentType: string): Promise<void>;
 }
 
-// ---- Zoom response shapes (only the fields we read) ----
-interface ZoomFile {
-  id?: string;
-  status?: string;
-  recording_type?: string;
-  file_type?: string;
-  file_extension?: string;
-  file_size?: number;
-  recording_start?: string;
-  recording_end?: string;
-  download_url?: string;
-}
-export interface ZoomMeeting {
-  uuid?: string;
-  topic?: string;
-  start_time?: string;
-  duration?: number; // minutes
-  recording_files?: ZoomFile[];
-}
 interface ZoomListResp {
   meetings?: ZoomMeeting[];
   next_page_token?: string;
@@ -115,81 +76,6 @@ async function api<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${await accessToken()}` } });
   if (!res.ok) throw new Error(`Zoom API ${res.status} for ${new URL(url).pathname}.`);
   return (await res.json()) as T;
-}
-
-const FORMAT_OF: Record<string, ZoomFormat> = Object.fromEntries(
-  Object.entries(ZOOM_RECORDING_TYPES).map(([format, type]) => [type, format as ZoomFormat]),
-);
-
-/**
- * When a file ran: its own start and length, which bracket exactly what
- * students will see or hear — the meeting may have opened minutes before
- * anyone pressed record. The meeting's start and whole minutes only when the
- * file does not say.
- */
-function fileSpan(f: ZoomFile, m: ZoomMeeting): { startTime: string; durationSec: number } {
-  if (f.recording_start && f.recording_end) {
-    const d = (Date.parse(f.recording_end) - Date.parse(f.recording_start)) / 1000;
-    if (Number.isFinite(d) && d > 0) return { startTime: f.recording_start, durationSec: Math.round(d) };
-  }
-  return { startTime: m.start_time ?? '', durationSec: Math.round((m.duration ?? 0) * 60) };
-}
-
-/** One of a meeting's files as an importable file, or null if it is not media the import takes. */
-function fileInfo(m: ZoomMeeting, f: ZoomFile): ZoomFileInfo | null {
-  // An M4A with no `recording_type` is the audio: older listings left it off.
-  const format: ZoomFormat | undefined =
-    FORMAT_OF[f.recording_type ?? ''] ??
-    (!f.recording_type && (f.file_extension ?? f.file_type) === 'M4A' ? 'audio' : undefined);
-  if (!format || !f.id) return null;
-  const span = fileSpan(f, m);
-  return {
-    meetingUuid: m.uuid ?? '',
-    topic: m.topic ?? '',
-    fileId: f.id,
-    format,
-    sizeBytes: f.file_size ?? 0,
-    durationSec: span.durationSec,
-    segmentStart: span.startTime,
-    ready: (f.status ?? 'completed') === 'completed',
-  };
-}
-
-/**
- * A meeting → its importable files grouped into segments, or null if it has
- * none. Pure (no network): the one bit of Zoom-JSON parsing worth testing on
- * its own, since the fake client in integration tests hands back listings
- * already in this shape.
- *
- * A SEGMENT IS A RECORDING START. Stopping and restarting the recording makes
- * a new set of files under the same meeting, each file carrying the start of
- * its own stretch, and the formats of one stretch share it. A segment's length
- * is its longest file's. Null too for a meeting with no readable start: it has
- * no date, so no range could hold it, and dating it would throw on the list.
- */
-export function meetingListing(m: ZoomMeeting): ZoomMeetingListing | null {
-  const bySegment = new Map<string, ZoomFileInfo[]>();
-  for (const f of m.recording_files ?? []) {
-    const info = fileInfo(m, f);
-    if (!info || !Number.isFinite(Date.parse(info.segmentStart))) continue;
-    bySegment.set(info.segmentStart, [...(bySegment.get(info.segmentStart) ?? []), info]);
-  }
-  if (bySegment.size === 0) return null;
-  const order: ZoomFormat[] = ['speaker', 'slides', 'audio'];
-  const segments = [...bySegment.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([startTime, files]) => ({
-      startTime,
-      durationSec: Math.max(...files.map((f) => f.durationSec)),
-      files: files.sort((x, y) => order.indexOf(x.format) - order.indexOf(y.format)),
-    }));
-  return {
-    meetingUuid: m.uuid ?? '',
-    topic: m.topic ?? '',
-    startTime: segments[0].startTime,
-    durationSec: segments.reduce((n, seg) => n + seg.durationSec, 0),
-    segments,
-  };
 }
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -263,7 +149,7 @@ export const zoomClient: ZoomClient = {
     if (!res.ok) throw new Error(`Zoom API ${res.status} for the meeting's recordings.`);
     const m = (await res.json()) as ZoomMeeting;
     const f = (m.recording_files ?? []).find((x) => x.id === fileId);
-    const info = f ? fileInfo(m, f) : null;
+    const info = f ? zoomFileInfo(m, f) : null;
     if (!f || !info || !f.download_url) return null;
     return { file: info, downloadUrl: f.download_url };
   },

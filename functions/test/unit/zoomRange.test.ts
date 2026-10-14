@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { zoomClient, type ZoomMeeting } from '../../src/zoom';
+import type { ZoomMeeting } from '@sabeel/shared';
+import { zoomClient } from '../../src/zoom';
 
 /*
  * THE REAL CLIENT against a fake Zoom, at the one seam it has: `fetch`.

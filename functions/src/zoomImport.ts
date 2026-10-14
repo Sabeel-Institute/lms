@@ -16,6 +16,8 @@ import {
   type SessionDoc,
   type ZoomImportDoc,
   type ZoomMeetingRow,
+  type ZoomFileInfo,
+  type ZoomMeetingListing,
 } from '@sabeel/shared';
 import { auditedCall } from './audited';
 import { SENTRY_DSN, reportedCall } from './reported';
@@ -25,13 +27,7 @@ import { draftInTransaction } from './recordings';
 import { writeItem } from './mediaWrite';
 import { MEDIA_WRITE_SECRETS, deleteObject, head } from './mediaStore';
 import { MAX_COPY_BYTES } from './mediaCopier';
-import {
-  ZOOM_SECRETS,
-  zoomClient,
-  type ZoomClient,
-  type ZoomFileInfo,
-  type ZoomMeetingListing,
-} from './zoom';
+import { ZOOM_SECRETS, zoomClient, type ZoomClient } from './zoom';
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 

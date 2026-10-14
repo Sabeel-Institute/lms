@@ -276,6 +276,8 @@ export interface SingleAudioRecording {
  * THE ONE TRANSFORM, used by the seed that copies the live project's data on
  * switchover day and by the migration of what this project already holds, so
  * the two cannot convert a recording differently. The object keeps its key.
+ * A Zoom file's segment start is not in the old shape, so it comes out null,
+ * and `scripts/backfill-zoom-segments.mjs` asks Zoom for it after the copy.
  */
 export function mediaFromSingleAudio(rec: SingleAudioRecording, itemId: string): MediaMap {
   if (!rec.audioPath) return {};
