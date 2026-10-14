@@ -2806,6 +2806,19 @@ const rowOf = (sheet, first, headerRows = 2) =>
   sheet.rows.slice(headerRows).find((r) => r[0] === first);
 
 await openHikam(admin);
+/*
+ * AN EXPORT NEEDS THE SERVER. Offline it was built from whatever the open
+ * screens had cached, stamped as the record "now", and said nothing.
+ */
+await admin.context().setOffline(true);
+await tap(admin, 'course-export');
+const exportRefused = await admin
+  .getByText('An export needs a connection', { exact: false })
+  .first()
+  .waitFor({ timeout: 20000 })
+  .then(() => true, () => false);
+await admin.context().setOffline(false);
+check('an export taken offline says it needs a connection, rather than saving what was cached', exportRefused);
 const courseBook = await readDownload(admin, 'course-export');
 check(
   'the course workbook is named for the course and the term',

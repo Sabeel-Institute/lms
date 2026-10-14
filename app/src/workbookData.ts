@@ -1,4 +1,16 @@
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, type DocumentData, type Query } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDocFromServer,
+  getDocsFromServer,
+  limit,
+  orderBy,
+  query,
+  where,
+  type DocumentData,
+  type DocumentReference,
+  type Query,
+} from 'firebase/firestore';
 import {
   AUDIT_PAGE,
   COLLECTIONS,
@@ -24,16 +36,31 @@ import { read, readIfExists } from './documents';
 /**
  * The reads behind the two export buttons, and the file each produces.
  *
- * ONE-SHOT `getDocs`, not listeners: an export is a photograph, taken when
- * the button is pressed. Every query is a shape a screen already sends —
+ * ONE-SHOT reads, not listeners: an export is a photograph, taken when the
+ * button is pressed. FROM THE SERVER, never the browser's cache: offline, or
+ * on a connection that dropped, a cached read answered with whatever the open
+ * screens had loaded, and the file came out partial, stamped with the moment
+ * of export, saying nothing. Offline it is now refused, and says why. Every query is a shape a screen already sends —
  * course-pinned where the rules want it, per managed course for a manager's
  * student — so the file can never show a manager more than their screens do.
  * The building is `@sabeel/shared` (`courseWorkbook`, `studentWorkbook`); this
  * file only fetches, joins and saves.
  */
 
+/** A read the server answers, or a refusal a person can act on. */
+async function fromServer<T>(read: Promise<T>): Promise<T> {
+  try {
+    return await read;
+  } catch (e) {
+    if ((e as { code?: string }).code === 'unavailable') {
+      throw new Error('An export needs a connection, so that the file is the record as it stands now. Try again once you are online.');
+    }
+    throw e;
+  }
+}
+const getDoc = (ref: DocumentReference<DocumentData>) => fromServer(getDocFromServer(ref));
 const rows = async <C extends StoredCollection>(coll: C, q: Query<DocumentData>): Promise<(StoredDocs[C] & { id: string })[]> =>
-  (await getDocs(q)).docs.map((d) => ({ id: d.id, ...read(coll, d) }));
+  (await fromServer(getDocsFromServer(q))).docs.map((d) => ({ id: d.id, ...read(coll, d) }));
 const byCourse = (name: string, courseId: string) =>
   query(collection(db, name), where('courseId', '==', courseId));
 /**
