@@ -616,16 +616,25 @@ export const handIn = reportedCall(async (req) => {
   return handInWork(uid, idOf((req.data as { courseworkId?: unknown })?.courseworkId, 'courseworkId'));
 });
 
-/** Take handed-in work back to change it: until the due date, while it has not been returned. */
+/** Why handed-in work cannot be taken back, in the words that are true of it. */
+function takeBackRefusal(sub: SubmissionDoc, courseOpen: boolean): string {
+  if (sub.state !== 'handedIn') return 'This work is not handed in.';
+  if (sub.notRequired) return STATE_REFUSAL.notRequired;
+  if (!courseOpen) return 'This course has been archived, so this work stays handed in.';
+  if (sub.closedEarly) return 'Your teacher has stopped taking work on this assignment, so this stays handed in.';
+  return 'The due date has passed, so this can no longer be taken back.';
+}
+
+/**
+ * Take handed-in work back to change it: until the due date, while it has not
+ * been returned, and while it could be handed in again (`canTakeBack`).
+ */
 export async function takeBackWork(uid: string, cwId: string) {
   const todayIs = today();
   return db().runTransaction(async (tx) => {
-    const { sub } = await myWork(tx, uid, cwId);
-    if (!canTakeBack(sub, todayIs)) {
-      throw new HttpsError(
-        'failed-precondition',
-        sub.state === 'handedIn' ? 'The due date has passed, so this can no longer be taken back.' : 'This work is not handed in.',
-      );
+    const { sub, courseOpen } = await myWork(tx, uid, cwId);
+    if (!canTakeBack(sub, todayIs, courseOpen)) {
+      throw new HttpsError('failed-precondition', takeBackRefusal(sub, courseOpen));
     }
     const now = Date.now();
     const draft: DraftDoc = {

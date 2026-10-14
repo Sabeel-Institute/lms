@@ -221,6 +221,31 @@ describe('taking work back', () => {
     await returnWorkRecord(id, [BILAL], null);
     await expect(takeBackWork(BILAL, id)).rejects.toThrow(/not handed in/);
   });
+
+  /*
+   * ONLY WHILE IT COULD GO BACK IN. Taken back after "Stop taking work", or
+   * after the course was archived, the work could never be handed in again:
+   * the teacher saw it as missed and could not return it, and the answer sat
+   * in a draft no member of staff reads.
+   */
+  it('is refused once the teacher stops taking work, and once the course is archived, and the work stays in', async () => {
+    const id = await posted();
+    await writeNote(AMINAH, id, 'Before the stop');
+    await handInWork(AMINAH, id);
+    await closeCourseworkRecord(id);
+    await expect(takeBackWork(AMINAH, id)).rejects.toThrow(/stopped taking work/);
+    expect(await sub(AMINAH, id)).toMatchObject({ state: 'handedIn', note: 'Before the stop' });
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 9 }, feedback: '' });
+    await returnWorkRecord(id, [AMINAH], null);
+    expect((await sub(AMINAH, id))?.state).toBe('returned');
+
+    const id2 = await posted();
+    await writeNote(BILAL, id2, 'Before the archive');
+    await handInWork(BILAL, id2);
+    await applyCourseUpdate({ courseId, archived: true });
+    await expect(takeBackWork(BILAL, id2)).rejects.toThrow(/archived/);
+    expect(await sub(BILAL, id2)).toMatchObject({ state: 'handedIn', note: 'Before the archive' });
+  });
 });
 
 describe('grading and returning', () => {

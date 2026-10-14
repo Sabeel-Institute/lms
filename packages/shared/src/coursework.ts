@@ -322,11 +322,18 @@ export function canHandIn(state: WorkState): boolean {
 
 /**
  * Whether the student may take handed-in work back: until their due date,
- * while it has not been returned. After the date, taking it back would make
- * it late, so the chance goes.
+ * while it has not been returned, and only while it could go back in. After
+ * the date, taking it back would make it late, so the chance goes; once the
+ * teacher has stopped taking work, or the course is archived, work taken back
+ * could never be handed in again, and would drop out of the teacher's view.
  */
-export function canTakeBack(sub: Pick<SubmissionDoc, 'state' | 'dueDate'>, today: string): boolean {
-  return sub.state === 'handedIn' && !isOverdue(sub.dueDate, today);
+export function canTakeBack(
+  sub: Pick<SubmissionDoc, 'state' | 'dueDate' | 'closedEarly' | 'notRequired'>,
+  today: string,
+  /** The course is running: `effectiveActive`. */
+  courseOpen: boolean,
+): boolean {
+  return sub.state === 'handedIn' && !sub.closedEarly && !sub.notRequired && courseOpen && !isOverdue(sub.dueDate, today);
 }
 
 /**

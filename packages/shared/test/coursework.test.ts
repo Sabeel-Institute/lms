@@ -90,10 +90,24 @@ describe('late', () => {
 });
 
 describe('taking work back', () => {
+  const work = (over: Partial<Parameters<typeof canTakeBack>[0]> = {}) => ({
+    state: 'handedIn' as const,
+    dueDate: '2026-10-13',
+    closedEarly: false,
+    notRequired: null,
+    ...over,
+  });
+
   it('is possible until the due date, and never once returned', () => {
-    expect(canTakeBack({ state: 'handedIn', dueDate: '2026-10-13' }, '2026-10-13')).toBe(true);
-    expect(canTakeBack({ state: 'handedIn', dueDate: '2026-10-13' }, '2026-10-14')).toBe(false);
-    expect(canTakeBack({ state: 'returned', dueDate: '2026-10-13' }, '2026-10-10')).toBe(false);
+    expect(canTakeBack(work(), '2026-10-13', true)).toBe(true);
+    expect(canTakeBack(work(), '2026-10-14', true)).toBe(false);
+    expect(canTakeBack(work({ state: 'returned' }), '2026-10-10', true)).toBe(false);
+  });
+
+  it('is not possible once it could not go back in: work stopped, the course archived, or not required', () => {
+    expect(canTakeBack(work({ closedEarly: true }), '2026-10-10', true)).toBe(false);
+    expect(canTakeBack(work(), '2026-10-10', false)).toBe(false);
+    expect(canTakeBack(work({ notRequired: { reason: 'Away', by: 't', at: 1 } }), '2026-10-10', true)).toBe(false);
   });
 });
 

@@ -103,7 +103,7 @@ export function WorkScreen({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {cw.editedAt ? <Text style={styles.quiet}>Updated {dayOf(cw.editedAt)}</Text> : null}
-      <StateNotice state={state} sub={sub} today={today} />
+      <StateNotice state={state} sub={sub} today={today} courseOpen={cls.effectiveActive} />
 
       {sub.state === 'returned' && sub.returned ? <Returned returned={sub.returned} grading={cw.grading} /> : null}
 
@@ -113,7 +113,7 @@ export function WorkScreen({
               work under it, as a file's bin belongs to its row. */}
           <SectionTitle
             action={
-              state === 'handedIn' && canTakeBack(sub, today) ? (
+              state === 'handedIn' && canTakeBack(sub, today, cls.effectiveActive) ? (
                 <Button testID="work-take-back" label="Take back" variant="quiet" hug busy={active === 'takeBack'} onPress={takeBackNow} />
               ) : undefined
             }
@@ -165,10 +165,12 @@ function StateNotice({
   state,
   sub,
   today,
+  courseOpen,
 }: {
   state: ReturnType<typeof workState>;
   sub: SubmissionRow;
   today: string;
+  courseOpen: boolean;
 }) {
   const due = unbreakableDate(sub.dueDate);
   switch (state) {
@@ -203,7 +205,7 @@ function StateNotice({
       return (
         <View testID="work-handed-in">
           <Notice tone="success">
-            {`Not returned yet.${canTakeBack(sub, today) ? ` You can take it back to change it until ${due}.` : ''}`}
+            {`Not returned yet.${canTakeBack(sub, today, courseOpen) ? ` You can take it back to change it until ${due}.` : ''}`}
           </Notice>
         </View>
       );
