@@ -7,7 +7,7 @@ import {
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
-import { COLLECTIONS, EMULATOR_PROJECT_ID, submissionId } from '@sabeel/shared';
+import { COLLECTIONS, EMULATOR_PROJECT_ID, MAX_ANSWER_CHARS, submissionId } from '@sabeel/shared';
 import { seedStaffRecords } from './staffRecords';
 
 /**
@@ -208,6 +208,12 @@ describe('drafts', () => {
     await assertSucceeds(updateDoc(mine, { note: 'Now finished', updatedAt: 2 }));
     await assertSucceeds(getDoc(mine));
     await assertFails(getDoc(doc(classmate(), COLLECTIONS.drafts, submissionId(STUDENT, CW))));
+  });
+
+  it('an answer is stored up to MAX_ANSWER_CHARS, and refused past it', async () => {
+    const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
+    await assertSucceeds(updateDoc(mine, { note: 'ب'.repeat(MAX_ANSWER_CHARS), updatedAt: 2 }));
+    await assertFails(updateDoc(mine, { note: 'ب'.repeat(MAX_ANSWER_CHARS + 1), updatedAt: 3 }));
   });
 
   it('a student cannot put files on a draft themselves', async () => {

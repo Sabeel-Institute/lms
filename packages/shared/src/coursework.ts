@@ -83,6 +83,16 @@ export type AttachmentContentType = (typeof ATTACHMENT_TYPES)[keyof typeof ATTAC
 
 export type AttachmentKind = 'document' | 'image' | 'audio';
 
+/**
+ * How long a written answer may be, as stored (the editor's markdown): about
+ * 3,000 words, as long as a teacher's instructions may be. Longer work goes
+ * in a document. Every handed-in answer sits on its submission with the
+ * earlier attempts', and the teachers' screens read a class's submissions
+ * whole, so the cap also keeps those reads small. `firestore.rules` holds the
+ * draft to it (`rules.coursework.test.ts` holds the two together).
+ */
+export const MAX_ANSWER_CHARS = 20_000;
+
 export const MAX_ATTACHMENTS = 10;
 export const MAX_ATTACHMENT_BYTES = 25 * 2 ** 20;
 /** A teacher's audio is for examples and corrections, not for handing out class recordings. */

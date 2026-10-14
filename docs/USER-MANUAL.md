@@ -237,7 +237,8 @@ worksheet to print, a reading, a recording to listen to. Tap a file to open it.
 
 - **Your answer** — write it right there. Bold, italics, lists and links are on
   the bar above the box, and Arabic runs right to left. Sometimes the answer is
-  all there is: a question put to the class, a few sentences.
+  all there is: a question put to the class, a few sentences. An answer can be
+  up to 20,000 characters, about 3,000 words; longer work goes in a document.
 - **Files** — tap the paperclip to add a document, a picture or an audio
   recording. On a phone it asks where from: **Choose files**, or **Take a
   photo** of a page you wrote out by hand. Up to ten files, 25 MB each; no

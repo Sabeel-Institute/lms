@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import {
   INSTITUTE_TIMEZONE,
+  MAX_ANSWER_CHARS,
   canHandIn,
   canTakeBack,
   closesOn,
@@ -309,16 +310,21 @@ function YourWork({
     // The editor reports what it was seeded with; that is not an edit.
     if (v === shown) return;
     setNote(v);
+    // Too long to store: the rules would refuse it, so it is not sent, and the
+    // line under the box says so rather than blaming the connection.
+    if (v.length > MAX_ANSWER_CHARS) return;
     saver.queue(v);
   };
   const onBusyChange = useCallback((b: boolean) => setUploading(b), []);
 
   const failed = saveState.kind === 'failed';
+  const over = shown.length - MAX_ANSWER_CHARS;
   const guard = useLeaveGuard({
-    when: uploading || failed,
+    when: uploading || failed || over > 0,
     // A failed answer gets one more try before anyone is asked; a file on its
-    // way cannot be hurried, so that is asked at once.
-    settle: uploading ? undefined : () => saver.flush(),
+    // way cannot be hurried, nor an answer too long to store, so those are
+    // asked at once.
+    settle: uploading || over > 0 ? undefined : () => saver.flush(),
     prompt: uploading
       ? {
           title: 'A file is still uploading',
@@ -328,7 +334,10 @@ function YourWork({
         }
       : {
           title: 'Your answer is not saved',
-          message: 'The last change did not reach the server. Leave now and it is lost.',
+          message:
+            over > 0
+              ? 'It is too long to save. Leave now and the last part you wrote is lost.'
+              : 'The last change did not reach the server. Leave now and it is lost.',
           stay: 'Stay',
           leave: 'Leave without it',
         },
@@ -355,18 +364,26 @@ function YourWork({
           <ActivityIndicator style={styles.loading} />
         )}
         <Attachments target="work" courseworkId={cw.id} files={files} editable studentUid={uid} onBusyChange={onBusyChange} />
-        <Text testID="work-saved" style={[styles.quiet, failed ? styles.failed : null]}>
-          {saveState.kind === 'waiting' || saveState.kind === 'saving'
-            ? 'Saving…'
-            : failed
-              ? 'Not saved. Check the connection; your answer is still here.'
-              : 'Saved. Only you can see this until you hand it in.'}
+        <Text testID="work-saved" style={[styles.quiet, failed || over > 0 ? styles.failed : null]}>
+          {over > 0
+            ? `Too long to save: ${over.toLocaleString('en')} characters over the ${MAX_ANSWER_CHARS.toLocaleString('en')} an answer can have. Shorten it, or put the long part in a document and attach that.`
+            : saveState.kind === 'waiting' || saveState.kind === 'saving'
+              ? 'Saving…'
+              : failed
+                ? (saveState.error as { code?: string } | null)?.code === 'permission-denied'
+                  ? 'Not saved: this work is no longer open to changes. Your answer is still here.'
+                  : 'Not saved. Check the connection; your answer is still here.'
+                : `Saved. Only you can see this until you hand it in.${
+                    shown.length > MAX_ANSWER_CHARS * 0.9
+                      ? ` ${shown.length.toLocaleString('en')} of ${MAX_ANSWER_CHARS.toLocaleString('en')} characters.`
+                      : ''
+                  }`}
         </Text>
         <Button
           testID="work-hand-in"
           label="Hand in"
           busy={busy}
-          disabled={empty || uploading}
+          disabled={empty || uploading || over > 0}
           onPress={() => onHandIn(() => saver.flush())}
         />
         {uploading ? <Text style={styles.quiet}>Ready once every file is up.</Text> : null}

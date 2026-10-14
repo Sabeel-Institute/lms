@@ -431,9 +431,10 @@ service cloud.firestore {
           && get(submissionPath(cwId)).data.state == 'open'
           && get(submissionPath(cwId)).data.courseId == courseId;
       }
+      // MAX_ANSWER_CHARS in @sabeel/shared; rules.coursework.test.ts holds them together.
       function noteShape() {
         return request.resource.data.note is string
-          && request.resource.data.note.size() <= 10000
+          && request.resource.data.note.size() <= 20000
           && request.resource.data.updatedAt is int;
       }
       allow get: if isStudent()
