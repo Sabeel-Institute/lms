@@ -1,4 +1,5 @@
-import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
+import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest';
+import { setBackgroundTriggers } from '../backgroundTriggers';
 import { withAudio } from '../mediaFixtures';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -386,24 +387,29 @@ describe('submitting a register', () => {
   });
 });
 
-/**
- * Let the emulator's own triggers land. Every session and recording write here
- * also fires `onSessionWritten` / `onRecordingWritten` out of band, and one that
- * read the session BEFORE a later change can write its answer after the test
- * has moved on — which is how a test that flips a due date twice became a coin
- * toss, and how a grant deactivated on unenrolment came back on CI's slower
- * runner. Production has the same window and converges on the next write; a
- * test cannot wait for "the next write", so it waits for the queue to drain.
- */
-const settle = () => new Promise((r) => setTimeout(r, 1500));
-
 describe('unenrolment', () => {
+  /*
+   * THE EMULATOR'S OWN TRIGGERS ARE OFF HERE. Every session and recording
+   * write fires `onSessionWritten` / `onRecordingWritten` out of band, and one
+   * that read the session while it was still open could write its grant after
+   * the test had moved on — unenrolled the student, closed the session — and
+   * hand back the grant the test had just switched off. It failed a few runs
+   * in a hundred on a loaded machine; a 1.5-second wait for the queue to drain
+   * made that rarer, and only rarer. Each step below reconciles explicitly,
+   * through the same functions the triggers call, so with the triggers off
+   * every write is one the test made, in the order it made them. Production
+   * has the same window, when a staff edit to a session and the unenrolment
+   * of one of its students land within one reconcile of each other; the next
+   * write to the session corrects it.
+   */
+  beforeAll(() => setBackgroundTriggers(false));
+  afterAll(() => setBackgroundTriggers(true));
+
   it('deactivates a student obligations in the course, keeping history', async () => {
     await seedSession('sess', { attendance: { s1: 'excused', s2: 'excused' }, submitted: true });
     await seedRecording('r1', 'sess', 'published');
     await reconcile('sess');
     expect(await countActive('r1')).toBe(2);
-    await settle();
 
     await deactivateStudentAssignmentsInCourse(db(), courseId, 's1');
     expect((await getAssignment('s1', 'r1'))?.active).toBe(false);
@@ -496,7 +502,6 @@ describe('unenrolment', () => {
     expect((await getAssignment('s1', 'rClosed'))?.active).toBe(true);
     // The listen-by date goes by.
     await db().collection(COLLECTIONS.sessions).doc(ns('closed')).update({ dueDate: '2020-01-01' });
-    await settle();
     await applyEnrollmentActive({ studentUid: 's1', courseId, active: false });
 
     await createEnrollmentRecord(ADMIN, { studentUid: 's1', courseId });
@@ -525,7 +530,6 @@ describe('unenrolment', () => {
     await seedRecording('rLate', 'late', 'published');
     await reconcile('late');
     await db().collection(COLLECTIONS.sessions).doc(ns('late')).update({ dueDate: '2020-01-01' });
-    await settle();
     await reconcile('late');
     expect((await getAssignment('s1', 'rLate'))?.active).toBe(true); // Missed stays Missed
     expect((await getAssignment('s2', 'rLate'))?.active).toBe(true);
@@ -536,7 +540,6 @@ describe('unenrolment', () => {
     expect((await getAssignment('s1', 'rLate'))?.active).toBe(true);
 
     await db().collection(COLLECTIONS.sessions).doc(ns('late')).update({ dueDate: '2099-01-01' });
-    await settle();
     await reconcile('late');
     expect((await getAssignment('s2', 'rLate'))?.active).toBe(true); // reopened for everyone excused
   });

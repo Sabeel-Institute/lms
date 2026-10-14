@@ -1746,6 +1746,14 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-14 — **The unenrolment tests run without the emulator's
+  triggers.** "Does not hand back an obligation whose deadline passed" failed
+  now and then on a loaded machine: a trigger from the test's own seed read
+  the session while it was open and wrote its grant after the test had
+  unenrolled the student and closed it. The block switches the background
+  triggers off around itself through the emulator hub and reconciles every
+  step explicitly; the fixed waits are gone. Justified by construction — no
+  writer is left that the test did not call — not by a green run.
 - 2026-10-14 — **v0.1.1 shipped to every surface** (build commit `57160d8`,
   versionCode 36): the screen-by-screen batch and its device-pass fixes.
   `check:queries`, `check:documents` (482 audit entries and every other

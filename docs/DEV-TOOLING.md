@@ -191,11 +191,10 @@ audit lie, and an audit that reports nothing is worse than no audit.
   until it stops 404ing.
 - **A trigger can land after the test's next step.** A test's own seed writes
   fire the functions emulator's triggers asynchronously, and on a loaded
-  machine one can arrive after the step it was meant to precede.
-  `assignments.integration` fails this way now and then (the unenrolment
-  tests: a grant active that the test had just switched off), and passes on
-  a rerun. A rerun that passes classifies it; a fixed `settle()` only makes
-  it rarer.
+  machine one can arrive after the step it was meant to precede. A fixed wait
+  only makes that rarer. Where a test reconciles every step itself, switch the
+  triggers off around it (`setBackgroundTriggers` in `functions/test`, through
+  the emulator hub), as `assignments.integration`'s unenrolment tests do.
 
 ## The local media store (SeaweedFS)
 
