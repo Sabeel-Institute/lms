@@ -107,6 +107,18 @@ describe('a file that plays', () => {
     expect((await item(id, wav.itemId))?.status).toBe('ready');
   });
 
+  /*
+   * AN ORDINARY VIDEO WITH ONE MORE TRACK. Editors write chapters, cameras keep
+   * a timecode, and a file may carry subtitles: none of them is a picture, and
+   * phones play the file. Each was counted as a picture that is not H.264, and
+   * the upload deleted with advice to export as H.264, which it already was.
+   */
+  it.each(['chapters', 'subtitles', 'timecode'] as const)('takes an H.264 and AAC video that also carries %s', async (name) => {
+    const id = await newDraft();
+    const { itemId } = await uploadFile(ADMIN, id, sample(name), 'video/mp4');
+    expect(await item(id, itemId)).toMatchObject({ kind: 'video', status: 'ready', durationSec: 3 });
+  });
+
   it('joins a video sent in several parts, in order, into the file that was sent', async () => {
     const id = await newDraft();
     const bytes = sample('bigVideo');

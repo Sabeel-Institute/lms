@@ -42,6 +42,19 @@ export function objectTokenizer(key: string, sizeBytes: number) {
   return tokenizer(client, { avoidHeadRequests: true });
 }
 
+/** A codec the parser named only by its fourcc in angle brackets: "<avc1>". */
+const fourcc = (name: string | undefined) => name?.match(/^<(.+)>$/)?.[1] ?? null;
+
+/**
+ * Sample entries that are neither picture nor sound: chapters ("text"),
+ * subtitles ("tx3g", "wvtt", "stpp"), captions ("c608", "c708"), timecode
+ * ("tmcd") and camera or timed metadata ("gpmd", "camm", "mett", "metx").
+ * The parser does not say which tracks are pictures, only which are sound, so
+ * these were counted as pictures that are not H.264 and an ordinary file was
+ * refused.
+ */
+const NEITHER = new Set(['text', 'tx3g', 'wvtt', 'stpp', 'c608', 'c708', 'tmcd', 'gpmd', 'camm', 'mett', 'metx']);
+
 /**
  * Probe one object.
  *
@@ -57,11 +70,12 @@ export async function probeObject(key: string, sizeBytes: number): Promise<Probe
   } catch (e) {
     throw new UnreadableMedia((e as Error).message);
   }
-  const tracks = format.trackInfo ?? [];
+  // Chapters, subtitles, captions and timecode are neither picture nor sound,
+  // and play no part in whether a phone can play the file.
+  const tracks = (format.trackInfo ?? []).filter((t) => !NEITHER.has(fourcc(t.codecName) ?? ''));
   // The parser names a codec it has no word for by its fourcc in angle
   // brackets — "<avc1>", "<hvc1>" — and marks audio tracks as type 2. A video
   // track is one it did not mark as audio.
-  const fourcc = (name: string | undefined) => name?.match(/^<(.+)>$/)?.[1] ?? null;
   const video = tracks.filter((t) => t.type !== 2 && fourcc(t.codecName));
   const audio = tracks.filter((t) => !video.includes(t));
   return {

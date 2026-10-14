@@ -15,6 +15,14 @@ import { join } from 'node:path';
  */
 const DIR = join(tmpdir(), 'sabeel-lms-media-samples-v1');
 
+/** A small file handed to ffmpeg inline, so a sample stays one command. */
+const inline = (text: string) => `data:text/plain;base64,${Buffer.from(text).toString('base64')}`;
+const CHAPTERS = inline(';FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1500\ntitle=One\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=3000\ntitle=Two\n');
+// The whole three seconds: `-shortest` ends the file with its shortest track.
+const SUBTITLES = inline('1\n00:00:00,000 --> 00:00:03,000\nAs-salamu alaykum\n');
+/** Three seconds of H.264 and AAC, the inputs every video sample starts from. */
+const PICTURE_AND_SOUND = ['-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=3', '-f', 'lavfi', '-i', 'sine=duration=3'] as const;
+
 const SPECS = {
   /** AAC in M4A, 3 s: an ordinary class recording. */
   m4a: ['-f', 'lavfi', '-i', 'sine=duration=3', '-c:a', 'aac', 'a.m4a'],
@@ -27,6 +35,18 @@ const SPECS = {
     '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=3', '-f', 'lavfi', '-i', 'sine=duration=3',
     '-c:v', 'libx264', '-c:a', 'aac', '-shortest', 'v.mp4',
   ],
+  /** H.264 + AAC with a chapter track, as an editor that writes markers exports it. */
+  chapters: [
+    ...PICTURE_AND_SOUND, '-f', 'ffmetadata', '-i', CHAPTERS,
+    '-map', '0', '-map', '1', '-map_chapters', '2', '-c:v', 'libx264', '-c:a', 'aac', '-shortest', 'chapters.mp4',
+  ],
+  /** H.264 + AAC with a subtitle track (mov_text, "tx3g"). */
+  subtitles: [
+    ...PICTURE_AND_SOUND, '-f', 'srt', '-i', SUBTITLES,
+    '-map', '0', '-map', '1', '-map', '2', '-c:v', 'libx264', '-c:a', 'aac', '-c:s', 'mov_text', '-shortest', 'subtitles.mp4',
+  ],
+  /** H.264 + AAC with a timecode track ("tmcd"), as cameras and editors keep it. */
+  timecode: [...PICTURE_AND_SOUND, '-c:v', 'libx264', '-c:a', 'aac', '-timecode', '01:00:00:00', '-shortest', 'tmcd.mp4'],
   /** HEVC in MP4: what an iPhone records. */
   hevc: [
     '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=5:duration=3', '-f', 'lavfi', '-i', 'sine=duration=3',
