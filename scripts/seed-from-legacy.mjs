@@ -32,7 +32,9 @@
  *  - Every object under `recordings/` in the source's Storage bucket, into the
  *    R2 media bucket at the same key, with the R2 write key.
  *
- * Then it counts both sides and fails loudly on any difference.
+ * Then it waits for the triggers its wipe fired to finish, writes back any
+ * copied document one of them changed, counts both sides, and fails loudly on
+ * any difference.
  */
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -180,6 +182,14 @@ async function sourceObjects() {
   return out;
 }
 
+/**
+ * Every prefix this project writes media to, but `help/`: the help films are
+ * this app's own, published from scripts/tutorials, and not the live app's.
+ * Testers' uploads, Zoom copies and assignment files go with the wipe, or
+ * they would stay in the bucket with nothing pointing at them.
+ */
+const WIPED_PREFIXES = ['recordings/', 'media/', 'coursework/', 'work/'];
+
 async function targetObjects(prefix = 'recordings/') {
   const out = [];
   let t;
@@ -195,10 +205,15 @@ async function targetObjects(prefix = 'recordings/') {
 console.log(`Copy ${SOURCE} (as ${SOURCE_ACCOUNT}, read-only) → ${TARGET} (as ${TARGET_ACCOUNT})\n`);
 
 const [srcDocs, srcUsers, srcObjects] = await Promise.all([allDocs('source', SOURCE), allUsers('source', SOURCE), sourceObjects()]);
+// The source's password hashing, read BEFORE anything here is wiped: a
+// failure to read it must leave this project as it was, not empty.
+const cfg = await json('source', 'GET', `https://identitytoolkit.googleapis.com/admin/v2/projects/${SOURCE}/config`);
+const hash = cfg.signIn?.hashConfig;
+if (hash?.algorithm !== 'SCRYPT') throw new Error(`unexpected source hash algorithm: ${hash?.algorithm}`);
 const [tgtDocs, tgtUsers, tgtObjects] = await Promise.all([
   allDocs('target', TARGET, fsBase(TARGET), new Set()),
   allUsers('target', TARGET),
-  targetObjects(),
+  Promise.all(WIPED_PREFIXES.map((prefix) => targetObjects(prefix))).then((lists) => lists.flat()),
 ]);
 const mb = (n) => `${(n / 1e6).toFixed(1)} MB`;
 const sum = (xs) => xs.reduce((a, o) => a + o.size, 0);
@@ -215,7 +230,7 @@ if (!EXECUTE) {
 }
 
 // 1. Wipe this project.
-console.log('\n1/5  wiping this project');
+console.log('\n1/6  wiping this project');
 await batchWrite(tgtDocs.map((d) => ({ delete: d.name })));
 for (let i = 0; i < tgtUsers.length; i += 1000) {
   await call('target', 'POST', `${itBase(TARGET)}/accounts:batchDelete`, {
@@ -231,10 +246,7 @@ for (let i = 0; i < tgtObjects.length; i += 1000) {
 }
 
 // 2. Accounts.
-console.log(`2/5  ${srcUsers.length} accounts`);
-const cfg = await json('source', 'GET', `https://identitytoolkit.googleapis.com/admin/v2/projects/${SOURCE}/config`);
-const hash = cfg.signIn?.hashConfig;
-if (hash?.algorithm !== 'SCRYPT') throw new Error(`unexpected source hash algorithm: ${hash?.algorithm}`);
+console.log(`2/6  ${srcUsers.length} accounts`);
 for (let i = 0; i < srcUsers.length; i += 1000) {
   const r = await json('target', 'POST', `${itBase(TARGET)}/accounts:batchCreate`, {
     hashAlgorithm: 'SCRYPT',
@@ -269,11 +281,11 @@ for (const d of srcDocs) {
   }
 }
 const renames = [...renamed].map(([from, n]) => `${n} ${from} → ${RENAMED_AUDIT_ACTIONS[from]}`).join(', ');
-console.log(`3/5  ${srcDocs.length} documents, ${writes.length - srcDocs.length} Zoom claims; audit entries renamed: ${renames || 'none'}`);
+console.log(`3/6  ${srcDocs.length} documents, ${writes.length - srcDocs.length} Zoom claims; audit entries renamed: ${renames || 'none'}`);
 await batchWrite(writes);
 
 // 4. Media.
-console.log(`4/5  ${srcObjects.length} media objects (${mb(sum(srcObjects))})`);
+console.log(`4/6  ${srcObjects.length} media objects (${mb(sum(srcObjects))})`);
 for (const o of srcObjects) {
   const res = await call('source', 'GET', `https://storage.googleapis.com/storage/v1/b/${o.bucket}/o/${encodeURIComponent(o.key)}?alt=media`);
   await s3.send(new PutObjectCommand({
@@ -287,14 +299,42 @@ for (const o of srcObjects) {
   console.log(`     ${o.key}  ${mb(o.size)}`);
 }
 
-// 5. Count both sides.
-console.log('5/5  checking');
+/*
+ * 5. SETTLE. The wipe's deletes fired the recording and session triggers, and
+ * one that runs after the copy has rewritten a grant finds "no recording" and
+ * switches every grant of it off; a past session's grant is never revived.
+ * That rewrote the term's Missed and Completed record, and the count below
+ * cannot see it (the documents are all there). So once the burst of trigger
+ * runs has passed, every copied document is compared with what was written,
+ * field by field, and any a trigger changed is written back, until a pass
+ * finds none. The triggers themselves change nothing in data copied whole.
+ */
+const canonical = (v) =>
+  JSON.stringify(v, (_k, x) =>
+    x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x,
+  );
+const problems = [];
+const SETTLE_MS = 90_000;
+for (let pass = 1; ; pass += 1) {
+  await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+  const now = new Map((await allDocs('target', TARGET, fsBase(TARGET), new Set())).map((d) => [relPath(d.name), d.fields ?? {}]));
+  const drifted = writes.filter((w) => canonical(now.get(relPath(w.update.name))) !== canonical(w.update.fields));
+  console.log(`5/6  settle pass ${pass}: ${drifted.length} document(s) changed since the copy`);
+  if (drifted.length === 0) break;
+  if (pass === 3) {
+    problems.push(`${drifted.length} document(s) still change after the copy, e.g. ${drifted.slice(0, 3).map((w) => relPath(w.update.name)).join(', ')}`);
+    break;
+  }
+  await batchWrite(drifted);
+}
+
+// 6. Count both sides.
+console.log('6/6  checking');
 const [afterDocs, afterUsers, afterObjects] = await Promise.all([
   allDocs('target', TARGET, fsBase(TARGET), new Set()),
   allUsers('target', TARGET),
   targetObjects(),
 ]);
-const problems = [];
 const want = countByShape(writes.map((w) => w.update));
 const got = countByShape(afterDocs);
 for (const k of new Set([...want.keys(), ...got.keys()])) {

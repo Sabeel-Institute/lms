@@ -166,16 +166,23 @@ IAM change there).
 | Push registrations | **Not copied** (`notifications/{uid}/devices`) | FCM tokens belong to the legacy project's sender and cannot deliver from here. Devices register again on first sign-in. |
 | Zoom import markers | Each Zoom recording's file gets its `zoomImports/{fileId}` claim | So a recording imported in legacy is not offered again. |
 
-Every run wipes this project first: anything entered here before switchover is
-test data and is lost on the next run, and staff trying features early are told
-so. After copying, it counts documents per collection shape (the claims it
-added included), accounts, custom claims, and media objects and sizes on both
-sides, and fails on any difference.
+Every run wipes this project first: documents, accounts, and the media under
+`recordings/`, `media/`, `coursework/` and `work/` (never `help/`). Anything
+entered here before switchover is test data and is lost on the next run, and
+staff trying features early are told so. The source's password hashing is read
+before the wipe, so a failure there leaves this project as it was.
 
-Once functions are deployed, a re-run's writes fire the triggers here
-(`onRecordingWritten`, `onSessionWritten`, `onAssignmentWritten`). They
-reconcile what was just copied and change nothing, and notifications go to
-staff at most until switchover (`NOTIFY_AUDIENCE`).
+Once functions are deployed, the wipe's deletes and the copy's writes fire the
+triggers here (`onRecordingWritten`, `onSessionWritten`, `onAssignmentWritten`).
+On copied data they change nothing, but one from the WIPE that runs after the
+copy reads a recording as gone and switches its grants off, and a past
+session's grant is never revived. So after copying the seed waits for that
+burst to pass, compares every copied document field by field with what it
+wrote, writes back any a trigger changed, and repeats until a pass finds
+none (it fails after three). Then it counts documents per collection shape (the
+claims it added included), accounts, custom claims, and media objects and
+sizes on both sides, and fails on any difference. Notifications go to staff at
+most until switchover (`NOTIFY_AUDIENCE`).
 
 ## Switchover day
 
