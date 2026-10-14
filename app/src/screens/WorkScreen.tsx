@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import {
   INSTITUTE_TIMEZONE,
   MAX_ANSWER_CHARS,
@@ -307,6 +307,8 @@ function YourWork({
   const [saver] = useState(() =>
     createAutosave<string>({
       delayMs: 700,
+      // Steady typing is still sent every couple of seconds (see autosave.ts).
+      maxWaitMs: 2500,
       save: (v) => saveDraftNote(uid, cw.id, courseId, v, draftExists.current),
       onState: setSaveState,
     }),
@@ -318,6 +320,22 @@ function YourWork({
    * screen does not have to stay for it.
    */
   useEffect(() => () => void saver.flush(), [saver]);
+  // AND WHEN THE PAGE GOES AWAY OR OUT OF SIGHT: a tab closed, a reload, the
+  // phone's browser put in the background. The write is queued in the SDK at
+  // once; the guard below asks before a reload or close lets it be lost.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const flushNow = () => void saver.flush();
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') flushNow();
+    };
+    window.addEventListener('pagehide', flushNow);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('pagehide', flushNow);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
+  }, [saver]);
   const shown = note ?? draft?.note ?? '';
 
   const change = (v: string) => {
@@ -335,7 +353,9 @@ function YourWork({
   const failed = saveState.kind === 'failed';
   const over = shown.length - MAX_ANSWER_CHARS;
   const guard = useLeaveGuard({
-    when: uploading || failed || over > 0,
+    // Waiting or on its way counts too: a reload or a closed tab in that moment
+    // lost the typing with no word (in-app ways out send it first, below).
+    when: uploading || failed || over > 0 || pending,
     // A failed answer gets one more try before anyone is asked; a file on its
     // way cannot be hurried, nor an answer too long to store, so those are
     // asked at once.

@@ -6,7 +6,10 @@
  * never sent. And two saves in flight at once can land in the wrong order on a
  * slow connection, leaving the older value. So the queue:
  *
- * - sends the latest value once typing pauses (`delayMs`);
+ * - sends the latest value once typing pauses (`delayMs`), and, with
+ *   `maxWaitMs`, at least that often while typing never pauses: each
+ *   keystroke restarted the timer, so ten seconds of steady typing reached
+ *   nothing, and a reload in them lost all of it;
  * - sends one at a time, in order, each after the last has answered;
  * - `flush()` sends what is waiting NOW and resolves once everything has been
  *   answered — true only if all of it was stored;
@@ -37,13 +40,19 @@ export interface Autosave<T> {
 
 export function createAutosave<T>(opts: {
   delayMs: number;
+  /** The longest a value may wait while typing goes on without a pause. */
+  maxWaitMs?: number;
   save: (value: T) => Promise<unknown>;
   onState: (state: AutosaveState) => void;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (timer: unknown) => void;
+  now?: () => number;
 }): Autosave<T> {
   const setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimer = opts.clearTimer ?? ((t) => clearTimeout(t as ReturnType<typeof setTimeout>));
+  const now = opts.now ?? Date.now;
+  /** When the oldest value not yet sent was typed; null when nothing waits. */
+  let waitingSince: number | null = null;
 
   let pending: { value: T } | null = null;
   let timer: unknown = null;
@@ -99,19 +108,26 @@ export function createAutosave<T>(opts: {
     queue(value) {
       stopTimer();
       pending = { value };
+      const at = now();
+      if (waitingSince === null) waitingSince = at;
+      const delay =
+        opts.maxWaitMs === undefined ? opts.delayMs : Math.min(opts.delayMs, Math.max(0, waitingSince + opts.maxWaitMs - at));
       timer = setTimer(() => {
         timer = null;
+        waitingSince = null;
         void send();
-      }, opts.delayMs);
+      }, delay);
       emit();
     },
     async flush() {
       stopTimer();
+      waitingSince = null;
       await send();
       return pending === null && lastError === null;
     },
     discard() {
       stopTimer();
+      waitingSince = null;
       pending = null;
       // A failed value went with it, so there is nothing left to retry.
       lastError = null;

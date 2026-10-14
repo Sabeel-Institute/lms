@@ -60,6 +60,31 @@ describe('autosave', () => {
     expect(states.at(-1)).toBe('saved');
   });
 
+  it('STEADY TYPING IS STILL SENT: with a maximum wait, a value goes even while keys keep coming', async () => {
+    const saved: string[] = [];
+    let clock = 0;
+    const a = createAutosave<string>({
+      delayMs: 700,
+      maxWaitMs: 2500,
+      save: async (v) => void saved.push(v),
+      onState: () => {},
+      now: () => clock,
+    });
+    // A key every 200 ms for five seconds: never a 700 ms pause.
+    for (let i = 1; i <= 25; i += 1) {
+      a.queue(`typed ${i}`);
+      clock += 200;
+      vi.advanceTimersByTime(200);
+      await tick();
+    }
+    // Sent at the 2.5 s mark, mid-typing, with what was on the screen then.
+    expect(saved).toEqual(['typed 13']);
+    // And the last of it once the typing pauses.
+    vi.advanceTimersByTime(700);
+    await tick();
+    expect(saved).toEqual(['typed 13', 'typed 25']);
+  });
+
   it('LEAVING AT ONCE STILL STORES IT: flush sends what is waiting, without the timer', async () => {
     const saved: string[] = [];
     const a = make(async (v) => void saved.push(v));
