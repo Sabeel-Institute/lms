@@ -21,6 +21,7 @@ import { LazyRichEditor } from '../components/LazyRichEditor';
 import { useLeaveGuard } from '../components/LeaveGuard';
 import { Attachments } from '../components/Attachments';
 import { PlainLines } from '../components/PlainLines';
+import { forgetAnswer, journalAnswer, journaledAnswer, restorable } from '../answerJournal';
 import { RichText } from '../components/RichText';
 import { handIn, saveDraftNote, takeBack, useMyDraftState, type CourseworkRow, type SubmissionRow } from '../coursework';
 import type { CourseRow } from '../structure';
@@ -347,9 +348,19 @@ function YourWork({
   const seedKey = useRef('none');
   if (note === null) seedKey.current = draft ? `draft-${draft.updatedAt}` : 'none';
   const [followed, setFollowed] = useState(false);
+  /*
+   * PUT BACK WHAT THIS DEVICE TYPED AND NEVER SAVED. On Android an answer
+   * typed with no signal waited in memory, and an app killed before the
+   * signal returned took it (answerJournal.ts). When the device's copy is
+   * newer than the stored answer, the editor starts from it, and it is saved.
+   */
+  const [restored, setRestored] = useState<string | null>(null);
+  const [restoredNotice, setRestoredNotice] = useState(false);
+  const typed = useRef(false);
   useEffect(() => {
     if (!draft || note === null || pending || draft.note === note) return;
     setFollowed(true);
+    setRestored(null);
     setNote(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the stored answer changing
   }, [draft?.updatedAt]);
@@ -361,10 +372,27 @@ function YourWork({
       delayMs: 700,
       // Steady typing is still sent every couple of seconds (see autosave.ts).
       maxWaitMs: 2500,
-      save: (v) => saveDraftNote(uid, cw.id, courseId, v, draftExists.current),
+      save: async (v) => {
+        await saveDraftNote(uid, cw.id, courseId, v, draftExists.current);
+        void forgetAnswer(uid, cw.id, v);
+      },
       onState: setSaveState,
     }),
   );
+  const checked = useRef(false);
+  useEffect(() => {
+    if (!draftState.resolved || checked.current) return;
+    checked.current = true;
+    const stored = draftState.value;
+    void journaledAnswer(uid, cw.id).then((entry) => {
+      if (typed.current || !restorable(entry, stored ? { note: stored.note, updatedAt: stored.updatedAt } : null)) return;
+      setRestored(entry.note);
+      setRestoredNotice(true);
+      setNote(entry.note);
+      if (entry.note.length <= MAX_ANSWER_CHARS) saver.queue(entry.note);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the stored answer is first known
+  }, [draftState.resolved]);
   /*
    * LEAVING SENDS WHAT IS WAITING. The save goes when typing pauses, and a
    * student who types a sentence and taps Back inside that pause used to lose
@@ -393,8 +421,11 @@ function YourWork({
   const change = (v: string) => {
     // The editor reports what it was seeded with; that is not an edit.
     if (v === shown) return;
+    typed.current = true;
     setFollowed(false);
+    setRestoredNotice(false);
     setNote(v);
+    journalAnswer(uid, cw.id, v);
     // Too long to store: the rules would refuse it, so it is not sent, and the
     // line under the box says so rather than blaming the connection.
     if (v.length > MAX_ANSWER_CHARS) return;
@@ -448,11 +479,11 @@ function YourWork({
         <Text style={inputLook.label}>Your answer</Text>
         {draftState.resolved ? (
           <LazyRichEditor
-            key={seedKey.current}
+            key={restored !== null ? 'restored' : seedKey.current}
             testID="work-note"
             label="Your answer"
             placeholder="Your answer, or a note to go with your files"
-            initialMarkdown={draft?.note ?? ''}
+            initialMarkdown={restored ?? draft?.note ?? ''}
             onChangeMarkdown={change}
           />
         ) : (
@@ -470,7 +501,7 @@ function YourWork({
                   ? (saveState.error as { code?: string } | null)?.code === 'permission-denied'
                     ? 'Not saved: this work is no longer open to changes. Your answer is still here.'
                     : 'Not saved. Check the connection; your answer is still here.'
-                  : `${followed ? 'Brought up to date with what you wrote on another device. ' : ''}${empty ? '' : 'Saved. '}Only you can see this until you hand it in.${
+                  : `${followed ? 'Brought up to date with what you wrote on another device. ' : ''}${restoredNotice ? 'Brought back what you typed here that had not been saved. ' : ''}${empty ? '' : 'Saved. '}Only you can see this until you hand it in.${
                       shown.length > MAX_ANSWER_CHARS * 0.9
                         ? ` ${shown.length.toLocaleString('en')} of ${MAX_ANSWER_CHARS.toLocaleString('en')} characters.`
                         : ''
