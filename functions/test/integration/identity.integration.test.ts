@@ -5,6 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, type StaffUserDoc } from '@sabeel/shared';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import { applyStaffAccess, setStaffAccess, validateStaffAccess } from '../../src/staff';
+import { onUserCreate } from '../../src/authTrigger';
 import { idTokenFor } from './emulatorToken';
 import {
   applyStudentAccess,
@@ -169,6 +170,56 @@ describe('applyStaffAccess', () => {
     await applyStaffAccess(ADMIN, { uid: 'promoted', role: 'admin' });
     const before = await getAuth().verifyIdToken(held, true);
     expect(before.uid).toBe('promoted');
+  });
+});
+
+/*
+ * THE SIGN-UP TRIGGER IS DELIVERED AT LEAST ONCE. A second delivery of a
+ * colleague's first Google sign-in, arriving after an admin approved them,
+ * put them back on "Waiting for approval" and back in the admin's queue.
+ */
+describe('onUserCreate delivered twice', () => {
+  /** The event as Cloud Functions hands it over for a first Google sign-in. */
+  const googleSignUp = (uid: string, email: string) => ({
+    uid,
+    email,
+    emailVerified: true,
+    displayName: 'New Colleague',
+    photoURL: null,
+    providerData: [{ providerId: 'google.com', uid: `g-${uid}`, email }],
+  });
+  const deliver = (event: unknown) =>
+    (onUserCreate as unknown as { run: (e: unknown, ctx: unknown) => Promise<void> }).run(event, { eventId: 'evt-1' });
+  const auditRows = async (uid: string, action: string) =>
+    (await getFirestore().collection(COLLECTIONS.auditLog).where('targets.uid', '==', uid).get()).docs.filter(
+      (d) => d.data().action === action,
+    ).length;
+
+  it('a colleague an admin approved in between stays approved, and is announced once', async () => {
+    const uid = `redelivered-${Date.now()}`;
+    const email = `${uid}@oursabeel.com`;
+    await getAuth().createUser({ uid, email, emailVerified: true });
+    await deliver(googleSignUp(uid, email));
+    expect(await claimsOf(uid)).toMatchObject({ role: 'manager', status: 'pending' });
+    await applyStaffAccess(ADMIN, { uid, status: 'active', role: 'admin' });
+
+    await deliver(googleSignUp(uid, email));
+
+    expect(await claimsOf(uid)).toMatchObject({ role: 'admin', status: 'active' });
+    const doc = (await getFirestore().collection(COLLECTIONS.staffUsers).doc(uid).get()).data();
+    expect(doc).toMatchObject({ role: 'admin', status: 'active', approvedBy: ADMIN });
+    expect(await auditRows(uid, 'authProvision')).toBe(1);
+  });
+
+  it('an off-domain sign-up delivered again is removed once, without a failure', async () => {
+    const uid = `outsider-${Date.now()}`;
+    const email = `${uid}@example.com`;
+    await getAuth().createUser({ uid, email, emailVerified: true });
+    await deliver(googleSignUp(uid, email));
+    await expect(getAuth().getUser(uid)).rejects.toMatchObject({ code: 'auth/user-not-found' });
+
+    await expect(deliver(googleSignUp(uid, email))).resolves.toBeUndefined();
+    expect(await auditRows(uid, 'authReject')).toBe(1);
   });
 });
 

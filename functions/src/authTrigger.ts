@@ -32,6 +32,9 @@ import { writeAudit } from './audited';
  * the approval queue, so the admin's list is never padded with junk that has to
  * be mentally filtered.
  */
+/** gRPC ALREADY_EXISTS: the directory row an earlier delivery created. */
+const ALREADY_EXISTS = 6;
+
 export const onUserCreate = functionsV1
   .runWith({ secrets: ['SENTRY_DSN'] })
   .region(REGION)
@@ -58,7 +61,13 @@ export const onUserCreate = functionsV1
           email: decision.email,
           reason: decision.reason,
         });
-        await getAuth().deleteUser(user.uid);
+        try {
+          await getAuth().deleteUser(user.uid);
+        } catch (e) {
+          // An earlier delivery of this event removed it, and said so.
+          if ((e as { code?: string }).code === 'auth/user-not-found') return;
+          throw e;
+        }
         await writeAudit({
           at: Date.now(),
           actorUid: user.uid,
@@ -73,11 +82,19 @@ export const onUserCreate = functionsV1
 
       const { claims, profile } = decision;
 
+      // Delivered AT LEAST once. A second delivery, after an admin had approved
+      // the colleague, set them back to pending and back in the queue. So the
+      // claims are set only on an account that has none, and the directory row
+      // is created, never overwritten: a row already there means an earlier
+      // delivery provisioned the account, and an admin may have acted since.
+      //
       // Claims BEFORE the mirror document. The token is what rules trust, so if
       // the second write failed we would have a user who can do nothing (pending
       // grants nothing) rather than one with a document but no claims — which the
       // client would misread as approved-but-broken.
-      await getAuth().setCustomUserClaims(user.uid, claims);
+      if ((await getAuth().getUser(user.uid)).customClaims?.role === undefined) {
+        await getAuth().setCustomUserClaims(user.uid, claims);
+      }
 
       const doc: StaffUserDoc = {
         displayName: profile.displayName,
@@ -87,7 +104,12 @@ export const onUserCreate = functionsV1
         status: 'pending',
         createdAt: Date.now(),
       };
-      await getFirestore().collection(COLLECTIONS.staffUsers).doc(user.uid).set(doc);
+      try {
+        await getFirestore().collection(COLLECTIONS.staffUsers).doc(user.uid).create(doc);
+      } catch (e) {
+        if ((e as { code?: number }).code === ALREADY_EXISTS) return;
+        throw e;
+      }
 
       functionsV1.logger.info('Provisioned pending staff account', {
         uid: user.uid,
