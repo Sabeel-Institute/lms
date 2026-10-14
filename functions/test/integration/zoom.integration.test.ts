@@ -396,6 +396,11 @@ describe('releasing a Zoom file', () => {
     expect(await claimOf('m1-aud')).toBeUndefined();
     const { itemId } = await uploadFile(ADMIN, res.recordingId, sample('m4a'), 'audio/mp4');
     expect(await items(res.recordingId)).toEqual([expect.objectContaining({ id: itemId, source: 'upload', status: 'ready' })]);
+    // And it can go out: nothing on it failed now. Left needing attention, it
+    // could not be published, and nothing on the page said why.
+    expect(await rec(res.recordingId)).toMatchObject({ status: 'draft' });
+    expect((await rec(res.recordingId)).attentionReason).toBeUndefined();
+    await expect(applyRecordingStatus({ recordingId: res.recordingId, status: 'published' })).resolves.toBeDefined();
   });
 });
 

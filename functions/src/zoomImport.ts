@@ -1,7 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import { getFunctions } from 'firebase-admin/functions';
-import { FieldValue, getFirestore, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, type DocumentReference } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
   MAX_AUDIO_BYTES,
@@ -317,23 +317,7 @@ async function queueCopies(recordingId: string, itemIds: string[], enqueue: Enqu
 
 // ------------------------------------------------------------- the copy --
 
-/**
- * Settle a draft's status after its items change: it needs attention when
- * every file it holds failed, and stops needing it once none has. A recording
- * that is not a draft keeps its status; its failed files show on the session
- * page.
- */
-function settleStatus(tx: Transaction, ref: DocumentReference, rec: RecordingDoc, media: MediaMap): void {
-  if (rec.status !== 'draft' && rec.status !== 'needsAttention') return;
-  const items = Object.values(media);
-  const failed = items.filter((i) => i.status === 'failed');
-  if (items.length > 0 && failed.length === items.length) {
-    tx.update(ref, { status: 'needsAttention', attentionReason: failed[0].failReason ?? 'Zoom import failed.' });
-  } else if (rec.status === 'needsAttention' && failed.length === 0) {
-    tx.update(ref, { status: 'draft', attentionReason: FieldValue.delete() });
-  }
-}
-
+/** Mark an item failed, with the reason staff read; the status settles with it (`writeItem`). */
 async function markFailed(recordingId: string, itemId: string, reason: string): Promise<void> {
   const db = getFirestore();
   const ref = db.collection(COLLECTIONS.recordings).doc(recordingId);
@@ -341,9 +325,7 @@ async function markFailed(recordingId: string, itemId: string, reason: string): 
     const rec = (await tx.get(ref)).data() as RecordingDoc | undefined;
     const item = rec?.media[itemId];
     if (!rec || !item) return;
-    const failed: MediaItem = { ...item, status: 'failed', failReason: reason };
-    tx.update(ref, { [`media.${itemId}`]: failed, updatedAt: Date.now() });
-    settleStatus(tx, ref, rec, { ...rec.media, [itemId]: failed });
+    writeItem(tx, ref, rec, itemId, { ...item, status: 'failed', failReason: reason });
   });
 }
 
@@ -382,10 +364,6 @@ export async function runCopyTask(task: CopyTask, finalAttempt: boolean, client:
     await deleteObject(item.storageKey);
     await client.copyToMediaStore(found.downloadUrl, item.storageKey, found.file.sizeBytes, item.contentType);
     await settleCopy(task.recordingId, task.itemId, found.file.durationSec, capFor(found.file));
-    await db.runTransaction(async (tx) => {
-      const now = (await tx.get(ref)).data() as RecordingDoc | undefined;
-      if (now) settleStatus(tx, ref, now, now.media);
-    });
   } catch (e) {
     if (!finalAttempt) throw e;
     const reason = `Zoom import failed: ${(e as Error).message}`.slice(0, 300);
