@@ -4,6 +4,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
   INSTITUTE_TIMEZONE,
+  UPLOAD_CONFIRM_SECONDS,
   UPLOAD_PART_BYTES,
   UPLOAD_TYPES,
   isVideoContentType,
@@ -398,7 +399,7 @@ export const finalizeRecordingUpload = auditedCall(
   MEDIA_WRITE_SECRETS,
   // Joining parts and probing take seconds; the default minute is ample, but
   // a slow bucket on an 8 GiB join should not be what fails it.
-  { timeoutSeconds: 300 },
+  { timeoutSeconds: UPLOAD_CONFIRM_SECONDS },
 );
 
 // ----------------------------------------------------------------- abort --

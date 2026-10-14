@@ -242,6 +242,16 @@ export function maxUploadBytes(contentType: string): number {
  */
 export const UPLOAD_PART_BYTES = 16 * 2 ** 20;
 
+/**
+ * How long confirming an upload may take: the server joins the parts and
+ * probes the file, which for a very large one is not quick. One number for
+ * both ends, because they disagreed: the server allowed five minutes and the
+ * client its SDK's default seventy seconds, and a client that gave up first
+ * cancelled, deleting the file the server was still confirming. The client
+ * waits a little longer than this, so it always hears the server's own answer.
+ */
+export const UPLOAD_CONFIRM_SECONDS = 300;
+
 /** How many pieces a file of this size is sent in. */
 export function uploadPartCount(sizeBytes: number): number {
   return Math.max(1, Math.ceil(sizeBytes / UPLOAD_PART_BYTES));

@@ -1,6 +1,6 @@
 import { collection, doc, orderBy, query, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { COLLECTIONS, type MediaEdit, type RecordingDoc, type RecordingStatus } from '@sabeel/shared';
+import { COLLECTIONS, UPLOAD_CONFIRM_SECONDS, type MediaEdit, type RecordingDoc, type RecordingStatus } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
 import type { UploadApi } from './upload';
@@ -139,6 +139,12 @@ export const deleteRecording = call<{ recordingId: string; ifEmpty?: boolean }, 
 export const uploadApi: UploadApi = {
   start: call<Parameters<UploadApi['start']>[0], Awaited<ReturnType<UploadApi['start']>>>('startRecordingUpload'),
   sign: call<Parameters<UploadApi['sign']>[0], Awaited<ReturnType<UploadApi['sign']>>>('signRecordingUploadParts'),
-  finalize: call<Parameters<UploadApi['finalize']>[0], unknown>('finalizeRecordingUpload'),
+  // Past the server's own limit, so the answer that comes back is the
+  // server's: a client that gave up first cancelled a file still being
+  // confirmed.
+  finalize: (input) =>
+    httpsCallable(functions, 'finalizeRecordingUpload', { timeout: (UPLOAD_CONFIRM_SECONDS + 30) * 1000 })(input).then(
+      (r) => r.data,
+    ),
   cancel: (input) => removeRecordingMedia(input),
 };
