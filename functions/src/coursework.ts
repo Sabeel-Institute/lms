@@ -570,6 +570,10 @@ export async function deleteCourseworkRecord(id: string, asAdmin: boolean) {
       if (data.storageKey) keys.push(data.storageKey);
       for (const a of data.attempts ?? []) keys.push(...filesOf(a.files));
     }
+    // A FILE ON ITS WAY KEEPS ITS RECORD: its link stays good for half an
+    // hour, so its bytes can land after this, and the daily sweep, which
+    // finds them by the record, deletes them then. Confirming it is refused.
+    if (collection === COLLECTIONS.attachmentUploads) continue;
     await inBatches(snap.docs, (batch, d) => batch.delete(d.ref));
   }
   await Promise.all(keys.map((k) => deleteObject(k)));

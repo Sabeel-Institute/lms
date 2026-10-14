@@ -358,6 +358,22 @@ describe('cleaning up', () => {
     expect(await objectExists(key)).toBe(false);
   });
 
+  /*
+   * A FILE ON ITS WAY WHEN THE ASSIGNMENT WENT. Its link to send the bytes
+   * stays good for half an hour, and they landed after the delete had removed
+   * every record of them, where nothing would ever find them.
+   */
+  it('a file on its way when the assignment is deleted is swept once its bytes land', async () => {
+    const start = await startAttachmentUpload.run(
+      await as(AMINAH, 'student', { target: 'work', courseworkId: cwId, name: 'late.txt', sizeBytes: TEXT.length }),
+    );
+    const key = (await db().collection(COLLECTIONS.attachmentUploads).doc(start.fileId).get()).data()?.storageKey as string;
+    await deleteCourseworkRecord(cwId, true);
+    expect((await fetch(start.url, { method: 'PUT', headers: start.headers, body: TEXT })).status).toBe(200);
+    expect(await sweepAttachmentUploads(Date.now() + 2 * 24 * 60 * 60 * 1000)).toBe(1);
+    expect(await objectExists(key)).toBe(false);
+  });
+
   it('deleting the assignment deletes every file on it and on its students’ work', async () => {
     const sheet = await attach(TEACHER, 'manager', 'Sheet.pdf', PDF);
     const page = await attach(AMINAH, 'student', 'Page.png', sample('png'));
