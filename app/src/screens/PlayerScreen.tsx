@@ -101,9 +101,20 @@ export function PlayerScreen({
    * screen swaps to "this recording closed" over audio that is still running,
    * with the transport gone and no control anywhere to stop it.
    */
+  /*
+   * EXCEPT AT THE STUDENT'S OWN DEADLINE, WHILE IT PLAYS: a recording playing
+   * when its last day ends plays on to the end of the file rather than
+   * stopping mid-sentence at midnight. Nothing starts it again: once it stops,
+   * it closes. The link it plays on was minted before midnight and lasts its
+   * hours, as the threat model allows; a new one is refused. Staff taking it
+   * away (archived, unpublished, the student no longer excused) still stops
+   * it at once.
+   */
+  const playingThis = session.now?.recordingId === recording.id && session.playing;
+  const finishing = closed && dueDate !== null && playingThis;
   useEffect(() => {
-    if (!allowed && session.now?.recordingId === recording.id) void closePlayback();
-  }, [allowed, session.now?.recordingId, recording.id]);
+    if (!allowed && !finishing && session.now?.recordingId === recording.id) void closePlayback();
+  }, [allowed, finishing, session.now?.recordingId, recording.id]);
 
   // Opening the session is an EFFECT, not a render-time call: this screen is one
   // view onto app-wide playback, and re-entering it for something already
@@ -145,7 +156,7 @@ export function PlayerScreen({
   // lookup is disabled for them (returns '').
   const cohortName = useCohortName(studentUid === null)(recording.cohortId);
 
-  if (!allowed) {
+  if (!allowed && !finishing) {
     return (
       <ScrollView style={styles.canvas} contentContainerStyle={styles.content}>
         {/* THE BANNER BELONGS ON THIS BRANCH TOO. It used to sit only on the
@@ -201,6 +212,11 @@ export function PlayerScreen({
   return (
     <ScrollView style={styles.canvas} contentContainerStyle={styles.content}>
       {listenerError ? <Notice tone="error">{listenerError}</Notice> : null}
+      {finishing ? (
+        <Notice tone="info">
+          This recording closed at midnight. It plays on to the end, but once it stops it cannot be started again.
+        </Notice>
+      ) : null}
       {state.error ? <Notice tone="error">{state.error}</Notice> : null}
       {/* A SESSION THAT CANNOT PLAY offers to open again, in place: offline
           and back, or a link that failed. One that can is beside a working

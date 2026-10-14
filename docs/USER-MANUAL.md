@@ -137,7 +137,8 @@ that recording — the card stays on your list marked *Missed*, so you can still
 see what it was, but the recording is closed. Opening it shows **Your record**: how
 much of it you played, and whether it was marked complete. Nothing you did
 is lost when a recording closes. If you need it reopened, ask your teacher: they
-can move the date.
+can move the date. If you are playing it when its last day ends at midnight,
+it plays on to the end; once it stops, it cannot be started again.
 
 One thing worth knowing: if you finish a recording and mark it complete *before*
 the date, it counts as complete for good. It is never turned into a "missed" the

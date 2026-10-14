@@ -8,7 +8,7 @@ import {
   playback,
   usePlayback,
 } from '../playback';
-import { INSTITUTE_TIMEZONE, canPlayNow, todayInZone } from '@sabeel/shared';
+import { INSTITUTE_TIMEZONE, canPlayFromCourse, canPlayNow, todayInZone } from '@sabeel/shared';
 import { liveDueDate, useMyAssignmentState } from '../completion';
 import { useRecordingState } from '../recordings';
 import { useCourseState } from '../structure';
@@ -94,15 +94,19 @@ export function MiniPlayer({
    * for another twelve hours, with nothing on screen saying anything changed.
    */
   const today = todayInZone(INSTITUTE_TIMEZONE);
-  const revoked =
-    !!now &&
-    ((loaded.resolved && !loaded.value) ||
-      (course.resolved &&
-        !!course.value &&
-        !canPlayNow(course.value, liveDueDate(now.studentUid, grant, now.dueDate), now.studentUid, today)));
+  const due = now ? liveDueDate(now.studentUid, grant, now.dueDate) : null;
+  const shut = !!course.value && !canPlayNow(course.value, due, now?.studentUid ?? null, today);
+  const revoked = !!now && ((loaded.resolved && !loaded.value) || (course.resolved && shut));
+  /*
+   * A recording playing when the student's own deadline passes plays on to
+   * the end and closes once it stops, as the player screen lets it (see
+   * there). Anything else that shuts it stops it at once.
+   */
+  const finishing =
+    !!now && loaded.value !== null && !!course.value && canPlayFromCourse(course.value) && due !== null && state.playing;
   useEffect(() => {
-    if (revoked) void closePlayback();
-  }, [revoked]);
+    if (revoked && !finishing) void closePlayback();
+  }, [revoked, finishing]);
 
   if (!now) return null;
 

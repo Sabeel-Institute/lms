@@ -383,7 +383,7 @@ the view, and for video only the sound continues until they return.
 | Very long video (> 4.9 GiB) | Multipart for staff uploads. A Zoom import that large is refused with a reason (the Worker copies in one put; spike M1 in MEDIA-ON-CLOUDFLARE.md); the largest Zoom file so far is 1.2 GB |
 | Part added to a published recording | Visible when ready; no new notification; completion unaffected |
 | Part hidden after students started it | Resume falls back to the first visible part; history kept |
-| Due date passes mid-playback | At midnight in the institute's timezone, by the device's clock, the player stops and the screen says the recording closed (the docked bar too). The URL itself still works to its expiry, as the threat model allows; a new one (a switch of version or part, a resume after a night) is refused |
+| Due date passes mid-playback | A recording playing at midnight (institute's timezone, by the device's clock) plays on to the end of its file, saying it has closed; once it stops (a pause, the end), it closes. Its URL works to its expiry, as the threat model allows; a new one (a switch of version or part, a resume after a night) is refused. Access taken away by staff still stops it at once |
 | A student switches version | No double counting of listened time; position kept |
 | Staff preview | Plays any item including drafts; writes no progress (as now) |
 | `notRecorded` session | No media can be added (as now) |

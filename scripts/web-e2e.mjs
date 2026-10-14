@@ -2778,9 +2778,40 @@ const playableBefore = await student.getByRole('button', { name: PLAYABLE }).cou
 // one, because a deadline may only become past by the passage of time. The real
 // onSessionWritten trigger still fires, so the date flows down to the grants
 // exactly as it would on the morning after.
+/*
+ * A RECORDING PLAYING WHEN ITS DATE PASSES PLAYS ON. It stopped mid-sentence
+ * at midnight; it now plays to the end of the file, says it has closed, and
+ * once it stops it cannot be started again.
+ */
+await goHome(student);
+await student.locator('[data-testid="next-up-Session 1"], [data-testid="task-Session 1"]').filter({ visible: true }).first().click();
+await student.getByTestId('player-play').waitFor({ timeout: 25000 });
+await tap(student, 'player-play');
+await student.waitForTimeout(2000);
 const sessDoc = (await readCollection('sessions'))[0];
 await patchField('sessions', sessDoc.name.split('/').pop(), 'dueDate', '2020-01-01');
 await new Promise((r) => setTimeout(r, 5000));
+const saysPlaysOn = await student
+  .getByText('It plays on to the end', { exact: false })
+  .filter({ visible: true })
+  .first()
+  .waitFor({ timeout: 15000 })
+  .then(() => true, () => false);
+const playOnFrom = await elapsedSeconds(student);
+await student.waitForTimeout(3000);
+const playOnTo = await elapsedSeconds(student);
+await tap(student, 'player-play'); // pause: the end of it
+const closesOnStop = await student
+  .getByText('This recording closed on 2020-01-01', { exact: false })
+  .filter({ visible: true })
+  .first()
+  .waitFor({ timeout: 15000 })
+  .then(() => true, () => false);
+check(
+  'a recording playing when its date passes plays on, says so, and closes once it stops',
+  saysPlaysOn && playOnTo >= playOnFrom + 2 && closesOnStop,
+  JSON.stringify({ saysPlaysOn, playOnFrom, playOnTo, closesOnStop }),
+);
 // A FLOOR AS WELL AS A PREDICATE. `[].every()` is true, so if the reconcile
 // deactivated every grant instead of re-dating it — the regression this names —
 // an empty array would have read as a pass.
