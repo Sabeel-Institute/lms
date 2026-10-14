@@ -34,6 +34,20 @@ describe('the deployed functions bundle', () => {
   const bundle = readFileSync(resolve(FUNCTIONS, 'lib/index.js'), 'utf8');
   const required = [...new Set([...bundle.matchAll(/\brequire\("([^"]+)"\)/g)].map((m) => m[1]))];
 
+  /*
+   * NOTHING AT START-UP THAT A COLD START DOES NOT NEED. @sentry/node was more
+   * than half of a function's module load (about 300 of 560 ms), paid by every
+   * cold start a person waits through; it is loaded at the first report.
+   */
+  it('does not load Sentry until something is reported', () => {
+    const loaded = execFileSync(
+      process.execPath,
+      ['-e', "require('./lib/index.js'); process.stdout.write(String(Object.keys(require.cache).some((k) => k.includes('/@sentry/node/'))))"],
+      { cwd: FUNCTIONS, encoding: 'utf8' },
+    );
+    expect(loaded).toBe('false');
+  });
+
   it('requires only declared dependencies and node builtins', () => {
     const undeclared = required.filter((s) => !builtins.has(s) && !(packageOf(s) in pkg.dependencies));
     expect(undeclared).toEqual([]);
