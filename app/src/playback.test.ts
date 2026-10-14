@@ -26,10 +26,13 @@ vi.mock('./sentry', () => ({ captureError: vi.fn() }));
  * are about.
  */
 const device = new Map<string, string>();
+/** When set, the device refuses to store anything: a private window, blocked site data. */
+let storageRefused = false;
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: {
     getItem: async (k: string) => device.get(k) ?? null,
     setItem: async (k: string, v: string) => {
+      if (storageRefused) throw new Error('QuotaExceededError');
       device.set(k, v);
     },
     removeItem: async (k: string) => {
@@ -215,6 +218,7 @@ async function load({ killed = false } = {}): Promise<Playback> {
     docs.clear();
   }
   players.length = 0;
+  storageRefused = false;
   holdLoad = false;
   ioLog = [];
   holdSet = false;
@@ -1107,6 +1111,22 @@ describe('listening with the screen locked', () => {
     pb = await load({ killed: true });
     await pb.drainProgressJournal('stu-1');
     expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('a device that refuses to store reports it once, not at every save', async () => {
+    const pb = await load();
+    const { captureError } = await import('./sentry');
+    storageRefused = true;
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.playback.play();
+    for (let i = 0; i < 5; i += 1) {
+      listen(players[0], i * PROGRESS_WRITE_INTERVAL_MS + 1_000, (i + 1) * PROGRESS_WRITE_INTERVAL_MS);
+      await flush();
+    }
+    // Saved all along, to the server; refused each time by the device.
+    expect(setDoc.mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect(captureError).toHaveBeenCalledTimes(1);
   });
 
   it('forgets the device\'s record once the server has it', async () => {

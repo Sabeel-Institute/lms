@@ -1,25 +1,37 @@
-// Native side of the listening-progress durability seam (web sibling:
-// progressJournal.web.ts).
+// The listening-progress journal: every save, recorded on the device until
+// the server holds it. One implementation for both platforms; AsyncStorage is
+// localStorage on the web.
 //
-// WHY THIS EXISTS: React Native stops every JavaScript timer while the app is
-// in the background (`JavaTimerManager.onHostPause`), and the Firebase JS SDK's
-// network layer runs on them. The audio keeps playing — it is a foreground
-// service — and the ticks keep arriving, but a progress write issued with the
-// screen locked does not reach the server until the app is brought back. A
-// lecture heard on the lock screen and then swiped away was lost whole: the
-// student reopened at the place they had been when the screen went off, and
-// the ledger showed the listening that happened before it. Measured on the API
-// 35 AVD against production, 2026-10-12.
+// WHY THIS EXISTS, ON EACH:
 //
-// So every progress save is also recorded here, one AsyncStorage key per
-// progress document. A native storage call needs no timer, and one key per
-// document means a record is a single `setItem` — no read-modify-write that
-// could itself stall half done. The record is forgotten once the server holds
-// a save at least as new, replayed on the next launch, and merged into the
-// session when the same recording is reopened on this device.
+// - Native. React Native stops every JavaScript timer while the app is in the
+//   background (`JavaTimerManager.onHostPause`), and the Firebase JS SDK's
+//   network layer runs on them. The audio keeps playing — it is a foreground
+//   service — and the ticks keep arriving, but a progress write issued with
+//   the screen locked does not reach the server until the app is brought
+//   back. A lecture heard on the lock screen and then swiped away was lost
+//   whole. Measured on the API 35 AVD against production, 2026-10-12.
+// - Web. The SDK's persistent cache keeps a pending write across a page close,
+//   but only the write handed to it: the playback write queue holds every
+//   later save in memory behind the first one still waiting for the server.
+//   Offline with minutes of lecture buffered, closing the tab lost all but the
+//   first save. Measured against production, 2026-10-14.
+//
+// So every progress save is also recorded here, one key per progress
+// document. A storage call needs no timer, and one key per document means a
+// record is a single `setItem` — no read-modify-write that could itself stall
+// half done. The record is forgotten once the server holds a save at least as
+// new, replayed on the next launch, and merged into the session when the same
+// recording is reopened on this device.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ListeningProgressDoc } from '@sabeel/shared';
 import { captureError } from './sentry';
+
+/**
+ * Reported once: storage refused is the device's condition (a private window,
+ * blocked site data), and saves come every few seconds.
+ */
+let reported = false;
 
 const PREFIX = 'sabeel.progressJournal.v1:';
 
@@ -30,9 +42,11 @@ export type JournalEntry = Pick<
 
 /** Record a save before it is sent. `id` is the progress document's id. */
 export function journalProgress(id: string, entry: JournalEntry): void {
-  AsyncStorage.setItem(PREFIX + id, JSON.stringify(entry)).catch((e: unknown) =>
-    captureError(e, { source: 'progressJournal' }),
-  );
+  AsyncStorage.setItem(PREFIX + id, JSON.stringify(entry)).catch((e: unknown) => {
+    if (reported) return;
+    reported = true;
+    captureError(e, { source: 'progressJournal' });
+  });
 }
 
 async function read(key: string): Promise<JournalEntry | null> {

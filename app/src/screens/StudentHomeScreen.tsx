@@ -92,9 +92,9 @@ export function StudentHomeScreen({
   const recordings = useResolvedDocs(COLLECTIONS.recordings, useMemo(() => grants.map((a) => a.recordingId), [grants]));
   const coursework = useResolvedDocs(COLLECTIONS.coursework, useMemo(() => work.map((s) => s.courseworkId), [work]));
 
-  // On launch, replay what this device saved and then lost to an app kill
-  // before it synced: a completion marked offline, and listening done with the
-  // screen locked (native only; both are no-ops on web).
+  // On launch, replay what this device saved and then lost before it synced:
+  // a completion marked offline (native only), and listening done with the
+  // screen locked or the tab closed offline (progressJournal.ts).
   useEffect(() => {
     void drainCompletionOutbox(uid);
     void drainProgressJournal(uid);
