@@ -202,9 +202,12 @@ A release bumps one version and ships it to both surfaces. In order:
      cp $out/app-arm64-v8a-release.apk /tmp/sabeel-institute-lms-arm64-v8a.apk
      cp $out/app-universal-release.apk /tmp/sabeel-institute-lms-universal.apk
      gh release create vX.Y.Z -R Sabeel-Institute/lms \
-       --title "vX.Y.Z — Android" --notes-file NOTES.md \
+       --title "vX.Y.Z — Android" --notes-file NOTES.md --latest \
        /tmp/sabeel-institute-lms-arm64-v8a.apk /tmp/sabeel-institute-lms-universal.apk
      ```
+     **The latest release, never a pre-release.** The download page links
+     through `releases/latest`, which skips a pre-release, so a build published
+     as one answers its download link with a 404.
      **Copied under the published names, not labelled.** `gh`'s `file#label`
      sets only a display label: the asset keeps the file's own name, and the
      download URL is the name. The repo is public, so these assets ARE the

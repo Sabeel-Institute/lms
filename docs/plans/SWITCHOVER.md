@@ -191,9 +191,10 @@ download page alongside the first Android release of
    with a plain message, and whose app shows that the institute has moved.
 3. Final seed, count check, smoke test on the new address. Set
    `NOTIFY_AUDIENCE=everyone` in `functions/.env.oursabeel-lms` and deploy
-   functions, so the new app notifies everyone from here on. List
-   `sabeel-institute-lms/` on Faisal's site index, make its buttons live, and
-   point the legacy `sabeel-recording-app/` page at it.
+   functions, so the new app notifies everyone from here on. Point the legacy
+   `sabeel-recording-app/` page at `sabeel-institute-lms/`, which is already
+   listed on Faisal's site index with live links, for testers, and say on it
+   that the move has happened.
 4. **Retire the legacy Android app** with a final update whose only screen
    says the app has moved and links to the new one. This is allowed by the
    store rule in `CLAUDE.md`: it points to an app, not to a sign-up flow.

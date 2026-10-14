@@ -37,6 +37,14 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-14 — **The download page is open to testers** (Faisal: the links
+  on his site must work; this is how testers get access). The site's index
+  lists the LMS, and its page links the web app and both Android builds now
+  rather than on switchover day, saying it is a pre-release whose activity is
+  cleared when everyone moves. v0.1.1 is the repo's latest release, not a
+  pre-release, because the page's links go through `releases/latest`, which
+  skips pre-releases.
+
 - 2026-10-14 — **The workbooks carry assignments and grades** (Faisal:
   staff need an exportable report of grades, as they have of attendance, in
   the course's workbook). The course workbook gains an Assignments tab, one
