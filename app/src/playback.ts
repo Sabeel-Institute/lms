@@ -346,7 +346,7 @@ async function writeProgress(save: Save): Promise<void> {
     // device may have listened further, and total listening must never go
     // backwards.
     const existing = readIfExists('listeningProgress', await getDoc(ref));
-    const merged = existing ? mergeProgress(mine, existing) : mine;
+    const merged = existing ? mergeProgress(mine, existing, Date.now()) : mine;
     await setDoc(ref, { ...who, ...merged });
     void forgetProgress(id, mine.updatedAt);
     // TAKE THE LARGER, never add the difference. `mine` was captured before two
@@ -627,7 +627,7 @@ export function openPlayback(req: OpenRequest): void {
       const saved = id ? await getDoc(doc(db, COLLECTIONS.listeningProgress, id)) : null;
       if (generation !== gen) return;
       const stored = saved ? readIfExists('listeningProgress', saved) : undefined;
-      const prior = stored && journaled ? mergeProgress(stored, journaled) : (stored ?? journaled);
+      const prior = stored && journaled ? mergeProgress(stored, journaled, Date.now()) : (stored ?? journaled);
       // RESUME WHERE THEY WERE: their part, in their version if that part
       // still has it — unless a particular file was asked for. A row from
       // before parts existed is a place in Part 1.

@@ -796,6 +796,27 @@ describe('counting listening', () => {
     expect(docOf('rec-a')?.positionMs).toBe(601_000);
   });
 
+  /*
+   * ANOTHER DEVICE'S CLOCK A DAY FAST stamped its place a day ahead, and every
+   * save from this one lost to it: the student's place stayed where the fast
+   * device left it, whatever they played here.
+   */
+  it('a place stamped by a clock a day ahead does not freeze the place here', async () => {
+    const pb = await load();
+    seedDoc('rec-a', { positionMs: 3_840, listenedMs: 9_613, updatedAt: nowMs + 24 * 60 * 60 * 1000 });
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.playback.seek(30_000);
+    await flush();
+    pb.playback.play();
+    players[0].events.onProgress(30_000);
+    wait(6_000);
+    players[0].events.onProgress(36_000);
+    pb.playback.pause();
+    await flush();
+    expect(docOf('rec-a')).toMatchObject({ positionMs: 36_000, listenedMs: 15_613 });
+  });
+
   it('never lets the total go backwards behind another device', async () => {
     const pb = await load();
     pb.openPlayback(recording('rec-a'));

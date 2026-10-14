@@ -229,6 +229,9 @@ export const PROGRESS_WRITE_INTERVAL_MS = 15_000;
 /** The fields of a progress row that two readings of it are merged on. */
 export type ProgressReading = Pick<ListeningProgressDoc, 'positionMs' | 'listenedMs' | 'updatedAt' | 'part' | 'version'>;
 
+/** How far past the reader's clock a place may be stamped and still be taken for a later save. */
+const CLOCK_AHEAD_MS = 60 * 60 * 1000;
+
 /**
  * Merge a local progress reading with whatever the server already has.
  *
@@ -237,9 +240,16 @@ export type ProgressReading = Pick<ListeningProgressDoc, 'positionMs' | 'listene
  * the place — position, part and version together, since a position means
  * nothing without its part — follows whichever device reported most recently:
  * that is the one the person is actually using.
+ *
+ * `now` is the reader's clock. A place stamped more than an hour past it was
+ * stamped by a clock running ahead, not later: taken as the latest, a device
+ * a day fast froze the student's place on every other device until real time
+ * caught up, which for a clock set years ahead is never. Such a place gives
+ * way to the other; its listening still counts.
  */
-export function mergeProgress(a: ProgressReading, b: ProgressReading): ProgressReading {
-  const newer = a.updatedAt >= b.updatedAt ? a : b;
+export function mergeProgress(a: ProgressReading, b: ProgressReading, now: number): ProgressReading {
+  const ahead = (r: ProgressReading) => r.updatedAt > now + CLOCK_AHEAD_MS;
+  const newer = ahead(a) !== ahead(b) ? (ahead(a) ? b : a) : a.updatedAt >= b.updatedAt ? a : b;
   return {
     positionMs: newer.positionMs,
     listenedMs: Math.max(a.listenedMs, b.listenedMs),
