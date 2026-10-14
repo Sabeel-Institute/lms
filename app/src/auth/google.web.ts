@@ -1,4 +1,5 @@
 import {
+  browserPopupRedirectResolver,
   getRedirectResult,
   GoogleAuthProvider,
   signInWithPopup,
@@ -15,6 +16,10 @@ import { captureError } from '../sentry';
  * `hd` restricts the account chooser to the Workspace domain. It is a UX
  * convenience ONLY — trivially bypassed, never treated as a check. The real
  * enforcement is the auth-create Cloud Function.
+ *
+ * Each call names `browserPopupRedirectResolver`: Auth is started without it
+ * (`authInit.web.ts`), so a phone does not wait for Google's iframe before it
+ * knows who is signed in.
  */
 
 /**
@@ -22,14 +27,14 @@ import { captureError } from '../sentry';
  * bounce back. Without this call the user lands on the sign-in screen again with
  * no error shown and nothing recorded anywhere.
  */
-getRedirectResult(auth).catch((e) => captureError(e, { source: 'redirectSignIn' }));
+getRedirectResult(auth, browserPopupRedirectResolver).catch((e) => captureError(e, { source: 'redirectSignIn' }));
 
 export async function signInWithGoogle(): Promise<void> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ hd: ALLOWED_EMAIL_DOMAIN, prompt: 'select_account' });
 
   try {
-    await signInWithPopup(auth, provider);
+    await signInWithPopup(auth, provider, browserPopupRedirectResolver);
   } catch (e) {
     const code = (e as { code?: string }).code;
 
@@ -41,7 +46,7 @@ export async function signInWithGoogle(): Promise<void> {
       code === 'auth/popup-blocked' ||
       code === 'auth/operation-not-supported-in-this-environment'
     ) {
-      await signInWithRedirect(auth, provider);
+      await signInWithRedirect(auth, provider, browserPopupRedirectResolver);
       return;
     }
 
