@@ -33,7 +33,7 @@ const MEDIA_COPIER_URL = defineString('MEDIA_COPIER_URL', {
 export const MAX_COPY_BYTES = Math.floor(4.9 * 2 ** 30);
 
 /** A 3.5 GB recording takes about 3 minutes at the measured rate; allow 20. */
-export const COPY_TIMEOUT_MS = 20 * 60 * 1000;
+const COPY_TIMEOUT_MS = 20 * 60 * 1000;
 
 export interface CopyRequest {
   sourceUrl: string;
