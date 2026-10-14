@@ -132,7 +132,7 @@ export function workbookHistory(
  * beside the listening they changed. `null` for a row that is not about this
  * student (an attendance submission names the whole roster, say).
  */
-export function describeHistoryRow(
+function describeHistoryRow(
   e: AuditEntryDoc,
   courseLabel: (courseId: string) => string,
 ): StudentHistoryRow | null {
