@@ -32,7 +32,7 @@
  */
 import { chromium } from 'playwright';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { helpVideoKey, pushPaths, readXlsx } from '@sabeel/shared';
+import { HELP_VIDEOS, helpVideoKey, pushPaths, readXlsx } from '@sabeel/shared';
 import { EMULATOR_PORTS, MEDIA_STORE_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import {
@@ -2694,9 +2694,12 @@ check(
 // ------------------------------------------------------------------- help --
 console.log('\nHelp');
 /*
- * A PERSON'S OWN FILMS, ON LINKS THAT PLAY. The list is the role's, and a film
- * opens on a link the server signed for this person — which plays only if the
- * signature is right, against a stand-in film in the local media store.
+ * A STUDENT'S OWN FILMS; EVERY FILM FOR STAFF; ON LINKS THAT PLAY. A student's
+ * list is the students' films and no others. Staff see every film, grouped as
+ * their own work, what a student sees, and running the institute, so a teacher
+ * can walk a student through a student's film. A film opens on a link the
+ * server signed for this person, which plays only if the signature is right,
+ * against a stand-in film in the local media store.
  */
 ensureVideoFixture();
 await putLocalObject(helpVideoKey('student-to-do', 'phone', 'video'), readFileSync(VIDEO_FIXTURE), 'video/mp4');
@@ -2705,35 +2708,42 @@ await putLocalObject(
   Buffer.from('WEBVTT\n\n1\n00:00:00.000 --> 00:00:02.000\nA stand-in film.\n'),
   'text/vtt',
 );
+const filmsFor = (...audiences) =>
+  audiences.flatMap((a) => HELP_VIDEOS.filter((v) => v.audience === a).map((v) => `help-film-${v.id}`));
+/** The film rows a page shows, top to bottom. */
+const listedFilms = (page) =>
+  page
+    .locator('[data-testid^="help-film-"]')
+    .evaluateAll((els) => els.filter((e) => e.checkVisibility()).map((e) => e.getAttribute('data-testid')));
+/** Whether the open film has loaded from its signed link, captions and all. */
+const filmPlays = (page) =>
+  page
+    .waitForFunction(
+      () => {
+        const video = document.querySelector('[data-testid="help-video"]');
+        const track = video?.textTracks?.[0];
+        if (track && track.mode === 'disabled') track.mode = 'hidden';
+        return (video?.readyState ?? 0) >= 1 && (track?.cues?.length ?? 0) > 0;
+      },
+      null,
+      { timeout: 20000 },
+    )
+    .then(() => true, () => false);
+
 await goHome(student);
 await more(student, 'more-help');
 await student.getByTestId('help-film-student-to-do').waitFor({ timeout: 20000 });
-const studentFilms = await student
-  .locator('[data-testid^="help-film-"]')
-  .evaluateAll((els) => els.filter((e) => e.checkVisibility()).map((e) => e.getAttribute('data-testid')));
+const studentFilms = await listedFilms(student);
 check(
   'a student’s Help lists the students’ films, and no teacher’s or administrator’s',
-  studentFilms.includes('help-film-student-to-do') &&
-    !studentFilms.some((id) => id.startsWith('help-film-staff-') || id.startsWith('help-film-admin-')),
+  studentFilms.join() === filmsFor('student').join(),
   studentFilms.join(', '),
 );
 await tap(student, 'help-film-student-to-do');
 await tap(student, 'help-cut-phone');
 // The captions too: a track from another origin loads only under the
 // bucket's CORS, which the film's `crossOrigin` asks for.
-const filmPlays = await student
-  .waitForFunction(
-    () => {
-      const video = document.querySelector('[data-testid="help-video"]');
-      const track = video?.textTracks?.[0];
-      if (track && track.mode === 'disabled') track.mode = 'hidden';
-      return (video?.readyState ?? 0) >= 1 && (track?.cues?.length ?? 0) > 0;
-    },
-    null,
-    { timeout: 20000 },
-  )
-  .then(() => true, () => false);
-check('a film opens on a signed link that plays, with its captions', filmPlays);
+check('a film opens on a signed link that plays, with its captions', await filmPlays(student));
 // WHOLE, controls and all: drawn at the column's width, a standing film ran
 // 200px past a phone's bar, its controls and the foot of the app it shows
 // below the fold.
@@ -2746,19 +2756,22 @@ const filmFits = await student.evaluate(() => {
 check('a standing film is drawn whole, above the bar', !!filmFits && filmFits.filmBottom <= filmFits.barTop, JSON.stringify(filmFits));
 await shot(student, '26b-help-film');
 
-await goHome(admin);
-await more(admin, 'more-help');
-await admin.getByTestId('help-film-staff-today').waitFor({ timeout: 20000 });
-const adminFilms = await admin
-  .locator('[data-testid^="help-film-"]')
-  .evaluateAll((els) => els.filter((e) => e.checkVisibility()).map((e) => e.getAttribute('data-testid')));
-check(
-  'an admin’s Help lists the teachers’ films and the administrators’, and no student’s',
-  adminFilms.includes('help-film-staff-today') &&
-    adminFilms.includes('help-film-admin-audit') &&
-    !adminFilms.some((id) => id.startsWith('help-film-student-')),
-  adminFilms.join(', '),
-);
+for (const [who, page] of [['a manager', mgr], ['an admin', admin]]) {
+  await goHome(page);
+  await more(page, 'more-help');
+  await page.getByTestId('help-film-student-to-do').waitFor({ timeout: 20000 });
+  const films = await listedFilms(page);
+  check(
+    `${who}’s Help lists every film: the teachers’, the students’, then the administrators’`,
+    films.join() === filmsFor('staff', 'student', 'admin').join(),
+    films.join(', '),
+  );
+}
+await shot(mgr, '26c-help-staff');
+// The server half of the promise: a student's film is signed for a teacher.
+await tap(mgr, 'help-film-student-to-do');
+await tap(mgr, 'help-cut-phone');
+check('a student’s film plays for a teacher, on a link signed for them', await filmPlays(mgr));
 
 // ------------------------------------------------------------ the library --
 console.log('\nRecording library');

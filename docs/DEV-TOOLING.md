@@ -610,8 +610,8 @@ disagree.
    filmed as blocked. A failed step leaves `.failed-<film>-<cut>.png` beside
    the films.
 4. `publish.mjs` puts them in the bucket under `help/`. They stay private; the
-   app plays them on links `getHelpVideoUrl` signs, for that person's films
-   only.
+   app plays them on links `getHelpVideoUrl` signs: a student's films for a
+   student, any film for staff.
 
 Re-record a film whenever a screen it shows changes.
 

@@ -132,8 +132,9 @@ Do not silently change any of these.
   finished upload takes no more parts, so no URL a client holds can replace a
   file (`functions/src/uploads.ts`). The help films (More → Help) live in
   the same bucket under `help/` and play on the same kind of link
-  (`getHelpVideoUrl`), each person their own role's films only; they are
-  recorded by `scripts/tutorials`, and a screen they show that changes means
+  (`getHelpVideoUrl`): a student the students' films only, staff every film,
+  the students' included; they are recorded by `scripts/tutorials`, and a
+  screen they show that changes means
   its film is recorded again (`docs/DEV-TOOLING.md`, "The help films").
 - **Adult learner tone.** Required, listen by / watch by, missed, completed, pending
   sync. "Missed" rather than "overdue" once access has closed: overdue implies

@@ -46,11 +46,13 @@ export const HELP_VIDEOS: readonly HelpVideo[] = [
   { id: 'admin-audit', audience: 'admin', title: 'Audit history', summary: 'Who changed what, and when.' },
 ];
 
-/** The films a person sees: a student's for a student, a teacher's for staff, and an administrator's too for an admin. */
+/**
+ * The films a person sees. A student sees the students' films and no others.
+ * Staff see every film, the students' included: a teacher or an administrator
+ * is who a student asks when they are stuck, and the film is the answer.
+ */
 export function helpVideosFor(role: 'student' | 'manager' | 'admin'): HelpVideo[] {
-  return HELP_VIDEOS.filter((v) =>
-    role === 'student' ? v.audience === 'student' : role === 'manager' ? v.audience === 'staff' : v.audience !== 'student',
-  );
+  return role === 'student' ? HELP_VIDEOS.filter((v) => v.audience === 'student') : [...HELP_VIDEOS];
 }
 
 /** Where a film is kept in the media bucket: private, and served only by signed link. */

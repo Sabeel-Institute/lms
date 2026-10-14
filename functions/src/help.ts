@@ -13,9 +13,9 @@ import { MEDIA_READ_SECRETS, signGet } from './mediaStore';
 
 /**
  * May this caller watch this help film, and if not, why? A student watches
- * the students' films; a manager the teachers'; an admin those and the
- * administrators'. Every branch is driven through the callable, with links
- * that play, in help.integration.test.ts.
+ * the students' films and no others; staff watch every film, the students'
+ * included (`helpVideosFor`). Every branch is driven through the callable,
+ * with links that play, in help.integration.test.ts.
  */
 function helpVideoDenial(claims: TokenClaims, id: string): string | null {
   if (!HELP_VIDEOS.some((v) => v.id === id)) return 'There is no such help film.';

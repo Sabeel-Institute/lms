@@ -14,17 +14,12 @@ describe('the help films', () => {
     expect(mine.length).toBe(HELP_VIDEOS.filter((v) => v.audience === 'student').length);
   });
 
-  it('show a manager the teachers’ films, and neither the students’ nor the administrators’', () => {
-    const mine = helpVideosFor('manager');
-    expect(mine.length).toBeGreaterThan(0);
-    expect(mine.every((v) => v.audience === 'staff')).toBe(true);
-  });
-
-  it('show an admin the teachers’ films and the administrators’, and not the students’', () => {
-    const mine = helpVideosFor('admin');
-    expect(mine.some((v) => v.audience === 'staff')).toBe(true);
-    expect(mine.some((v) => v.audience === 'admin')).toBe(true);
-    expect(mine.some((v) => v.audience === 'student')).toBe(false);
+  it('show staff every film, the students’ included, so they can help a student through one', () => {
+    for (const role of ['manager', 'admin'] as const) {
+      expect(helpVideosFor(role).map((v) => v.id)).toEqual(HELP_VIDEOS.map((v) => v.id));
+    }
+    // Every audience is represented, or "every film" would prove nothing.
+    expect(new Set(HELP_VIDEOS.map((v) => v.audience))).toEqual(new Set(['student', 'staff', 'admin']));
   });
 
   it('are kept under help/ in the bucket, one file per cut and kind', () => {

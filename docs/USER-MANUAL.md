@@ -61,9 +61,10 @@ changing your password. Admins also reach the audit history there.
 
 **Help** is short films of the app at work, narrated, with captions: each thing
 you do, shown on a phone and on a computer. A student sees the students'
-films; staff see the teachers', and admins the administrators' too. A film
-opens on the version for the screen you are using, and the other is one tap
-away.
+films. Staff see every film: their own under **Teaching**, the students' under
+**For students**, for helping a student through what they see, and the
+administrators' under **Running the institute**. A film opens on the version
+for the screen you are using, and the other is one tap away.
 
 When something is playing, a slim bar shows what it is with a play/pause button
 — above the tabs on a phone, along the foot of the window on a computer. You can

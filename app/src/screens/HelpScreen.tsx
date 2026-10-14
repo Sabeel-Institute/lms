@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutRectangle } from 'react-native';
-import { HELP_VIDEOS, helpVideosFor, type HelpVariant, type HelpVideo } from '@sabeel/shared';
+import { HELP_VIDEOS, helpVideosFor, type HelpAudience, type HelpVariant, type HelpVideo } from '@sabeel/shared';
 import { Empty, NavRow, Notice, RowList, Screen, SectionTitle, Segmented } from '../components/ui';
 import { HelpFilm } from '../components/HelpFilm';
 import { helpFilmLinks } from '../help';
@@ -11,15 +11,23 @@ import { getTheme, spacing } from '../theme';
 const t = getTheme();
 
 /**
+ * Staff see every film, in this order: their own work, what a student sees,
+ * and running the institute.
+ */
+const STAFF_SECTIONS: { audience: HelpAudience; title: string }[] = [
+  { audience: 'staff', title: 'Teaching' },
+  { audience: 'student', title: 'For students' },
+  { audience: 'admin', title: 'Running the institute' },
+];
+
+/**
  * Help: short films of the app at work, each made on a phone and on a
- * computer. A person sees the films for what they do — a student the
- * students', a teacher the teachers', an administrator those and their own —
- * and the server signs no other.
+ * computer. A student sees the students' films and the server signs them no
+ * other. Staff see every film, the students' included, so a teacher can walk
+ * a student through what the student sees.
  */
 export function HelpScreen({ role, onOpen }: { role: 'student' | 'manager' | 'admin'; onOpen: (id: string) => void }) {
   const films = helpVideosFor(role);
-  const running = films.filter((f) => f.audience === 'admin');
-  const teaching = films.filter((f) => f.audience !== 'admin');
   const rows = (list: HelpVideo[]) => (
     <RowList>
       {list.map((f) => (
@@ -31,14 +39,14 @@ export function HelpScreen({ role, onOpen }: { role: 'student' | 'manager' | 'ad
     // No title of its own: the header says "Help".
     <Screen width="read">
       <Text style={styles.lede}>Short films of the app at work, each on a phone and on a computer.</Text>
-      {running.length > 0 ? <SectionTitle>Teaching</SectionTitle> : null}
-      {rows(teaching)}
-      {running.length > 0 ? (
-        <>
-          <SectionTitle>Running the institute</SectionTitle>
-          {rows(running)}
-        </>
-      ) : null}
+      {role === 'student'
+        ? rows(films)
+        : STAFF_SECTIONS.map(({ audience, title }) => (
+            <Fragment key={audience}>
+              <SectionTitle>{title}</SectionTitle>
+              {rows(films.filter((f) => f.audience === audience))}
+            </Fragment>
+          ))}
     </Screen>
   );
 }

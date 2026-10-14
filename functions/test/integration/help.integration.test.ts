@@ -7,8 +7,8 @@ import { idTokenFor } from './emulatorToken';
 import { putObject } from './mediaObjects';
 
 /**
- * THE HELP FILMS ARE A PERSON'S OWN: a student watches the students' films, a
- * manager the teachers', an admin those and the administrators'. Driven
+ * A STUDENT WATCHES THE STUDENTS' FILMS AND NO OTHERS; STAFF WATCH EVERY FILM,
+ * the students' included, so a teacher can help a student through one. Driven
  * through the callable, which signs against the local media store as
  * production signs against R2, so "gets a link" means "gets a link that plays".
  */
@@ -47,20 +47,21 @@ async function denialOf(r: CallableRequest): Promise<string | null> {
 }
 
 describe('getHelpVideoUrl', () => {
-  it('gives a student the students’ films, and not the teachers’', async () => {
+  it('gives a student the students’ films, and not the teachers’ or the administrators’', async () => {
     expect(await denialOf(await req('student', { id: 'student-to-do', variant: 'phone' }))).toBeNull();
     expect(await denialOf(await req('student', { id: 'staff-today', variant: 'computer' }))).toMatch(/not open to you/);
     expect(await denialOf(await req('student', { id: 'admin-audit', variant: 'phone' }))).toMatch(/not open to you/);
   });
 
-  it('gives a manager the teachers’ films, and not the students’ or the administrators’', async () => {
+  it('gives a manager every film: the teachers’, the students’ and the administrators’', async () => {
     expect(await denialOf(await req('manager', { id: 'staff-today', variant: 'computer' }))).toBeNull();
-    expect(await denialOf(await req('manager', { id: 'student-to-do', variant: 'phone' }))).toMatch(/not open to you/);
-    expect(await denialOf(await req('manager', { id: 'admin-audit', variant: 'phone' }))).toMatch(/not open to you/);
+    expect(await denialOf(await req('manager', { id: 'student-to-do', variant: 'phone' }))).toBeNull();
+    expect(await denialOf(await req('manager', { id: 'admin-audit', variant: 'phone' }))).toBeNull();
   });
 
-  it('gives an admin the teachers’ films and the administrators’', async () => {
+  it('gives an admin every film: the teachers’, the students’ and the administrators’', async () => {
     expect(await denialOf(await req('admin', { id: 'staff-today', variant: 'computer' }))).toBeNull();
+    expect(await denialOf(await req('admin', { id: 'student-to-do', variant: 'phone' }))).toBeNull();
     expect(await denialOf(await req('admin', { id: 'admin-audit', variant: 'phone' }))).toBeNull();
   });
 
