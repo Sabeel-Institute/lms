@@ -1835,10 +1835,20 @@ check('a worksheet attaches to a posted assignment', await shows(admin, `attachm
 const cwId = (await readCollection('coursework')).find((c) => c.fields.title.stringValue === CW)?.name.split('/').pop();
 await patchField('coursework', cwId, 'title', 'Changed elsewhere');
 await tap(admin, 'coursework-save');
-await admin.getByTestId('notice-error').filter({ hasText: 'Someone else changed' }).waitFor({ timeout: 20000 });
+const refusedSave = admin.getByTestId('notice-error').filter({ hasText: 'Someone else changed' });
+await refusedSave.waitFor({ timeout: 20000 });
 check(
   'saving over another teacher’s edit is refused, and theirs stands',
   (await readCollection('coursework')).find((c) => c.name.endsWith(`/${cwId}`))?.fields.title.stringValue === 'Changed elsewhere',
+);
+// Said where the teacher is looking: beside Save, not at the top of a form
+// that is taller than the phone.
+const refusedAt = await refusedSave.boundingBox();
+const viewHeight = admin.viewportSize()?.height ?? 0;
+check(
+  'the refusal is in view beside the button that was pressed',
+  !!refusedAt && refusedAt.y >= 0 && refusedAt.y + refusedAt.height <= viewHeight,
+  JSON.stringify({ refusedAt, viewHeight }),
 );
 await patchField('coursework', cwId, 'title', CW);
 

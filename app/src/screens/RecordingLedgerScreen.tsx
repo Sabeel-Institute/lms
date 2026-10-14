@@ -83,13 +83,15 @@ export function RecordingLedgerScreen({
   // "Mark complete" was in flight, and two callables raced on one override.
   // The gate is a ref, not this render's `busy`, which a same-frame second
   // tap would still read as free.
-  const run = (key: string, fn: () => Promise<unknown>) =>
+  // `shown` puts the refusal where the action was taken: an override is made
+  // in a sheet, and its refusal drawn on the page went on behind it.
+  const run = (key: string, fn: () => Promise<unknown>, shown: (text: string | null) => void = setError) =>
     once(key, async () => {
-      setError(null);
+      shown(null);
       try {
         await fn();
       } catch (e) {
-        setError(errorText(e));
+        shown(errorText(e));
       }
     });
 
@@ -270,9 +272,10 @@ function LedgerRowCard({
   today: string;
   closedBy: ClosedBy;
   busy: string | null;
-  onRun: (key: string, fn: () => Promise<unknown>) => void;
+  onRun: (key: string, fn: () => Promise<unknown>, shown: (text: string | null) => void) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
   /*
    * EMPTY EVERY TIME IT OPENS, never prefilled from the existing override.
    *
@@ -291,6 +294,7 @@ function LedgerRowCard({
   const [reason, setReason] = useState('');
   const close = () => {
     setReason('');
+    setRefused(null);
     setOpen(false);
   };
   const outcome = grantOutcome(r, today, closedBy === null);
@@ -329,6 +333,7 @@ function LedgerRowCard({
       </View>
 
       <Sheet visible={open} title={`Override: ${r.name}`} onClose={close} closeLabel="Cancel">
+        {refused ? <Notice tone="error">{refused}</Notice> : null}
         {caption}
         <Field
           testID={`override-reason-${r.name}`}
@@ -347,7 +352,7 @@ function LedgerRowCard({
               onRun(`ov-${r.studentUid}`, async () => {
                 await overrideCompletion({ studentUid: r.studentUid, recordingId, completed: true, reason: reason.trim() });
                 close();
-              })
+              }, setRefused)
             }
           />
           <Button
@@ -360,7 +365,7 @@ function LedgerRowCard({
               onRun(`ov-${r.studentUid}`, async () => {
                 await overrideCompletion({ studentUid: r.studentUid, recordingId, completed: false, reason: reason.trim() });
                 close();
-              })
+              }, setRefused)
             }
           />
         </Row>
@@ -375,7 +380,7 @@ function LedgerRowCard({
               onRun(`rm-${r.studentUid}`, async () => {
                 await clearCompletionOverride({ studentUid: r.studentUid, recordingId, reason: reason.trim() });
                 close();
-              })
+              }, setRefused)
             }
           />
         ) : null}

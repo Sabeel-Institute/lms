@@ -225,7 +225,6 @@ export function CourseworkEditScreen({
       width="read"
     >
       {guard.element}
-      {error ? <Notice tone="error">{error}</Notice> : null}
       <Card>
         <Field testID="coursework-title" label="Title" value={title} onChangeText={setTitle} autoCapitalize="words" />
         <InstructionsEditor value={instructions} onChange={setInstructions} />
@@ -304,6 +303,10 @@ export function CourseworkEditScreen({
           })
         }
       >
+        {/* THE REFUSAL BESIDE THE BUTTONS that were pressed: at the top of a
+            long form, on a phone, it was above the screen and nothing seemed
+            to happen. */}
+        {error ? <Notice tone="error">{error}</Notice> : null}
         <Row>
           {posted ? (
             <Button

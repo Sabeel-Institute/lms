@@ -58,7 +58,10 @@ export function WorkScreen({
   const open = canHandIn(state);
   const handedIn = sub.state === 'handedIn' || sub.state === 'returned';
   const dueWord = isOverdue(sub.dueDate, today) ? 'Was due' : state === 'notRequired' ? 'Due' : 'Hand in by';
-  const [error, setError] = useState<string | null>(null);
+  // Which action was refused, so its words appear beside its button: at the
+  // top of a page with a long answer they were out of sight, and a refused
+  // hand-in looked like one that had gone in.
+  const [error, setError] = useState<{ key: 'handIn' | 'takeBack'; text: string } | null>(null);
   // One at a time, so a double tap cannot hand in and then show the second
   // call's refusal as an error over work that went in.
   const { active, run: once } = useOneAtATime();
@@ -68,7 +71,7 @@ export function WorkScreen({
       try {
         await fn();
       } catch (e) {
-        setError(errorText(e));
+        setError({ key, text: errorText(e) });
       }
     });
 
@@ -90,6 +93,11 @@ export function WorkScreen({
       </>
     ) : null;
   const late = sub.handedInAt !== null && isLate(sub.handedInAt, sub.dueDate, INSTITUTE_TIMEZONE);
+  // Beside the button when it is still drawn; at the top when the work has
+  // moved on under it (closed at midnight, say), so it is said somewhere.
+  const takeBackRefused = error?.key === 'takeBack' && handedIn ? error.text : null;
+  const handInRefused = error?.key === 'handIn' && !handedIn && open ? error.text : null;
+  const refusedElsewhere = error && !takeBackRefused && !handInRefused ? error.text : null;
   const takeBackNow = () => run('takeBack', () => takeBack({ courseworkId: cw.id }));
 
   return (
@@ -102,7 +110,7 @@ export function WorkScreen({
       ].join(' · ')}
       width="read"
     >
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      {refusedElsewhere ? <Notice tone="error">{refusedElsewhere}</Notice> : null}
       {cw.editedAt ? <Text style={styles.quiet}>Updated {dayOf(cw.editedAt)}</Text> : null}
       <StateNotice state={state} sub={sub} today={today} courseOpen={cls.effectiveActive} />
 
@@ -125,6 +133,7 @@ export function WorkScreen({
           <Card>
             <HandedIn note={sub.note} files={sub.files} courseworkId={cw.id} uid={uid} />
           </Card>
+          {takeBackRefused ? <Notice tone="error">{takeBackRefused}</Notice> : null}
           {instructions}
         </>
       ) : (
@@ -136,6 +145,7 @@ export function WorkScreen({
               cw={cw}
               courseId={sub.courseId}
               busy={active === 'handIn'}
+              refused={handInRefused}
               onHandIn={(saveAnswer) =>
                 run('handIn', async () => {
                   // What is on the screen is what goes in: the answer is
@@ -266,12 +276,15 @@ function YourWork({
   cw,
   courseId,
   busy,
+  refused,
   onHandIn,
 }: {
   uid: string;
   cw: CourseworkRow;
   courseId: string;
   busy: boolean;
+  /** Why the last hand-in did not go in, said beside the button. */
+  refused: string | null;
   /** Hand in, given the way to store the answer first. */
   onHandIn: (saveAnswer: () => Promise<boolean>) => void;
 }) {
@@ -414,6 +427,7 @@ function YourWork({
                       : ''
                   }`}
         </Text>
+        {refused ? <Notice tone="error">{refused}</Notice> : null}
         <Button
           testID="work-hand-in"
           label="Hand in"
