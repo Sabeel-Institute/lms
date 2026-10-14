@@ -239,10 +239,16 @@ There is a pair of scripts for filling production with a realistic dataset to lo
 at the reports with, and for taking it out again:
 
 ```bash
-node scripts/seed-demo-prod.mjs     # 3 cohorts, 8 courses, 50 students, ~80 sessions
-node scripts/wipe-demo-prod.mjs     # DRY RUN — prints the plan, deletes nothing
+node scripts/seed-demo-prod.mjs              # 3 cohorts, 8 courses, 50 students, ~80 sessions
+node scripts/seed-demo-coursework.mjs        # DRY RUN; --yes adds assignments, work and grades to every active course
+node scripts/wipe-demo-prod.mjs              # DRY RUN — prints the plan, deletes nothing
 node scripts/wipe-demo-prod.mjs --yes
 ```
+
+`seed-demo-coursework.mjs` writes over REST as faisal.shah@oursabeel.com
+through gcloud. The other two use the Admin SDK, so Application Default
+Credentials must be that account (`gcloud auth application-default login`);
+on this machine they belong to another account, and the wipe is refused.
 
 **If you are asked to "clean up the demo data", that second command is the whole
 job** — there is nothing else to undo. The seed changed no application code,

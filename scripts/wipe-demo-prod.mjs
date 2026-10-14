@@ -1,6 +1,6 @@
 /**
- * Remove everything `seed-demo-prod.mjs` put into the LIVE project — and nothing
- * else.
+ * Remove everything `seed-demo-prod.mjs` and `seed-demo-coursework.mjs` put
+ * into the LIVE project — and nothing else.
  *
  *   node scripts/wipe-demo-prod.mjs           # DRY RUN: prints the plan, deletes nothing
  *   node scripts/wipe-demo-prod.mjs --yes     # actually delete
@@ -24,6 +24,9 @@
  *   - auditLog           — `getPlaybackUrl` and every staff callable audits itself
  *   - enrollments        — a demo student enrolled by hand, in a demo course or
  *     a real one, is an app-written row with no flag
+ *   - submissions / grades / submissionEvents / drafts / attachmentUploads —
+ *     written by the callables when anyone hands in, grades or attaches a file
+ *     on a demo assignment; a saved grade replaces its document, flag and all
  *   - notifications/{uid} and its devices/sent subtrees — written the moment a
  *     demo account turns notifications on, and Firestore never cascades a
  *     subcollection delete, so removing the parent alone leaves them behind
@@ -94,16 +97,18 @@ const chunk = (items, size) => {
 };
 
 const FLAGGED = ['cohorts','courses','sessions','recordings','students','enrollments',
-  'completions','listeningProgress','completionOverrides','completionEvents','auditLog','staffUsers'];
+  'completions','listeningProgress','completionOverrides','completionEvents','auditLog','staffUsers',
+  'coursework','submissions','grades','submissionEvents'];
 const BY_REFERENCE = ['sessions','recordings','enrollments','attendanceRecords','assignments',
-  'completions','completionEvents','listeningProgress','completionOverrides','auditLog'];
+  'completions','completionEvents','listeningProgress','completionOverrides','auditLog',
+  'submissions','grades','submissionEvents','drafts','attachmentUploads'];
 
 /** The fields the app joins on. A document pointing at demo data through any of
  *  them is orphaned the moment that data goes. */
 const isDemoRef = (d) => {
   const v = d.data();
   return (
-    ['recordingId', 'studentUid', 'courseId', 'sessionId', 'cohortId'].some((f) => isDemoId(v[f])) ||
+    ['recordingId', 'studentUid', 'courseId', 'sessionId', 'cohortId', 'courseworkId'].some((f) => isDemoId(v[f])) ||
     Object.values(v.targets ?? {}).some(isDemoId)
   );
 };
@@ -165,9 +170,13 @@ const removedRecordingIds = new Set(
 );
 // Both layouts: `media/{recordingId}/{itemId}`, and `recordings/{recordingId}/…`
 // for files stored before parts existed.
-const orphanFiles = [...(await listKeys('media/')), ...(await listKeys('recordings/'))].filter((k) =>
-  removedRecordingIds.has(k.split('/')[1]),
-);
+const orphanFiles = [
+  ...[...(await listKeys('media/')), ...(await listKeys('recordings/'))].filter((k) => removedRecordingIds.has(k.split('/')[1])),
+  // Files attached to a demo assignment, or to the work handed in on one:
+  // `coursework/{courseworkId}/…` and `work/{uid}/{courseworkId}/…`.
+  ...(await listKeys('coursework/')).filter((k) => isDemoId(k.split('/')[1])),
+  ...(await listKeys('work/')).filter((k) => isDemoId(k.split('/')[2])),
+];
 const seedTmp = await listKeys('demo-seed/');
 
 const demoUsers = [];
