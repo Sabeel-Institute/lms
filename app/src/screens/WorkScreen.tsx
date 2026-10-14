@@ -439,7 +439,7 @@ function YourWork({
           <ActivityIndicator style={styles.loading} />
         )}
         <Attachments target="work" courseworkId={cw.id} files={files} editable studentUid={uid} onBusyChange={onBusyChange} />
-        <Text testID="work-saved" style={[styles.quiet, failed || over > 0 ? styles.failed : null]}>
+        <Text testID="work-saved" aria-live="polite" style={[styles.quiet, failed || over > 0 ? styles.failed : null]}>
           {over > 0
             ? `Too long to save: ${over.toLocaleString('en')} characters over the ${MAX_ANSWER_CHARS.toLocaleString('en')} an answer can have. Shorten it, or put the long part in a document and attach that.`
             : unanswered

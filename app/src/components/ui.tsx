@@ -614,6 +614,8 @@ export function Field({
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         testID={testID}
+        // Named by its label: the Text above it is seen, not read out with it.
+        accessibilityLabel={label}
         style={[
           styles.input,
           multiline ? styles.inputMultiline : null,

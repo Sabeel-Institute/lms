@@ -2283,6 +2283,19 @@ check(
   JSON.stringify(subBefore.returned ?? null),
 );
 
+/*
+ * FOR A SCREEN READER: the feedback box is named, the save line is announced,
+ * and the class list says whose work is open. None of the three was.
+ */
+const feedbackNamed = await admin.getByRole('textbox', { name: 'Feedback' }).filter({ visible: true }).count();
+const statusLive = await admin.getByTestId('grade-status').filter({ visible: true }).first().getAttribute('aria-live');
+const openRows = await admin.locator('[data-testid^="grade-list-"][aria-current="true"]').count();
+check(
+  'the grading form names its feedback box, announces its saves, and marks whose work is open',
+  feedbackNamed >= 1 && statusLive === 'polite' && openRows === 1,
+  JSON.stringify({ feedbackNamed, statusLive, openRows }),
+);
+
 // Feedback typed and returned with Ctrl + Enter at once: what is on the
 // screen goes back, the feedback included, not what was stored a moment ago.
 await admin.getByTestId('grade-feedback').fill('Clear, and in your own words.');

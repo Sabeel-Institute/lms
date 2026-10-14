@@ -26,6 +26,7 @@ export function DateField({ label, value, onChange }: DateFieldProps) {
       <Text style={styles.label}>{label}</Text>
       <input
         type="date"
+        aria-label={label}
         value={value}
         onChange={(e) => onChange((e.target as HTMLInputElement).value)}
         style={{

@@ -334,7 +334,9 @@ export function GradeScreen({
             testID={`grade-list-${nameOf(s.studentUid)}`}
             accessibilityRole="button"
             accessibilityLabel={`Open ${nameOf(s.studentUid)}’s work`}
-            accessibilityState={{ selected: here }}
+            // The open student, said: react-native-web carries no
+            // accessibilityState to the page (as AppNav found).
+            aria-current={here ? 'true' : undefined}
             onPress={() => open(s.studentUid)}
             style={({ pressed }) => [styles.listRow, here ? styles.listRowHere : null, pressed ? styles.pressed : null]}
           >
@@ -568,7 +570,7 @@ function GradeForm({
           />
         )}
         <Field testID="grade-feedback" label="Feedback" value={draft.feedback} onChangeText={(v) => change({ feedback: v })} multiline />
-        <Text testID="grade-status" style={[styles.quiet, invalid || failed ? styles.failed : null]}>
+        <Text testID="grade-status" aria-live="polite" style={[styles.quiet, invalid || failed ? styles.failed : null]}>
           {invalid
             ? invalid
             : failed
