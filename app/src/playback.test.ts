@@ -87,10 +87,17 @@ let ioLog: string[] = [];
 // `data()` instead would hand a read issued minutes ago whatever the document
 // says when someone finally looks at it — which is exactly the staleness the
 // generation guards exist to survive, hidden from the tests that check them.
+/** When set, the next `getDoc` waits for `finishGet()`: a slow read of the saved place. */
+let holdGet = false;
+let finishGet: (() => void) | null = null;
 const getDoc = vi.fn((ref: { path: string }) => {
   const snap = docs.get(ref.path);
   ioLog.push('get');
-  return Promise.resolve({ data: () => snap });
+  if (!holdGet) return Promise.resolve({ data: () => snap });
+  holdGet = false;
+  return new Promise((resolve) => {
+    finishGet = () => resolve({ data: () => snap });
+  });
 });
 /**
  * When set, the next `setDoc` waits for `finishSet()`.
@@ -223,6 +230,8 @@ async function load({ killed = false } = {}): Promise<Playback> {
   ioLog = [];
   holdSet = false;
   finishSet = null;
+  holdGet = false;
+  finishGet = null;
   denySet = false;
   getDoc.mockClear();
   setDoc.mockClear();
@@ -396,6 +405,7 @@ describe('opening and closing', () => {
 
   it('a tick from a closed session cannot write over the open one', async () => {
     const pb = await load();
+    seedDoc('rec-b', { positionMs: 60_000, listenedMs: 60_000, updatedAt: nowMs - 1_000 });
     pb.openPlayback(recording('rec-a'));
     await flush();
     const first = players[0];
@@ -403,9 +413,35 @@ describe('opening and closing', () => {
     await flush();
 
     // The old player is torn down but nothing stops a queued callback firing.
+    wait(1_000);
     first.events.onProgress(9_000_000);
     await flush();
-    expect(docOf('rec-a')?.recordingId).not.toBe('rec-b');
+    // THE OPEN SESSION'S DOCUMENT, which is where a stale tick would land: the
+    // closed one's is not, and asserting on it passed with the guard removed.
+    await pb.closePlayback();
+    await flush();
+    expect(docOf('rec-b')?.positionMs).toBe(60_000);
+  });
+
+  /*
+   * A SLOW READ OF THE SAVED PLACE, ANSWERING AFTER ANOTHER RECORDING WAS
+   * OPENED. Every other test here holds the mint; this holds the read, which
+   * is where the old session would load its own file on the closed player.
+   */
+  it('a saved place read after another recording opened starts nothing', async () => {
+    const pb = await load();
+    seedDoc('rec-a', { positionMs: 3_000_000, listenedMs: 3_000_000, updatedAt: nowMs - 1_000 });
+    holdGet = true;
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.openPlayback(recording('rec-b'));
+    await flush();
+    finishGet?.();
+    await flush();
+    await flush();
+    expect(players[0].loaded).toBeNull();
+    expect(players[1]).toMatchObject({ startedAt: 0 });
+    expect(callable.mock.calls.map((c) => (c[0] as { recordingId: string }).recordingId)).toEqual(['rec-b']);
   });
 
   /*
@@ -1492,6 +1528,30 @@ describe('parts and versions', () => {
     players[0].events.onEnded();
     await flush();
     expect(callable.mock.calls.length).toBe(mints);
+  });
+
+  /*
+   * A TICK WHILE A SWITCH IS ON ITS WAY is the old file's last word: counted,
+   * it would be listening the student did not do, saved against the new file.
+   */
+  it('a tick during a switch counts nothing and is not saved against the new file', async () => {
+    const pb = await load();
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    pb.playback.play();
+    players[0].events.onProgress(0);
+    wait(10_000);
+    players[0].events.onProgress(10_000);
+    holdMint = true;
+    pb.playback.selectItem('p1v');
+    wait(5_000);
+    players[0].events.onProgress(15_000);
+    finishMint?.({ data: { url: 'https://signed/p1v', expiresAt: 1e15 } });
+    await flush();
+    await flush();
+    await pb.closePlayback();
+    await flush();
+    expect(docOf('rec-a')).toMatchObject({ version: 'speaker', positionMs: 10_000, listenedMs: 10_000 });
   });
 
   /** Each file's URL names it, so a test can tell which one the player holds. */
