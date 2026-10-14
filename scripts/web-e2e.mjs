@@ -363,8 +363,24 @@ check('bootstrapAdmin refuses a second call', again.status === 409);
 
 // A second staff member, approved from the admin's session.
 const mgr = await newSession('mgr');
+/*
+ * ITS FIRST POLL FAILS. A new staff account has no role in its first token,
+ * so the session's poll is the only thing that finds one, and the first poll
+ * is called directly, not by the timer that re-arms it. A connection dropping
+ * at that moment left the account on the sign-in screen, signed in, until a
+ * reload. Its first token refresh is refused here, once.
+ */
+const tokenRefresh = /securetoken/;
+let refreshes = 0;
+await mgr.route(tokenRefresh, (route) => (refreshes++ === 0 ? route.abort('internetdisconnected') : route.continue()));
 await tap(mgr, 'dev-signin-manager');
 await sawText(mgr, 'Waiting for approval');
+await mgr.unroute(tokenRefresh);
+check(
+  'a new staff sign-in whose first poll fails still reaches its gate',
+  refreshes >= 2 && (await showsText(mgr, 'Waiting for approval')),
+  `${refreshes} token refresh request(s)`,
+);
 await tap(admin, 'tab-people');
 await tap(admin, 'segment-staff');
 await tap(admin, 'approve-manager@oursabeel.com');

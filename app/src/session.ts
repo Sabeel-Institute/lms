@@ -312,6 +312,15 @@ export function useSession(): Session {
             setSession((s) => (s.phase === 'signedOut' ? { phase: 'signedOut', refused: true } : s));
           }
           console.warn('session poll', code ?? (e as Error).message);
+          /*
+           * AND TRY AGAIN. Only `publish` arms the chain, so a poll that failed
+           * before publishing anything stayed failed: the first one, which
+           * `start` calls directly, with the connection dropping as someone
+           * signed in, left an account with no role yet on the sign-in screen,
+           * signed in, until a reload. `arm` does nothing once this sign-in has
+           * been superseded, and nothing while a tick is already waiting.
+           */
+          chain.arm(gen, poll);
         }
       };
 
