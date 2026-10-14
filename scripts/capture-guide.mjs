@@ -32,7 +32,7 @@ const home = async (p) => { await p.goto(WEB, { waitUntil: 'domcontentloaded' })
  * How far down to cut a capture, when something below that point must not ship.
  *
  * The sign-in screen carries the emulator dev-sign-in panel ("as faisal.shah
- * (first admin)", "as manager", "as outsider (gets deleted)"), because these
+ * (first admin)", "as manager", "as outsider (refused)"), because these
  * shots are taken against a DEV server — that panel is what every suite here
  * uses to reach an authenticated screen at all. It is also the first figure in
  * a manual written for institute staff, so it cannot appear in it. Cutting

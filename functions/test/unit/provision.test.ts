@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ALLOWED_EMAIL_DOMAIN } from '@sabeel/shared';
-import { decideProvision } from '../../src/provision';
+import { decideProvision, refusedSignUp } from '../../src/provision';
 
 const staffEmail = `teacher@${ALLOWED_EMAIL_DOMAIN}`;
 const google = (over: Partial<Parameters<typeof decideProvision>[0]> = {}) =>
@@ -122,5 +122,32 @@ describe('decideProvision — everything else', () => {
         providerIds: ['password', 'google.com'],
       }).action,
     ).toBe('reject');
+  });
+});
+
+/*
+ * THE DOOR BEFORE THE ACCOUNT (the blocking sign-up gate). Every sign-up it
+ * sees came from a client; the one legitimate kind is a colleague's first
+ * Google sign-in on the staff domain.
+ */
+describe('refusedSignUp', () => {
+  it('lets a colleague in with a verified staff Google account', () => {
+    expect(refusedSignUp('google.com', staffEmail, true)).toBeNull();
+  });
+
+  it('refuses a password sign-up, whatever the address', () => {
+    expect(refusedSignUp('password', 'someone@example.com', false)).toBe('self-signup');
+    expect(refusedSignUp('password', staffEmail, true)).toBe('self-signup');
+  });
+
+  it('refuses Google accounts off the staff domain, and unverified ones on it', () => {
+    expect(refusedSignUp('google.com', 'someone@gmail.com', true)).toBe('bad-domain');
+    expect(refusedSignUp('google.com', staffEmail, false)).toBe('bad-domain');
+  });
+
+  it('refuses every other way in, and a sign-up that names none', () => {
+    for (const provider of ['facebook.com', 'apple.com', 'anonymous', 'phone', null]) {
+      expect(refusedSignUp(provider, staffEmail, true)).toBe('unsupported-provider');
+    }
   });
 });

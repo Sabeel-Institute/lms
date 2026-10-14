@@ -9,6 +9,7 @@ import * as bootstrap from './bootstrap';
 initializeApp();
 
 export { onUserCreate } from './authTrigger';
+export { beforeSignUp } from './signUpGate';
 export { setStaffAccess } from './staff';
 export { createStudent, setStudentAccess } from './students';
 export { deleteAccount } from './deleteAccount';

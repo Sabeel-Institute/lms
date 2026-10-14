@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { signInMessage } from './signInMessage';
+import { SIGN_UP_REFUSED } from '@sabeel/shared';
+import { REFUSED_ACCOUNT, signInMessage } from './signInMessage';
 
 describe('the sign-in screen\'s words for a failure', () => {
   it('refuses a Google sign-in with no account without naming the website', () => {
@@ -37,6 +38,21 @@ describe('the sign-in screen\'s words for a failure', () => {
       code: 'auth/account-exists-with-different-credential',
     });
     expect(signInMessage(e)).toBe('Students sign in with their email address and password above.');
+  });
+
+  it('tells someone the sign-up gate refused which account to use', () => {
+    // How the browser SDK reports a blocking function's refusal: one generic
+    // code, with the function's own message inside its message.
+    const e = Object.assign(
+      new Error(`Firebase: HTTP Cloud Function returned an error: {"error":{"message":"${SIGN_UP_REFUSED}: bad-domain","status":"PERMISSION_DENIED"}} (auth/internal-error).`),
+      { code: 'auth/internal-error' },
+    );
+    expect(signInMessage(e)).toBe(REFUSED_ACCOUNT);
+  });
+
+  it('does not read any other internal error as a refusal', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(signInMessage({ code: 'auth/internal-error', message: 'Firebase: Error (auth/internal-error).' })).not.toBe(REFUSED_ACCOUNT);
   });
 
   it('says the same thing for a wrong password and an unknown address', () => {

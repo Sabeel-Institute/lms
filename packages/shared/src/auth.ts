@@ -2,6 +2,14 @@
 export const ALLOWED_EMAIL_DOMAIN = 'oursabeel.com';
 
 /**
+ * The words a refused sign-up carries out of the blocking function
+ * (`functions/src/signUpGate.ts`), and the sign-in screen looks for. The
+ * browser SDK reports every blocking refusal as `auth/internal-error`, with the
+ * function's message inside its own; this is how the screen knows it is ours.
+ */
+export const SIGN_UP_REFUSED = 'SIGN_UP_REFUSED';
+
+/**
  * The one address `bootstrapAdmin` will promote, and the account the emulator
  * dev sign-in row mints for its first admin.
  *

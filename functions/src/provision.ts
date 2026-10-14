@@ -17,10 +17,12 @@ import type { Role, UserStatus } from '@sabeel/shared';
  *  - Anything else is deleted.
  */
 
+export type RejectReason = 'bad-domain' | 'unsupported-provider' | 'self-signup';
+
 export type ProvisionDecision =
   | {
       action: 'reject';
-      reason: 'bad-domain' | 'unsupported-provider' | 'self-signup';
+      reason: RejectReason;
       email: string | null;
     }
   | { action: 'ignore'; reason: 'admin-sdk-provisioned' }
@@ -97,4 +99,25 @@ export function decideProvision(user: NewUser): ProvisionDecision {
       photoUrl: user.photoURL ?? null,
     },
   };
+}
+
+/**
+ * THE DOOR, BEFORE ANY ACCOUNT EXISTS: what the blocking `beforeUserCreated`
+ * asks of every sign-up made from a client. One is legitimate here, a
+ * colleague's first Google sign-in on the staff domain. Students are made by
+ * staff through the Admin SDK, which no blocking function sees, so a password
+ * sign-up is always someone holding the site's public key. Null lets it in.
+ *
+ * The same verdicts as `decideProvision`, which stays behind the door for
+ * anything that gets past it.
+ */
+export function refusedSignUp(
+  providerId: string | null,
+  email: string | null | undefined,
+  emailVerified: boolean,
+): RejectReason | null {
+  if (providerId === 'password') return 'self-signup';
+  if (providerId !== 'google.com') return 'unsupported-provider';
+  if (!isAllowedStaffEmail(email, emailVerified)) return 'bad-domain';
+  return null;
 }

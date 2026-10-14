@@ -1,10 +1,13 @@
+import { SIGN_UP_REFUSED } from '@sabeel/shared';
 import { errorText } from '../errors';
 
 /**
  * What a person is told when the app refuses their account at the door: a
- * Google account outside the staff domain, which the auth trigger deletes. The
- * sign-in screen shows it whether the deletion landed inside the sign-in
- * (below) or a moment after it (`refused` on the session).
+ * Google account outside the staff domain. The sign-up gate refuses it before
+ * the account exists (`auth/internal-error`, below); the auth trigger, behind
+ * it, deletes one that got past, and the screen shows this whether that
+ * deletion landed inside the sign-in or a moment after it (`refused` on the
+ * session).
  */
 export const REFUSED_ACCOUNT = "That account can't sign in here. Staff use their Sabeel Google account.";
 
@@ -58,6 +61,10 @@ export function signInMessage(e: unknown): string {
        * than join the two. "Try again in a moment" could never work.
        */
       return 'Students sign in with their email address and password above.';
+    case 'auth/internal-error':
+      // The sign-up gate's refusal travels inside this code's message; any
+      // other internal error is not a door, and says so in its own words.
+      return String((e as { message?: unknown }).message ?? '').includes(SIGN_UP_REFUSED) ? REFUSED_ACCOUNT : errorText(e);
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a few minutes and try again.';
     case 'auth/network-request-failed':

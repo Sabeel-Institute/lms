@@ -211,6 +211,7 @@ const NOT_CALLABLES = new Set([
   'copyZoomFile', // the copy queue's, private by design: only the queue's account calls it
   'sweepAbandonedUploads', // scheduled
   'bootstrapAdmin', // the emulator's only
+  'beforeSignUp', // the sign-up gate: Identity Platform calls it, the app never does
 ]);
 const indexSrc = readFileSync(`${ROOT}functions/src/index.ts`, 'utf8');
 const exported = [

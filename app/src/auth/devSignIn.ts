@@ -32,9 +32,9 @@ export const devSignInAvailable = IS_DEV && USE_EMULATORS;
  * so a password-based dev path would be provisioned as a student — never
  * exercising the staff domain gate this is meant to test.
  *
- * Sign in with a non-org address and the auth trigger deletes the account,
- * exactly as in production. That is intended, and a useful way to watch the
- * domain check work.
+ * Sign in with a non-org address and the sign-up gate refuses it before the
+ * account exists, exactly as in production. That is intended, and a useful way
+ * to watch the domain check work.
  */
 export async function devSignIn(localPart: string): Promise<UserCredential> {
   if (!devSignInAvailable) {

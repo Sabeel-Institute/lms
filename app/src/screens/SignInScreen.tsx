@@ -172,7 +172,7 @@ function DevRow({ busy, run }: { busy: boolean; run: (fn: () => Promise<void>) =
       />
       <Button
         testID="dev-signin-outsider"
-        label="as outsider (gets deleted)"
+        label="as outsider (refused)"
         variant="secondary"
         disabled={busy}
         onPress={as('someone@gmail.com')}

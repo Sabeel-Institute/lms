@@ -32,7 +32,7 @@
  */
 import { chromium } from 'playwright';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { HELP_VIDEOS, helpVideoKey, pushPaths, readXlsx } from '@sabeel/shared';
+import { HELP_VIDEOS, SIGN_UP_REFUSED, helpVideoKey, pushPaths, readXlsx } from '@sabeel/shared';
 import { EMULATOR_PORTS, MEDIA_STORE_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import {
@@ -390,77 +390,42 @@ check(
   await shows(mgr, 'tab-courses'),
 );
 
-// An off-domain account must be deleted outright, not marked rejected.
+// An off-domain account is refused at the door: the sign-up gate turns it
+// away before any account exists, and the sign-in screen says which account
+// to use. (The auth trigger behind the gate deletes one that got past it;
+// `signInMessage.test.ts` holds what that path says.)
 const outsider = await newSession('outsider');
 await tap(outsider, 'dev-signin-outsider');
-/**
- * Wait for the TRANSITION, not for a duration.
- *
- * This used to sleep 6000ms and assert once, which made it load-sensitive: the
- * budget has to cover sign-in, the auth trigger running, the delete, and the
- * client re-rendering. Observed failing and passing on identical bytes, which is
- * how it was found — a check that returns both results from the same code is
- * evidence about the machine, not the app.
- *
- * The obvious repair — poll for 'Emulator sign-in' — does NOT work, and the
- * reason is worth keeping: that text is on the SIGN-IN screen, which is where
- * this starts. It is present before the click, so a wait for it succeeds
- * instantly against the pre-click state and asserts nothing at all. It is not a
- * landmark; its RETURN is.
- *
- * So: wait for the dev row to go (we left sign-in and are provisioning), then
- * for it to come back (the trigger deleted the account and dropped us out).
- * Both waits are tolerant, so a timeout surfaces as the assertion below failing
- * with the page's actual text rather than as an exception with none.
- */
-const outsiderDevRow = outsider.getByText('Emulator sign-in', { exact: false }).first();
-await outsiderDevRow.waitFor({ state: 'hidden', timeout: 30000 }).catch(() => {});
-await outsiderDevRow.waitFor({ state: 'visible', timeout: 30000 }).catch(() => {});
+const outsiderTold = await outsider
+  .getByText("That account can't sign in here", { exact: false })
+  .first()
+  .waitFor({ timeout: 30000 })
+  .then(() => true, () => false);
 check(
-  'an off-domain sign-in is deleted and lands back at sign-in',
-  (await bodyText(outsider)).includes('Emulator sign-in'),
+  'an off-domain sign-in is refused at the door, and told which account to use',
+  outsiderTold && (await bodyText(outsider)).includes('Emulator sign-in'),
+  (await bodyText(outsider)).slice(0, 200),
 );
-// The promise itself: the account is gone, not marked. Looked up as the
-// Admin SDK would; an empty answer is the account not existing.
-let outsiderLeft = null;
-for (let i = 0; i < 10; i++) {
-  outsiderLeft = await (
-    await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/projects/${EMULATOR_PROJECT_ID}/accounts:lookup`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: ['someone@gmail.com'] }),
-    })
-  ).json();
-  if (!outsiderLeft.users?.length) break;
-  await outsider.waitForTimeout(1000);
-}
-check('…and its account no longer exists', !outsiderLeft.users?.length && !outsiderLeft.error, JSON.stringify(outsiderLeft).slice(0, 200));
-/*
- * WHAT THE PERSON IS TOLD CANNOT BE CHECKED HERE, only that they are back at
- * sign-in. The trigger deletes the account inside the sign-in or just after
- * it. Inside, the sign-in fails `auth/user-token-expired` and the screen says
- * why (`signInMessage.test.ts`). Just after, which is the usual case in
- * production, the session's first forced refresh is answered USER_NOT_FOUND:
- * the SDK reports `auth/user-token-expired` and signs out, and the session
- * marks that ending refused, so the sign-in screen says why. The Auth emulator
- * answers that refresh INVALID_REFRESH_TOKEN instead, which the SDK reports as
- * `auth/invalid-refresh-token` and does not sign out on, so here the session
- * never leaves the sign-in screen and nothing is said. The usual case was
- * checked on the live site: silent before the session change, saying why
- * after it (docs/PHASE_STATUS.md, 2026-10-14).
- */
+// The promise itself: no account was made. Looked up as the Admin SDK would;
+// an empty answer is the account not existing.
+const outsiderLeft = await (
+  await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/projects/${EMULATOR_PROJECT_ID}/accounts:lookup`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: ['someone@gmail.com'] }),
+  })
+).json();
+check('…and no account was made', !outsiderLeft.users?.length && !outsiderLeft.error, JSON.stringify(outsiderLeft).slice(0, 200));
 
-// A stranger self-registering with email/password must also be deleted.
+// A stranger self-registering with email/password is refused at the door.
 //
 // This is driven through the REST API rather than the UI because the app offers
 // no sign-up control at all — which is exactly why it has to be tested this way:
 // the absence of a button is not a control, and anyone can post to this
-// endpoint with the public API key.
-//
-// It matters because the console setting that would block it
-// (`disabledUserSignup`) cannot be used — it also blocks a staff member's first
-// Google sign-in with `auth/admin-restricted-operation`. The trigger is the only
-// thing standing here.
+// endpoint with the public API key. The console setting that would close the
+// endpoint (`disabledUserSignup`) also blocks a staff member's first Google
+// sign-in, so the sign-up gate is what stands here, with the auth trigger
+// behind it.
 const strangerEmail = `stranger-${Date.now()}@example.com`;
 const signUp = await fetch(
   `${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key`,
@@ -470,7 +435,12 @@ const signUp = await fetch(
     body: JSON.stringify({ email: strangerEmail, password: 'hunter2hunter2', returnSecureToken: true }),
   },
 );
-check('a self-signup is not blocked at the door (so the trigger must catch it)', signUp.ok);
+const signUpAnswer = await signUp.json();
+check(
+  'a self-signup is refused at the door',
+  !signUp.ok && String(signUpAnswer.error?.message).includes(SIGN_UP_REFUSED),
+  JSON.stringify(signUpAnswer).slice(0, 200),
+);
 
 // Asserted by trying to USE the credential, not by listing accounts.
 //
@@ -495,7 +465,7 @@ for (let i = 0; i < 20 && !strangerDenied; i++) {
   if (body.error) strangerDenied = body.error.message;
 }
 check(
-  'a self-registered account is deleted — its credential stops working',
+  '…and no account was made — its credential works nowhere',
   strangerDenied === 'EMAIL_NOT_FOUND',
   strangerDenied || 'sign-in still succeeded',
 );
