@@ -1,6 +1,8 @@
 import { Component, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { captureError } from '../sentry';
+import { db } from '../firebase';
+import { reloadFromServer } from '../firestoreInit';
 import { Button } from './ui';
 import { getTheme, spacing } from '../theme';
 
@@ -17,8 +19,11 @@ const t = getTheme();
  * app as a whole is wrapped too, for anything drawn outside a screen.
  *
  * Reported here, because a caught error never reaches the global handler that
- * reports everything else. "Try again" draws it afresh, which is usually
- * enough: a cached copy has been replaced by the server's by then.
+ * reports everything else. "Try again" draws it from the server's copies: on
+ * the web the browser's cache is dropped and the page loaded again when
+ * nothing is waiting to be sent (`reloadFromServer`), since a copy kept from
+ * before a migration would only break the screen again; otherwise, and on a
+ * phone, the screen is redrawn.
  */
 export class ScreenBoundary extends Component<{ where: 'screen' | 'app'; children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -41,7 +46,13 @@ export class ScreenBoundary extends Component<{ where: 'screen' | 'app'; childre
             ? 'Something on it did not load as it should. Try again, or go back.'
             : 'Something did not load as it should. Try again.'}
         </Text>
-        <Button testID="page-failed-retry" label="Try again" variant="secondary" hug onPress={() => this.setState({ failed: false })} />
+        <Button
+          testID="page-failed-retry"
+          label="Try again"
+          variant="secondary"
+          hug
+          onPress={() => void reloadFromServer(db).then((reloading) => !reloading && this.setState({ failed: false }))}
+        />
       </View>
     );
   }

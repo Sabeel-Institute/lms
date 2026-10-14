@@ -22,3 +22,8 @@ export function initDb(app: FirebaseApp): Firestore {
 
 /** The memory cache goes with the process, and a phone has no address to reset (see the web sibling). */
 export async function afterSignOut(_db: Firestore, _drained: boolean): Promise<void> {}
+
+/** A phone redraws the screen (see the web sibling): nothing of a migration outlives the process. */
+export async function reloadFromServer(_db: Firestore): Promise<boolean> {
+  return false;
+}

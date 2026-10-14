@@ -1910,6 +1910,49 @@ await secondDevice.context().close();
 await noteHas(student, 'Checked on the second.');
 
 /*
+ * TRY AGAIN DRAWS THE SERVER'S COPY. A document the browser kept in an old
+ * shape broke its screen, and Try again redrew it from that same cache every
+ * time: the screen's own listener went with the screen, so nothing fetched
+ * the migrated copy. Here the student's work loses a field on the server (the
+ * old shape), the open screen breaks on it, the server is put right (the
+ * migration), and Try again must draw the page.
+ */
+const workOwner = (await readCollection('students'))
+  .find((st) => st.fields.email.stringValue === 'fatima@example.com')
+  .name.split('/')
+  .pop();
+const fatimaSubId = `${workOwner}_${cwId}`;
+const subField = async (field, value) => {
+  const r = await fetch(`${FS_READ}/submissions/${fatimaSubId}?updateMask.fieldPaths=${field}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    // No value under the mask deletes the field: the old shape.
+    body: JSON.stringify({ fields: value === undefined ? {} : { [field]: value } }),
+  });
+  if (!r.ok) throw new Error(`patch submissions/${fatimaSubId}: ${r.status}`);
+};
+await subField('attempts', undefined);
+const brokeOnOldShape = await student
+  .getByTestId('page-failed')
+  .filter({ visible: true })
+  .first()
+  .waitFor({ timeout: 20000 })
+  .then(() => true, () => false);
+await subField('attempts', { arrayValue: {} });
+await tap(student, 'page-failed-retry');
+const drawnAgain = await student
+  .getByTestId('work-note')
+  .filter({ visible: true })
+  .first()
+  .waitFor({ timeout: 30000 })
+  .then(() => true, () => false);
+check(
+  'Try again draws the server’s copy of a document the browser kept in an old shape',
+  brokeOnOldShape && drawnAgain && (await student.getByTestId('page-failed').filter({ visible: true }).count()) === 0,
+  `broke ${brokeOnOldShape}, drawn again ${drawnAgain}`,
+);
+
+/*
  * LEAVING MID-UPLOAD ASKS, because leaving stops it. The upload is slowed so
  * there is a moment to leave in; Stay lets it finish.
  */
