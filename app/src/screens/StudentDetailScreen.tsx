@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { INSTITUTE_TIMEZONE, QUEUE_SCOPE, stampInZone } from '@sabeel/shared';
+import { AUDIT_PAGE, INSTITUTE_TIMEZONE, QUEUE_SCOPE, stampInZone } from '@sabeel/shared';
 import {
   Card,
   EmailText,
@@ -233,6 +233,12 @@ function History({ student, isAdmin, uid }: { student: StudentRow; isAdmin: bool
             Changes in {QUEUE_SCOPE.manager} of the {myCourseIds.length} courses you manage are
             listed; the rest are not.
           </Notice>
+        ) : null}
+        {/* SAYS SO WHEN IT IS CUT SHORT. The read stops at the most recent
+            AUDIT_PAGE rows naming the student, so the earliest rows are the
+            ones left out, which a list starting "Account created" hides. */}
+        {(isAdmin ? adminRows : scoped.rows).length >= AUDIT_PAGE ? (
+          <Notice tone="info">Earlier changes are kept, but only the most recent are listed here.</Notice>
         ) : null}
         <View testID="student-history">
           <HistoryRow

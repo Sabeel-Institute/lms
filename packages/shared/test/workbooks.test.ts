@@ -341,6 +341,18 @@ describe('courseStudentStats', () => {
     expect(courseStudentStats(later, S.fatima, ctx).items.find((i) => i.session.id === '1')?.outcome).toBe('missed');
   });
 
+  it('a student brought back after a date passed while they were away has it closed, not missed', () => {
+    const back = {
+      ...world,
+      enrollments: world.enrollments.map((e) => (e.studentUid === S.fatima ? { ...enrol(S.fatima, '2026-08-24'), unenrolledAt: T('2026-09-10') } : e)),
+      assignments: world.assignments.map((a) => (a.studentUid === S.fatima && a.recordingId === 'r1' ? { ...a, active: false } : a)),
+    };
+    expect(courseStudentStats(back, S.fatima, ctx).items.find((i) => i.session.id === '1')?.outcome).toBe('closed');
+    // …while one who left only after the date, and came back, did miss it.
+    const late = { ...back, enrollments: back.enrollments.map((e) => (e.studentUid === S.fatima ? { ...e, unenrolledAt: T('2026-09-20') } : e)) };
+    expect(courseStudentStats(late, S.fatima, ctx).items.find((i) => i.session.id === '1')?.outcome).toBe('missed');
+  });
+
   it('recordings closed on an archived class closes an open grant', () => {
     const off = { ...world, course: { ...world.course, effectiveActive: false, archivedAccess: false } };
     expect(courseStudentStats(off, S.aminah, ctx)).toMatchObject({ open: 0, closed: 1 });
@@ -573,6 +585,7 @@ describe('studentWorkbook', () => {
         { at: T('2026-08-24'), actorUid: 'mgr', what: 'Enrolled in Hikam Foundations', courseId: COURSE, detail: '' },
         { at: T('2026-08-24', '12:01'), actorUid: 'mgr', what: 'Enrolled in Arabic I', courseId: 'arabic', detail: '' },
       ],
+      historyComplete: true,
     },
     { ...ctx, scopeNote: 'the courses you manage' },
   );
@@ -611,6 +624,21 @@ describe('studentWorkbook', () => {
     expect(summary['Assignments, all courses']).toBe(
       '4 assigned · 2 returned · 1 with the teacher · 1 not in yet · 0 missed · average grade 85%',
     );
+  });
+
+  it('says so when the history read stopped at its cap, before the rows it has', () => {
+    const cut = studentWorkbook(
+      {
+        student: { uid: S.fatima, name: 'Fatima Ahmed', email: 'fatima@example.com', status: 'active', createdAt: T('2026-08-24') },
+        courses: [world],
+        history: [{ at: T('2026-08-24'), actorUid: 'mgr', what: 'Enrolled in Hikam Foundations', courseId: COURSE, detail: '' }],
+        historyComplete: false,
+      },
+      ctx,
+    );
+    const rows = sheet(cut, 'History').rows.slice(1).map((r) => r.map((c) => String(c.v ?? '')).join('|'));
+    expect(rows[0]).toMatch(/Earlier changes are kept, but not in this file/);
+    expect(sheet(wb, 'History').rows.slice(1).some((r) => r.some((c) => /Earlier changes/.test(String(c.v))))).toBe(false);
   });
 
   it('carries the scope and the history', () => {

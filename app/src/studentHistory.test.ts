@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AuditEntryDoc } from '@sabeel/shared';
-import { describeStudentEvent, studentHistory } from './studentHistory';
+import { describeStudentEvent, studentHistory, workbookHistory } from './studentHistory';
 
 /**
  * What a person reads on a student's page, from what the server wrote.
@@ -126,5 +126,26 @@ describe('studentHistory', () => {
       ['a', 'Enrolled in Hikam Foundations · Autumn 2026'],
       ['c', 'Removed from Hikam Foundations · Autumn 2026'],
     ]);
+  });
+});
+
+describe('workbookHistory', () => {
+  const created = { at: 5, by: 'admin' };
+
+  it('is the page’s history: a double tap is one row, and the account’s creation comes first', () => {
+    const rows = workbookHistory(
+      [row({ at: 10, action: 'createEnrollment' }), row({ at: 10 + 24, action: 'createEnrollment' })],
+      label,
+      created,
+    );
+    expect(rows.map((r) => [r.at, r.what])).toEqual([
+      [5, 'Account created'],
+      [10, 'Enrolled in Hikam Foundations · Autumn 2026'],
+    ]);
+  });
+
+  it('keeps the creation row the log has, once', () => {
+    const rows = workbookHistory([row({ at: 7, action: 'createStudent', courseId: null })], label, created);
+    expect(rows.map((r) => [r.at, r.what])).toEqual([[7, 'Account created']]);
   });
 });

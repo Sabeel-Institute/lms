@@ -183,6 +183,8 @@ export function courseStudentStats(
   const enrollment = data.enrollments.find((e) => e.studentUid === studentUid);
   const joined = enrollment ? dateOf(enrollment.enrolledAt, ctx.timeZone) : null;
   const left = enrollment && !enrollment.active ? dateOf(enrollment.unenrolledAt, ctx.timeZone) : null;
+  // When they last left, even if they have come back since.
+  const lastLeft = dateOf(enrollment?.unenrolledAt, ctx.timeZone);
   const inWindow = (date: string) => (!joined || date >= joined) && (!left || date <= left);
   const playable = canPlayFromCourse(data.course);
   const recordingById = new Map(data.recordings.map((r) => [r.id, r]));
@@ -265,8 +267,11 @@ export function courseStudentStats(
     const progress = progressOf.get(recording.id);
     let outcome: ListeningOutcome;
     if (eff.completed) outcome = 'completed';
-    // Left the class before the date: the date never closed on them.
+    // Left the class before the date: the date never closed on them. Nor on
+    // one brought back since, whose grant leaving switched off and a date
+    // already past did not switch on again: the ledger says closed too.
     else if (left && left < session.dueDate) outcome = 'closed';
+    else if (!grant.active && lastLeft && lastLeft < session.dueDate) outcome = 'closed';
     else if (isOverdue(session.dueDate, ctx.today)) outcome = 'missed';
     else if (!grant.active || !playable) outcome = 'closed';
     else outcome = 'open';
@@ -763,6 +768,8 @@ export interface StudentWorkbookInput {
   /** Every course the file covers, each with its documents. */
   courses: CourseData[];
   history: StudentHistoryRow[];
+  /** False when the history read stopped at its cap, so the earliest of it is not here. */
+  historyComplete: boolean;
 }
 
 export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContext): WorkbookSpec {
@@ -956,6 +963,9 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
     widths: [17, 24, 30, 26, 60],
     rows: [
       [text('When', 'head'), text('Who', 'head'), text('What', 'head'), text('Course', 'head'), text('Detail', 'head')],
+      ...(input.historyComplete
+        ? []
+        : [[text(''), text(''), text('Earlier changes are kept, but not in this file: it holds the most recent.', 'note')]]),
       ...[...input.history]
         .sort((a, b) => a.at - b.at)
         .map((h) => [

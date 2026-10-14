@@ -25,12 +25,11 @@ import {
   type StudentDoc,
   type StoredCollection,
   type StoredDocs,
-  type StudentHistoryRow,
   type WorkbookContext,
 } from '@sabeel/shared';
 import { db } from './firebase';
 import { saveWorkbook } from './exportWorkbook';
-import { describeHistoryRow } from './studentHistory';
+import { workbookHistory } from './studentHistory';
 import { read, readIfExists } from './documents';
 
 /**
@@ -211,9 +210,7 @@ export async function exportStudentWorkbook(
     const d = data.find((x) => x.course.id === id);
     return d ? `${d.course.name} (${d.cohortName})` : id;
   };
-  const history: StudentHistoryRow[] = audit
-    .map((e) => describeHistoryRow(e, courseLabel))
-    .filter((h): h is StudentHistoryRow => h !== null);
+  const history = workbookHistory(audit, courseLabel, { at: student.createdAt, by: student.createdBy });
   const ctx = context(dir, byUid, isAdmin ? undefined : 'the courses you manage');
   await saveWorkbook(
     workbookFilename(`${student.displayName} — ${ctx.today}`),
@@ -229,6 +226,9 @@ export async function exportStudentWorkbook(
           },
           courses: data,
           history,
+          // The read stops at AUDIT_PAGE rows, newest first: at the cap, the
+          // earliest of the student's history is not in the file, and it says so.
+          historyComplete: audit.length < AUDIT_PAGE,
         },
         ctx,
       ),

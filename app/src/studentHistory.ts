@@ -94,18 +94,35 @@ export function studentHistory(
     const what = describeStudentEvent(e, courseLabel);
     if (what) rows.push({ id: e.id, at: e.at, actorUid: e.actorUid, what });
   }
-  rows.sort((a, b) => a.at - b.at);
-  const out: StudentEvent[] = [];
-  for (const r of rows) {
+  return oneRowPerTap(rows);
+}
+
+/** Oldest first, with a repeat of the row before it, by the same person this soon after, dropped. */
+function oneRowPerTap<R extends { at: number; actorUid: string; what: string }>(rows: R[]): R[] {
+  const out: R[] = [];
+  for (const r of [...rows].sort((a, b) => a.at - b.at)) {
     const prev = out[out.length - 1];
-    const sameTap =
-      prev !== undefined &&
-      prev.what === r.what &&
-      prev.actorUid === r.actorUid &&
-      r.at - prev.at <= SAME_TAP_MS;
+    const sameTap = prev !== undefined && prev.what === r.what && prev.actorUid === r.actorUid && r.at - prev.at <= SAME_TAP_MS;
     if (!sameTap) out.push(r);
   }
   return out;
+}
+
+/**
+ * The student workbook's History tab: the page's history, rows for the
+ * overrides beside it, and the account's creation first, as the page shows it
+ * whether or not its audit row is among those read. Built row by row, a
+ * double tap's two enrolments were both in the file the page shows as one.
+ */
+export function workbookHistory(
+  entries: readonly AuditEntryDoc[],
+  courseLabel: (courseId: string) => string,
+  created: { at: number; by: string },
+): StudentHistoryRow[] {
+  const rows = oneRowPerTap(entries.flatMap((e) => describeHistoryRow(e, courseLabel) ?? []));
+  return rows.some((r) => r.what === 'Account created')
+    ? rows
+    : [{ at: created.at, actorUid: created.by, what: 'Account created', courseId: null, detail: '' }, ...rows];
 }
 
 /**
