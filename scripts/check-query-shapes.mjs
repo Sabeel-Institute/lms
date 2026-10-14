@@ -269,7 +269,7 @@ const shapes = [
       db.collection('submissionEvents').where('courseId', '==', ID).where('courseworkId', '==', ID).where('studentUid', '==', ID),
   ],
   // Shapes the app and functions send that were missing from this list
-  // (bug hunt, 2026-10-15). All are served by single-field indexes today; one
+  // (bug hunt, 2026-10-14). All are served by single-field indexes today; one
   // gaining an orderBy or a range later fails here instead of on a screen.
   ['completions — a student’s on one recording (player)', () => db.collection('completions').where('studentUid', '==', ID).where('recordingId', '==', ID)],
   ['completions — a student’s in a course (ledger, student workbook)', () => db.collection('completions').where('studentUid', '==', ID).where('courseId', '==', ID)],

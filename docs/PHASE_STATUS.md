@@ -1854,7 +1854,7 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
-- 2026-10-15 — **Bug hunt, round 1: checkpoint deploy** (`2f9da51`–`3d2f022`;
+- 2026-10-14 — **Bug hunt, round 1: checkpoint deploy** (`2f9da51`–`3d2f022`;
   rules, functions and hosting deployed, live at `v0.1.1 · 3d2f022`). Eight
   reviewers read everything since the fork and drove it on the live site
   and the emulators: 106 findings so far, 61 settled, each fix with a test

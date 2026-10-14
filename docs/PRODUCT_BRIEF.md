@@ -481,7 +481,7 @@ A message is shown whether the app is open, in the background, or closed — on 
 
 ## Future ideas
 
-Considered and set aside for now (2026-10-15), with what each would solve and
+Considered and set aside for now (2026-10-14), with what each would solve and
 cost, so the reasoning is not lost.
 
 - **Long recordings that start at once on a slow phone.** A player cannot
