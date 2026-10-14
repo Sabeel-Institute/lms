@@ -199,7 +199,7 @@ export function StudentDetailScreen({
           </Sheet>
 
           {isAdmin ? (
-            <AdminCourses studentUid={studentUid} who={who} onOpenCourse={onOpenCourse} />
+            <AdminCourses studentUid={studentUid} who={who} deleted={student.status === 'deleted'} onOpenCourse={onOpenCourse} />
           ) : (
             <ManagerCourses studentUid={studentUid} uid={uid} who={who} onOpenCourse={onOpenCourse} />
           )}
@@ -327,10 +327,13 @@ function HistoryRow({
 function AdminCourses({
   studentUid,
   who,
+  deleted,
   onOpenCourse,
 }: {
   studentUid: string;
   who: string;
+  /** No "yet" for an account that is gone. */
+  deleted: boolean;
   onOpenCourse: (cls: CourseRow) => void;
 }) {
   // Both `State` variants: a row needs its enrolment AND its course, and
@@ -361,7 +364,7 @@ function AdminCourses({
       {checking ? (
         <Empty>Checking their courses…</Empty>
       ) : rows.length === 0 ? (
-        <Empty>Not enrolled in any course yet.</Empty>
+        <Empty>{deleted ? 'Never enrolled in a course.' : 'Not enrolled in any course yet.'}</Empty>
       ) : (
         <Grid min={330} rows>
           {rows.map((r) => (

@@ -2695,6 +2695,7 @@ check(
   JSON.stringify({ deleteWhileActive, email: zaydDoc?.fields.email, users: zaydLookup.users?.length ?? 0 }),
 );
 await admin.getByText('deleted', { exact: true }).first().waitFor({ timeout: 10000 }).catch(() => {});
+await shot(admin, '20c-student-deleted');
 await tap(admin, 'student-actions');
 check(
   'their page shows no address, and offers their record and nothing else',
@@ -2704,7 +2705,6 @@ check(
     (await admin.getByTestId('student-resend').count()) === 0 &&
     (await admin.getByTestId('student-delete').count()) === 0,
 );
-await shot(admin, '20c-student-deleted');
 await closeSheet(admin);
 await goHome(admin);
 await tap(admin, 'tab-people');
