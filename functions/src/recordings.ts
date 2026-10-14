@@ -526,19 +526,38 @@ export async function applyDeleteRecording(recordingId: string) {
 export async function applyRecordingDelete(
   req: CallableRequest,
   recordingId: string,
-): Promise<{ recordingId: string; courseId: string }> {
+  { ifEmpty = false }: { ifEmpty?: boolean } = {},
+): Promise<{ recordingId: string; courseId: string; deleted: boolean }> {
   const snap = await getFirestore().collection(COLLECTIONS.recordings).doc(recordingId).get();
   if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
-  await requireDeleteRights(req, snap.data() as RecordingDoc, recordingId);
-  return applyDeleteRecording(recordingId);
+  const rec = snap.data() as RecordingDoc;
+  /*
+   * ONLY IF STILL EMPTY: the cleanup after an upload that did not land throws
+   * away the draft that attempt made, and nothing else. Without it the delete
+   * fell through to the admin's rights, and an admin's failed upload took a
+   * colleague's file, added meanwhile, with the recording.
+   */
+  if (ifEmpty) {
+    await requireCourseScope(req, rec.courseId);
+    if (!isDiscardable(rec) || (await hasRecordingHistory(recordingId))) {
+      return { recordingId, courseId: rec.courseId, deleted: false };
+    }
+  }
+  await requireDeleteRights(req, rec, recordingId);
+  return { ...(await applyDeleteRecording(recordingId)), deleted: true };
 }
 
 export const deleteRecording = auditedCall('deleteRecording', async (req, audit) => {
-  const d = req.data as { recordingId?: unknown };
+  const d = req.data as { recordingId?: unknown; ifEmpty?: unknown };
   if (typeof d?.recordingId !== 'string' || !d.recordingId) {
     throw new HttpsError('invalid-argument', 'recordingId is required.');
   }
-  const res = await applyRecordingDelete(req, d.recordingId);
+  if (d.ifEmpty !== undefined && typeof d.ifEmpty !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'ifEmpty is true or false.');
+  }
+  const res = await applyRecordingDelete(req, d.recordingId, { ifEmpty: d.ifEmpty === true });
   audit.courseId = res.courseId; // recordingId target is auto-picked from req.data
-  return { recordingId: res.recordingId };
+  // Nothing deleted, nothing to record.
+  audit.noop = !res.deleted;
+  return { recordingId: res.recordingId, deleted: res.deleted };
 }, MEDIA_WRITE_SECRETS);

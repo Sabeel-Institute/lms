@@ -558,6 +558,26 @@ describe('applyDeleteRecording', () => {
         code: 'permission-denied',
       });
     });
+
+    /*
+     * A FAILED UPLOAD'S CLEANUP THROWS AWAY ONLY THE EMPTY DRAFT IT MADE. An
+     * admin's upload that did not land cleared away the recording it had
+     * created, and since an admin may delete anything, a colleague's file
+     * added meanwhile went with it: its bytes, its Zoom claim, the session's
+     * recording.
+     */
+    it('the cleanup after a failed upload leaves a recording someone else has added to, even for an admin', async () => {
+      const id = await ready();
+      await expect(applyRecordingDelete(admin(), id, { ifEmpty: true })).resolves.toMatchObject({ deleted: false });
+      expect(await recExists(id)).toBe(true);
+      expect((await onlyItem(id)).status).toBe('ready');
+    });
+
+    it('and throws away the draft it made when nothing landed on it', async () => {
+      const { id } = await newDraft();
+      await expect(applyRecordingDelete(admin(), id, { ifEmpty: true })).resolves.toMatchObject({ deleted: true });
+      expect(await recExists(id)).toBe(false);
+    });
   });
 
   it('REFUSES a published recording and removes nothing (unpublish/archive first)', async () => {

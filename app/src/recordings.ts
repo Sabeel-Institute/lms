@@ -129,7 +129,7 @@ export const removeRecordingMedia = call<{ recordingId: string; itemId: string }
 );
 
 /** Permanent, admin-only, cascading delete. Refused server-side while published. */
-export const deleteRecording = call<{ recordingId: string }, unknown>('deleteRecording');
+export const deleteRecording = call<{ recordingId: string; ifEmpty?: boolean }, unknown>('deleteRecording');
 
 /**
  * The upload callables, in the shape `uploadMedia` drives (upload.ts). The

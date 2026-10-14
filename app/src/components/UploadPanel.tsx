@@ -146,7 +146,8 @@ export function useUploads(sessionId: string, recording: RecordingRow | null) {
     } finally {
       // A recording this attempt created and nothing landed on would block
       // the next attempt (a session takes one recording) behind a delete.
-      if (created && added === 0) await deleteRecording({ recordingId: created }).catch(() => undefined);
+      // Only if it is still empty: someone else may have added to it since.
+      if (created && added === 0) await deleteRecording({ recordingId: created, ifEmpty: true }).catch(() => undefined);
       abort.current = null;
       running.current = false;
       setPhase('finished');
