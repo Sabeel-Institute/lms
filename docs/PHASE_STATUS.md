@@ -1678,6 +1678,19 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-13 — **"Post" broke into "Po / st"** on the assignment form, on a
+  staff phone with larger text. `Row` gives each control a cell of its own,
+  never squeezed, but `Children.map` hands a fragment over as one child, so
+  Post and Save as draft (one branch of a condition) shared a cell; the upload
+  panel did the same. `Row` now spreads a fragment's children into cells. The
+  sweep could not see it — at its default text the label fitted — so it now
+  also measures every button's label with the text a third larger, the large
+  setting phones offer, and fails a word broken inside; with the old `Row` it
+  fails on the form at 390px. Found on the way: the sweep's seed dated
+  sessions in UTC and assignments in the institute's zone, so after 7 pm in
+  Chicago the student's "next up" changed hands on a tie; both now use the
+  institute's calendar.
+
 - 2026-10-13 — **The browser's media notification: ⏪ ⏩ did nothing**
   (Faisal's phone, v0.1.0 on the web, Chrome). Play and pause worked — the
   browser pauses the element itself — and the skips spun and stopped: the web

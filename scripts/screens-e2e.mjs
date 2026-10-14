@@ -513,6 +513,47 @@ const layoutFaults = (page, readOnly = false) =>
     }
 
     /*
+     * NO BUTTON'S LABEL BREAKS INSIDE A WORD — at the text size a phone can be
+     * set to. "Post" came out "Po / st" on a staff phone with larger text than
+     * this sweep's, in a button crushed into half of a shared cell; at the
+     * default size it fitted, so nothing here could see it. So the labels are
+     * measured with every font a third larger (the large-text setting phones and
+     * Chrome offer), word by word: a word whose letters land on two lines is a
+     * label broken mid-word. Only LABELS are read — a control whose text runs
+     * past 40 characters is a row carrying content (a name and an email), and
+     * a long address in it may rightly wrap anywhere — and a break after a
+     * hyphen is a break between words. Links are left out for the same reason.
+     * Every font is put back before anything else is measured.
+     */
+    const LARGE_TEXT = 1.3;
+    const BUTTONS = '[role="button"], [role="switch"], [role="radio"], [role="tab"], button';
+    const scaled = [...document.querySelectorAll('body *')].map((el) => [
+      el,
+      el.style.getPropertyValue('font-size'),
+      el.style.getPropertyPriority('font-size'),
+      parseFloat(getComputedStyle(el).fontSize),
+    ]);
+    for (const [el, , , size] of scaled) if (size) el.style.setProperty('font-size', `${size * LARGE_TEXT}px`, 'important');
+    for (const control of els.filter((e) => e.matches(BUTTONS) && e.textContent.trim().length <= 40)) {
+      const walker = document.createTreeWalker(control, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const word of node.textContent.matchAll(/[^\s-]+-?/g)) {
+          const range = document.createRange();
+          range.setStart(node, word.index);
+          range.setEnd(node, word.index + word[0].length);
+          const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+          if (lines.size > 1) {
+            faults.push(`"${control.textContent.trim().slice(0, 30)}" breaks inside "${word[0]}" with large text`);
+          }
+        }
+      }
+    }
+    for (const [el, value, priority] of scaled) {
+      if (value) el.style.setProperty('font-size', value, priority);
+      else el.style.removeProperty('font-size');
+    }
+
+    /*
      * A FIXED-FORMAT CONTROL SQUASHED NARROWER THAN ITS OWN WIDGET.
      *
      * The only check here sensitive to ABSOLUTE width, and it exists because

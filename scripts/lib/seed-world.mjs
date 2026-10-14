@@ -24,14 +24,21 @@ import { createRequire } from 'node:module';
 
 import { EMULATOR_PROJECT_ID as PROJECT } from './project.mjs';
 import { putLocalObject } from './media-store.mjs';
-import { deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
+import { INSTITUTE_TIMEZONE, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey, todayInZone } from '@sabeel/shared';
 
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 
 const DAY = 86_400_000;
 const now = Date.now();
-const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+/**
+ * A date as the app reads it: the institute's calendar day, not UTC's. Sessions
+ * were dated in UTC and assignments in the institute's zone, so after 7 pm in
+ * Chicago — already tomorrow in UTC — every session moved a day later than the
+ * assignments seeded beside it, and the student's "next up" changed hands on a
+ * tie the world was built never to have.
+ */
+const iso = (ms) => todayInZone(INSTITUTE_TIMEZONE, ms);
 
 /**
  * WAITING FOR THE PORT IS NOT WAITING FOR READINESS.
@@ -581,7 +588,7 @@ export async function seedWorld({ db, auth, browser, base }) {
    */
   const PDF = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n');
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-  const day = (offset) => new Date(now + offset * DAY).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  const day = (offset) => iso(now + offset * DAY);
   const file = async (key, id, name, contentType, body) => {
     await putLocalObject(key, body, contentType);
     return { id, name, contentType, sizeBytes: body.length, durationSec: null, storageKey: key, addedAt: now - 5 * DAY };

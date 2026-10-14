@@ -1,5 +1,6 @@
 import {
   Children,
+  Fragment,
   createContext,
   isValidElement,
   useCallback,
@@ -890,12 +891,24 @@ const RowCellContext = createContext(false);
  * come out different widths, and a pair whose labels do not both fit overflows
  * the card and lands one control on top of the other.
  */
+/**
+ * A FRAGMENT IS ITS CHILDREN, here. `Children.map` hands a fragment over as
+ * ONE child, so two buttons written as `<>…</>` (one branch of a condition)
+ * shared a single cell, and on a phone with large text the first was crushed
+ * to "Po / st" — the very thing the cells exist to prevent.
+ */
+function cells(children: ReactNode): ReactNode[] {
+  return Children.toArray(children).flatMap((child) =>
+    isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment ? cells(child.props.children) : [child],
+  );
+}
+
 export function Row({ children }: { children: ReactNode }) {
   const roomy = useRoomy();
   return (
     <RowCellContext.Provider value={true}>
       <View style={styles.row}>
-        {Children.map(children, (child) =>
+        {cells(children).map((child, i) =>
           child ? (
             /*
              * THE CELLS SHARE THE WIDTH ON A PHONE AND NOT ON A LAPTOP.
@@ -910,7 +923,9 @@ export function Row({ children }: { children: ReactNode }) {
              * the shared primitive rather than in any screen, which is why it
              * appeared on five screens at once.
              */
-            <View style={[styles.rowItem, roomy ? styles.rowItemWide : null]}>{child}</View>
+            <View key={i} style={[styles.rowItem, roomy ? styles.rowItemWide : null]}>
+              {child}
+            </View>
           ) : null,
         )}
       </View>
