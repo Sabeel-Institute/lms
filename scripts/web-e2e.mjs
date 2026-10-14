@@ -1876,6 +1876,40 @@ const draftNote = (await readCollection('drafts')).find((d) => d.fields.coursewo
 check('an answer typed just before leaving is kept', answerKept && draftNote.includes('**God**'), JSON.stringify(draftNote));
 
 /*
+ * ONE STUDENT, TWO DEVICES. A screen left open on one kept the answer it
+ * opened with, and its next keystroke stored that over what was written on
+ * the other since. The open screen now follows the stored answer while
+ * nothing typed on it is waiting, so each device adds to the other's.
+ */
+const noteHas = (page, text) =>
+  page
+    .waitForFunction((t) => document.querySelector('[data-testid="work-note"]')?.textContent.includes(t), text, { timeout: 20000 })
+    .then(() => true, () => false);
+const secondDevice = await newSession('student-second-device');
+await secondDevice.getByTestId('signin-email').fill('fatima@example.com');
+await secondDevice.getByTestId('signin-password').fill('StudentPass123!');
+await tap(secondDevice, 'signin-student');
+await secondDevice.getByTestId('tab-classes').waitFor({ timeout: 30000 });
+await secondDevice.goto(`${WEB}${pushPaths.work(cwId)}`, { waitUntil: 'domcontentloaded' });
+await noteHas(secondDevice, 'not on what I did.');
+await student.getByTestId('work-note').click();
+await student.keyboard.press('Control+End');
+await student.keyboard.type(' Finished on the first device.');
+const followed = await noteHas(secondDevice, 'Finished on the first device.');
+await secondDevice.getByTestId('work-note').click();
+await secondDevice.keyboard.press('Control+End');
+await secondDevice.keyboard.type(' Checked on the second.');
+await secondDevice.waitForTimeout(2500);
+const bothNotes = (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue ?? '';
+check(
+  'an answer open on two devices keeps what each one wrote',
+  followed && bothNotes.includes('Finished on the first device.') && bothNotes.includes('Checked on the second.'),
+  JSON.stringify(bothNotes),
+);
+await secondDevice.context().close();
+await noteHas(student, 'Checked on the second.');
+
+/*
  * LEAVING MID-UPLOAD ASKS, because leaving stops it. The upload is slowed so
  * there is a moment to leave in; Stay lets it finish.
  */

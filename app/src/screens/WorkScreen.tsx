@@ -278,15 +278,29 @@ function YourWork({
   const draftState = useMyDraftState(uid, cw.id);
   const draft = draftState.value;
   const [note, setNote] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<AutosaveState>({ kind: 'idle' });
+  const pending = saveState.kind === 'waiting' || saveState.kind === 'saving' || saveState.kind === 'failed';
   /*
    * The editor seeds ONCE, so it waits for the draft and starts again if the
    * draft turns up after it — a taken-back answer can arrive a snapshot after
-   * the form does. Never once the student has typed: that would throw their
-   * words away.
+   * the form does. Never over typing that has not been stored: that would
+   * throw their words away.
+   *
+   * AND IT FOLLOWS THE STUDENT'S OTHER DEVICE. A screen left open on a phone
+   * kept the answer it opened with while the essay was written on the laptop,
+   * and its next keystroke stored the old text over the essay. So when the
+   * stored answer changes to one this screen did not type, and nothing typed
+   * here is waiting, the editor starts again from the stored one.
    */
   const seedKey = useRef('none');
-  if (note === null) seedKey.current = draft ? 'draft' : 'none';
-  const [saveState, setSaveState] = useState<AutosaveState>({ kind: 'idle' });
+  if (note === null) seedKey.current = draft ? `draft-${draft.updatedAt}` : 'none';
+  const [followed, setFollowed] = useState(false);
+  useEffect(() => {
+    if (!draft || note === null || pending || draft.note === note) return;
+    setFollowed(true);
+    setNote(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the stored answer changing
+  }, [draft?.updatedAt]);
   const [uploading, setUploading] = useState(false);
   const draftExists = useRef(false);
   draftExists.current = draft !== null;
@@ -309,6 +323,7 @@ function YourWork({
   const change = (v: string) => {
     // The editor reports what it was seeded with; that is not an edit.
     if (v === shown) return;
+    setFollowed(false);
     setNote(v);
     // Too long to store: the rules would refuse it, so it is not sent, and the
     // line under the box says so rather than blaming the connection.
@@ -373,7 +388,7 @@ function YourWork({
                 ? (saveState.error as { code?: string } | null)?.code === 'permission-denied'
                   ? 'Not saved: this work is no longer open to changes. Your answer is still here.'
                   : 'Not saved. Check the connection; your answer is still here.'
-                : `Saved. Only you can see this until you hand it in.${
+                : `${followed ? 'Brought up to date with what you wrote on another device. ' : ''}Saved. Only you can see this until you hand it in.${
                     shown.length > MAX_ANSWER_CHARS * 0.9
                       ? ` ${shown.length.toLocaleString('en')} of ${MAX_ANSWER_CHARS.toLocaleString('en')} characters.`
                       : ''
