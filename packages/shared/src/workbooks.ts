@@ -34,7 +34,7 @@ import type { Cell, CellStyle, SheetSpec, WorkbookSpec } from './xlsx';
 export const WORKBOOK_DEFINITIONS: readonly [term: string, definition: string][] = [
   [
     'Held',
-    'Registers submitted for sessions between the day the student joined the class and the day they left it, in which they were marked. A session whose register was never taken is not held for anyone.',
+    'Registers submitted in which the student was marked, whatever the session’s date: a newcomer marked on an earlier session’s register, to catch them up, counts too. A session whose register was never taken is not held for anyone.',
   ],
   [
     'Present / Absent / Excused',
@@ -164,7 +164,7 @@ export interface StudentCourseStats {
   missed: number;
   closed: number;
   items: RequiredItem[];
-  /** One mark per session id: P / A / E, '·' not taken, '—' outside their window. */
+  /** One mark per session id: P / A / E, '·' not taken, '—' outside their window and unmarked. */
   marks: Map<string, string>;
 }
 
@@ -221,7 +221,16 @@ export function courseStudentStats(
   for (const session of [...data.sessions].sort((a, b) => a.date.localeCompare(b.date))) {
     const taken = session.attendanceSubmittedAt !== null;
     const mark = session.attendance[studentUid];
-    if (!inWindow(session.date)) {
+    /*
+     * A MARK ON A TAKEN REGISTER COUNTS, whenever the session was. A class that
+     * met before its roster was entered is marked afterwards, and a newcomer is
+     * caught up by being excused on an earlier session's register (the brief's
+     * late-enrolment step); the server grants on the mark, with no date window.
+     * Dropping those left the file disagreeing with the register, the grants
+     * and every screen. Only a session with no mark for them, outside the days
+     * they were in the class, is '—'.
+     */
+    if (!(taken && mark) && !inWindow(session.date)) {
       stats.marks.set(session.id, '—');
       continue;
     }

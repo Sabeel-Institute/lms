@@ -298,12 +298,24 @@ describe('courseStudentStats', () => {
     expect(idris.marks.get('4')).toBe('');
     expect(idris.marks.get('5')).toBe('—');
 
-    // Ayesha joined 10-10: only S5 is in her window.
+    // Ayesha joined 10-10, and was marked on S4's register (09-22) as well:
+    // a mark on a taken register counts whenever the session was. S1, with no
+    // mark for her and before she joined, is outside her window.
     const ayesha = courseStudentStats(world, S.ayesha, ctx);
-    expect(ayesha).toMatchObject({ held: 1, present: 1, required: 0 });
+    expect(ayesha).toMatchObject({ held: 2, present: 2, required: 0 });
+    expect(ayesha.marks.get('4')).toBe('P');
     expect(ayesha.marks.get('1')).toBe('—');
     // A register never taken is '·' for everyone in its window.
     expect(fatima.marks.get('3')).toBe('·');
+  });
+
+  it('a newcomer excused on an earlier session’s register must listen to its recording, as the server granted', () => {
+    const caughtUp: CourseData = {
+      ...world,
+      sessions: world.sessions.map((s) => (s.id === '2' ? { ...s, attendance: { ...s.attendance, [S.ayesha]: 'excused' } } : s)),
+      assignments: [...world.assignments, grant(S.ayesha, 'r2', '2', '2026-10-30')],
+    };
+    expect(courseStudentStats(caughtUp, S.ayesha, ctx)).toMatchObject({ excused: 1, required: 1, open: 1 });
   });
 
   it('Held is the sum of the three marks, and Required of the four outcomes, for everyone', () => {
@@ -370,6 +382,13 @@ describe('courseWorkbook', () => {
     }
   });
 
+  it('the Sessions tab’s register columns sum to the Students tab’s', () => {
+    const sumOf = (rows: Record<string, unknown>[], k: string) => rows.reduce((n: number, r) => n + (typeof r[k] === 'number' ? (r[k] as number) : 0), 0);
+    for (const k of ['Present', 'Absent', 'Excused']) {
+      expect(sumOf(table(wb, 'Sessions'), k), k).toBe(sumOf(table(wb, 'Students'), k));
+    }
+  });
+
   it('the Sessions tab’s catch-up columns sum to the Students tab’s', () => {
     const students = table(wb, 'Students');
     const sessions = table(wb, 'Sessions');
@@ -413,8 +432,9 @@ describe('courseWorkbook', () => {
 
   it('the Summary states the rates the tabs add up to', () => {
     const summary = Object.fromEntries(sheet(wb, 'Summary').rows.map((r) => [String(r[0].v), String(r[1].v)]));
-    // present 8 of held 14 → 57%; completed 1 ÷ (1 + 1 missed) → 50%.
-    expect(summary['Attendance rate (present ÷ held)']).toBe('57%');
+    // present 9 of held 15 → 60% (Ayesha's S4 mark, from before she joined,
+    // is on the register and counts); completed 1 ÷ (1 + 1 missed) → 50%.
+    expect(summary['Attendance rate (present ÷ held)']).toBe('60%');
     expect(summary['Catch-up rate (completed ÷ completed + missed)']).toBe('50%');
     expect(summary['Recordings published']).toBe('3 of 5 sessions');
   });

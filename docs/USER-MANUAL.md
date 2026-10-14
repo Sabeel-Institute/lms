@@ -957,7 +957,8 @@ it; on a computer it downloads.
   been archived or unpublished is noted as *withdrawn from the totals*.
 - **Register** — students down the side, sessions across the top, one mark in
   each cell: **P**, **A**, **E**, a dot for a register never taken, a dash for
-  a session outside the time the student was enrolled.
+  a session outside the time the student was enrolled that holds no mark for
+  them.
 - **Recordings** — the same grid for published recordings: whether each
   excused student completed it (and when), or is still open, missed the
   deadline, or was closed — with how much of the recording they have played.
@@ -1004,7 +1005,7 @@ The file's **Definitions** tab reads:
 
 | Term | Meaning |
 |---|---|
-| **Held** | Registers submitted for sessions between the day the student joined the class and the day they left it, in which they were marked. A session whose register was never taken is not held for anyone. |
+| **Held** | Registers submitted in which the student was marked, whatever the session’s date: a newcomer marked on an earlier session’s register, to catch them up, counts too. A session whose register was never taken is not held for anyone. |
 | **Present / Absent / Excused** | The mark on the register. Excused is the only mark that opens the recording and requires it. |
 | **Attendance rate** | Present ÷ Held. |
 | **Required** | Excused sessions whose recording is published — one recording the student must play and mark complete by its due date. A recording that has been archived or unpublished is withdrawn: it counts nowhere, and the Sessions tab says so. |
