@@ -186,6 +186,14 @@ if (bundleSrc) {
   const mapRes = await fetch(new URL(`${bundleSrc}.map`, BASE), { cache: 'no-store' });
   const type = mapRes.headers.get('content-type') ?? '';
   check(/text\/html/.test(type), `the bundle's .map is not served (content-type ${type || 'none'})`);
+  /*
+   * NO NATIVE-ONLY WEIGHT. react-native-keyboard-controller has no web side,
+   * and imported on the web it brought all of Reanimated: 22% of the bundle,
+   * fetched and run on every load for nothing (KeyboardRoot.web.tsx).
+   */
+  const bundle = await (await fetch(new URL(bundleSrc, BASE))).text();
+  const nativeOnly = ['Reanimated', 'KeyboardControllerView'].filter((marker) => bundle.includes(marker));
+  check(nativeOnly.length === 0, `the bundle carries no native-only libraries${nativeOnly.length ? ` (found ${nativeOnly.join(', ')})` : ''}`);
 } else {
   check(false, 'found the bundle script tag, to ask for its .map');
 }

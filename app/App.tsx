@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { KeyboardProvider } from 'react-native-keyboard-controller';
 import {
   NavigationContainer,
   createNavigationContainerRef,
@@ -55,6 +54,7 @@ import { CrashScreen } from './src/screens/CrashScreen';
 import { USE_EMULATORS } from './src/env';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { AppNav } from './src/components/AppNav';
+import { KeyboardRoot } from './src/components/KeyboardRoot';
 import { ScreenBoundary } from './src/components/ScreenBoundary';
 import { MoreSheet } from './src/components/MoreSheet';
 import { MiniPlayer } from './src/components/MiniPlayer';
@@ -411,7 +411,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <KeyboardProvider>
+      <KeyboardRoot>
         <StatusBar style="dark" />
         {headerless ? (
           <SafeAreaView style={styles.root}>
@@ -422,7 +422,7 @@ export default function App() {
             <ScreenBoundary where="app">{content}</ScreenBoundary>
           </View>
         )}
-      </KeyboardProvider>
+      </KeyboardRoot>
     </SafeAreaProvider>
   );
 }
