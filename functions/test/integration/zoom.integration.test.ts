@@ -82,7 +82,14 @@ const ALL = [M1_SPEAKER, M1_SLIDES, M1_AUDIO, M2_SPEAKER, M2_AUDIO];
 const pick = (...files: ZoomFileInfo[]) => files.map((f) => ({ meetingUuid: f.meetingUuid, fileId: f.fileId }));
 
 /** A Zoom that holds `files`, and a copy that writes their bytes (or fails). */
-function fakeZoom(files: ZoomFileInfo[] = ALL, opts: { failCopy?: Set<string> } = {}): ZoomClient {
+function fakeZoom(
+  files: ZoomFileInfo[] = ALL,
+  opts: {
+    failCopy?: Set<string>;
+    /** Run once the copy is under way, before its bytes land: a long copy, held. */
+    midCopy?: () => Promise<void>;
+  } = {},
+): ZoomClient {
   return {
     async listMeetings(): Promise<ZoomMeetingListing[]> {
       return [];
@@ -95,6 +102,7 @@ function fakeZoom(files: ZoomFileInfo[] = ALL, opts: { failCopy?: Set<string> } 
       if (opts.failCopy?.has(downloadUrl.slice('fake://'.length))) throw new Error('network boom');
       // Write-once, like the real copy: an object already there is an error.
       if (await objectExists(key)) throw new Error(`refusing to overwrite ${key}`);
+      await opts.midCopy?.();
       await putObject(key, new Uint8Array(sizeBytes));
     },
   };
@@ -284,6 +292,78 @@ describe('the copy task', () => {
     const before = await objectInfo((await itemFor(res.recordingId, 'm1-aud')).storageKey);
     await runCopyTask(task, true, client);
     expect(await objectInfo((await itemFor(res.recordingId, 'm1-aud')).storageKey)).toEqual(before);
+  });
+
+  /*
+   * TWO DELIVERIES OF ONE COPY AT ONCE. A task is delivered at least once and a
+   * copy is long, so a second delivery can start while the first is copying.
+   * Whichever lands second found the file already ready: it deleted the bytes
+   * students were about to play, or, on its last attempt, marked the ready
+   * file failed.
+   */
+  /** A copy held mid-way until `release`, then finished or failed as `then` says. */
+  function heldCopy(then: () => Promise<void> = async () => {}) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let entered!: () => void;
+    const inside = new Promise<void>((resolve) => (entered = resolve));
+    const client = fakeZoom(ALL, {
+      midCopy: async () => {
+        entered();
+        await gate;
+        await then();
+      },
+    });
+    return { client, release, inside };
+  }
+
+  it('a delivery overlapping another leaves the file ready, its bytes in place', async () => {
+    const q = queue();
+    const res = await applyImportZoomFiles(ADMIN, { sessionId, files: pick(M1_AUDIO) }, fakeZoom(), q.enqueue);
+    const [task] = q.tasks;
+    const slow = heldCopy();
+    const first = runCopyTask(task, true, slow.client);
+    await slow.inside;
+    await runCopyTask(task, true, fakeZoom());
+    slow.release();
+    await first;
+    const item = await itemFor(res.recordingId, 'm1-aud');
+    expect(item.status).toBe('ready');
+    expect(await objectExists(item.storageKey)).toBe(true);
+  });
+
+  it('a last attempt that fails after another delivery landed the file leaves it ready', async () => {
+    const q = queue();
+    const res = await applyImportZoomFiles(ADMIN, { sessionId, files: pick(M1_AUDIO) }, fakeZoom(), q.enqueue);
+    const [task] = q.tasks;
+    const slow = heldCopy(async () => {
+      throw new Error('network boom');
+    });
+    const first = runCopyTask(task, true, slow.client);
+    await slow.inside;
+    await runCopyTask(task, true, fakeZoom());
+    slow.release();
+    await first;
+    const item = await itemFor(res.recordingId, 'm1-aud');
+    expect(item).toMatchObject({ status: 'ready', failReason: null });
+    expect(await objectExists(item.storageKey)).toBe(true);
+  });
+
+  /*
+   * REMOVED WHILE ITS LAST ATTEMPT WAS COPYING: the bytes landed after the
+   * file was gone, and nothing would ever delete them.
+   */
+  it('a file removed while its last attempt was copying leaves nothing in the bucket', async () => {
+    const q = queue();
+    const res = await applyImportZoomFiles(ADMIN, { sessionId, files: pick(M1_AUDIO) }, fakeZoom(), q.enqueue);
+    const item = await itemFor(res.recordingId, 'm1-aud');
+    const slow = heldCopy();
+    const attempt = runCopyTask(q.tasks[0], true, slow.client);
+    await slow.inside;
+    await removeMedia(res.recordingId, item.id);
+    slow.release();
+    await attempt;
+    expect(await objectExists(item.storageKey)).toBe(false);
   });
 
   it('deletes what it wrote when the file was removed while it waited', async () => {

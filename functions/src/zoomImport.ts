@@ -328,14 +328,18 @@ async function queueCopies(recordingId: string, itemIds: string[], enqueue: Enqu
 
 // ------------------------------------------------------------- the copy --
 
-/** Mark an item failed, with the reason staff read; the status settles with it (`writeItem`). */
+/**
+ * Mark an item failed, with the reason staff read; the status settles with it
+ * (`writeItem`). Only an item still copying: another delivery of the same
+ * copy may have landed it meanwhile, and a ready file is not failed.
+ */
 async function markFailed(recordingId: string, itemId: string, reason: string): Promise<void> {
   const db = getFirestore();
   const ref = db.collection(COLLECTIONS.recordings).doc(recordingId);
   await db.runTransaction(async (tx) => {
     const rec = (await tx.get(ref)).data() as RecordingDoc | undefined;
     const item = rec?.media[itemId];
-    if (!rec || !item) return;
+    if (!rec || item?.status !== 'copying') return;
     writeItem(tx, ref, rec, itemId, { ...item, status: 'failed', failReason: reason });
   });
 }
@@ -371,9 +375,16 @@ export async function runCopyTask(task: CopyTask, finalAttempt: boolean, client:
       await markFailed(task.recordingId, task.itemId, 'This file is no longer in Zoom.');
       return;
     }
-    // Write-once, like every upload: whatever an earlier attempt left goes first.
-    await deleteObject(item.storageKey);
-    await client.copyToMediaStore(found.downloadUrl, item.storageKey, found.file.sizeBytes, item.contentType);
+    // ANOTHER DELIVERY MAY HAVE COPIED IT: a task arrives at least once, and
+    // a copy is long. An object appears only once it is whole, so one of the
+    // file's size is the copy done, and it is settled rather than deleted from
+    // under whoever is playing it. Anything else in the way goes first: the
+    // copier writes only where nothing is.
+    const there = await head(item.storageKey);
+    if (there?.sizeBytes !== found.file.sizeBytes) {
+      if (there) await deleteObject(item.storageKey);
+      await client.copyToMediaStore(found.downloadUrl, item.storageKey, found.file.sizeBytes, item.contentType);
+    }
     await settleCopy(task.recordingId, task.itemId, found.file.durationSec, capFor(found.file));
   } catch (e) {
     if (!finalAttempt) throw e;
@@ -388,26 +399,40 @@ export async function runCopyTask(task: CopyTask, finalAttempt: boolean, client:
 /**
  * Record what a copy actually put in the bucket: the item becomes `ready` with
  * the size read from the bucket and the length Zoom reported. An object over
- * the cap is deleted and its item removed rather than kept. Only an item still
- * `copying` is settled, so a task replayed later cannot rewrite a ready one.
+ * the cap is deleted and its item removed rather than kept.
+ *
+ * A file another delivery already made ready is left as it is. One removed
+ * while the copy ran has nothing pointing at what the copy wrote, so that
+ * goes: on the last attempt nothing else would ever delete it.
  */
 async function settleCopy(recordingId: string, itemId: string, durationSec: number | null, maxBytes: number) {
   const db = getFirestore();
   const ref = db.collection(COLLECTIONS.recordings).doc(recordingId);
+  const key = mediaStorageKey(recordingId, itemId);
   const item = ((await ref.get()).data() as RecordingDoc | undefined)?.media[itemId];
-  if (item?.status !== 'copying') throw new Error('That file is not waiting to be confirmed.');
-  const object = await head(item.storageKey);
+  if (!item) {
+    await deleteObject(key);
+    return;
+  }
+  if (item.status === 'ready') return;
+  const object = await head(key);
   if (!object) throw new Error('No file found for that copy.');
   const tooLarge = object.sizeBytes > maxBytes;
-  if (tooLarge) await deleteObject(item.storageKey);
-  await db.runTransaction(async (tx) => {
+  if (tooLarge) await deleteObject(key);
+  const removed = await db.runTransaction(async (tx) => {
     const fresh = (await tx.get(ref)).data() as RecordingDoc | undefined;
     const current = fresh?.media[itemId];
-    if (!fresh || !current) throw new Error('That file was removed.');
+    if (!fresh || !current) return true;
+    if (current.status === 'ready') return false;
     writeItem(tx, ref, fresh, itemId, tooLarge
       ? null
       : { ...current, status: 'ready', failReason: null, sizeBytes: object.sizeBytes, durationSec });
+    return false;
   });
+  if (removed) {
+    await deleteObject(key);
+    return;
+  }
   if (tooLarge) throw new Error(`That file is too large (${Math.round(maxBytes / 2 ** 20)} MB at most).`);
 }
 
