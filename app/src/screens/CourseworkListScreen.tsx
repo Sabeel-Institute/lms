@@ -7,7 +7,7 @@ import {
   unbreakableDate,
   type CourseworkCounts,
 } from '@sabeel/shared';
-import { Button, Empty, Grid, Screen, SectionTitle } from '../components/ui';
+import { Empty, Grid, IconButton, Screen, SectionTitle, useGridCell } from '../components/ui';
 import {
   useCourseCourseworkState,
   useCourseGradesState,
@@ -77,12 +77,11 @@ export function CourseworkListScreen({
       subtitle={enrolled === undefined ? undefined : `${enrolled} ${enrolled === 1 ? 'student' : 'students'}`}
       parent={{ label: cls.name, testID: 'up-to-course-from-coursework', onPress: onOpenCourse }}
       width="list"
+      // A plus, as every list adds; only while the course is running.
+      actions={
+        cls.effectiveActive ? <IconButton testID="coursework-new" icon="add" label="New assignment" onPress={onNew} /> : undefined
+      }
     >
-      {cls.effectiveActive ? (
-        <View style={styles.actions}>
-          <Button testID="coursework-new" label="New assignment" hug onPress={onNew} />
-        </View>
-      ) : null}
       {state === null ? (
         <Empty>Checking this course’s assignments…</Empty>
       ) : all.length === 0 ? (
@@ -117,13 +116,14 @@ export function CourseworkListScreen({
 
 function CourseworkCard({ cw, counts, onOpen }: { cw: CourseworkRow; counts: CourseworkCounts | null; onOpen: () => void }) {
   const draft = cw.status === 'draft';
+  const inGrid = useGridCell();
   return (
     <Pressable
       testID={`coursework-${cw.title}`}
       accessibilityRole="button"
       accessibilityLabel={`Open ${cw.title}`}
       onPress={onOpen}
-      style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [styles.card, inGrid, pressed ? styles.pressed : null]}
     >
       <Text style={styles.title}>{cw.title}</Text>
       <Text style={styles.meta}>
@@ -152,7 +152,6 @@ function CourseworkCard({ cw, counts, onOpen }: { cw: CourseworkRow; counts: Cou
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', marginBottom: spacing(4) },
   card: {
     flexGrow: 1,
     backgroundColor: t.bg.surface,

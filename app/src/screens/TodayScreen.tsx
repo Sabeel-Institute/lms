@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { INSTITUTE_TIMEZONE, todayInZone } from '@sabeel/shared';
-import { Empty, Grid, Notice, Screen } from '../components/ui';
+import { Empty, Grid, Notice, Screen, useGridCell } from '../components/ui';
 import { PushNudge } from '../components/PushNudge';
 import { KIND_ORDER, type TodayItem, type TodayKind, type TodayQueue } from '../today';
 import { getTheme, spacing } from '../theme';
@@ -129,9 +130,9 @@ export function TodayScreen({
               </Text>
               <Text style={styles.groupBlurb}>{h.blurb}</Text>
             </View>
-            <Grid min={330}>
+            <Grid min={330} rows>
               {rows.map((item) => (
-                <QueueCard
+                <QueueRow
                   key={item.key}
                   item={item}
                   onPress={() =>
@@ -151,7 +152,10 @@ export function TodayScreen({
   );
 }
 
-/** What pressing this card does, in the words the card shows. */
+/**
+ * What pressing a row does, for a screen reader. The eye has it from the
+ * section heading the row sits under, so the row itself does not repeat it.
+ */
 const ACTION: Record<TodayKind, string> = {
   attendance: 'Take attendance',
   closing: 'See who has listened',
@@ -160,8 +164,14 @@ const ACTION: Record<TodayKind, string> = {
   grading: 'Grade',
 };
 
-function QueueCard({ item, onPress }: { item: TodayItem; onPress: () => void }) {
+/**
+ * TWO LINES: what it is, then its course and what is true of it alone ("Met
+ * 4 days ago"), and a chevron that says it opens. The action word each card
+ * once ended on repeated its section's heading.
+ */
+function QueueRow({ item, onPress }: { item: TodayItem; onPress: () => void }) {
   const urgent = item.kind === 'attendance';
+  const inGrid = useGridCell();
   return (
     <Pressable
       testID={`today-${item.key}`}
@@ -174,22 +184,22 @@ function QueueCard({ item, onPress }: { item: TodayItem; onPress: () => void }) 
        * details so two cards in different sections stopped repeating their own
        * heading left those two cards announcing the identical sentence.
        */
-      accessibilityLabel={`${HEADING[item.kind].label}: ${item.title}, ${item.courseName}. ${item.detail} ${item.action ?? ACTION[item.kind]}.`}
+      accessibilityLabel={`${HEADING[item.kind].label}: ${item.title}, ${item.courseName}. ${item.detail}. ${item.action ?? ACTION[item.kind]}.`}
       onPress={onPress}
       style={({ pressed }) => [
-        styles.card,
-        urgent ? styles.cardUrgent : null,
-        pressed ? styles.cardPressed : null,
+        styles.row,
+        inGrid,
+        urgent ? styles.rowUrgent : null,
+        pressed ? styles.rowPressed : null,
       ]}
     >
-      <Text style={styles.course} numberOfLines={1}>
-        {item.courseName}
-      </Text>
-      <Text style={styles.title} numberOfLines={2}>
-        {item.title}
-      </Text>
-      <Text style={styles.detail}>{item.detail}</Text>
-      <Text style={styles.action}>{item.action ?? ACTION[item.kind]} ›</Text>
+      <View style={styles.rowText}>
+        <Text style={styles.title} numberOfLines={2}>
+          {item.title}
+        </Text>
+        <Text style={styles.caption}>{[item.courseName, item.detail].filter(Boolean).join(' · ')}</Text>
+      </View>
+      <MaterialIcons name="chevron-right" size={22} color={t.text.muted} />
     </Pressable>
   );
 }
@@ -209,17 +219,19 @@ const styles = StyleSheet.create({
   // captions, borders and dividers.
   groupBlurb: { fontSize: 13, color: t.text.secondary, marginTop: 2 },
   note: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(3) },
-  card: {
-    // Fills the grid cell it is given, so a row of these ends level instead
-    // of ragged with its actions at three different heights.
+  row: {
+    // Fills the grid cell it is given, so cards side by side end level.
     flexGrow: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(2),
     backgroundColor: t.bg.surface,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: t.border.subtle,
-    padding: spacing(4),
-    marginBottom: spacing(3),
-    minHeight: 132,
+    paddingVertical: spacing(3),
+    paddingLeft: spacing(4),
+    paddingRight: spacing(2),
   },
   // The tint behind an ATTENDANCE row — not behind every blocking one. An
   // unpublished recording is blocking too and gets no tint, because it is a
@@ -228,10 +240,9 @@ const styles = StyleSheet.create({
   // on you" fill; `dangerSoft` is the tint of "remove this person", and wearing
   // it on the card a teacher sees at the start of every class both overstated
   // the problem and spent the colour that has to mean something worse.
-  cardUrgent: { borderColor: t.accent.gold, backgroundColor: t.bg.goldSoft },
-  cardPressed: { opacity: 0.8 },
-  course: { fontSize: 12, fontWeight: '700', color: t.text.secondary, letterSpacing: 0.4 },
-  title: { fontSize: 16, fontWeight: '700', color: t.text.primary, marginTop: 2 },
-  detail: { fontSize: 13, color: t.text.secondary, marginTop: spacing(2), flex: 1 },
-  action: { fontSize: 13, fontWeight: '700', color: t.text.accent, marginTop: spacing(3) },
+  rowUrgent: { borderColor: t.accent.gold, backgroundColor: t.bg.goldSoft },
+  rowPressed: { opacity: 0.8 },
+  rowText: { flex: 1, minWidth: 0 },
+  title: { fontSize: 16, fontWeight: '700', color: t.text.primary },
+  caption: { fontSize: 13, color: t.text.secondary, marginTop: 2 },
 });

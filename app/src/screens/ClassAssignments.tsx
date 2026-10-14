@@ -9,9 +9,10 @@ import {
   todayInZone,
   unbreakableDate,
   workState,
+  type CourseworkDoc,
   type WorkState,
 } from '@sabeel/shared';
-import { Card, Empty } from '../components/ui';
+import { CountsLine, Empty, Grid, useGridCell } from '../components/ui';
 import { useResolvedDocs } from '../resolveDocs';
 import type { SubmissionRow } from '../coursework';
 import type { CourseRow } from '../structure';
@@ -69,58 +70,66 @@ export function ClassAssignments({
   if (resolving && rows.length === 0) return <Empty>Checking your assignments…</Empty>;
   return (
     <>
-      <Card>
-        <View style={styles.tally}>
-          <Tally label="To do" value={tally.toDo} />
-          <Tally label="Handed in" value={tally.handedIn} />
-          <Tally label="Missed" value={tally.missed} />
-        </View>
-      </Card>
-      {rows.map(({ s, cw }) => {
-        const st = workState(s, today, cls.effectiveActive);
-        const when =
-          st === 'toDo'
-            ? `Hand in by ${unbreakableDate(s.dueDate)}`
-            : st === 'pastDue'
-              ? `Was due ${unbreakableDate(s.dueDate)} · accepted until ${unbreakableDate(closesOn(s))}`
-              : `${isOverdue(s.dueDate, today) ? 'Was due' : 'Due'} ${unbreakableDate(s.dueDate)}`;
-        return (
-          <Pressable
-            key={s.id}
-            testID={`class-work-${cw.title}`}
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${cw.title}`}
-            onPress={() => onOpenWork(s.courseworkId)}
-            style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
-          >
-            <View style={styles.rowMain}>
-              <Text style={styles.title}>{cw.title}</Text>
-              <Text style={styles.date}>{when}</Text>
-            </View>
-            <Text style={styles.status}>
-              {st === 'returned' && s.returned?.grade ? gradeText(s.returned.grade, cw.grading) : STATE_WORD[st]}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {/* What is in and what was missed. What is still to hand in is the
+          notice above the tabs, in words. */}
+      <CountsLine
+        counts={[
+          { value: tally.handedIn, label: 'handed in' },
+          { value: tally.missed, label: 'missed' },
+        ]}
+      />
+      <View style={styles.list}>
+        <Grid min={330} rows>
+          {rows.map(({ s, cw }) => (
+            <WorkRow key={s.id} s={s} cw={cw} st={workState(s, today, cls.effectiveActive)} today={today} onOpenWork={onOpenWork} />
+          ))}
+        </Grid>
+      </View>
     </>
   );
 }
 
-function Tally({ label, value }: { label: string; value: number }) {
+function WorkRow({
+  s,
+  cw,
+  st,
+  today,
+  onOpenWork,
+}: {
+  s: SubmissionRow;
+  cw: CourseworkDoc;
+  st: WorkState;
+  today: string;
+  onOpenWork: (courseworkId: string) => void;
+}) {
+  const inGrid = useGridCell();
+  const when =
+    st === 'toDo'
+      ? `Hand in by ${unbreakableDate(s.dueDate)}`
+      : st === 'pastDue'
+        ? `Was due ${unbreakableDate(s.dueDate)} · accepted until ${unbreakableDate(closesOn(s))}`
+        : `${isOverdue(s.dueDate, today) ? 'Was due' : 'Due'} ${unbreakableDate(s.dueDate)}`;
   return (
-    <View style={styles.tallyItem}>
-      <Text style={styles.tallyValue}>{value}</Text>
-      <Text style={styles.tallyLabel}>{label}</Text>
-    </View>
+    <Pressable
+      testID={`class-work-${cw.title}`}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${cw.title}`}
+      onPress={() => onOpenWork(s.courseworkId)}
+      style={({ pressed }) => [styles.row, inGrid, pressed ? styles.pressed : null]}
+    >
+      <View style={styles.rowMain}>
+        <Text style={styles.title}>{cw.title}</Text>
+        <Text style={styles.date}>{when}</Text>
+      </View>
+      <Text style={styles.status}>
+        {st === 'returned' && s.returned?.grade ? gradeText(s.returned.grade, cw.grading) : STATE_WORD[st]}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  tally: { flexDirection: 'row', justifyContent: 'space-around' },
-  tallyItem: { alignItems: 'center' },
-  tallyValue: { fontSize: 24, fontWeight: '700', color: t.text.primary },
-  tallyLabel: { fontSize: 12, color: t.text.secondary, letterSpacing: 0.6, textTransform: 'uppercase' },
+  list: { marginTop: spacing(3) },
   row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -129,7 +138,6 @@ const styles = StyleSheet.create({
     backgroundColor: t.bg.surface,
     borderRadius: 12,
     padding: spacing(4),
-    marginTop: spacing(2),
     borderWidth: 1,
     borderColor: t.border.subtle,
   },

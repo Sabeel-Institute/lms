@@ -27,6 +27,7 @@ export function Select({
   options,
   onChange,
   testID,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -34,6 +35,7 @@ export function Select({
   onChange: (next: string) => void;
   /** The field itself; each row in the open sheet gets `${testID}-option-${value}`. */
   testID?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.value === value);
@@ -44,8 +46,9 @@ export function Select({
         accessibilityRole="button"
         accessibilityLabel={`${label}: ${current?.label ?? 'none'}`}
         aria-expanded={open}
+        disabled={disabled}
         onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.field, pressed ? styles.fieldPressed : null]}
+        style={({ pressed }) => [styles.field, pressed ? styles.fieldPressed : null, disabled ? styles.fieldDisabled : null]}
       >
         <Text style={styles.value} numberOfLines={1}>
           {current?.label ?? '—'}
@@ -55,7 +58,7 @@ export function Select({
         <Text style={styles.caret}>▾</Text>
       </Pressable>
 
-      <Sheet visible={open} title={label} onClose={() => setOpen(false)}>
+      <Sheet visible={open} title={label} onClose={() => setOpen(false)} closeAt="corner">
         {options.map((o) => (
           <SheetOption
             key={o.value}
@@ -97,6 +100,7 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   fieldPressed: { backgroundColor: t.bg.surface },
+  fieldDisabled: { opacity: 0.5 },
   value: { flexShrink: 1, fontSize: 15, color: t.text.primary },
   caret: { fontSize: 13, color: t.text.secondary },
 });

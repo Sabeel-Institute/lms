@@ -10,7 +10,6 @@ import {
   Grid,
   Notice,
   Screen,
-  SectionTitle,
   useAddAction,
 } from '../components/ui';
 import { DateField } from '../components/DateField';
@@ -150,13 +149,12 @@ export function SessionsScreen({
         </AddAction>
       }
     >
-      <SectionTitle>Sessions{sessionsState === null ? '' : ` (${sessions.length})`}</SectionTitle>
       {sessions.length === 0 ? (
         <Empty>
           {sessionsState === null ? 'Checking the sessions…' : 'No sessions yet. Add one for each class meeting.'}
         </Empty>
       ) : (
-        <Grid min={330}>
+        <Grid min={330} rows>
           {sessions.map((s) => (
             <Pressable
               key={s.id}
@@ -174,14 +172,7 @@ export function SessionsScreen({
               <Card>
                 <Text style={styles.title}>{s.title}</Text>
                 <Text style={styles.date}>{s.date}</Text>
-                <View style={styles.tags}>
-                  <Tag
-                    on={!!s.attendanceSubmittedAt}
-                    onLabel="Attendance taken"
-                    offLabel="Attendance not taken"
-                  />
-                  <Tag on={!!s.recordingId} onLabel="Recording added" offLabel="No recording" />
-                </View>
+                <Outstanding session={s} />
               </Card>
             </Pressable>
           ))}
@@ -192,20 +183,24 @@ export function SessionsScreen({
 }
 
 /**
- * One step of a session's progress: done, or still to do.
- *
- * THE OUTSTANDING STATE IS THE LOUD ONE. It was the other way round — done wore
- * the brand accent and outstanding was grey-on-grey — so a screen of finished
- * sessions was a wall of pink and today's class, with attendance not taken and
- * no recording, was the palest card on the page. Staff read this list to find
- * work; a list that highlights the finished rows points them away from it.
+ * WHAT IS STILL TO DO, and nothing about what is done. Staff read this list to
+ * find work: a tag on every finished step made a term of finished sessions a
+ * wall of tags, and the one class still waiting on its register no louder
+ * than the rest. A class marked not recorded owes no recording.
  */
-function Tag({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLabel: string }) {
+function Outstanding({ session: s }: { session: SessionRow }) {
+  const todo = [
+    s.attendanceSubmittedAt ? null : 'Attendance not taken',
+    s.recordingId || s.notRecorded ? null : 'No recording',
+  ].filter((x): x is string => x !== null);
+  if (todo.length === 0) return null;
   return (
-    <View style={[styles.tag, on ? styles.tagDone : styles.tagTodo]}>
-      <Text style={[styles.tagText, on ? styles.tagTextDone : styles.tagTextTodo]}>
-        {on ? onLabel : offLabel}
-      </Text>
+    <View style={styles.tags}>
+      {todo.map((label) => (
+        <View key={label} style={styles.tag}>
+          <Text style={styles.tagText}>{label}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -215,12 +210,15 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '600', color: t.text.primary },
   date: { fontSize: 13, color: t.text.secondary, marginTop: 2 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), marginTop: spacing(3) },
-  tag: { paddingVertical: spacing(1), paddingHorizontal: spacing(3), borderRadius: 999, borderWidth: 1 },
   // Gold, the app's "waiting on you" register — the same one the work queue's
-  // blocking card wears.
-  tagTodo: { backgroundColor: t.bg.goldSoft, borderColor: t.accent.gold },
-  tagDone: { backgroundColor: 'transparent', borderColor: t.border.subtle },
-  tagText: { fontSize: 12, fontWeight: '600' },
-  tagTextTodo: { color: t.accent.goldText },
-  tagTextDone: { color: t.text.secondary },
+  // blocking row wears.
+  tag: {
+    paddingVertical: spacing(1),
+    paddingHorizontal: spacing(3),
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: t.bg.goldSoft,
+    borderColor: t.accent.gold,
+  },
+  tagText: { fontSize: 12, fontWeight: '600', color: t.accent.goldText },
 });

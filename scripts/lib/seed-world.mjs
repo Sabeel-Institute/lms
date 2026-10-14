@@ -748,6 +748,9 @@ export async function seedWorld({ db, auth, browser, base }) {
     HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE,
     /** A classmate whose hand-in on "Memorize the first hikma" is still to grade. */
     TO_GRADE: students[2],
+    /** The long-named course, and an active student not in it: a row its roster's picker offers. */
+    LONG_COURSE_NAME,
+    UNENROLLED: students[4],
   };
 }
 

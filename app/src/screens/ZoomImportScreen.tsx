@@ -11,7 +11,8 @@ import {
   type ZoomFileRow,
   type ZoomMeetingRow,
 } from '@sabeel/shared';
-import { Button, Card, Chips, Empty, Field, Notice, Row, Screen } from '../components/ui';
+import { Button, Card, Chips, Empty, Field, IconButton, Notice, Row, Screen } from '../components/ui';
+import { Sheet, SheetSection } from '../components/Sheet';
 import { DateField } from '../components/DateField';
 import { importZoomFiles, listZoomRecordings } from '../zoom';
 import {
@@ -106,6 +107,7 @@ export function ZoomImportScreen({
   const [formats, setFormats] = useState<ZoomFormatFilter>('all');
   const [hideShort, setHideShort] = useState(true);
   const [sessionDayOnly, setSessionDayOnly] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [chosen, setChosen] = useState<Set<string>>(() => new Set());
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -178,45 +180,60 @@ export function ZoomImportScreen({
       }
     })();
 
+  // What the filters have changed from how the picker opened, in words, so a
+  // list narrowed behind the ⚙ never reads as everything there is.
+  const narrowedBy = [
+    status === 'available' ? null : status === 'imported' ? 'imported only' : 'imported too',
+    formats === 'all' ? null : formats === 'video' ? 'video only' : 'audio only',
+    hideShort ? null : 'short recordings too',
+  ].filter(Boolean);
+
   return (
-    <Screen title="Import from Zoom" subtitle={`${session.title} · ${cls.name}`}>
-      <Card>
-        <DateField label="From" value={from} onChange={setFrom} />
-        <DateField label="To" value={to} onChange={setTo} />
-        <Button
-          testID="zoom-load"
-          label="Load recordings"
-          busy={loading}
-          onPress={() => void load({ from, to })}
-        />
-      </Card>
-
-      <Field label="Search by title" value={search} onChangeText={setSearch} placeholder="topic…" />
-      <View style={styles.filter}>
-        <Chips value={status} testIdPrefix="zoom-filter" options={STATUS_FILTERS} onChange={setStatus} />
-      </View>
-      <View style={styles.filter}>
-        <Chips value={formats} testIdPrefix="zoom-format" options={FORMAT_FILTERS} onChange={setFormats} />
-      </View>
-
-      {/* ROWS OF THEIR OWN, AND A SHAPE OF THEIR OWN. These are independent
-          toggles, not further members of the one-of-three filters above them —
-          drawn as the same raspberry pill, "available" and "hide <2 min" read as
-          two selections in one group. A tick and a square say "on/off"; a
-          filled pill says "chosen". */}
+    // No title of its own: the header says "Import from Zoom", and this line
+    // says which session the files go into.
+    <Screen subtitle={`${session.title} · ${cls.name}`}>
+      {/* THE SESSION'S DAY FIRST, AND MOSTLY ALL THAT IS NEEDED: the range is
+          asked for only once the picker is looking beyond that day. A tick
+          and a square say "on/off"; a filled pill says "chosen". */}
       <Check
         testID="zoom-session-day"
         on={sessionDayOnly}
         onToggle={() => setSessionDayOnly((v) => !v)}
         label={`Only recordings from this session's date (${unbreakableDate(session.date)})`}
       />
-      <Check
-        testID="zoom-hide-short"
-        on={hideShort}
-        onToggle={() => setHideShort((v) => !v)}
-        label="Hide recordings under 2 minutes"
-        accessibilityLabel="Hide recordings under two minutes"
-      />
+      {sessionDayOnly ? null : (
+        <Card>
+          <DateField label="From" value={from} onChange={setFrom} />
+          <DateField label="To" value={to} onChange={setTo} />
+          <Button
+            testID="zoom-load"
+            label="Load recordings"
+            busy={loading}
+            onPress={() => void load({ from, to })}
+          />
+        </Card>
+      )}
+
+      <View style={styles.searchRow}>
+        <View style={styles.search}>
+          <Field label="Search by title" value={search} onChangeText={setSearch} placeholder="topic…" />
+        </View>
+        <IconButton testID="zoom-filters" icon="tune" label="Filters" onPress={() => setFiltersOpen(true)} />
+      </View>
+      {narrowedBy.length > 0 ? <Text style={styles.narrowed}>{`Showing ${narrowedBy.join(', ')}.`}</Text> : null}
+      <Sheet visible={filtersOpen} title="Filters" onClose={() => setFiltersOpen(false)} closeAt="corner">
+        <SheetSection label="Recordings" />
+        <Chips value={status} testIdPrefix="zoom-filter" options={STATUS_FILTERS} onChange={setStatus} />
+        <SheetSection label="Formats" />
+        <Chips value={formats} testIdPrefix="zoom-format" options={FORMAT_FILTERS} onChange={setFormats} />
+        <Check
+          testID="zoom-hide-short"
+          on={hideShort}
+          onToggle={() => setHideShort((v) => !v)}
+          label="Hide recordings under 2 minutes"
+          accessibilityLabel="Hide recordings under two minutes"
+        />
+      </Sheet>
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       {/* NOT BOTH. `rows` stays null when the request fails, so the empty state
@@ -230,7 +247,7 @@ export function ZoomImportScreen({
         // be what is hiding that day's recording.
         <Empty>
           {sessionDayOnly
-            ? `No recordings match on ${unbreakableDate(session.date)}. Change the filters above, or untick "Only recordings from this session's date" to see the whole range.`
+            ? `No recordings match on ${unbreakableDate(session.date)}. Change the filters, or untick "Only recordings from this session's date" to see the whole range.`
             : 'No recordings match. Widen the date range or the filters, then Load.'}
         </Empty>
       ) : (
@@ -416,7 +433,9 @@ function FileRow({
 }
 
 const styles = StyleSheet.create({
-  filter: { marginTop: spacing(2), marginBottom: spacing(2) },
+  searchRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing(2) },
+  search: { flex: 1, minWidth: 0 },
+  narrowed: { fontSize: 13, color: t.text.secondary, marginTop: spacing(2) },
   importedRow: { minHeight: 44, justifyContent: 'center' },
   toggle: {
     flexDirection: 'row',

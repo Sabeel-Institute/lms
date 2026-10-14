@@ -285,7 +285,7 @@ export function Attachments({
         </View>
       ))}
       {error ? <Text style={[styles.meta, styles.failed]}>{error}</Text> : null}
-      <Sheet visible={choosing} title="Where from?" onClose={() => setChoosing(false)} closeLabel="Cancel">
+      <Sheet visible={choosing} title="Where from?" onClose={() => setChoosing(false)} closeLabel="Cancel" closeAt="corner">
         <SheetOption
           testID={`attachments-files-${target}`}
           label="Choose files"

@@ -9,7 +9,7 @@ import {
   todayInZone,
   unbreakableDate,
 } from '@sabeel/shared';
-import { Chips, Empty, Grid, Screen, Segmented } from '../components/ui';
+import { Chips, Empty, Grid, Screen, Segmented, useGridCell } from '../components/ui';
 import { StaffStudentWork } from './StaffStudentWork';
 import { LEDGER_FILTERS, useStudentLedger, type LedgerFilter, type StudentLedgerItem } from '../ledger';
 import { useCourseRecordings } from '../recordings';
@@ -93,31 +93,41 @@ export function StudentLedgerScreen({
       ) : rows.length === 0 ? (
         <Empty>No required recordings here.</Empty>
       ) : (
-        <Grid min={330}>
+        <Grid min={330} rows>
           {rows.map((r) => (
-            <View key={r.recordingId} style={styles.row}>
-              <View style={styles.rowMain}>
-                <Text style={styles.title}>{r.title}</Text>
-                {r.source === 'override' ? (
-                  <Text style={styles.override}>Override: {r.overrideReason}</Text>
-                ) : null}
-              </View>
-              {/* Wrapped in its own end-aligned block, like the student's home
-                  card. As a bare Text a wrapped status fell to the left of its
-                  own line, so a four-row list showed the same fact in two
-                  places. */}
-              <View style={styles.rowMeta}>
-                <Text style={[styles.status, styleFor(r, today, playable)]}>
-                  {statusLabel(r, r.verb, today, playable)}
-                </Text>
-              </View>
-            </View>
+            <RequiredRow key={r.recordingId} row={r} today={today} playable={playable} />
           ))}
         </Grid>
       )}
       </>
       )}
     </Screen>
+  );
+}
+
+/** One recording required of the student: its title, any override, and where it stands. */
+function RequiredRow({
+  row: r,
+  today,
+  playable,
+}: {
+  row: StudentLedgerItem & { title: string; verb: 'Watch' | 'Listen' };
+  today: string;
+  playable: boolean;
+}) {
+  return (
+    <View style={[styles.row, useGridCell()]}>
+      <View style={styles.rowMain}>
+        <Text style={styles.title}>{r.title}</Text>
+        {r.source === 'override' ? <Text style={styles.override}>Override: {r.overrideReason}</Text> : null}
+      </View>
+      {/* Wrapped in its own end-aligned block, like the student's home card.
+          As a bare Text a wrapped status fell to the left of its own line, so a
+          four-row list showed the same fact in two places. */}
+      <View style={styles.rowMeta}>
+        <Text style={[styles.status, styleFor(r, today, playable)]}>{statusLabel(r, r.verb, today, playable)}</Text>
+      </View>
+    </View>
   );
 }
 

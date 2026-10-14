@@ -37,6 +37,32 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-14 — **Room for what a screen is for** (Faisal approved all
+  twenty-one proposals of an app-wide sweep, with the defects it found, as one
+  batch). Collections draw as a phone draws a list: on one column a list of
+  people or entries is one card of rows divided by hairlines (`Grid rows`,
+  `RowList`), and a card in a grid keeps no margin of its own, so the gap
+  between cards is the grid's alone. Adding is a plus beside what it adds to;
+  changing a name or a session is a pencil by its title, opening a sheet;
+  what takes a thing away — archive, unpublish, disable, delete — waits
+  under a ⋮, and Publish, Play, Grade and Hand in stay buttons. Counts are one
+  line (`CountsLine`): bold numbers joined to their words, the danger colour
+  only on a missed count above zero. Headings, subtitles and status chips that
+  repeated what the header, the tab or the section already said are gone. The
+  player's title is one line that scrolls when it is long, pausing at each end
+  and still under reduced motion, and opens whole when tapped (Faisal's
+  design); its speed is one dropdown beside the times. Today's rows are two
+  lines with no action words, the section heading being the action (his
+  choice); the library's whole row plays, with a large play icon as the cue
+  and Progress a small icon outside it (his choice). The student's assignment
+  says when it went in, and whether late, on the heading of the work, with
+  Take back beside it. The assignment form loses Cancel: its course name is a
+  way up, which is also the only way off the page when it was opened from a
+  link. Defects fixed with it: the library's date broke at its hyphens;
+  To do's dates wrapped under the icon; emails broke at "example." (now one
+  line, the part before the @ giving way first); the manual said "Also
+  played" for the ledger's "Also listened"; the course's archived-access
+  label was cut short at 320 px (now a switch).
 - 2026-10-13 — **Old data is migrated, never accommodated** (Faisal: "greenfield
   mindset"). After the library's white page, the plan to catch documents
   older than the code included reading them around their gaps: defaults for

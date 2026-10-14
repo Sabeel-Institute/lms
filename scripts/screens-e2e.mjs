@@ -287,7 +287,7 @@ await resetEmulators();
 const browser = await chromium.launch();
 const world = await seedWorld({ db, auth, browser, base: BASE });
 const {
-  STUDENT, DISABLED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived,
+  STUDENT, DISABLED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived, LONG_COURSE_NAME, UNENROLLED,
   HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE, TO_GRADE,
 } = world;
 
@@ -1101,7 +1101,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 42;
+const STAFF_SCREENS = 50;
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
@@ -1134,14 +1134,21 @@ async function tourStaff(page, tag) {
   await visit('staff', async () => {
     await tap(byId(page, 'tab-people'));
     await tap(byId(page, 'segment-staff'));
+  }, 'staff-actions-manager@oursabeel.com');
+  // A colleague's menu, OPEN: the role and access choices exist in no other
+  // state.
+  await visit('staff-actions', async () => {
+    await tap(byId(page, 'tab-people'));
+    await tap(byId(page, 'segment-staff'));
+    await tap(byId(page, 'staff-actions-manager@oursabeel.com'));
   }, 'staff-role-manager@oursabeel.com');
   // The staff list's disabled section EXPANDED — the same closed section the
-  // student list has, and the only card whose action row reads Re-enable.
+  // student list has.
   await visit('staff-disabled', async () => {
     await tap(byId(page, 'tab-people'));
     await tap(byId(page, 'segment-staff'));
     await tap(byId(page, 'staff-disabled'));
-  }, 'staff-access-yusuf.rahman@oursabeel.com');
+  }, 'staff-actions-yusuf.rahman@oursabeel.com');
   // The create sheet OPEN — a form that exists in no other state, and the one
   // affordance that is absent entirely on a native build.
   await visit('students-add', async () => {
@@ -1163,6 +1170,12 @@ async function tourStaff(page, tag) {
     await tap(byId(page, 'tab-people'));
     await tap(byId(page, `student-open-${STUDENT.email}`));
   }, `student-history-${HISTORY_ROW}`);
+  // The student's menu, OPEN, an admin's: all three choices.
+  await visit('student-actions', async () => {
+    await tap(byId(page, 'tab-people'));
+    await tap(byId(page, `student-open-${STUDENT.email}`));
+    await tap(byId(page, 'student-actions'));
+  }, 'student-access');
   await visit('cohorts', () => tap(byId(page, 'tab-courses')), 'cohorts-add');
   /*
    * THE CREATE SHEETS, OPEN — these three, and `students-add` above.
@@ -1192,7 +1205,25 @@ async function tourStaff(page, tag) {
     await tap(byId(page, 'cohort-open-Autumn 2026'));
     await tap(byId(page, 'courses-add'));
   }, 'course-create');
+  // The rename sheets, OPEN: the name field and Save live nowhere else.
+  await visit('cohort-rename', async () => {
+    await tap(byId(page, 'tab-courses'));
+    await tap(byId(page, 'cohort-open-Autumn 2026'));
+    await tap(byId(page, 'cohort-rename-open'));
+  }, 'cohort-rename-save');
   await visit('course', openCourse, 'nav-sessions');
+  await visit('course-rename', async () => {
+    await openCourse();
+    await tap(byId(page, 'course-rename-open'));
+  }, 'course-rename-save');
+  // The roster's picker, OPEN: the students who can be added, each a row — on
+  // the long-named course, whose roster leaves some out.
+  await visit('course-add-student', async () => {
+    await tap(byId(page, 'tab-courses'));
+    await tap(byId(page, 'cohort-open-Autumn 2026'));
+    await tap(byId(page, `course-open-${LONG_COURSE_NAME}`));
+    await tap(byId(page, 'roster-add'));
+  }, `enrol-${UNENROLLED.email}`);
   // A roster removal CONFIRMS IN PLACE — the row is replaced by a warning and
   // two buttons, which is more than fits where the row was.
   await visit('course-remove-confirm', async () => {
@@ -1231,6 +1262,15 @@ async function tourStaff(page, tag) {
     await tap(byId(page, 'sessions-add'));
   }, 'session-create');
   await visit('session', openSession, 'recording-ledger');
+  // The recording's menus, OPEN: what takes it away, and where files come from.
+  await visit('recording-actions', async () => {
+    await openSession();
+    await tap(byId(page, 'recording-actions'));
+  }, 'recording-archived');
+  await visit('recording-add', async () => {
+    await openSession();
+    await tap(byId(page, 'recording-add'));
+  }, 'recording-import-zoom-more');
   // The session editor: four fields and a Save/Cancel row that exist nowhere
   // else, and 320px is where they run out of room.
   // A recording of several files: parts, versions, a failed copy, the
@@ -1359,6 +1399,7 @@ async function tourStaff(page, tag) {
     await openCourse();
     await tap(byId(page, 'nav-sessions'));
     await tap(byId(page, 'session-open-Session 8 — The Signs of Sincerity'));
+    await tap(byId(page, 'recording-add'));
     const chooser = page.waitForEvent('filechooser');
     await tap(byId(page, 'recording-upload'));
     await (await chooser).setFiles([
@@ -1396,17 +1437,24 @@ async function tourStaff(page, tag) {
   );
   // Every date, every status: the "already imported" row — the longest line a
   // card carries, naming the class it went into — exists in no other state.
+  // The picker's filters, OPEN.
+  await visit('zoom-filters', async () => {
+    await openZoomImport();
+    await tap(byId(page, 'zoom-filters'));
+  }, 'zoom-filter-all');
   await visit('zoom-import-all', async () => {
     await openZoomImport();
     await tap(byId(page, 'zoom-session-day'));
+    await tap(byId(page, 'zoom-filters'));
     await tap(byId(page, 'zoom-filter-all'));
+    await tap(byName(page, 'Close'));
   }, 'zoom-open-earlier-aud');
   check(
     `${tag} / zoom import with the date filter off shows the other days too`,
     (await page.locator('[data-testid^="zoom-when-"]').count()) === 3 &&
       (await page.locator('[data-testid^="zoom-open-"]').count()) === 1,
   );
-  await visit('library', () => tap(byId(page, 'tab-library')), 'library-filter-all');
+  await visit('library', () => tap(byId(page, 'tab-library')), 'library-status');
   // With a cohort CHOSEN: the clear control exists in no other state, and two
   // dropdowns plus a button is the row that has to wrap at 320px.
   await visit('library-filtered', async () => {
@@ -1491,7 +1539,7 @@ async function tourManager(page, tag) {
     await tap(byId(page, 'tab-more'));
     await tap(byId(page, 'more-my-audit'));
   }, 'my-audit-list');
-  await visit('library', () => tap(byId(page, 'tab-library')), 'library-filter-all');
+  await visit('library', () => tap(byId(page, 'tab-library')), 'library-status');
   // People, and one student's page. A manager's People tab is not an admin's
   // with rows removed: the student page swaps a whole query for a per-course
   // one, drops the Disable control for a sentence explaining who has it, and

@@ -1,4 +1,4 @@
-import { Collapsible, Empty, Grid, Notice, Screen, SectionTitle } from '../components/ui';
+import { Collapsible, Empty, Grid, Notice, Screen } from '../components/ui';
 import { useListenerFailed } from '../liveQuery';
 import { useMyCoursesState, type CourseRow } from '../structure';
 import { CourseCard } from './CoursesScreen';
@@ -20,9 +20,9 @@ export function MyCoursesScreen({
   /*
    * THE `State` VARIANT, so "none have arrived" is not rendered as "there are
    * none". The `?? []` wrapper reads identically on a cold load and on an
-   * unassigned account — and this screen answers the second with a heading
-   * saying `Courses (0)`, "You are not assigned to any courses yet" and a
-   * notice about waiting for an administrator. Shown to a manager whose access
+   * unassigned account — and this screen answers the second with "You are not
+   * assigned to any courses yet" and a notice about waiting for an
+   * administrator. Shown to a manager whose access
    * was granted an hour ago, for the length of every load, that reads as their
    * access being broken.
    */
@@ -39,8 +39,7 @@ export function MyCoursesScreen({
   const current = courses.filter((c) => c.effectiveActive);
   const past = courses.filter((c) => !c.effectiveActive);
   return (
-    <Screen title="Your courses" subtitle="Everything you run, and the way in to each" width="list">
-      <SectionTitle>Courses{loaded === null ? '' : ` (${current.length})`}</SectionTitle>
+    <Screen title="Your courses" width="list">
       {checking ? (
         <Empty>Checking your courses…</Empty>
       ) : loaded === null ? (
@@ -64,7 +63,7 @@ export function MyCoursesScreen({
       )}
       {past.length > 0 ? (
         <Collapsible testID="courses-archived" title="Archived" count={past.length}>
-          <Grid min={330}>
+          <Grid min={330} rows>
             {past.map((c) => (
               <CourseCard key={c.id} cls={c} onOpen={onOpen} />
             ))}

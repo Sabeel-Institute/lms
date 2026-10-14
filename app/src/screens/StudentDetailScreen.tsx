@@ -2,17 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { INSTITUTE_TIMEZONE, QUEUE_SCOPE, stampInZone } from '@sabeel/shared';
 import {
-  Button,
   Card,
+  EmailText,
   Empty,
   Grid,
+  IconButton,
   ListRow,
   Notice,
-  Row,
   Screen,
   SectionTitle,
   StatusChip,
 } from '../components/ui';
+import { Sheet, SheetOption } from '../components/Sheet';
 import { resendPasswordSetup, setStudentAccess, useStudentState, type StudentRow } from '../students';
 import { useDecidedStaff } from '../staff';
 import { useStudentAudit, useStudentAuditIn } from '../ledger';
@@ -36,8 +37,8 @@ const NO_COURSES: CourseRow[] = [];
 const NO_ENROLLMENTS: EnrollmentRow[] = [];
 
 /**
- * One student, everything about them in one place: their access, and the courses
- * they are in.
+ * One student, everything about them in one place: the courses they are in and
+ * their history, with what can be done about their account under the ⋮.
  *
  * WHAT A MANAGER SEES IS DIFFERENT, and deliberately so. There is no query for
  * "this student's courses" that a manager may run: the enrollments rule resolves
@@ -65,6 +66,7 @@ export function StudentDetailScreen({
   const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const run = (key: string, fn: () => Promise<void>) =>
     once(key, async () => {
@@ -80,12 +82,31 @@ export function StudentDetailScreen({
   const who = student?.displayName ?? '';
   const disabled = student?.status === 'disabled';
 
+  // The sheet closes as the action starts; the ⋮ turns into a spinner until it
+  // is done, and the result is the notice at the top of the page.
+  const choose = (key: string, fn: () => Promise<void>) => {
+    setMenuOpen(false);
+    void run(key, fn);
+  };
+
   return (
     <Screen
       title={who}
-      subtitle={student?.email}
+      subtitle={student ? <EmailText email={student.email} lede /> : undefined}
       status={student ? student.status : undefined}
       width="list"
+      actions={
+        student ? (
+          <IconButton
+            testID="student-actions"
+            icon="more-vert"
+            bare
+            busy={busy !== null}
+            label={`Actions for ${who}`}
+            onPress={() => setMenuOpen(true)}
+          />
+        ) : undefined
+      }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {info ? <Notice tone="success">{info}</Notice> : null}
@@ -98,69 +119,46 @@ export function StudentDetailScreen({
         </Empty>
       ) : (
         <>
-          <SectionTitle>Access</SectionTitle>
-          <Card>
-            {/* A Row, like every other action pair in the app. Straight into the
-                Card they stacked at the left of an 1114px card, two different
-                widths, while the equivalent pair on a course sits side by side. */}
-            <Row>
-              {/* Everything about this student, across the courses the reader
-                  may see, in one .xlsx — the student's counterpart of the
-                  course workbook. */}
-              <Button
-                testID="student-export-workbook"
-                label="Export workbook"
-                variant="secondary"
-                busy={busy === 'export'}
-                onPress={() => void run('export', () => exportStudentWorkbook(student, uid, isAdmin))}
-              />
-              <Button
-                testID="student-resend"
-                label="Resend password link"
-                variant="secondary"
-                busy={busy === 'resend'}
+          <Sheet visible={menuOpen} title={who} onClose={() => setMenuOpen(false)} closeAt="corner">
+            <SheetOption
+              testID="student-resend"
+              label="Resend password link"
+              detail={`Emails ${student.email} a link to set a password.`}
+              onPress={() =>
+                choose('resend', async () => {
+                  await resendPasswordSetup(student.email);
+                  setInfo(`Password link sent to ${student.email}.`);
+                })
+              }
+            />
+            {/* Everything about this student, across the courses the reader
+                may see, in one .xlsx — the student's counterpart of the course
+                workbook. */}
+            <SheetOption
+              testID="student-export-workbook"
+              label="Export workbook"
+              detail="Their courses, attendance and listening, in one spreadsheet."
+              onPress={() => choose('export', () => exportStudentWorkbook(student, uid, isAdmin))}
+            />
+            {/* Enable/disable is directory-level — it spans every course — so
+                the server keeps it admin-only, and a manager's menu does not
+                offer what would only fail. The normal tone in BOTH directions:
+                disabling is the reversible, recommended action in this product,
+                and dressing it as destructive is how people learn to ignore the
+                colour that marks the genuinely irreversible ones. */}
+            {isAdmin ? (
+              <SheetOption
+                testID="student-access"
+                label={disabled ? 'Re-enable account' : 'Disable account'}
+                detail={disabled ? 'They can sign in again.' : 'They can no longer sign in. You can re-enable them.'}
                 onPress={() =>
-                  void run('resend', async () => {
-                    await resendPasswordSetup(student.email);
-                    setInfo(`Password link sent to ${student.email}.`);
-                  })
+                  choose('access', () =>
+                    setStudentAccess({ uid: studentUid, status: disabled ? 'active' : 'disabled' }),
+                  )
                 }
               />
-              {/* Enable/disable is directory-level — it spans every course — so
-                  the server keeps it admin-only. A manager sees the state, not a
-                  control that would only fail. */}
-              {isAdmin ? (
-                <Button
-                  testID="student-access"
-                  // Secondary in BOTH directions, like archiving a course.
-                  // Disabling is the reversible, recommended action in this
-                  // product; dressing it as destructive is how people learn to
-                  // ignore the colour that marks the genuinely irreversible ones.
-                  label={disabled ? 'Re-enable account' : 'Disable account'}
-                  variant="secondary"
-                  busy={busy === 'access'}
-                  onPress={() =>
-                    void run('access', () =>
-                      setStudentAccess({
-                        uid: studentUid,
-                        status: disabled ? 'active' : 'disabled',
-                      }),
-                    )
-                  }
-                />
-              ) : null}
-            </Row>
-            {/* BELOW the row, not inside it. A Row cell is 150px of action; a
-                sentence dropped into one is a paragraph squeezed into half a
-                card beside a button. */}
-            {isAdmin ? null : (
-              <Empty>
-                {disabled
-                  ? 'This account is disabled. An admin can re-enable it.'
-                  : 'Only an admin can disable an account.'}
-              </Empty>
-            )}
-          </Card>
+            ) : null}
+          </Sheet>
 
           {isAdmin ? (
             <AdminCourses studentUid={studentUid} who={who} onOpenCourse={onOpenCourse} />
@@ -321,7 +319,7 @@ function AdminCourses({
       ) : rows.length === 0 ? (
         <Empty>Not enrolled in any course yet.</Empty>
       ) : (
-        <Grid min={330}>
+        <Grid min={330} rows>
           {rows.map((r) => (
             <CourseEnrollmentRow
               key={r.enrollment.id}
@@ -361,12 +359,18 @@ function ManagerCourses({
   // listener, because one read per managed course is the only shape a manager
   // may issue. So they report back; without it a student in none of these
   // courses left the heading standing over nothing.
-  const [enrolledIn, setEnrolledIn] = useState<Record<string, boolean>>({});
-  const report = useCallback((courseId: string, enrolled: boolean) => {
-    setEnrolledIn((m) => (m[courseId] === enrolled ? m : { ...m, [courseId]: enrolled }));
+  // `null`: asked, and not enrolled; absent: not answered yet.
+  const [enrolledIn, setEnrolledIn] = useState<Record<string, { active: boolean } | null>>({});
+  const report = useCallback((courseId: string, enrolment: { active: boolean } | null) => {
+    setEnrolledIn((m) =>
+      courseId in m && m[courseId]?.active === enrolment?.active ? m : { ...m, [courseId]: enrolment },
+    );
   }, []);
   const allAnswered = courses.length > 0 && courses.every((c) => c.id in enrolledIn);
   const noneMatched = allAnswered && courses.every((c) => !enrolledIn[c.id]);
+  // Only the courses that hold them are rows: a probe that found nothing must
+  // not leave an empty row between two dividers.
+  const matched = courses.filter((c) => enrolledIn[c.id]);
 
   return (
     <>
@@ -377,19 +381,23 @@ function ManagerCourses({
         <Empty>You are not assigned to any courses.</Empty>
       ) : (
         <>
-          <Grid min={330}>
-            {courses.map((c) => (
-              <ManagedCourseRow
-                key={c.id}
-                course={c}
-                cohortName={cohortNameOf(c.cohortId)}
-                studentUid={studentUid}
-                who={who}
-                onOpenCourse={onOpenCourse}
-                onAnswered={report}
-              />
-            ))}
-          </Grid>
+          {courses.map((c) => (
+            <EnrollmentProbe key={c.id} course={c} studentUid={studentUid} onAnswered={report} />
+          ))}
+          {matched.length > 0 ? (
+            <Grid min={330} rows>
+              {matched.map((c) => (
+                <CourseEnrollmentRow
+                  key={c.id}
+                  course={c}
+                  cohortName={cohortNameOf(c.cohortId)}
+                  active={enrolledIn[c.id]?.active ?? false}
+                  who={who}
+                  onOpenCourse={onOpenCourse}
+                />
+              ))}
+            </Grid>
+          ) : null}
           {noneMatched ? (
             <Empty>{who} is not in any of the courses you manage.</Empty>
           ) : null}
@@ -399,21 +407,15 @@ function ManagerCourses({
   );
 }
 
-/** Renders nothing unless this student is in this manager's course. */
-function ManagedCourseRow({
+/** Asks whether this student is in this manager's course, and says so; draws nothing. */
+function EnrollmentProbe({
   course,
-  cohortName,
   studentUid,
-  who,
-  onOpenCourse,
   onAnswered,
 }: {
   course: CourseRow;
-  cohortName: string;
   studentUid: string;
-  who: string;
-  onOpenCourse: (cls: CourseRow) => void;
-  onAnswered: (courseId: string, enrolled: boolean) => void;
+  onAnswered: (courseId: string, enrolment: { active: boolean } | null) => void;
 }) {
   // Scoped to one course, so the rule resolves one class get() however big the
   // roster — and asked as a LIST, because the answer is usually "no such
@@ -421,20 +423,11 @@ function ManagedCourseRow({
   // useEnrollmentIn.
   const enrollment = useEnrollmentIn(studentUid, course.id);
   const { resolved } = enrollment;
-  const enrolled = !!enrollment.value;
+  const active = enrollment.value ? enrollment.value.active : null;
   useEffect(() => {
-    if (resolved) onAnswered(course.id, enrolled);
-  }, [resolved, enrolled, course.id, onAnswered]);
-  if (!enrollment.value) return null;
-  return (
-    <CourseEnrollmentRow
-      course={course}
-      cohortName={cohortName}
-      active={enrollment.value.active}
-      who={who}
-      onOpenCourse={onOpenCourse}
-    />
-  );
+    if (resolved) onAnswered(course.id, active === null ? null : { active });
+  }, [resolved, active, course.id, onAnswered]);
+  return null;
 }
 
 function CourseEnrollmentRow({
@@ -456,7 +449,9 @@ function CourseEnrollmentRow({
       name={course.name}
       // The same course name recurs across cohorts, so the term disambiguates it.
       detail={cohortName || undefined}
-      status={<StatusChip status={active ? 'active' : 'inactive'} />}
+      // Only when it says something: "active" on every course they are in
+      // said nothing.
+      status={active ? undefined : <StatusChip status="inactive" />}
       openLabel={`Open ${who}'s progress in ${course.name}`}
       onPress={() => onOpenCourse(course)}
     />

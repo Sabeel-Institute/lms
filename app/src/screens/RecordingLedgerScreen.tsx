@@ -9,7 +9,21 @@ import {
   todayInZone,
   type GrantOutcome,
 } from '@sabeel/shared';
-import { Button, Chips, Empty, Field, Grid, Notice, Row, Screen, SectionTitle } from '../components/ui';
+import {
+  Button,
+  Chips,
+  Collapsible,
+  CountsLine,
+  Empty,
+  Field,
+  Grid,
+  IconButton,
+  Notice,
+  Row,
+  Screen,
+  useGridCell,
+} from '../components/ui';
+import { Sheet } from '../components/Sheet';
 import {
   LEDGER_FILTERS,
   overrideCompletion,
@@ -95,27 +109,18 @@ export function RecordingLedgerScreen({
           who to chase. Four confident zeros are a worse answer than four
           absent tiles. */}
       {loading || failed ? null : (
-        <View style={styles.summary}>
-          {/* The product's own words — required listening, completed, missed —
-              and not a fifth set for this screen. "Accountable" was also the one
-              label too long for its tile. */}
-          <Stat label="Required" value={rollup.total} />
-          {/* THE TONE FOLLOWS THE VALUE, never the label. Bound to the word,
-              "0 Completed" came out in the success green — a green zero at the
-              top of the accountability screen — while a healthy "0 Missed"
-              still had to be told apart from a bad one. */}
-          <Stat
-            label="Completed"
-            value={rollup.complete}
-            tone={rollup.complete > 0 ? 'success' : undefined}
-          />
-          <Stat label="Not complete" value={rollup.incomplete} />
-          <Stat
-            label="Missed"
-            value={rollup.missed}
-            tone={rollup.missed > 0 ? 'danger' : undefined}
-          />
-        </View>
+        /* The product's own words — required listening, completed, missed —
+           on one line. THE TONE FOLLOWS THE VALUE, never the label: a missed
+           count is in the danger colour only when someone missed it. */
+        <CountsLine
+          testID="ledger-counts"
+          counts={[
+            { value: rollup.total, label: 'required' },
+            { value: rollup.complete, label: 'completed' },
+            { value: rollup.incomplete, label: 'not complete' },
+            { value: rollup.missed, label: 'missed', alarm: true },
+          ]}
+        />
       )}
 
       <View style={styles.toolbar}>
@@ -148,7 +153,7 @@ export function RecordingLedgerScreen({
                 : 'Everyone required has completed this — nice.'}
         </Empty>
       ) : (
-        <Grid min={330}>
+        <Grid min={330} rows>
           {rows.map((r) => (
             <LedgerRowCard
               key={r.studentUid}
@@ -163,73 +168,52 @@ export function RecordingLedgerScreen({
         </Grid>
       )}
 
-      <SectionTitle>Present ({attendees.length})</SectionTitle>
-      {attendees.length === 0 ? (
-        <Empty>
-          {session.attendanceSubmittedAt === null
-            ? 'Attendance has not been taken for this session.'
-            : 'No one was marked present at this session.'}
-        </Empty>
-      ) : (
-        <>
-          <Notice tone="info">
-            They were at the session, so this recording is neither required for them nor open to
-            them.
-          </Notice>
-          <Grid min={300}>
-            {attendees.map((r) => (
-              <ListenerRow key={r.studentUid} row={r} />
-            ))}
-          </Grid>
-        </>
-      )}
+      {/* FOR REFERENCE, AND CLOSED: nothing in these is asked of anyone, so
+          they wait below the list that is, each with its count and the reason
+          it is not in that list. */}
+      <View style={styles.reference}>
+        {attendees.length > 0 ? (
+          <Collapsible testID="ledger-present" title="Present" count={attendees.length}>
+            <Notice tone="info">
+              They were at the session, so this recording is neither required for them nor open to
+              them.
+            </Notice>
+            <ListenerRows rows={attendees} />
+          </Collapsible>
+        ) : null}
 
-      {absentees.length > 0 ? (
-        <>
-          <SectionTitle>Absent ({absentees.length})</SectionTitle>
-          <Notice tone="info">
-            Marked absent rather than excused, so the recording was not opened to them. To let
-            someone catch up, mark them excused on the session and submit again.
-          </Notice>
-          <Grid min={300}>
-            {absentees.map((r) => (
-              <ListenerRow key={r.studentUid} row={r} />
-            ))}
-          </Grid>
-        </>
-      ) : null}
+        {absentees.length > 0 ? (
+          <Collapsible testID="ledger-absent" title="Absent" count={absentees.length}>
+            <Notice tone="info">
+              Marked absent rather than excused, so the recording was not opened to them. To let
+              someone catch up, mark them excused on the session and submit again.
+            </Notice>
+            <ListenerRows rows={absentees} />
+          </Collapsible>
+        ) : null}
 
-      {lapsed.length > 0 ? (
-        <>
-          <SectionTitle>Excused, access closed ({lapsed.length})</SectionTitle>
-          <Notice tone="info">
-            Excused at the session, but they hold no active grant — they were unenrolled from the
-            class, or corrected out of the register since. Nothing is required of them, and they
-            can&apos;t open it. Re-enrolling them restores it — for anything still inside its
-            listen-by date.
-          </Notice>
-          <Grid min={300}>
-            {lapsed.map((r) => (
-              <ListenerRow key={r.studentUid} row={r} />
-            ))}
-          </Grid>
-        </>
-      ) : null}
+        {lapsed.length > 0 ? (
+          <Collapsible testID="ledger-lapsed" title="Excused, access closed" count={lapsed.length}>
+            <Notice tone="info">
+              Excused at the session, but they hold no active grant — they were unenrolled from the
+              class, or corrected out of the register since. Nothing is required of them, and they
+              can&apos;t open it. Re-enrolling them restores it — for anything still inside its
+              listen-by date.
+            </Notice>
+            <ListenerRows rows={lapsed} />
+          </Collapsible>
+        ) : null}
 
-      {otherListeners.length > 0 ? (
-        <>
-          <SectionTitle>Also listened ({otherListeners.length})</SectionTitle>
-          <Notice tone="info">
-            Listening from someone who holds no current grant — for example, excused and listening,
-            then corrected to present. Kept as history; does not count toward accountability.
-          </Notice>
-          <Grid min={300}>
-            {otherListeners.map((r) => (
-              <ListenerRow key={r.studentUid} row={r} />
-            ))}
-          </Grid>
-        </>
-      ) : null}
+        {otherListeners.length > 0 ? (
+          <Collapsible testID="ledger-also" title="Also listened" count={otherListeners.length}>
+            <Notice tone="info">
+              Listening from someone who holds no current grant — for example, excused and listening,
+              then corrected to present. Kept as history; does not count toward accountability.
+            </Notice>
+            <ListenerRows rows={otherListeners} />
+          </Collapsible>
+        ) : null}
+      </View>
     </Screen>
   );
 }
@@ -243,12 +227,22 @@ export function RecordingLedgerScreen({
  * of whom nothing was asked. Someone who listened anyway is worth showing;
  * someone who did not is simply not in this story.
  */
+function ListenerRows({ rows }: { rows: LedgerRow[] }) {
+  return (
+    <Grid min={300} rows>
+      {rows.map((r) => (
+        <ListenerRow key={r.studentUid} row={r} />
+      ))}
+    </Grid>
+  );
+}
+
 function ListenerRow({ row: r }: { row: LedgerRow }) {
   const listened = r.listenedPct !== 0 || !!r.lastListened;
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, useGridCell()]}>
       <View style={styles.rowHead}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.rowText}>
           <Text style={styles.name}>{r.name}</Text>
           {listened ? (
             <Text style={styles.sub}>
@@ -300,112 +294,92 @@ function LedgerRowCard({
     setOpen(false);
   };
   const outcome = grantOutcome(r, today, closedBy === null);
+  const inGrid = useGridCell();
+  const writing = busy === `ov-${r.studentUid}` || busy === `rm-${r.studentUid}`;
+  const caption = (
+    <Text style={styles.sub}>
+      {/* THE STATUS LEADS, in its colour: it is what the row is read for. */}
+      <Text style={[styles.status, statusStyle(outcome)]}>{statusLabel(r, today, closedBy)}</Text>
+      {` · ${listenedText(r.listenedPct)}`}
+      {r.lastListened ? ` · last ${fmtDate(r.lastListened)}` : ''}
+      {r.pending ? ' · pending sync' : ''}
+    </Text>
+  );
 
   return (
     // Named, so a check about ONE student can be bound to their row. A regex
     // over the page says only that somebody on it is overridden, which is the
     // one thing an override check must not settle for.
-    <View testID={`ledger-row-${r.name}`} style={styles.row}>
+    <View testID={`ledger-row-${r.name}`} style={[styles.row, inGrid]}>
       <View style={styles.rowHead}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.rowText}>
           <Text style={styles.name}>{r.name}</Text>
-          <Text style={styles.sub}>
-            {listenedText(r.listenedPct)}
-            {r.lastListened ? ` · last ${fmtDate(r.lastListened)}` : ''}
-            {r.pending ? ' · pending sync' : ''}
-          </Text>
+          {caption}
           {r.source === 'override' ? (
             <Text style={styles.override}>Override: {r.overrideReason}</Text>
           ) : null}
         </View>
-        <Text style={[styles.status, statusStyle(outcome)]}>{statusLabel(r, today, closedBy)}</Text>
+        <IconButton
+          testID={`override-open-${r.name}`}
+          icon="edit"
+          bare
+          label={r.source === 'override' ? `Change ${r.name}'s override` : `Override completion for ${r.name}`}
+          onPress={() => setOpen(true)}
+        />
       </View>
 
-      {/* NOT pushed to the foot. Grid row-mates are equal height, so pinning the
-          actions down there cost far more than it bought: a name wrapping to two
-          lines dropped its Override 19px below its neighbours', and the fix
-          turned every row containing an OPEN editor into a 245px void inside the
-          cards beside it — in the one state a staff member is always in when
-          they use this screen. Nineteen ragged pixels is the smaller problem. */}
-      {open ? (
-        <View style={styles.overrideForm}>
-          <Field
-            testID={`override-reason-${r.name}`}
-            label="Reason (required, recorded in the audit log)"
-            value={reason}
-            onChangeText={setReason}
-            placeholder="e.g. attended in person"
-          />
-          <Row>
-            <Button
-              testID={`override-complete-${r.name}`}
-              label="Mark complete"
-              disabled={!reason.trim()}
-              busy={busy === `ov-${r.studentUid}` || busy === `rm-${r.studentUid}`}
-              onPress={() =>
-                onRun(`ov-${r.studentUid}`, async () => {
-                  await overrideCompletion({ studentUid: r.studentUid, recordingId, completed: true, reason: reason.trim() });
-                  close();
-                })
-              }
-            />
-            <Button
-              testID={`override-incomplete-${r.name}`}
-              label="Mark not complete"
-              variant="secondary"
-              disabled={!reason.trim()}
-              busy={busy === `ov-${r.studentUid}` || busy === `rm-${r.studentUid}`}
-              onPress={() =>
-                onRun(`ov-${r.studentUid}`, async () => {
-                  await overrideCompletion({ studentUid: r.studentUid, recordingId, completed: false, reason: reason.trim() });
-                  close();
-                })
-              }
-            />
-          </Row>
-          {r.source === 'override' ? (
-            <Button
-              testID={`override-remove-${r.name}`}
-              label="Remove override"
-              variant="secondary"
-              disabled={!reason.trim()}
-              busy={busy === `ov-${r.studentUid}` || busy === `rm-${r.studentUid}`}
-              onPress={() =>
-                onRun(`rm-${r.studentUid}`, async () => {
-                  await clearCompletionOverride({ studentUid: r.studentUid, recordingId, reason: reason.trim() });
-                  close();
-                })
-              }
-            />
-          ) : null}
+      <Sheet visible={open} title={`Override: ${r.name}`} onClose={close} closeLabel="Cancel">
+        {caption}
+        <Field
+          testID={`override-reason-${r.name}`}
+          label="Reason (required, recorded in the audit log)"
+          value={reason}
+          onChangeText={setReason}
+          placeholder="e.g. attended in person"
+        />
+        <Row>
           <Button
-            label="Cancel"
-            variant="quiet"
-            disabled={busy === `ov-${r.studentUid}` || busy === `rm-${r.studentUid}`}
-            onPress={close}
+            testID={`override-complete-${r.name}`}
+            label="Mark complete"
+            disabled={!reason.trim()}
+            busy={writing}
+            onPress={() =>
+              onRun(`ov-${r.studentUid}`, async () => {
+                await overrideCompletion({ studentUid: r.studentUid, recordingId, completed: true, reason: reason.trim() });
+                close();
+              })
+            }
           />
-        </View>
-      ) : (
-        <View>
           <Button
-            testID={`override-open-${r.name}`}
-            label={r.source === 'override' ? 'Change override' : 'Override'}
+            testID={`override-incomplete-${r.name}`}
+            label="Mark not complete"
             variant="secondary"
-            onPress={() => setOpen(true)}
+            disabled={!reason.trim()}
+            busy={writing}
+            onPress={() =>
+              onRun(`ov-${r.studentUid}`, async () => {
+                await overrideCompletion({ studentUid: r.studentUid, recordingId, completed: false, reason: reason.trim() });
+                close();
+              })
+            }
           />
-        </View>
-      )}
-    </View>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'danger' }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={[styles.statValue, tone === 'success' ? styles.ok : tone === 'danger' ? styles.bad : null]}>
-        {value}
-      </Text>
-      <Text style={styles.statLabel}>{label}</Text>
+        </Row>
+        {r.source === 'override' ? (
+          <Button
+            testID={`override-remove-${r.name}`}
+            label="Remove override"
+            variant="secondary"
+            disabled={!reason.trim()}
+            busy={writing}
+            onPress={() =>
+              onRun(`rm-${r.studentUid}`, async () => {
+                await clearCompletionOverride({ studentUid: r.studentUid, recordingId, reason: reason.trim() });
+                close();
+              })
+            }
+          />
+        ) : null}
+      </Sheet>
     </View>
   );
 }
@@ -468,32 +442,6 @@ function fmtDate(ms: number | null): string {
 }
 
 const styles = StyleSheet.create({
-  /**
-   * WRAPS, because four tiles across a phone cannot hold their own labels.
-   * A quarter of a 360dp screen leaves a label about 49dp of inner width, and
-   * an 11-character one broke mid-word on a real device — "Accountabl / e".
-   * Every layout check passed throughout: nothing overlapped and nothing was
-   * clipped, which is all they can see.
-   *
-   * `minWidth` is what makes the row break, and it is set to break CLEANLY. The
-   * label itself only needs about 84 — but at 84 a 390px screen fits three
-   * across, orphaning "Missed" on a full-width second row. 112 is the smallest
-   * value that takes 320 and 390 to a tidy two-by-two while still seating all
-   * four in one row once the content column reaches its 720 cap. Shrinking the
-   * type instead would have bought a few characters and cost legibility for an
-   * adult-learner audience.
-   */
-  summary: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(3), marginBottom: spacing(4) },
-  stat: {
-    flex: 1,
-    minWidth: 112,
-    backgroundColor: t.bg.surface,
-    borderRadius: 10,
-    padding: spacing(3),
-    alignItems: 'center',
-  },
-  statValue: { fontSize: 22, fontWeight: '700', color: t.text.primary },
-  statLabel: { fontSize: 11, color: t.text.secondary, marginTop: spacing(1) },
   ok: { color: t.feedback.success },
   bad: { color: t.feedback.danger },
   warn: { color: t.feedback.warning },
@@ -504,9 +452,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing(4),
     flexWrap: 'wrap',
   },
+  reference: { marginTop: spacing(5) },
   row: {
-    // Fills its grid cell, so a row of these ends level — and so an open
-    // override editor stretches its neighbours instead of leaving a hole.
+    // Fills its grid cell, so cards side by side end level.
     flexGrow: 1,
     backgroundColor: t.bg.surface,
     borderRadius: 12,
@@ -515,10 +463,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: t.border.subtle,
   },
-  rowHead: { flexDirection: 'row', alignItems: 'flex-start' },
+  rowHead: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing(2) },
+  rowText: { flex: 1, minWidth: 0 },
   name: { fontSize: 16, fontWeight: '600', color: t.text.primary },
   sub: { fontSize: 13, color: t.text.secondary, marginTop: spacing(1) },
   override: { fontSize: 13, color: t.text.accent, marginTop: spacing(1) },
   status: { fontSize: 13, fontWeight: '700' },
-  overrideForm: { marginTop: spacing(3), gap: spacing(2) },
 });

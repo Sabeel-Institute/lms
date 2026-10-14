@@ -1,20 +1,27 @@
 import { useCourseCourseworkState } from '../coursework';
 import { useCourseworkFigures } from './CourseworkListScreen';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   Button,
   Card,
+  CountsLine,
+  EmailText,
   Empty,
-  Field,
   Grid,
   IconButton,
   ListRow,
+  NavRow,
   Notice,
   Row,
+  RowList,
   Screen,
   SectionTitle,
+  SwitchRow,
+  useGridCell,
 } from '../components/ui';
+import { RenameAction } from '../components/RenameAction';
+import { Sheet } from '../components/Sheet';
 import { INSTITUTE_TIMEZONE, todayInZone } from '@sabeel/shared';
 import { useCourseLedger } from '../ledger';
 import { useDecidedStaff } from '../staff';
@@ -82,8 +89,8 @@ export function CourseDetailScreen({
   );
   const today = todayInZone(INSTITUTE_TIMEZONE);
   const ledger = useCourseLedger(cls.id, today);
-  const [name, setName] = useState(cls.name);
   const { active: busy, run: once } = useOneAtATime();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Enrollment id whose removal is being confirmed, if any. */
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -224,23 +231,17 @@ export function CourseDetailScreen({
   return (
     <Screen
       title={cls.name}
-      subtitle="Sessions, assignments, roster and listening"
       status={cls.effectiveActive ? 'active' : 'inactive'}
       width="list"
-      /* THE TWO THINGS THIS PAGE IS FOR, beside the name rather than in a card
-         under it. Everything below is settings and lists; these two are where a
-         teacher is actually going. */
       actions={
-        <>
-          <Button testID="nav-sessions" label="Sessions" onPress={onOpenSessions} />
-          <Button testID="nav-coursework" label="Assignments" onPress={onOpenCoursework} />
-          <Button
-            testID="nav-attendance"
-            label="Attendance report"
-            variant="secondary"
-            onPress={onOpenAttendance}
+        isAdmin ? (
+          <RenameAction
+            name={cls.name}
+            label="Rename course"
+            testID="course-rename"
+            onSave={(name) => updateCourse({ courseId: cls.id, name })}
           />
-        </>
+        ) : undefined
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -252,94 +253,199 @@ export function CourseDetailScreen({
         </Notice>
       ) : null}
 
-      {/* Course-level accountability at a glance. Archiving the course changes
-          none of it: the grants stay active and the counts stand as the term's
-          record — it is archiving a RECORDING that closes grants. */}
-      <Card>
-        {/* Three stats on one line, each an unbreakable run. Ordinary spaces let
-            a 320px wrap split "37" from "not complete" and then run the tail of
-            one stat into the head of the next. */}
-        {ledger.resolved ? (
-          <Text style={styles.ledgerLine}>
-            {'Listening   '}
-            <Text style={styles.ledgerNum}>{ledger.rollup.total}</Text>
-            {'\u00A0required'}
-            {'   '}
-            <Text style={styles.ledgerNum}>{ledger.rollup.incomplete}</Text>
-            {'\u00A0not\u00A0complete'}
-            {'   '}
-            <Text style={[styles.ledgerNum, ledger.rollup.missed > 0 ? styles.missedNum : null]}>
-              {ledger.rollup.missed}
-            </Text>
-            {'\u00A0missed'}
-          </Text>
-        ) : (
-          // Not three zeros: until the grants arrive those are the exact wrong
-          // answer, stated as fact — see `useRecordingLedger`.
-          <Text style={styles.ledgerLine}>Counting the listening…</Text>
-        )}
-        <AssignmentsLine cls={cls} />
-        <Row>
-          <Button testID="nav-audit" label="Audit history" variant="secondary" onPress={onOpenAudit} />
-          {/* THE ONE EXPORT: every student, every session, every grant of this
-              course in one .xlsx — Summary, Students, Sessions, the Register
-              and Recordings grids, Detail, Definitions. It replaced four CSVs
-              that each photographed one screen and closed on no arithmetic. */}
-          <Button
-            testID="course-export"
-            label="Export workbook"
-            variant="secondary"
-            busy={busy === 'export'}
-            onPress={() => void run('export', () => exportCourseWorkbook(cls, uid))}
+      {/* THE WAY IN to what a teacher comes here for, each row saying what is
+          there. Archiving the course changes none of the figures: the grants
+          stay active and the counts stand as the term's record — it is
+          archiving a RECORDING that closes grants. */}
+      <RowList>
+        <NavRow
+          testID="nav-sessions"
+          label="Sessions"
+          caption={
+            ledger.resolved ? (
+              <CountsLine
+                lead="Listening"
+                counts={[
+                  { value: ledger.rollup.total, label: 'required' },
+                  { value: ledger.rollup.incomplete, label: 'not complete' },
+                  { value: ledger.rollup.missed, label: 'missed', alarm: true },
+                ]}
+              />
+            ) : (
+              // Not three zeros: until the grants arrive those are the exact
+              // wrong answer, stated as fact — see `useRecordingLedger`.
+              'Counting the listening…'
+            )
+          }
+          onPress={onOpenSessions}
+        />
+        <NavRow testID="nav-coursework" label="Assignments" caption={<AssignmentsCounts cls={cls} />} onPress={onOpenCoursework} />
+        <NavRow testID="nav-attendance" label="Attendance report" onPress={onOpenAttendance} />
+        <NavRow testID="nav-audit" label="Audit history" onPress={onOpenAudit} />
+      </RowList>
+      {/* THE ONE EXPORT: every student, every session, every grant of this
+          course in one .xlsx — Summary, Students, Sessions, the Register and
+          Recordings grids, Detail, Definitions. */}
+      <Button
+        testID="course-export"
+        label="Export workbook"
+        variant="quiet"
+        hug
+        busy={busy === 'export'}
+        onPress={() => void run('export', () => exportCourseWorkbook(cls, uid))}
+      />
+
+      <SectionTitle
+        action={
+          <IconButton
+            testID="roster-add"
+            icon="person-add"
+            label="Add a student to this course"
+            onPress={() => setPickerOpen(true)}
           />
-        </Row>
-      </Card>
+        }
+      >
+        Roster{rosterState === null ? '' : ` (${enrolled.length})`}
+      </SectionTitle>
+      {rosterState === null ? (
+        <Empty>Checking the roster…</Empty>
+      ) : enrolled.length === 0 ? (
+        <Empty>Nobody is enrolled in this course yet.</Empty>
+      ) : (
+        <Grid min={320} rows>
+          {/* By name. The list carries a remove button on every row, so an
+              arbitrary order is a real chance of removing the wrong person. */}
+          {sortByName(
+            roster.filter((r) => r.active),
+            (r) => byUid.get(r.studentUid)?.displayName ?? r.studentUid,
+          )
+            .map((r) => {
+              const s = byUid.get(r.studentUid);
+              const who = s?.displayName ?? r.studentUid;
+              // The whole row opens the student's progress, so the × beside it is
+              // one mis-tap away from silently unenrolling someone. It confirms IN
+              // PLACE, replacing the row: leaving the row still tappable under
+              // "remove?" is the flaw ConfirmDanger exists to prevent.
+              if (confirmRemove === r.id) {
+                return (
+                  <ConfirmRow key={r.id}>
+                    <Notice tone="error">
+                      Remove {who} from this course? Their listening history is kept, and you
+                      can add them back.
+                    </Notice>
+                    <Row>
+                      <Button
+                        testID={`roster-remove-confirm-${s?.email ?? r.studentUid}`}
+                        label="Remove"
+                        variant="danger"
+                        busy={busy === `rm-${r.id}`}
+                        onPress={() =>
+                          void run(`rm-${r.id}`, async () => {
+                            await setEnrollmentActive({
+                              studentUid: r.studentUid,
+                              courseId: cls.id,
+                              active: false,
+                            });
+                            setConfirmRemove(null);
+                          })
+                        }
+                      />
+                      <Button
+                        label="Cancel"
+                        variant="quiet"
+                        disabled={busy === `rm-${r.id}`}
+                        onPress={() => setConfirmRemove(null)}
+                      />
+                    </Row>
+                  </ConfirmRow>
+                );
+              }
+              // The roster is a list to scan, so it is one line per student: the
+              // email added nothing here (you identify classmates by name) and cost
+              // a line each, which on a 20-student course is most of the screen.
+              return (
+                <ListRow
+                  key={r.id}
+                  testID={`student-ledger-${s?.email ?? r.studentUid}`}
+                  name={who}
+                  openLabel={`Open ${who}'s progress`}
+                  onPress={() => onOpenStudent(r.studentUid)}
+                  actionsPinned
+                  actions={
+                    /* A GREY ×, no tile. Removing someone from a course keeps
+                       their listening history and can be undone — the
+                       confirmation says so in as many words — and the
+                       destructive register is this app's mark for permanent
+                       deletion. A tinted control on every row made the loudest
+                       thing on the page the one action nobody came here to
+                       take. The CONFIRM is still danger-red, which is where the
+                       weight belongs. */
+                    <IconButton
+                      testID={`roster-remove-${s?.email ?? r.studentUid}`}
+                      icon="close"
+                      bare
+                      label={`Remove ${who} from this course`}
+                      onPress={() => setConfirmRemove(r.id)}
+                    />
+                  }
+                />
+              );
+            })}
+        </Grid>
+      )}
+
+      {/* STAYS OPEN for several: each row leaves the list once the roster
+          holds the student, and the × closes it. */}
+      <Sheet visible={pickerOpen} title="Add a student" onClose={() => setPickerOpen(false)} closeAt="corner">
+        {rosterState === null || studentsState === null ? (
+          <Empty>Checking who can be added…</Empty>
+        ) : notEnrolled.length === 0 ? (
+          <Empty>
+            {students.filter((s) => s.status === 'active').length === 0
+              ? // The People screen has an Add button on the web only; on the
+                // phone the sentence sent people to a screen where the thing
+                // does not exist.
+                Platform.OS === 'web'
+                ? 'No student accounts yet. Create one from the People screen first.'
+                : 'No student accounts yet.'
+              : 'Every active student is already in this course.'}
+          </Empty>
+        ) : (
+          notEnrolled.map((s) => {
+            const inFlight = adding.has(s.uid);
+            return (
+              <Pressable
+                key={s.uid}
+                testID={`enrol-${s.email}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Enrol ${s.displayName}`}
+                // aria-*, as the manager row above: react-native-web maps no
+                // accessibilityState, so it reached the DOM as nothing at all.
+                aria-busy={inFlight}
+                aria-disabled={inFlight}
+                disabled={inFlight}
+                onPress={() => enrol(s.uid)}
+                style={[styles.pickRow, inFlight ? styles.pickRowBusy : null]}
+              >
+                <View style={styles.plus}>
+                  {inFlight ? (
+                    <ActivityIndicator size="small" color={t.text.secondary} />
+                  ) : (
+                    <Text style={styles.plusText}>+</Text>
+                  )}
+                </View>
+                <View style={styles.pickText}>
+                  <Text style={styles.name}>{s.displayName}</Text>
+                  {inFlight ? <Text style={styles.hint}>Adding…</Text> : <EmailText email={s.email} />}
+                </View>
+              </Pressable>
+            );
+          })
+        )}
+      </Sheet>
 
       {isAdmin ? (
         <>
-          <SectionTitle>Settings</SectionTitle>
-          <Card>
-            <Field testID="course-rename" label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
-            <Button
-              label="Rename"
-              disabled={!name.trim() || name.trim() === cls.name}
-              busy={busy === 'rename'}
-              onPress={() => void run('rename', () => updateCourse({ courseId: cls.id, name: name.trim() }))}
-            />
-            <Row>
-              <Button
-                testID="course-archive"
-                label={cls.archived ? 'Reactivate course' : 'Archive course'}
-                variant="secondary"
-                busy={busy === 'archive'}
-                onPress={() =>
-                  void run('archive', () =>
-                    updateCourse({ courseId: cls.id, archived: !cls.archived }),
-                  )
-                }
-              />
-              <Button
-                testID="course-archived-access"
-                // What pressing it DOES, not the state it is in. "Archived
-                // listening: off" reads as a label on a switch that isn't
-                // there, and sat in a row beside "Archive course" — which does
-                // what it says — styled identically.
-                label={
-                  cls.archivedAccess
-                    ? 'Close recordings when archived'
-                    : 'Keep recordings open when archived'
-                }
-                variant="secondary"
-                busy={busy === 'access'}
-                onPress={() =>
-                  void run('access', () =>
-                    updateCourse({ courseId: cls.id, archivedAccess: !cls.archivedAccess }),
-                  )
-                }
-              />
-            </Row>
-          </Card>
-
           <SectionTitle>Managers ({cls.managerUids.length})</SectionTitle>
           <Card>
             {/* Managers are scoped-DOWN staff — access to just this course.
@@ -404,190 +510,74 @@ export function CourseDetailScreen({
                       )}
                       <View style={styles.pickText}>
                         <Text style={styles.name}>{s.displayName}</Text>
-                        <Text style={styles.hint}>{s.email}</Text>
+                        <EmailText email={s.email} />
                       </View>
                     </Pressable>
                   );
                 })
             )}
           </Card>
+
+          <SectionTitle>Settings</SectionTitle>
+          <Card>
+            <SwitchRow
+              testID="course-archived-access"
+              label="Keep recordings open when archived"
+              description="Students can still play the recordings they were given."
+              on={cls.archivedAccess}
+              onChange={(next) =>
+                void run('access', () => updateCourse({ courseId: cls.id, archivedAccess: next }))
+              }
+            />
+            <Button
+              testID="course-archive"
+              label={cls.archived ? 'Reactivate course' : 'Archive course'}
+              variant="secondary"
+              busy={busy === 'archive'}
+              onPress={() =>
+                void run('archive', () => updateCourse({ courseId: cls.id, archived: !cls.archived }))
+              }
+            />
+          </Card>
         </>
       ) : null}
-
-      <SectionTitle>Roster{rosterState === null ? '' : ` (${enrolled.length})`}</SectionTitle>
-      {rosterState === null ? (
-        <Empty>Checking the roster…</Empty>
-      ) : enrolled.length === 0 ? (
-        <Empty>Nobody is enrolled in this course yet.</Empty>
-      ) : (
-        <Grid min={320}>
-          {/* By name. The list carries a remove button on every row, so an
-              arbitrary order is a real chance of removing the wrong person. */}
-          {sortByName(
-            roster.filter((r) => r.active),
-            (r) => byUid.get(r.studentUid)?.displayName ?? r.studentUid,
-          )
-            .map((r) => {
-              const s = byUid.get(r.studentUid);
-              const who = s?.displayName ?? r.studentUid;
-              // The whole row opens the student's progress, so the × beside it is
-              // one mis-tap away from silently unenrolling someone. It confirms IN
-              // PLACE, replacing the row: leaving the row still tappable under
-              // "remove?" is the flaw ConfirmDanger exists to prevent.
-              if (confirmRemove === r.id) {
-                return (
-                  <View key={r.id} style={styles.confirmRow}>
-                    <Notice tone="error">
-                      Remove {who} from this course? Their listening history is kept, and you
-                      can add them back.
-                    </Notice>
-                    <Row>
-                      <Button
-                        testID={`roster-remove-confirm-${s?.email ?? r.studentUid}`}
-                        label="Remove"
-                        variant="danger"
-                        busy={busy === `rm-${r.id}`}
-                        onPress={() =>
-                          void run(`rm-${r.id}`, async () => {
-                            await setEnrollmentActive({
-                              studentUid: r.studentUid,
-                              courseId: cls.id,
-                              active: false,
-                            });
-                            setConfirmRemove(null);
-                          })
-                        }
-                      />
-                      <Button
-                        label="Cancel"
-                        variant="quiet"
-                        disabled={busy === `rm-${r.id}`}
-                        onPress={() => setConfirmRemove(null)}
-                      />
-                    </Row>
-                  </View>
-                );
-              }
-              // The roster is a list to scan, so it is one line per student: the
-              // email added nothing here (you identify classmates by name) and cost
-              // a line each, which on a 20-student course is most of the screen.
-              return (
-                <ListRow
-                  key={r.id}
-                  testID={`student-ledger-${s?.email ?? r.studentUid}`}
-                  name={who}
-                  openLabel={`Open ${who}'s progress`}
-                  onPress={() => onOpenStudent(r.studentUid)}
-                  actionsPinned
-                  actions={
-                    /* Secondary, like Disable and Archive. Removing someone from a
-                       course keeps their listening history and can be undone — the
-                       confirmation says so in as many words — and the destructive
-                       register is this app's mark for permanent deletion. Fourteen
-                       alarm-tinted chips tiled three across a 1440px roster made
-                       the loudest thing on the page the one action nobody came
-                       here to take. The CONFIRM is still danger-red, which is
-                       where the weight belongs. */
-                    <IconButton
-                      testID={`roster-remove-${s?.email ?? r.studentUid}`}
-                      glyph="×"
-                      label={`Remove ${who} from this course`}
-                      onPress={() => setConfirmRemove(r.id)}
-                    />
-                  }
-                />
-              );
-            })}
-        </Grid>
-      )}
-
-      <SectionTitle>Add a student</SectionTitle>
-      <Card>
-        {rosterState === null || studentsState === null ? (
-          <Empty>Checking who can be added…</Empty>
-        ) : notEnrolled.length === 0 ? (
-          <Empty>
-            {students.filter((s) => s.status === 'active').length === 0
-              ? // The People screen has an Add button on the web only; on the
-                // phone the sentence sent people to a screen where the thing
-                // does not exist.
-                Platform.OS === 'web'
-                ? 'No student accounts yet. Create one from the People screen first.'
-                : 'No student accounts yet.'
-              : 'Every active student is already in this course.'}
-          </Empty>
-        ) : (
-          notEnrolled.map((s) => {
-            const inFlight = adding.has(s.uid);
-            return (
-              <Pressable
-                key={s.uid}
-                testID={`enrol-${s.email}`}
-                accessibilityRole="button"
-                accessibilityLabel={`Enrol ${s.displayName}`}
-                // aria-*, as the manager row above: react-native-web maps no
-                // accessibilityState, so it reached the DOM as nothing at all.
-                aria-busy={inFlight}
-                aria-disabled={inFlight}
-                disabled={inFlight}
-                onPress={() => enrol(s.uid)}
-                style={[styles.pickRow, inFlight ? styles.pickRowBusy : null]}
-              >
-                <View style={styles.plus}>
-                  {inFlight ? (
-                    <ActivityIndicator size="small" color={t.text.secondary} />
-                  ) : (
-                    <Text style={styles.plusText}>+</Text>
-                  )}
-                </View>
-                <View style={styles.pickText}>
-                  <Text style={styles.name}>{s.displayName}</Text>
-                  <Text style={styles.hint}>{inFlight ? 'Adding…' : s.email}</Text>
-                </View>
-              </Pressable>
-            );
-          })
-        )}
-      </Card>
     </Screen>
   );
 }
 
 /**
- * The course's assignments at a glance, under the listening line: what is
- * posted, what waits on the teacher, and what waits on students.
+ * The course's assignments at a glance, under its row: what is posted, what
+ * waits on the teacher, and what waits on students. Nothing until the figures
+ * arrive — four zeros would be an answer.
  */
-function AssignmentsLine({ cls }: { cls: CourseRow }) {
+function AssignmentsCounts({ cls }: { cls: CourseRow }) {
   const coursework = useCourseCourseworkState(cls.id);
   const figures = useCourseworkFigures(cls);
   if (coursework === null || figures === null) return null;
   const posted = coursework.filter((c) => c.status === 'posted');
   const sum = (k: 'toGrade' | 'pastDue' | 'missed') => posted.reduce((n, c) => n + figures(c)[k], 0);
   return (
-    <Text testID="course-assignments-line" style={styles.ledgerLine}>
-      {'Assignments   '}
-      <Text style={styles.ledgerNum}>{posted.length}</Text>
-      {'\u00A0posted'}
-      {'   '}
-      <Text style={styles.ledgerNum}>{sum('toGrade')}</Text>
-      {'\u00A0to\u00A0grade'}
-      {'   '}
-      <Text style={styles.ledgerNum}>{sum('pastDue')}</Text>
-      {'\u00A0past\u00A0due'}
-      {'   '}
-      <Text style={styles.ledgerNum}>{sum('missed')}</Text>
-      {'\u00A0missed'}
-    </Text>
+    <CountsLine
+      testID="course-assignments-line"
+      counts={[
+        { value: posted.length, label: 'posted' },
+        { value: sum('toGrade'), label: 'to grade' },
+        { value: sum('pastDue'), label: 'past due' },
+        { value: sum('missed'), label: 'missed', alarm: true },
+      ]}
+    />
   );
+}
+
+/** The in-place confirm that stands where a roster row was. */
+function ConfirmRow({ children }: { children: ReactNode }) {
+  return <View style={[styles.confirmRow, useGridCell()]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '600', color: t.text.primary },
   hint: { fontSize: 13, color: t.text.secondary },
   managerLede: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(2), lineHeight: 19 },
-  ledgerLine: { fontSize: 15, color: t.text.secondary, marginBottom: spacing(3) },
-  ledgerNum: { fontSize: 18, fontWeight: '700', color: t.text.primary },
-  missedNum: { color: t.feedback.danger },
   pickRowBusy: { opacity: 0.6 },
   pickRow: {
     flexDirection: 'row',
@@ -595,7 +585,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(2),
     gap: spacing(3),
   },
-  pickText: { flex: 1 },
+  pickText: { flex: 1, minWidth: 0 },
   rowWaiting: { opacity: 0.5 },
   // Sits where the row was, so the list does not jump while confirming.
   confirmRow: {

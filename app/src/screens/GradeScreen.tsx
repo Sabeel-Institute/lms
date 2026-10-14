@@ -14,7 +14,7 @@ import {
   type Grade,
   type ScaleMark,
 } from '@sabeel/shared';
-import { Button, Card, Chips, Field, Notice, Row, Screen, SectionTitle } from '../components/ui';
+import { Button, Card, Chips, Field, InlineNumber, Notice, Row, Screen, SectionTitle } from '../components/ui';
 import { useLeaveGuard } from '../components/LeaveGuard';
 import { DateField } from '../components/DateField';
 import { Attachments } from '../components/Attachments';
@@ -197,8 +197,12 @@ export function GradeScreen({
 
   const work = (
     <>
+      {/* THE MINUTE IT WENT IN, on the heading: with one hand-in there is no
+          history to read it from. */}
       <SectionTitle>
-        {sub.handedInAt ? `Handed in ${dayOf(sub.handedInAt)}${late ? ' · late' : ''}` : 'Nothing handed in'}
+        {sub.handedInAt
+          ? `Handed in ${stampInZone(INSTITUTE_TIMEZONE, sub.handedInAt)}${late ? ' · late' : ''}`
+          : 'Nothing handed in'}
       </SectionTitle>
       <Card>
         {sub.note ? (
@@ -217,7 +221,8 @@ export function GradeScreen({
           </Text>
         ) : null}
       </Card>
-      {events && events.length > 0 ? (
+      {/* A history from two events on: one hand-in is the heading above. */}
+      {events && events.length > 1 ? (
         <View testID="grade-history" style={styles.history}>
           <Text style={styles.historyTitle}>Hand-in history</Text>
           {events.map((e) => (
@@ -482,16 +487,13 @@ function GradeForm({
       <SectionTitle>Grade</SectionTitle>
       <Card>
         {cw.grading.kind === 'points' ? (
-          <View style={styles.points}>
-            <View style={styles.pointsField}>
-              <Field
-                testID="grade-points"
-                label={`Out of ${cw.grading.outOf}`}
-                value={draft.points}
-                onChangeText={(v) => change({ points: v })}
-              />
-            </View>
-          </View>
+          <InlineNumber
+            testID="grade-points"
+            label={`Grade out of ${cw.grading.outOf}`}
+            after={`/ ${cw.grading.outOf}`}
+            value={draft.points}
+            onChangeText={(v) => change({ points: v })}
+          />
         ) : (
           <Chips<ScaleMark>
             value={draft.scale as ScaleMark}
@@ -623,8 +625,6 @@ const styles = StyleSheet.create({
   failed: { color: t.feedback.danger },
   note: { fontSize: 15, lineHeight: 22, color: t.text.primary, marginBottom: spacing(3) },
   answer: { marginBottom: spacing(3) },
-  points: { flexDirection: 'row', alignItems: 'flex-end' },
-  pointsField: { width: 160 },
   returnNow: { marginTop: spacing(2) },
   options: { marginTop: spacing(4) },
   history: { marginTop: spacing(3) },

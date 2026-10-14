@@ -18,13 +18,14 @@ const DESKTOP = { width: 1280, height: 900 };
 const browser = await chromium.launch();
 
 async function newPage(vp) {
-  const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: 2 });
+  // REDUCED MOTION, so a figure is the screen at rest: the player's long title
+  // slides along its line, and a capture caught it mid-slide ("ssion 3 — …").
+  const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: 2, reducedMotion: 'reduce' });
   const p = await ctx.newPage();
   await p.goto(WEB, { waitUntil: 'networkidle' });
   return p;
 }
 const tap = (p, id) => p.getByTestId(id).click();
-const sawText = (p, t, to = 20000) => p.getByText(t, { exact: false }).first().waitFor({ timeout: to });
 const home = async (p) => { await p.goto(WEB, { waitUntil: 'domcontentloaded' }); await p.waitForTimeout(2500); };
 
 /**
@@ -143,7 +144,7 @@ await pair(stu, '01-signin', { cutAbove: 'dev-signin-first-admin' });
 await stu.getByTestId('signin-email').fill('fatima.ahmed@example.com');
 await stu.getByTestId('signin-password').fill('HikamStudent1');
 await tap(stu, 'signin-student');
-await sawText(stu, 'Recordings and assignments, soonest first', 25000);
+await stu.getByTestId('screen-title').filter({ visible: true, hasText: /^To do$/ }).first().waitFor({ timeout: 25000 });
 await pair(stu, '02-student-home');
 // The hero card: the home screen promotes the most urgent recording still open
 // and drops it from the grouped list, so this is the handle it has.

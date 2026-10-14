@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { INSTITUTE_TIMEZONE, todayInZone } from '@sabeel/shared';
-import { Card, Empty, Grid, Screen, Segmented } from '../components/ui';
+import { Card, CountsLine, Empty, Grid, Screen, Segmented } from '../components/ui';
 import { useCourseAttendance } from '../ledger';
 import { useStudents } from '../students';
 import type { CourseRow } from '../structure';
@@ -85,7 +85,7 @@ export function CourseAttendanceScreen({
         report.sessions.length === 0 ? (
           <Empty>No sessions in this course yet.</Empty>
         ) : (
-          <Grid min={330}>
+          <Grid min={330} rows>
             {report.sessions.map((s) => (
               <Card key={s.sessionId}>
                 <Pressable
@@ -97,13 +97,13 @@ export function CourseAttendanceScreen({
                   <Text style={styles.name}>{s.title}</Text>
                   <Text style={styles.hint}>{s.date}</Text>
                   {s.submitted ? (
-                    <Text style={styles.counts}>
-                      <Text style={styles.countValue}>{s.present}</Text> present
-                      {'   '}
-                      <Text style={styles.countValue}>{s.absent}</Text> absent
-                      {'   '}
-                      <Text style={styles.countValue}>{s.excused}</Text> excused
-                    </Text>
+                    <CountsLine
+                      counts={[
+                        { value: s.present, label: 'present' },
+                        { value: s.absent, label: 'absent' },
+                        { value: s.excused, label: 'excused' },
+                      ]}
+                    />
                   ) : (
                     <View style={styles.notTakenChip}>
                       <Text style={styles.notTaken}>Attendance not taken</Text>
@@ -117,7 +117,7 @@ export function CourseAttendanceScreen({
       ) : studentRows.length === 0 ? (
         <Empty>Nobody is enrolled in this course yet.</Empty>
       ) : (
-        <Grid min={330}>
+        <Grid min={330} rows>
           {studentRows.map((s) => (
             <Card key={s.studentUid}>
               <Pressable
@@ -134,14 +134,14 @@ export function CourseAttendanceScreen({
                 {s.departed ? (
                   <Text style={styles.departed}>No longer enrolled</Text>
                 ) : null}
-                <Text style={styles.counts}>
-                  <Text style={styles.countValue}>{s.present}</Text> present
-                  {'   '}
-                  <Text style={styles.countValue}>{s.absent}</Text> absent
-                  {'   '}
-                  <Text style={styles.countValue}>{s.excused}</Text> excused
-                  {s.notMarked > 0 ? <Text style={styles.hint}>{`   ${s.notMarked} not marked`}</Text> : null}
-                </Text>
+                <CountsLine
+                  counts={[
+                    { value: s.present, label: 'present' },
+                    { value: s.absent, label: 'absent' },
+                    { value: s.excused, label: 'excused' },
+                    ...(s.notMarked > 0 ? [{ value: s.notMarked, label: 'not marked' }] : []),
+                  ]}
+                />
                 {s.assigned > 0 ? (
                   <Text style={styles.catchup}>
                     Required recordings: {s.completed} of {s.assigned} completed
@@ -176,15 +176,6 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '600', color: t.text.primary },
   hint: { fontSize: 13, color: t.text.secondary },
   departed: { fontSize: 12, color: t.text.secondary, fontStyle: 'italic', marginTop: spacing(1) },
-  counts: { fontSize: 14, color: t.text.secondary, marginTop: spacing(1) },
-  /*
-   * ONE WEIGHT, NO TONE. A breakdown is three facts, not three verdicts, and
-   * binding the colour to the WORD made the number lie: "0 present" came out
-   * green because "present" is good, and "11 excused" came out in the attention
-   * colour on every healthy session — excused is the normal, intended state
-   * that opens a recording and is the whole of a student's entitlement.
-   */
-  countValue: { color: t.text.primary, fontWeight: '700' },
   // THE SAME CHIP THE SESSIONS LIST WEARS. This screen's only job is attendance
   // coverage, and the state that blocks every student's access was set in the
   // same italic grey as the neutral counts beside it — the quietest of three

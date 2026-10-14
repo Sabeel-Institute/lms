@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
-import { Button } from './ui';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Button, IconButton } from './ui';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
@@ -20,6 +20,7 @@ export function Sheet({
   onClose,
   closeLabel = 'Close',
   closeTestID,
+  closeAt = 'foot',
   children,
 }: {
   visible: boolean;
@@ -27,6 +28,13 @@ export function Sheet({
   onClose: () => void;
   closeLabel?: string;
   closeTestID?: string;
+  /**
+   * Where the way out is. A MENU or a picker closes from a × beside its title,
+   * as menus do; a full-width bar under one menu of three options was the
+   * biggest thing in it. A sheet whose way out is one of its answers — Cancel
+   * under a form, Stay under "Leave now?" — keeps it at the foot, full width.
+   */
+  closeAt?: 'foot' | 'corner';
   children: ReactNode;
 }) {
   if (!visible) return null;
@@ -39,7 +47,14 @@ export function Sheet({
             measures the SCREEN BEHIND the sheet — the panel would have to lose
             its width cap entirely before anything noticed. */}
         <Pressable testID="sheet-panel" style={styles.panel} onPress={() => {}}>
-          <Text style={styles.title}>{title}</Text>
+          {closeAt === 'corner' ? (
+            <View style={styles.titleRow}>
+              <Text style={[styles.title, styles.titleInRow]}>{title}</Text>
+              <IconButton testID={closeTestID} icon="close" label={closeLabel} bare onPress={onClose} />
+            </View>
+          ) : (
+            <Text style={styles.title}>{title}</Text>
+          )}
           <ScrollView
             style={styles.body}
             contentContainerStyle={styles.bodyContent}
@@ -50,7 +65,9 @@ export function Sheet({
           {/* Quiet, and deliberately: this is the sheet's way OUT, sitting
               under a form whose primary is the reason the sheet is open. Filled,
               full width, it outweighed a disabled "Create account" above it. */}
-          <Button testID={closeTestID} label={closeLabel} variant="quiet" onPress={onClose} block />
+          {closeAt === 'foot' ? (
+            <Button testID={closeTestID} label={closeLabel} variant="quiet" onPress={onClose} block />
+          ) : null}
         </Pressable>
       </Pressable>
     </Modal>
@@ -127,6 +144,8 @@ const styles = StyleSheet.create({
     gap: spacing(2),
   },
   title: { fontSize: 18, fontWeight: '700', color: t.text.primary },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing(2) },
+  titleInRow: { flexShrink: 1 },
   body: { flexGrow: 0 },
   bodyContent: { gap: spacing(1) },
   option: {

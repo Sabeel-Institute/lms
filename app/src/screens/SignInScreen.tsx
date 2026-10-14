@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { APP_NAME, FIRST_ADMIN_LOCAL_PART } from '@sabeel/shared';
 import { auth } from '../firebase';
@@ -42,23 +42,8 @@ export function SignInScreen() {
 
   return (
     <Screen title={APP_NAME}>
-      <View style={styles.block}>
-        <Text style={styles.groupTitle}>Staff</Text>
-        <Text style={styles.groupHint}>
-          Sign in with your Sabeel Google account. New accounts need an admin to approve
-          them before they can be used.
-        </Text>
-        <Button
-          testID="signin-google"
-          label="Sign in with Google"
-          busy={busy === 'google'}
-          disabled={busy !== null}
-          onPress={() => void run('google', signInWithGoogle)}
-        />
-      </View>
-
-      <View style={styles.divider} />
-
+      {/* STUDENTS FIRST: most people signing in are students, and their form
+          owns the page's one main button. */}
       <View style={styles.block}>
         <Text style={styles.groupTitle}>Students</Text>
         <Text style={styles.groupHint}>
@@ -91,10 +76,14 @@ export function SignInScreen() {
             })
           }
         />
-        <Button
-          label="Email me a password link"
-          variant="secondary"
-          busy={busy === 'reset'}
+        {/* A LINK, not a second button the size of Sign in: on an empty form
+            the two were identical grey bars. Muted until there is an address
+            to send it to. */}
+        <Pressable
+          testID="signin-reset"
+          accessibilityRole="button"
+          accessibilityLabel="Email me a password link"
+          aria-disabled={busy !== null || !email.trim()}
           disabled={busy !== null || !email.trim()}
           onPress={() =>
             void run('reset', async () => {
@@ -104,6 +93,25 @@ export function SignInScreen() {
               setInfo('If that address has an account, a link is on its way.');
             })
           }
+          style={styles.link}
+        >
+          <Text style={[styles.linkText, busy !== null || !email.trim() ? styles.linkMuted : null]}>
+            {busy === 'reset' ? 'Sending the link…' : 'Email me a password link'}
+          </Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.block}>
+        <Text style={styles.groupHint}>Staff: sign in with your Sabeel Google account. An admin approves new accounts.</Text>
+        <Button
+          testID="signin-google"
+          label="Sign in with Google"
+          variant="secondary"
+          busy={busy === 'google'}
+          disabled={busy !== null}
+          onPress={() => void run('google', signInWithGoogle)}
         />
       </View>
 
@@ -172,7 +180,11 @@ const styles = StyleSheet.create({
   block: { marginBottom: spacing(2) },
   groupTitle: { fontSize: 17, fontWeight: '700', color: t.text.primary, marginBottom: spacing(1) },
   groupHint: { fontSize: 14, color: t.text.secondary, marginBottom: spacing(1) },
-  divider: { height: 1, backgroundColor: t.accent.gold, marginVertical: spacing(6) },
+  divider: { height: 1, backgroundColor: t.accent.gold, marginVertical: spacing(5) },
+  link: { alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 4, justifyContent: 'center', marginTop: spacing(1) },
+  // This app's link treatment (ledeLink in ui.tsx): accent and underline.
+  linkText: { fontSize: 15, color: t.text.accent, textDecorationLine: 'underline' },
+  linkMuted: { color: t.text.secondary, textDecorationLine: 'none' },
   devRow: {
     marginTop: spacing(8),
     padding: spacing(3),

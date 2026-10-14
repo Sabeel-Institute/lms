@@ -3,8 +3,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AUDIT_PAGE, INSTITUTE_TIMEZONE, stampInZone } from '@sabeel/shared';
 import { useDecidedStaff } from '../staff';
 import { useStudents } from '../students';
-import { Empty, Grid, Notice, Screen } from '../components/ui';
+import { Empty, Grid, Notice, Screen, useGridCell } from '../components/ui';
 import { useAuditState, useMyAudit, type AuditRow } from '../ledger';
+import { useAllCourses, useCohortName, useMyCourses, type CourseRow } from '../structure';
 
 const NO_ENTRIES: AuditRow[] = [];
 import { getTheme, spacing } from '../theme';
@@ -62,6 +63,9 @@ export function AuditScreen({
       ]),
     [staff, students],
   );
+  // The institute-wide view spans courses, so each entry names its own; a
+  // course's view leaves its course off every entry.
+  const courseNames = useCourseNames(useAllCourses(allowed && courseId === null));
 
   if (!allowed) {
     return (
@@ -97,9 +101,9 @@ export function AuditScreen({
         ) : entries.length === 0 ? (
           <Empty>No audit entries yet.</Empty>
         ) : (
-          <Grid min={330}>
+          <Grid min={330} rows>
             {entries.map((e) => (
-              <AuditCard key={e.id} entry={e} people={people} />
+              <AuditCard key={e.id} entry={e} people={people} courseNames={courseNames} courseId={courseId} />
             ))}
           </Grid>
         )}
@@ -127,6 +131,8 @@ export function MyAuditScreen({ uid }: { uid: string }) {
   const entries = useMyAudit(uid);
   const staff = useDecidedStaff(true);
   const students = useStudents(true);
+  // A manager acts only in the courses they run, so these name every one.
+  const courseNames = useCourseNames(useMyCourses(uid));
   const people = useMemo(
     () =>
       new Map<string, string>([
@@ -147,9 +153,9 @@ export function MyAuditScreen({ uid }: { uid: string }) {
         {entries.length === 0 ? (
           <Empty>You have not changed anything yet.</Empty>
         ) : (
-          <Grid min={330}>
+          <Grid min={330} rows>
             {entries.map((e) => (
-              <AuditCard key={e.id} entry={e} people={people} />
+              <AuditCard key={e.id} entry={e} people={people} courseNames={courseNames} courseId={null} />
             ))}
           </Grid>
         )}
@@ -158,26 +164,64 @@ export function MyAuditScreen({ uid }: { uid: string }) {
   );
 }
 
-function AuditCard({ entry: e, people }: { entry: AuditRow; people: Map<string, string> }) {
+/**
+ * Each course's name and term, by id: "course: Hikam Foundations · Autumn 2026"
+ * where an entry printed `courseId=…`. The term, because a course name recurs
+ * from one term to the next.
+ */
+function useCourseNames(courses: CourseRow[]): Map<string, string> {
+  const cohortNameOf = useCohortName();
+  return useMemo(
+    () =>
+      new Map(
+        courses.map((c) => {
+          const cohort = cohortNameOf(c.cohortId);
+          return [c.id, cohort ? `${c.name} · ${cohort}` : c.name];
+        }),
+      ),
+    [courses, cohortNameOf],
+  );
+}
+
+function AuditCard({
+  entry: e,
+  people,
+  courseNames,
+  courseId,
+}: {
+  entry: AuditRow;
+  people: Map<string, string>;
+  courseNames: Map<string, string>;
+  /** The course this screen is about, which its entries need not repeat. */
+  courseId: string | null;
+}) {
+  const inGrid = useGridCell();
   // A list of uids in a detail — the managers added to or removed from a
   // course — reads as names where the directory has them, like a target does.
   const named = (v: unknown) =>
     Array.isArray(v) ? v.map((u) => people.get(String(u)) ?? String(u)).join(', ') : String(v);
   const detail = e.detail ? Object.entries(e.detail).map(([k, v]) => `${k}: ${named(v)}`).join(' · ') : '';
-  const targets = Object.entries(e.targets ?? {})
-    .map(([k, v]) =>
-      PERSON_TARGETS[k] ? `${PERSON_TARGETS[k]}: ${people.get(String(v)) ?? v}` : `${k}=${v}`,
-    )
-    .join(' · ');
   // A name when the directory has one; the raw uid when it does not — a deleted
   // account is still evidence, and a shortened id is worse than a full one when
   // it is the only handle left.
   const actor =
-    e.actorRole === 'system'
-      ? 'system'
-      : `${e.actorRole} ${people.get(e.actorUid) ?? e.actorUid}`;
+    e.actorRole === 'system' ? 'system' : `${people.get(e.actorUid) ?? e.actorUid} (${e.actorRole})`;
+  // WHO, THEN WHAT TO, on one line. The screen's own course is not repeated on
+  // every entry of its history.
+  const who = [
+    actor,
+    ...Object.entries(e.targets)
+      .filter(([k, v]) => !(k === 'courseId' && v === courseId))
+      .map(([k, v]) =>
+        PERSON_TARGETS[k]
+          ? `${PERSON_TARGETS[k]}: ${people.get(String(v)) ?? v}`
+          : k === 'courseId' && courseNames.has(v)
+            ? `course: ${courseNames.get(v)}`
+            : `${k}=${v}`,
+      ),
+  ].join(' · ');
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, inGrid]}>
       <View style={styles.head}>
         <Text style={styles.action}>{ACTION_LABELS[e.action] ?? RETIRED_ACTION_LABELS[e.action] ?? e.action}</Text>
         {/* The institute's clock, not the reader's — see `stampInZone`. This
@@ -185,8 +229,7 @@ function AuditCard({ entry: e, people }: { entry: AuditRow; people: Map<string, 
             reading their own zone dates an override to the wrong day. */}
         <Text style={styles.time}>{stampInZone(INSTITUTE_TIMEZONE, e.at)}</Text>
       </View>
-      <Text style={styles.by}>by {actor}</Text>
-      {targets ? <Text style={styles.targets}>{targets}</Text> : null}
+      <Text style={styles.targets}>{who}</Text>
       {detail ? <Text style={styles.detail}>{detail}</Text> : null}
     </View>
   );
@@ -275,8 +318,7 @@ const styles = StyleSheet.create({
   // secondary, not muted. "When" is half of what this screen's own subtitle
   // promises, and taupe is ~2.7:1 — BRAND.md's captions-only colour.
   time: { fontSize: 12, color: t.text.secondary },
-  by: { fontSize: 13, color: t.text.secondary, marginTop: spacing(1) },
-  targets: { fontSize: 12, color: t.text.secondary, marginTop: spacing(1), fontVariant: ['tabular-nums'] },
+  targets: { fontSize: 13, color: t.text.secondary, marginTop: spacing(1), fontVariant: ['tabular-nums'] },
   // secondary, not accent. `text.accent` is the app's link colour, and an
   // override's reason is content — set in raspberry it was the loudest line on
   // the card and read as something to click.

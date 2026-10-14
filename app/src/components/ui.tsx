@@ -6,8 +6,10 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ComponentProps,
+  type ReactElement,
   type ReactNode,
 } from 'react';
 import {
@@ -17,6 +19,8 @@ import {
   Text,
   TextInput,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { LAYOUT_WIDTHS, getTheme, spacing, type LayoutWidth } from '../theme';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -57,7 +61,8 @@ export function Screen({ title, titleLink, subtitle, status, parent, width = 're
    * the accessible label says where.
    */
   titleLink?: { testID: string; label: string; onPress: () => void };
-  subtitle?: string;
+  /** Words under the title; or an element of its own, as a student's `EmailText`. */
+  subtitle?: string | ReactElement;
   /**
    * Which maximum this screen's content stops growing at. See `LAYOUT_WIDTHS` —
    * prose and forms want a narrow reading column, collections want the room.
@@ -67,9 +72,8 @@ export function Screen({ title, titleLink, subtitle, status, parent, width = 're
    */
   width?: LayoutWidth;
   /**
-   * Screen-level actions, rendered beside the heading on a wide screen and
-   * beneath it on a phone. A primary action belongs next to the title it acts
-   * on, not stranded at the bottom of a 1400px window.
+   * Screen-level actions — icons: a plus that adds, a pencil that edits, a ⋮
+   * that holds the rest — beside the title they act on, at every width.
    */
   actions?: ReactNode;
   /** The state of the thing this screen is about. Rendered as a lamp on the
@@ -121,7 +125,9 @@ export function Screen({ title, titleLink, subtitle, status, parent, width = 're
             </Text>
           ) : null}
           {status ? <StatusLight status={status} /> : null}
-          {parent || subtitle ? (
+          {subtitle !== undefined && typeof subtitle !== 'string' ? (
+            <View style={styles.ledeBlock}>{subtitle}</View>
+          ) : parent || subtitle ? (
             <Text style={styles.lede}>
               {parent ? (
                 // Underlined, not coloured alone: colour by itself does not say
@@ -174,12 +180,109 @@ export function Screen({ title, titleLink, subtitle, status, parent, width = 're
   );
 }
 
-export function Card({ children }: { children: ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
+/**
+ * How the grid a card or row sits in draws it: on its own (`none`), as one of
+ * a grid's cards (`cards`), or as a row of the one card a list of rows becomes
+ * on a phone (`rows`). A card in a grid drops its own bottom margin, so the
+ * grid's gap is the only space between cards — the two together put twice the
+ * room between cards stacked on a phone as beside each other on a laptop.
+ */
+type GridLook = 'none' | 'cards' | 'rows';
+const GridLookContext = createContext<GridLook>('none');
+
+/**
+ * What a card or row adds to its own style for the grid it sits in: no
+ * margin of its own in any grid, and no border or corners as a row of the one
+ * card a list of rows becomes. `Card` and `ListRow` apply it; a hand-built
+ * card in a `Grid` applies it too, or it keeps the margin the grid replaced.
+ */
+export function useGridCell(): StyleProp<ViewStyle> {
+  const look = useContext(GridLookContext);
+  return look === 'none' ? null : look === 'cards' ? styles.cardInGrid : [styles.cardInGrid, styles.cardAsRow];
 }
 
-export function SectionTitle({ children }: { children: ReactNode }) {
-  return <Text style={styles.sectionTitle}>{children}</Text>;
+export function Card({ children }: { children: ReactNode }) {
+  return <View style={[styles.card, useGridCell()]}>{children}</View>;
+}
+
+/** One count on a `CountsLine`. */
+export interface Count {
+  value: number;
+  /** The word after the number: "required", "not complete". */
+  label: string;
+  /** Drawn in the danger colour when above zero: "missed". */
+  alarm?: boolean;
+  testID?: string;
+}
+
+/**
+ * Counts on one line — "8 required · 0 completed · 3 missed" — each number
+ * bold and JOINED to its words, so a narrow screen wraps between counts and
+ * never splits "37" from "not complete". Replaced the tiles of four boxes
+ * that took a phone's first screen to say one sentence.
+ */
+export function CountsLine({ lead, counts, testID }: { lead?: string; counts: Count[]; testID?: string }) {
+  return (
+    <Text style={styles.countsLine} testID={testID}>
+      {lead ? `${lead}: ` : ''}
+      {counts.map((c, i) => (
+        <Text key={c.label}>
+          {/* The dot rides with the count AFTER it, so a wrap never leaves one
+              dangling at the end of a line. */}
+          {i > 0 ? '  \u00B7\u00A0\u00A0' : ''}
+          <Text testID={c.testID} style={[styles.countsNum, c.alarm && c.value > 0 ? styles.countsAlarm : null]}>
+            {c.value}
+          </Text>
+          {`\u00A0${c.label.replace(/ /g, '\u00A0')}`}
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
+/**
+ * An email address on ONE line. Wrapped, it broke at "example." and put "com"
+ * on a line of its own. Cut short when it does not fit — in the middle on a
+ * phone, so the name before the @ and the domain both stay; at the end in a
+ * browser, which has no middle cut. ONE TEXT, so it copies and is read out as
+ * one address: two pieces side by side copied as two lines.
+ */
+export function EmailText({
+  email,
+  suffix,
+  lede,
+  testID,
+}: {
+  email: string;
+  /** Words after the address that never give way: " · admin". */
+  suffix?: string;
+  /** Set as a page's subtitle rather than a row's detail. */
+  lede?: boolean;
+  testID?: string;
+}) {
+  const look = lede ? styles.ledeText : styles.rowDetail;
+  return (
+    <View testID={testID} style={styles.email}>
+      <Text style={[look, styles.emailText]} numberOfLines={1} ellipsizeMode="middle">
+        {email}
+      </Text>
+      {suffix ? <Text style={[look, styles.emailSuffix]}>{suffix}</Text> : null}
+    </View>
+  );
+}
+
+/**
+ * A section's heading, and an action that belongs to the whole section — the
+ * plus that adds to its list — at the right-hand end of the same line.
+ */
+export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  if (!action) return <Text style={styles.sectionTitle}>{children}</Text>;
+  return (
+    <View style={styles.sectionTitleRow}>
+      <Text style={[styles.sectionTitle, styles.sectionTitleInRow]}>{children}</Text>
+      {action}
+    </View>
+  );
 }
 
 export function Button({
@@ -363,7 +466,8 @@ export function ListRow({
 }: {
   name: string;
   status?: ReactNode;
-  detail?: string;
+  /** A line under the name: words, or an `EmailText`. */
+  detail?: ReactNode;
   actions?: ReactNode;
   /**
    * Keep the actions on the name's line, pinned right and centred, letting a
@@ -377,17 +481,18 @@ export function ListRow({
   openLabel?: string;
   testID?: string;
 }) {
+  const inGrid = useGridCell();
   const ident = (
     <>
       <View style={styles.rowTitleLine}>
         <Text style={styles.rowTitle}>{name}</Text>
         {status ?? null}
       </View>
-      {detail ? <Text style={styles.rowDetail}>{detail}</Text> : null}
+      {typeof detail === 'string' ? <Text style={styles.rowDetail}>{detail}</Text> : (detail ?? null)}
     </>
   );
   return (
-    <View style={styles.rowCard}>
+    <View style={[styles.rowCard, inGrid]}>
       <View style={[styles.rowHead2, actionsPinned ? styles.rowHeadPinned : null]}>
         {/* Title, status and detail are ONE block, so when the actions wrap to
             their own line they go below the whole identity rather than landing
@@ -511,6 +616,46 @@ export function Field({
         onContentSizeChange={multiline ? onGrow : undefined}
         textAlignVertical={multiline ? 'top' : undefined}
       />
+    </View>
+  );
+}
+
+/**
+ * A number inside its sentence — "Out of [10]", "[8] / 10" — in a box as wide
+ * as the number. A full-width field for two digits read as a paragraph to
+ * write, a line to itself above the words that say what it is.
+ */
+export function InlineNumber({
+  before,
+  after,
+  label,
+  value,
+  onChangeText,
+  testID,
+}: {
+  before?: string;
+  after?: string;
+  /** The whole sentence, for a screen reader: "Grade out of 10". */
+  label: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  testID?: string;
+}) {
+  return (
+    <View style={styles.inlineNumber}>
+      {before ? <Text style={styles.inlineNumberText}>{before}</Text> : null}
+      <TextInput
+        testID={testID}
+        accessibilityLabel={label}
+        style={[styles.input, styles.inlineNumberBox]}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType="decimal-pad"
+        inputMode="decimal"
+        autoCorrect={false}
+        selectTextOnFocus
+      />
+      {after ? <Text style={styles.inlineNumberText}>{after}</Text> : null}
     </View>
   );
 }
@@ -647,7 +792,21 @@ function StatusLight({ status }: { status: string }) {
  * and a grid that did not state it would be laid out by whatever the default
  * happened to be that day.
  */
-export function Grid({ min, children }: { min: number; children: ReactNode }) {
+export function Grid({
+  min,
+  rows = false,
+  children,
+}: {
+  min: number;
+  /**
+   * A LIST OF ROWS — people, entries — rather than of cards: on one column it
+   * is drawn as one card of rows divided by hairlines, the way a phone shows a
+   * list, instead of a stack of separate cards each carrying its own border
+   * and margin. Two columns and more stay cards.
+   */
+  rows?: boolean;
+  children: ReactNode;
+}) {
   const [width, setWidth] = useState(0);
   const cells = Children.toArray(children);
 
@@ -697,8 +856,10 @@ export function Grid({ min, children }: { min: number; children: ReactNode }) {
   const cell =
     width > 0 && fits > 1 ? Math.floor((width - gap * (cols - 1)) / cols) : undefined;
 
+  const asRows = rows && cols === 1;
   return (
-    <View style={styles.grid} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={[styles.grid, asRows ? styles.gridAsRows : null]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      <GridLookContext.Provider value={asRows ? 'rows' : 'cards'}>
       {cells.map((child, i) => (
         /*
          * KEYED BY THE CHILD'S OWN KEY, never by index.
@@ -716,12 +877,65 @@ export function Grid({ min, children }: { min: number; children: ReactNode }) {
           // next one wraps beneath it. A percentage `width` on a flex item does
           // not reliably resolve against a wrapping row — the cards came out
           // sized to their own text, each a different width.
-          style={[styles.gridCell, cell ? { width: cell } : styles.gridCellFull]}
+          style={[styles.gridCell, cell ? { width: cell } : styles.gridCellFull, asRows && i > 0 ? styles.gridRowDivider : null]}
         >
           {child}
         </View>
       ))}
+      </GridLookContext.Provider>
     </View>
+  );
+}
+
+/**
+ * ONE COLUMN OF ROWS AT EVERY WIDTH, divided by hairlines inside one card —
+ * how `Grid rows` draws itself on a phone — for a list read top to bottom
+ * whatever the window: an assignment's students, a course's pages.
+ */
+export function RowList({ testID, children }: { testID?: string; children: ReactNode }) {
+  return (
+    <View testID={testID} style={styles.rowList}>
+      <GridLookContext.Provider value="rows">
+        {Children.toArray(children).map((child, i) => (
+          <View key={(isValidElement(child) && child.key) || i} style={i > 0 ? styles.gridRowDivider : null}>
+            {child}
+          </View>
+        ))}
+      </GridLookContext.Provider>
+    </View>
+  );
+}
+
+/**
+ * A row that goes somewhere: its name, a line about what is there, and a
+ * chevron. The whole row is the target.
+ */
+export function NavRow({
+  label,
+  caption,
+  onPress,
+  testID,
+}: {
+  label: string;
+  /** What is there: words, or a `CountsLine`. */
+  caption?: ReactNode;
+  onPress: () => void;
+  testID?: string;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [styles.navRow, pressed ? styles.navRowPressed : null]}
+    >
+      <View style={styles.navText}>
+        <Text style={styles.rowTitle}>{label}</Text>
+        {typeof caption === 'string' ? <Text style={styles.rowDetail}>{caption}</Text> : (caption ?? null)}
+      </View>
+      <MaterialIcons name="chevron-right" size={22} color={t.text.muted} />
+    </Pressable>
   );
 }
 
@@ -746,7 +960,11 @@ export function AddAction({
   testID,
   children,
 }: {
-  /** The button's words — "Add a student", not "Add" or "+". */
+  /**
+   * What the plus does, in words — "Add a student". It is the button's name
+   * for a screen reader and the sheet's purpose; the plus itself carries no
+   * words (Faisal, 2026-10-14: a plus on the heading line, as lists add).
+   */
   label: string;
   /** The sheet's heading. Usually the same words. */
   title: string;
@@ -757,11 +975,10 @@ export function AddAction({
   const [open, setOpen] = useState(false);
   return (
     <AddActionContext.Provider value={() => setOpen(false)}>
-      {/* CONTENT-WIDTH AT EVERY WIDTH, which is the one place `hug` is used.
-          A full-width raspberry bar above the list is the first thing on a phone
-          screen, and it spends the accent well past its share on a page whose
-          job is the list underneath. */}
-      <Button testID={testID} label={label} hug onPress={() => setOpen(true)} />
+      {/* A PLUS ON THE HEADING LINE. A labelled button wrapped to a line of its
+          own under the title on a phone, the first thing on a page whose job
+          is the list underneath. */}
+      <IconButton testID={testID} icon="add" label={label} onPress={() => setOpen(true)} />
       <Sheet visible={open} title={title} onClose={() => setOpen(false)} closeLabel="Cancel">
         {children}
       </Sheet>
@@ -970,6 +1187,7 @@ export function ConfirmDanger({
   onConfirm,
   testID,
   confirmTestID,
+  opened,
   children,
 }: {
   enabled?: boolean;
@@ -982,17 +1200,27 @@ export function ConfirmDanger({
   onConfirm: () => void;
   testID?: string;
   confirmTestID?: string;
+  /**
+   * OPENED FROM ELSEWHERE — a menu's Delete — instead of from a button of its
+   * own: whether it is open, and how it closes. Without it, the confirm owns
+   * that state and draws its button.
+   */
+  opened?: { open: boolean; close: () => void };
   /** The actions this replaces while confirming. */
   children?: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = opened ? opened.open : ownOpen;
+  const close = opened ? opened.close : () => setOwnOpen(false);
+  const closeNow = useRef(close);
+  closeNow.current = close;
 
   // If the underlying thing stops being deletable while the confirm is open
   // (someone else published it), close it — otherwise the stale `open` would
   // spring the confirm back the moment it became deletable again.
   useEffect(() => {
-    if (!enabled) setOpen(false);
-  }, [enabled]);
+    if (!enabled && open) closeNow.current();
+  }, [enabled, open]);
 
   if (!enabled) return <>{children}</>;
 
@@ -1012,7 +1240,7 @@ export function ConfirmDanger({
               editor's, a confirmation's. Filled sage, it was the most legible
               control on a card whose primary is correctly disabled until a
               reason is typed. */}
-          <Button label="Cancel" variant="quiet" disabled={busy} onPress={() => setOpen(false)} />
+          <Button label="Cancel" variant="quiet" disabled={busy} onPress={close} />
         </Row>
       </View>
     );
@@ -1021,9 +1249,11 @@ export function ConfirmDanger({
   return (
     <>
       {children}
-      <View style={styles.dangerZone}>
-        <Button testID={testID} label={label} variant="danger" onPress={() => setOpen(true)} />
-      </View>
+      {opened ? null : (
+        <View style={styles.dangerZone}>
+          <Button testID={testID} label={label} variant="danger" onPress={() => setOwnOpen(true)} />
+        </View>
+      )}
     </>
   );
 }
@@ -1149,11 +1379,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   contentWide: { paddingHorizontal: spacing(8), paddingTop: spacing(7) },
-  // WRAPS: three actions (Sessions, Assignments, Attendance report) do not
-  // fit one 320px line, and a button cut off at the edge is no button. The
-  // `maxWidth` is what lets it: a row sized to its content never runs out of
-  // room to wrap in, it just runs past the screen.
-  headActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), alignItems: 'flex-start', flexShrink: 1, maxWidth: '100%' },
+  headActions: { flexDirection: 'row', gap: spacing(2), alignItems: 'flex-start', flexShrink: 0 },
   h1: { fontSize: 26, fontWeight: '700', color: t.text.primary },
   // Hugs the name rather than spanning the row, so the press target is the
   // words and the chevron, not the empty space beside them.
@@ -1222,11 +1448,42 @@ const styles = StyleSheet.create({
    * up; as flex items it has to be answered.
    */
   gridCell: { flexShrink: 0, minWidth: 0 },
+  // One card holding the rows: its border and corners, and no gap between rows.
+  gridAsRows: {
+    gap: 0,
+    backgroundColor: t.bg.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: t.border.subtle,
+    overflow: 'hidden',
+  },
+  rowList: {
+    backgroundColor: t.bg.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: t.border.subtle,
+    overflow: 'hidden',
+    marginBottom: spacing(3),
+  },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(2),
+    minHeight: 52,
+    paddingVertical: spacing(3),
+    paddingLeft: spacing(4),
+    paddingRight: spacing(2),
+  },
+  navRowPressed: { backgroundColor: t.bg.inset },
+  navText: { flex: 1, minWidth: 0 },
+  gridRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border.subtle },
   // `flexBasis: '100%'`, not 0. With `flexWrap` a zero basis never fills a line,
   // so every cell landed on the SAME line — thirteen 21px slivers. A full-width
   // basis is what makes one item per line and fills it.
   gridCellFull: { flexGrow: 1, flexBasis: '100%' },
   lede: { fontSize: 15, color: t.text.secondary, marginTop: spacing(1) },
+  ledeBlock: { marginTop: spacing(1) },
+  ledeText: { fontSize: 15, color: t.text.secondary },
   // Raspberry is the primary action's colour, and this IS the header's action.
   // #83114F on the ivory canvas is far past 4.5:1, so it carries at 15pt.
   ledeLink: { color: t.text.accent, textDecorationLine: 'underline' },
@@ -1301,6 +1558,24 @@ const styles = StyleSheet.create({
     padding: spacing(4),
     marginBottom: spacing(3),
   },
+  countsLine: { fontSize: 14, lineHeight: 22, color: t.text.secondary },
+  email: { flexDirection: 'row', minWidth: 0, maxWidth: '100%' },
+  emailText: { flexShrink: 1, minWidth: 0 },
+  emailSuffix: { flexShrink: 0 },
+  countsNum: { fontSize: 15, fontWeight: '700', color: t.text.primary },
+  countsAlarm: { color: t.text.danger },
+  cardInGrid: { marginTop: 0, marginBottom: 0 },
+  // A row of the grid's one card: the card's border and corners are the grid's.
+  cardAsRow: { borderWidth: 0, borderRadius: 0 },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing(2),
+    marginTop: spacing(3),
+    marginBottom: spacing(1),
+  },
+  sectionTitleInRow: { flexShrink: 1, marginTop: 0, marginBottom: 0 },
   btn: {
     borderRadius: 8,
     paddingVertical: spacing(3),
@@ -1366,6 +1641,9 @@ const styles = StyleSheet.create({
   inputMultiline: { minHeight: 114, maxHeight: 312, lineHeight: 22, textAlignVertical: 'top' },
   fieldLabel: inputLook.label,
   input: inputLook.box,
+  inlineNumber: { flexDirection: 'row', alignItems: 'center', gap: spacing(2), marginTop: spacing(3) },
+  inlineNumberText: { fontSize: 15, color: t.text.primary },
+  inlineNumberBox: { width: 76, textAlign: 'center' },
   notice: {
     borderRadius: 8,
     padding: spacing(3),
@@ -1444,27 +1722,27 @@ const styles = StyleSheet.create({
   // `Screen`'s note and `StatusLight`.
   headRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    // The top, so an icon stays with the title's first line when a long name
+    // wraps, instead of floating between its lines.
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing(3),
-    flexWrap: 'wrap',
     marginBottom: spacing(4),
   },
   /*
-   * `minWidth` IS WHAT MAKES THE ROW WRAP. `headRow` is `flexWrap: 'wrap'`, but
-   * a wrap only happens when something does not FIT — and with no floor this
-   * column shrinks indefinitely, so the row never overflows and the actions
-   * never move down. The title just gets narrower until it breaks mid-word:
-   * measured on a Pixel 6, "Hikam Foundations" beside Sessions + Attendance
-   * report rendered as "Hikam / Foundat / ions".
+   * THE TITLE GIVES WAY, AND WRAPS BETWEEN ITS WORDS; the icons beside it do
+   * not move. They are icons — a plus, a pencil, a ⋮ — 44px each, so even two
+   * leave a 320px phone's title 172px, wider than any word in a course or
+   * session name. A row that wrapped instead put the pencil on a line of its
+   * own under every long title: a wrapping row lays a long title out at its
+   * whole one-line width first, which fills the line, and only then shrinks it.
    *
-   * The sweep cannot see this. It asserts nothing is clipped, nothing overlaps
-   * and the column caps — all true of a crushed heading — and react-native-web
-   * does not reproduce Yoga's `flexShrink: 0` default on the actions beside it,
-   * so the squeeze never happens in a browser at any width. Same defect as the
-   * ledger tiles' "Accountabl / e", same remedy. Device-only, both times.
+   * `minWidth: 0` is what lets it shrink at all: a flex item keeps its
+   * content's width otherwise, and the title would push the icons off the
+   * screen. Yoga (Android) gives `flexShrink: 0` to the icons by default, so
+   * they keep their size there too.
    */
-  headText: { flexShrink: 1, flexGrow: 1, minWidth: 220 },
+  headText: { flex: 1, minWidth: 0 },
   light: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1497,6 +1775,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
+    // Lines of a wrapped row are packed to the TOP of its minimum height unless
+    // told otherwise, which left a blank band under every two-line row.
+    alignContent: 'center',
     gap: spacing(2),
     minHeight: 52,
   },

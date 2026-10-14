@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   INSTITUTE_TIMEZONE,
@@ -8,7 +8,20 @@ import {
   todayInZone,
   unbreakableDate,
 } from '@sabeel/shared';
-import { Button, Card, Chips, Empty, Notice, Row, Screen, Segmented, StatusChip } from '../components/ui';
+import {
+  Button,
+  Card,
+  Chips,
+  CountsLine,
+  Empty,
+  IconButton,
+  Notice,
+  Row,
+  RowList,
+  Screen,
+  Segmented,
+  useGridCell,
+} from '../components/ui';
 import { RichText } from '../components/RichText';
 import { Attachments } from '../components/Attachments';
 import {
@@ -32,8 +45,9 @@ const NO_STUDENTS: StudentRow[] = [];
 
 /**
  * One assignment's page: where is everyone? Laid out like the listening
- * progress page, so a teacher who knows one can read the other: four counts,
- * filters, then the class by name, each row opening that student's work.
+ * progress page, so a teacher who knows one can read the other: a line of
+ * counts, filters, then the class by name, each row opening that student's
+ * work.
  */
 export function CourseworkDetailScreen({
   cls,
@@ -107,16 +121,15 @@ export function CourseworkDetailScreen({
         .filter(Boolean)
         .join(' · ')}
       width="list"
+      actions={<IconButton testID="coursework-edit" icon="edit" bare label="Edit assignment" onPress={onEdit} />}
     >
-      <View style={styles.head}>
-        <StatusChip status={cw.status} />
-        <Row>
-          {toGrade.length > 0 ? (
-            <Button testID="coursework-grade" label="Grade" hug onPress={() => onGrade(toGrade[0], toGrade)} />
-          ) : null}
-          <Button testID="coursework-edit" label="Edit" variant="secondary" hug onPress={onEdit} />
-        </Row>
-      </View>
+      {/* No status chip: a draft says so in the notice below, and "posted" on
+          every posted assignment said nothing. */}
+      {toGrade.length > 0 ? (
+        <View style={styles.head}>
+          <Button testID="coursework-grade" label="Grade" hug onPress={() => onGrade(toGrade[0], toGrade)} />
+        </View>
+      ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {cw.status === 'draft' ? (
         <Notice tone="info">Not posted. No student can see it until you post it from Edit.</Notice>
@@ -149,12 +162,16 @@ export function CourseworkDetailScreen({
         <Empty>{cw.status === 'draft' ? 'Nobody has it yet: it goes to the class when it is posted.' : 'Nobody in the class has this assignment.'}</Empty>
       ) : (
         <>
-          <View style={styles.tiles}>
-            <Tile label="Expected" value={counts.expected} />
-            <Tile label="Handed in" value={counts.handedIn} />
-            <Tile label={beforeDue ? 'Not in yet' : 'Past due'} value={beforeDue ? counts.notInYet : counts.pastDue} />
-            <Tile label="Missed" value={counts.missed} />
-          </View>
+          <CountsLine
+            testID="coursework-counts"
+            counts={[
+              { value: counts.handedIn, label: `of ${counts.expected} handed in`, testID: 'coursework-count-handed-in' },
+              beforeDue
+                ? { value: counts.notInYet, label: 'not in yet' }
+                : { value: counts.pastDue, label: 'past due' },
+              { value: counts.missed, label: 'missed', alarm: true },
+            ]}
+          />
           <View style={styles.filters}>
             <Chips<WorkFilter>
               value={filter}
@@ -168,28 +185,25 @@ export function CourseworkDetailScreen({
               onChange={setFilter}
             />
           </View>
-          {shown.map(({ s, st, g }) => (
-            <Pressable
-              key={s.id}
-              testID={`work-row-${nameOf(s.studentUid)}`}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${nameOf(s.studentUid)}’s work`}
-              onPress={() => onGrade(s.studentUid, toGrade)}
-              style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
-            >
-              <View style={styles.rowMain}>
-                <Text style={styles.name}>{nameOf(s.studentUid)}</Text>
-                <Text style={styles.quiet}>{rowLine(s, st)}</Text>
-              </View>
-              <View style={styles.rowMeta}>
-                {st === 'returned' && s.returned?.grade ? <Text style={styles.grade}>{gradeText(s.returned.grade, cw.grading)}</Text> : null}
-                {st === 'graded' && g?.grade ? <Text style={styles.grade}>{gradeText(g.grade, cw.grading)}</Text> : null}
-                {st === 'graded' ? <Text style={styles.quiet}>not returned</Text> : null}
-                {st === 'toGrade' ? <Text style={[styles.tag, styles.onTeacher]}>To grade</Text> : null}
-                {st === 'pastDue' ? <Text style={[styles.tag, styles.onStudents]}>Past due</Text> : null}
-              </View>
-            </Pressable>
-          ))}
+          {shown.length > 0 ? (
+            <RowList>
+              {shown.map(({ s, st, g }) => (
+                <StudentRow key={s.id} name={nameOf(s.studentUid)} onPress={() => onGrade(s.studentUid, toGrade)}>
+                  <View style={styles.rowMain}>
+                    <Text style={styles.name}>{nameOf(s.studentUid)}</Text>
+                    <Text style={styles.quiet}>{rowLine(s, st)}</Text>
+                  </View>
+                  <View style={styles.rowMeta}>
+                    {st === 'returned' && s.returned?.grade ? <Text style={styles.grade}>{gradeText(s.returned.grade, cw.grading)}</Text> : null}
+                    {st === 'graded' && g?.grade ? <Text style={styles.grade}>{gradeText(g.grade, cw.grading)}</Text> : null}
+                    {st === 'graded' ? <Text style={styles.quiet}>not returned</Text> : null}
+                    {st === 'toGrade' ? <Text style={[styles.tag, styles.onTeacher]}>To grade</Text> : null}
+                    {st === 'pastDue' ? <Text style={[styles.tag, styles.onStudents]}>Past due</Text> : null}
+                  </View>
+                </StudentRow>
+              ))}
+            </RowList>
+          ) : null}
           {toReturn.length > 0 ? (
             <View style={styles.returnAll}>
               {/*
@@ -227,33 +241,26 @@ export function CourseworkDetailScreen({
   );
 }
 
-function Tile({ label, value }: { label: string; value: number }) {
+/** One student's row: their work on this assignment, opening it to grade. */
+function StudentRow({ name, onPress, children }: { name: string; onPress: () => void; children: ReactNode }) {
+  const inGrid = useGridCell();
   return (
-    <View style={styles.tile}>
-      <Text style={styles.tileValue}>{value}</Text>
-      <Text style={styles.tileLabel}>{label}</Text>
-    </View>
+    <Pressable
+      testID={`work-row-${name}`}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${name}’s work`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, inGrid, pressed ? styles.pressed : null]}
+    >
+      {children}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  // The status, then the actions under it: side by side they ran past a
-  // 320px screen.
-  head: { gap: spacing(2), marginBottom: spacing(3) },
+  head: { flexDirection: 'row', marginBottom: spacing(3) },
   tabs: { marginBottom: spacing(3) },
   files: { marginTop: spacing(3) },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(2), marginBottom: spacing(3) },
-  tile: {
-    flexGrow: 1,
-    flexBasis: 120,
-    backgroundColor: t.bg.surface,
-    borderRadius: 12,
-    padding: spacing(3),
-    borderWidth: 1,
-    borderColor: t.border.subtle,
-  },
-  tileValue: { fontSize: 22, fontWeight: '700', color: t.text.primary },
-  tileLabel: { fontSize: 12, color: t.text.secondary, letterSpacing: 0.6, textTransform: 'uppercase' },
   filters: { marginBottom: spacing(3) },
   row: {
     flexDirection: 'row',

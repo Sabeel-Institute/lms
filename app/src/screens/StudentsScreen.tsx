@@ -4,6 +4,7 @@ import {
   AddAction,
   Button,
   Collapsible,
+  EmailText,
   Empty,
   Field,
   Grid,
@@ -11,7 +12,6 @@ import {
   Notice,
   Screen,
   SectionTitle,
-  StatusChip,
   useAddAction,
 } from '../components/ui';
 import { createStudent, useStudentsState, type StudentRow } from '../students';
@@ -92,13 +92,13 @@ export function StudentsScreen({
       ) : active.length === 0 ? (
         <Empty>No students yet.</Empty>
       ) : (
-        <Grid min={330}>
+        <Grid min={330} rows>
           {active.map((s) => (
             <ListRow
               key={s.uid}
               testID={`student-open-${s.email}`}
               name={s.displayName}
-              detail={s.email}
+              detail={<EmailText email={s.email} />}
               onPress={() => onOpenStudent(s.uid)}
             />
           ))}
@@ -107,14 +107,14 @@ export function StudentsScreen({
 
       {disabled.length > 0 ? (
         <Collapsible testID="students-disabled" title="Disabled" count={disabled.length}>
-          <Grid min={330}>
+          {/* No status chip: the section says it. */}
+          <Grid min={330} rows>
             {disabled.map((s) => (
               <ListRow
                 key={s.uid}
                 testID={`student-open-${s.email}`}
                 name={s.displayName}
-                status={<StatusChip status={s.status} />}
-                detail={s.email}
+                detail={<EmailText email={s.email} />}
                 onPress={() => onOpenStudent(s.uid)}
               />
             ))}

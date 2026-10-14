@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Collapsible, Empty, Grid, Screen } from '../components/ui';
+import { Collapsible, Empty, Grid, Screen, useGridCell } from '../components/ui';
 import { useMyAttendanceState, type AttendanceRecordRow } from '../attendance';
 
 const NO_MARKS: AttendanceRecordRow[] = [];
@@ -66,7 +66,6 @@ export function StudentCoursesScreen({
       // LIST, like every other collection — see `StudentHomeScreen`.
       width="list"
       title="Your classes"
-      subtitle="Your attendance, recordings and assignments, class by class"
     >
       {courseIds.map((id) => (
         <CourseProbe key={id} courseId={id} onCourse={onCourse} />
@@ -121,13 +120,14 @@ function CourseCard({
   const present = marks.filter((m) => m.status === 'present').length;
   const excused = marks.filter((m) => m.status === 'excused').length;
   const absent = marks.filter((m) => m.status === 'absent').length;
+  const inGrid = useGridCell();
   return (
     <Pressable
       testID={`myclass-${cls.name}`}
       accessibilityRole="button"
       accessibilityLabel={`Open ${cls.name}`}
       onPress={() => onOpen(cls.id)}
-      style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [styles.card, inGrid, pressed ? styles.pressed : null]}
     >
       <View style={{ flex: 1 }}>
         <Text style={styles.name}>{cls.name}</Text>

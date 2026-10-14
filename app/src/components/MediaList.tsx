@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
   VERSION_LABELS,
   VERSION_ORDER,
@@ -11,7 +12,7 @@ import {
   type MediaVersion,
   type RecordingDoc,
 } from '@sabeel/shared';
-import { Button, Chips } from './ui';
+import { Chips, IconButton } from './ui';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
@@ -43,9 +44,14 @@ function stateText(item: MediaItem): string {
  * A recording's files, as staff manage them: its parts in play order, each
  * with its versions, what state each file is in, and what may be done to it.
  *
+ * ROWS LIKE AN ASSIGNMENT'S FILES: the name is the link that plays it, and
+ * hiding and removing are small icons at the end of its row. Three buttons
+ * under every version of every part made a two-part recording a column a phone
+ * scrolled past.
+ *
  * Parts move up and down rather than by dragging, which has no web/Android
  * parity. Every action is offered only where the server would allow it, so a
- * button here never exists just to fail: `canRemove` carries who may remove
+ * control here never exists just to fail: `canRemove` carries who may remove
  * what, and hiding is offered on every ready file because it is reversible
  * and changes no file.
  */
@@ -77,88 +83,54 @@ export function MediaList({
         const longest = Math.max(0, ...items.map((i) => i.durationSec ?? 0));
         return (
           <View key={part} testID={`media-part-${part}`} style={styles.part}>
-            <Text style={styles.partHead}>
-              {[
-                `Part ${index + 1}`,
-                segmentStart ? zoomRecordingHours({ startTime: segmentStart, durationSec: longest }) : null,
-                longest > 0 ? length(longest) : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </Text>
+            <View style={styles.partHead}>
+              <Text style={styles.partTitle}>
+                {[
+                  `Part ${index + 1}`,
+                  segmentStart ? zoomRecordingHours({ startTime: segmentStart, durationSec: longest }) : null,
+                  longest > 0 ? length(longest) : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+              {index > 0 ? (
+                <IconButton
+                  testID={`media-up-${part}`}
+                  icon="arrow-upward"
+                  bare
+                  label={`Move part ${index + 1} up`}
+                  disabled={disabled}
+                  onPress={() => onEdit({ op: 'moveUp', part })}
+                />
+              ) : null}
+              {index < parts.length - 1 ? (
+                <IconButton
+                  testID={`media-down-${part}`}
+                  icon="arrow-downward"
+                  bare
+                  label={`Move part ${index + 1} down`}
+                  disabled={disabled}
+                  onPress={() => onEdit({ op: 'moveDown', part })}
+                />
+              ) : null}
+            </View>
             {items.map((item) => (
-              <View key={item.id} testID={`media-item-${item.id}`} style={styles.item}>
-                <Text style={styles.label}>{itemLabel(item)}</Text>
-                <Text style={[styles.state, item.status === 'failed' ? styles.failed : null]}>
-                  {stateText(item)}
-                </Text>
-                {/* ONE LINE OF SMALL ACTIONS, not a Row of full cells: three
-                    150px cells per file stacked into a column a phone had to
-                    scroll past for every version of every part. */}
-                <View style={styles.actions}>
-                  {item.status === 'ready' ? (
-                    <Button
-                      testID={`media-play-${item.id}`}
-                      label="Play"
-                      variant="secondary"
-                      hug
-                      disabled={disabled}
-                      onPress={() => onPlay(item.id)}
-                    />
-                  ) : null}
-                  {item.status === 'ready' ? (
-                    <Button
-                      testID={`media-${item.hidden ? 'show' : 'hide'}-${item.id}`}
-                      label={item.hidden ? 'Show' : 'Hide'}
-                      variant="quiet"
-                      hug
-                      disabled={disabled}
-                      onPress={() => onEdit({ op: item.hidden ? 'show' : 'hide', itemId: item.id })}
-                    />
-                  ) : null}
-                  {canRemove(item) ? (
-                    <Button
-                      testID={`media-remove-${item.id}`}
-                      label="Remove"
-                      variant="quiet"
-                      hug
-                      disabled={disabled}
-                      onPress={() => onRemove(item.id)}
-                    />
-                  ) : null}
-                </View>
-              </View>
+              <FileRow
+                key={item.id}
+                item={item}
+                disabled={disabled}
+                removable={canRemove(item)}
+                onPlay={() => onPlay(item.id)}
+                onEdit={onEdit}
+                onRemove={() => onRemove(item.id)}
+              />
             ))}
-            {parts.length > 1 ? (
-              <View style={styles.actions}>
-                {index > 0 ? (
-                  <Button
-                    testID={`media-up-${part}`}
-                    label={`Move part ${index + 1} up`}
-                    variant="quiet"
-                    hug
-                    disabled={disabled}
-                    onPress={() => onEdit({ op: 'moveUp', part })}
-                  />
-                ) : null}
-                {index < parts.length - 1 ? (
-                  <Button
-                    testID={`media-down-${part}`}
-                    label={`Move part ${index + 1} down`}
-                    variant="quiet"
-                    hug
-                    disabled={disabled}
-                    onPress={() => onEdit({ op: 'moveDown', part })}
-                  />
-                ) : null}
-              </View>
-            ) : null}
           </View>
         );
       })}
       {versions.length > 1 ? (
         <View style={styles.part}>
-          <Text style={styles.partHead}>Students start on</Text>
+          <Text style={styles.partTitle}>Students start on</Text>
           <Chips<MediaVersion>
             value={r.defaultVersion}
             testIdPrefix="media-default"
@@ -171,14 +143,92 @@ export function MediaList({
   );
 }
 
+/** One file: a link that plays it once it is ready, plain words until then. */
+function FileRow({
+  item,
+  disabled,
+  removable,
+  onPlay,
+  onEdit,
+  onRemove,
+}: {
+  item: MediaItem;
+  disabled: boolean;
+  removable: boolean;
+  onPlay: () => void;
+  onEdit: (edit: MediaEdit) => void;
+  onRemove: () => void;
+}) {
+  const label = itemLabel(item);
+  const ready = item.status === 'ready';
+  const face = (
+    <>
+      <MaterialIcons
+        name={item.kind === 'video' ? 'videocam' : 'audiotrack'}
+        size={20}
+        color={ready ? t.text.secondary : t.text.muted}
+      />
+      <View style={styles.text}>
+        <Text style={ready ? styles.link : styles.name}>{label}</Text>
+        <Text style={[styles.state, item.status === 'failed' ? styles.failed : null]}>{stateText(item)}</Text>
+      </View>
+    </>
+  );
+  return (
+    <View testID={`media-item-${item.id}`} style={styles.row}>
+      {ready ? (
+        <Pressable
+          testID={`media-play-${item.id}`}
+          accessibilityRole="link"
+          accessibilityLabel={`Play ${label}`}
+          disabled={disabled}
+          onPress={onPlay}
+          style={({ pressed }) => [styles.face, pressed ? styles.pressed : null, disabled ? styles.off : null]}
+        >
+          {face}
+        </Pressable>
+      ) : (
+        <View style={styles.face}>{face}</View>
+      )}
+      {ready ? (
+        <IconButton
+          testID={`media-${item.hidden ? 'show' : 'hide'}-${item.id}`}
+          icon={item.hidden ? 'visibility' : 'visibility-off'}
+          bare
+          label={item.hidden ? `Show ${label} to students` : `Hide ${label} from students`}
+          disabled={disabled}
+          onPress={() => onEdit({ op: item.hidden ? 'show' : 'hide', itemId: item.id })}
+        />
+      ) : null}
+      {removable ? (
+        <IconButton
+          testID={`media-remove-${item.id}`}
+          icon="delete-outline"
+          variant="danger"
+          bare
+          label={`Remove ${label}`}
+          disabled={disabled}
+          onPress={onRemove}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  list: { marginTop: spacing(2) },
+  list: { marginTop: spacing(1) },
   part: { marginTop: spacing(3) },
-  partHead: { fontSize: 14, fontWeight: '700', color: t.text.primary },
-  // No indent: at 320px it cost the width two actions need side by side.
-  item: { marginTop: spacing(3) },
-  label: { fontSize: 14, fontWeight: '600', color: t.text.primary },
-  state: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(1) },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing(1), marginTop: spacing(1) },
+  partHead: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), minHeight: 44 },
+  partTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: t.text.primary },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), minHeight: 44 },
+  face: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing(2), paddingVertical: spacing(1) },
+  pressed: { opacity: 0.6 },
+  off: { opacity: 0.5 },
+  // minWidth 0: a flex child keeps its content's width on the web unless told
+  // it may shrink, and a long label would push the icons off the row.
+  text: { flex: 1, minWidth: 0 },
+  link: { fontSize: 15, color: t.text.accent, textDecorationLine: 'underline' },
+  name: { fontSize: 15, color: t.text.primary },
+  state: { fontSize: 13, color: t.text.secondary },
   failed: { color: t.feedback.danger },
 });

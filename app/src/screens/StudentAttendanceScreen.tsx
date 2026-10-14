@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   INSTITUTE_TIMEZONE,
@@ -11,13 +11,13 @@ import {
   type AttendanceStatus,
 } from "@sabeel/shared";
 import {
-  Card,
+  CountsLine,
   Empty,
   Grid,
   Notice,
   Screen,
-  SectionTitle,
   Segmented,
+  useGridCell,
 } from "../components/ui";
 import { ClassAssignments, workTally } from "./ClassAssignments";
 import { useMySubmissions } from "../coursework";
@@ -122,7 +122,7 @@ export function StudentAttendanceScreen({
        reading cap made this the one screen in the app that LOST a column as the
        window grew: 680px of phone layout fits two cards, and crossing the 900px
        breakpoint capped the column at 656 and dropped it to one. */
-    <Screen title={cls.name} subtitle="Your attendance, listening and assignments" width="list">
+    <Screen title={cls.name} width="list">
       {/* WHAT THEY STILL OWE COMES FIRST, and in their words. Three attendance
           counts are the register a teacher keeps; the number an adult student
           opens this screen for is how much listening is still outstanding — and
@@ -154,31 +154,29 @@ export function StudentAttendanceScreen({
       {marksState === null ? (
         <Empty>Checking your attendance…</Empty>
       ) : (
-        <Card>
-          <View style={styles.tally}>
-            <Tally label="Present" value={tally.present} />
-            <Tally label="Absent" value={tally.absent} />
-            <Tally label="Excused" value={tally.excused} />
-          </View>
-        </Card>
+        /* The register's three counts on one line. Each NUMBER carries the id,
+           so a check reads one counter rather than a digit somewhere near a
+           word — which matched the counter next door and passed with the
+           labels swapped. Zeros are said: "0 absent" is part of the record. */
+        <CountsLine
+          counts={[
+            { value: tally.present, label: "present", testID: "attendance-tally-present" },
+            { value: tally.absent, label: "absent", testID: "attendance-tally-absent" },
+            { value: tally.excused, label: "excused", testID: "attendance-tally-excused" },
+          ]}
+        />
       )}
 
-      <SectionTitle>Sessions{marksState === null ? "" : ` (${rows.length})`}</SectionTitle>
+      {/* No "Sessions" heading: the tab above names the list and counts it. */}
       {marksState === null ? null : rows.length === 0 ? (
         <Empty>No attendance has been taken for this class yet.</Empty>
       ) : (
-        <Grid min={330}>
-          {rows.map((m) => {
-            const a = bySession.get(m.sessionId);
-            return (
-              <View
-                key={m.id}
-                testID={`attendance-${m.title}`}
-                style={styles.row}
-              >
-                <View style={styles.rowMain}>
-                  <Text style={styles.title}>{m.title}</Text>
-                  <Text style={styles.date}>{m.date}</Text>
+        <View style={styles.list}>
+          <Grid min={330} rows>
+            {rows.map((m) => {
+              const a = bySession.get(m.sessionId);
+              return (
+                <MarkRow key={m.id} mark={m}>
                   {a ? (
                     <RecordingLine
                       recordingId={a.recordingId}
@@ -188,12 +186,11 @@ export function StudentAttendanceScreen({
                       playable={canPlayFromCourse(cls)}
                     />
                   ) : null}
-                </View>
-                <Text style={styles.status}>{STATUS_LABEL[m.status]}</Text>
-              </View>
-            );
-          })}
-        </Grid>
+                </MarkRow>
+              );
+            })}
+          </Grid>
+        </View>
       )}
       </>
       )}
@@ -279,35 +276,23 @@ function listeningLine(
   }
 }
 
-function Tally({ label, value }: { label: string; value: number }) {
+/** One session of the student's register: its title, date, mark and what it asks of them. */
+function MarkRow({ mark, children }: { mark: AttendanceRecordRow; children: ReactNode }) {
   return (
-    <View style={styles.tallyItem}>
-      {/* The NUMBER carries the id, so a check can read one counter rather than
-          matching a digit somewhere near a word — which matched the counter next
-          door and would have passed with the labels swapped. */}
-      <Text
-        testID={`attendance-tally-${label.toLowerCase()}`}
-        style={styles.tallyNum}
-      >
-        {value}
-      </Text>
-      <Text style={styles.tallyLabel}>{label}</Text>
+    <View testID={`attendance-${mark.title}`} style={[styles.row, useGridCell()]}>
+      <View style={styles.rowMain}>
+        <Text style={styles.title}>{mark.title}</Text>
+        <Text style={styles.date}>{mark.date}</Text>
+        {children}
+      </View>
+      <Text style={styles.status}>{STATUS_LABEL[mark.status]}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   tabs: { marginTop: spacing(3), marginBottom: spacing(3) },
-  tally: { flexDirection: "row", justifyContent: "space-around" },
-  tallyItem: { alignItems: "center" },
-  tallyNum: { fontSize: 24, fontWeight: "700", color: t.text.primary },
-  tallyLabel: {
-    fontSize: 12,
-    color: t.text.secondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginTop: spacing(1),
-  },
+  list: { marginTop: spacing(3) },
   row: {
     // Fills the grid cell it is given, so a row of these ends level instead
     // of ragged with its actions at three different heights.

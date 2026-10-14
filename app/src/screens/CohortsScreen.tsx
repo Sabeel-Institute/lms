@@ -61,7 +61,7 @@ export function CohortsScreen({ onOpen }: { onOpen: (cohort: CohortRow) => void 
       ) : active.length === 0 ? (
         <Empty>No cohorts yet.</Empty>
       ) : (
-        <Grid min={320}>
+        <Grid min={320} rows>
           {active.map((c) => (
             <CohortRowItem key={c.id} cohort={c} count={courseCounts[c.id] ?? 0} onOpen={onOpen} />
           ))}
@@ -70,7 +70,7 @@ export function CohortsScreen({ onOpen }: { onOpen: (cohort: CohortRow) => void 
 
       {archived.length > 0 ? (
         <Collapsible testID="cohorts-archived" title="Archived" count={archived.length}>
-          <Grid min={320}>
+          <Grid min={320} rows>
             {archived.map((c) => (
               <CohortRowItem key={c.id} cohort={c} count={courseCounts[c.id] ?? 0} onOpen={onOpen} />
             ))}

@@ -1,17 +1,23 @@
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { hasLedger, isVisibleToStudents, mediaSummary, startingItem, type RecordingStatus } from '@sabeel/shared';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
-  Button,
-  Card,
-  Chips,
+  hasLedger,
+  isVisibleToStudents,
+  mediaSummary,
+  startingItem,
+  unbreakableDate,
+  type RecordingStatus,
+} from '@sabeel/shared';
+import {
   Empty,
   Grid,
-  Row,
+  IconButton,
   Screen,
   SectionTitle,
   StatusChip,
   statusWord,
+  useGridCell,
 } from '../components/ui';
 import { Select } from '../components/Select';
 import { useAllRecordingsState, useCourseRecordingsState, type RecordingRow } from '../recordings';
@@ -44,13 +50,16 @@ type StatusFilter = 'all' | RecordingStatus;
  *
  * THE LABELS COME FROM `statusWord`, not from a second map beside this one. A
  * recording's status is written in two places on this screen — the filter and
- * the chip on every card — and they were two independent spellings of the same
- * six values, each carrying its own `needsAttention: 'needs attention'`. Lower
- * case throughout, because that is how `StatusChip` renders the same words.
+ * the chip on every row — and they were two independent spellings of the same
+ * six values, each carrying its own `needsAttention: 'needs attention'`.
+ * Capitalised here, as the cohort and course choices beside it are.
  */
 const STATUSES: { value: StatusFilter; label: string }[] = (
   ['all', 'published', 'draft', 'archived', 'unpublished', 'needsAttention'] as StatusFilter[]
-).map((value) => ({ value, label: statusWord(value) }));
+).map((value) => {
+  const word = value === 'all' ? 'all statuses' : statusWord(value);
+  return { value, label: word.charAt(0).toUpperCase() + word.slice(1) };
+});
 
 /**
  * The cross-cohort recording library with status counts (deferred from Phase 3).
@@ -115,13 +124,12 @@ export function LibraryScreen({
   return (
     <Screen
       title="Recording library"
-      subtitle={isAdmin ? 'Every recording, across every cohort' : 'Recordings in the courses you run'}
       width="list"
     >
       <View style={styles.filter}>
-        <Chips value={status} testIdPrefix="library-filter" options={STATUSES} onChange={setStatus} />
         {/* Cohort first, then course: the cohort narrows what the course
-            dropdown offers, never the other way round (`libraryFilters`). */}
+            dropdown offers, never the other way round (`libraryFilters`). The
+            status last: it narrows whatever the two have chosen. */}
         <View style={styles.scope}>
           <Select
             testID="library-cohort"
@@ -137,10 +145,20 @@ export function LibraryScreen({
             options={courseChoices}
             onChange={(courseId) => setScope((s) => ({ ...s, courseId }))}
           />
+          <Select
+            testID="library-status"
+            label="Status"
+            value={status}
+            options={STATUSES}
+            onChange={(v) => setStatus(v as StatusFilter)}
+          />
           {/* Only ever present when there is something to clear, so it is
-              never a dead control. Quiet: it undoes, it does not act. */}
+              never a dead control. A bare ×: it undoes, it does not act. */}
           {narrowed ? (
-            <Button testID="library-clear" label="Clear filters" variant="quiet" hug onPress={clear} />
+            // The dropdowns' own top margin, so the × sits level with them.
+            <View style={styles.clear}>
+              <IconButton testID="library-clear" icon="close" bare label="Clear filters" onPress={clear} />
+            </View>
           ) : null}
         </View>
       </View>
@@ -228,7 +246,7 @@ function AdminLibrary({
       ) : filtered.length === 0 ? (
         <Empty>No recordings match these filters.</Empty>
       ) : (
-        <Grid min={330}>
+        <Grid min={330} rows>
           {filtered.map((r) => {
             const cls = clsFor(r);
             return (
@@ -273,7 +291,7 @@ function CourseSection({
       ) : filtered.length === 0 ? (
         <Empty>No recordings match these filters.</Empty>
       ) : (
-        <Grid min={330}>
+        <Grid min={330} rows>
           {filtered.map((r) => (
             <RecordingLine
               key={r.id}
@@ -299,6 +317,12 @@ function Counts({ recordings }: { recordings: RecordingRow[] }) {
   );
 }
 
+/**
+ * One recording: a large play icon, then its title, where it is from and its
+ * state. THE WHOLE ROW PLAYS — the icon says so — and Progress is a small icon
+ * at its end, outside that target, for staff following who has listened. A
+ * recording with nothing to play is not a button at all.
+ */
 function RecordingLine({
   r,
   courseName,
@@ -312,76 +336,102 @@ function RecordingLine({
   onPlay: () => void;
   onOpenProgress: () => void;
 }) {
+  const inGrid = useGridCell();
   const playable = startingItem(r.media, r.defaultVersion) !== null;
-  return (
-    <Card>
-      <Text style={styles.title}>{r.title}</Text>
-      {/* Admin flat list shows the course AND its cohort — a course name alone is
-          ambiguous across cohorts. The manager view groups by course, so it
-          passes no courseName. */}
-      {courseName ? (
-        <Text style={styles.courseName}>
-          {cohortName ? `${courseName} · ${cohortName}` : courseName}
-        </Text>
-      ) : null}
-      <View style={styles.meta}>
-        <StatusChip status={r.status} />
-        <Text style={styles.sub}>
-          {[
-            r.durationSec ? `${Math.round(r.durationSec / 60)} min` : playable ? 'length unknown' : 'nothing to play',
-            mediaSummary(r.media),
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-          {r.date ? ` · ${r.date}` : ''}
-        </Text>
-      </View>
-      {/* Pushed to the foot of the card: the cards in a row are the same height,
-          and a title that wraps used to drop its own actions below its
-          neighbours' — level outlines with a ragged row of buttons inside. NOT
-          RENDERED WHEN THERE IS NOTHING IN IT, because the same `marginTop:
-          'auto'` made an empty row reserve 76px of blank card under a recording
-          with no audio, half the height of the card beside it. */}
-      {playable || hasLedger(r) ? (
-        <View style={styles.actions}>
-          <Row>
-            {/* PRIMARY, and the only one on the card. Two identical sage bars
-                six times down a page gave the library no answer to "what do I do
-                here", and playing is what the library is for — the ledger
-                beside it is the follow-up. */}
-            {playable ? (
-              <Button testID={`library-play-${r.title}`} label="Play" onPress={onPlay} />
-            ) : null}
-            {hasLedger(r) ? (
-              <Button
-                testID={`library-progress-${r.title}`}
-                label="Progress"
-                variant="secondary"
-                onPress={onOpenProgress}
-              />
-            ) : null}
-          </Row>
+  const body: ReactNode = (
+    <>
+      <MaterialIcons
+        name={playable ? 'play-circle-outline' : 'hourglass-empty'}
+        size={40}
+        color={playable ? t.text.accent : t.text.muted}
+      />
+      <View style={styles.text}>
+        <Text style={styles.title}>{r.title}</Text>
+        {/* Admin flat list shows the course AND its cohort — a course name alone
+            is ambiguous across cohorts. The manager view groups by course, so it
+            passes no courseName. */}
+        {courseName ? (
+          <Text style={styles.sub}>{cohortName ? `${courseName} · ${cohortName}` : courseName}</Text>
+        ) : null}
+        <View style={styles.meta}>
+          <StatusChip status={r.status} />
+          <Text style={styles.sub}>
+            {[
+              r.durationSec ? `${Math.round(r.durationSec / 60)} min` : playable ? 'length unknown' : 'nothing to play',
+              mediaSummary(r.media),
+              // Unbreakable: a wrap split the date at its hyphens.
+              r.date ? unbreakableDate(r.date) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
         </View>
+      </View>
+    </>
+  );
+  return (
+    <View style={[styles.row, inGrid]}>
+      {playable ? (
+        <Pressable
+          testID={`library-play-${r.title}`}
+          accessibilityRole="button"
+          accessibilityLabel={`Play ${r.title}`}
+          onPress={onPlay}
+          style={({ pressed }) => [styles.play, pressed ? styles.pressed : null]}
+        >
+          {body}
+        </Pressable>
+      ) : (
+        <View style={styles.play}>{body}</View>
+      )}
+      {hasLedger(r) ? (
+        <IconButton
+          testID={`library-progress-${r.title}`}
+          icon="insights"
+          bare
+          label={`Progress of ${r.title}`}
+          onPress={onOpenProgress}
+        />
       ) : null}
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  actions: { marginTop: 'auto' },
   filter: { marginBottom: spacing(4) },
-  // Wraps, like the pills above it: two dropdowns and a clear control are one
-  // line on a laptop and two on a 320px phone.
+  // Wraps: three dropdowns and a clear control are one line on a laptop and
+  // two on a 320px phone.
   scope: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing(2),
-    marginTop: spacing(3),
   },
+  clear: { marginTop: spacing(2) },
   counts: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(2) },
+  row: {
+    flexGrow: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(1),
+    backgroundColor: t.bg.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: t.border.subtle,
+    paddingRight: spacing(2),
+  },
+  play: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(3),
+    paddingVertical: spacing(3),
+    paddingLeft: spacing(3),
+  },
+  pressed: { opacity: 0.85 },
+  text: { flex: 1, minWidth: 0 },
   title: { fontSize: 16, fontWeight: '600', color: t.text.primary },
-  courseName: { fontSize: 13, color: t.text.secondary, marginTop: 2 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginTop: spacing(2) },
-  sub: { fontSize: 13, color: t.text.secondary },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing(2), rowGap: spacing(1), marginTop: spacing(1) },
+  sub: { fontSize: 13, color: t.text.secondary, marginTop: 2 },
 });

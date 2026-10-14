@@ -880,9 +880,7 @@ function CourseworkEdit({ isAdmin }: { isAdmin: boolean }) {
           : navigation.dispatch(StackActions.replace('CourseworkDetail', { courseId, courseworkId: id }))
       }
       onDeleted={() => up(navigation, 'Coursework', { courseId })}
-      // Back where it came from; with nothing under it, up to the list, so
-      // Cancel is never a button that does nothing.
-      onCancel={() => (navigation.canGoBack() ? navigation.goBack() : up(navigation, 'Coursework', { courseId }))}
+      onOpenCourse={() => up(navigation, 'CourseDetail', { courseId })}
     />
   );
 }

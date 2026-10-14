@@ -13,7 +13,7 @@ import {
   type AttachmentMap,
   type CourseworkGrading,
 } from '@sabeel/shared';
-import { Button, Card, Chips, ConfirmDanger, Field, Notice, Row, Screen, SectionTitle, SwitchRow } from '../components/ui';
+import { Button, Card, Chips, ConfirmDanger, Field, InlineNumber, Notice, Row, Screen, SectionTitle, SwitchRow } from '../components/ui';
 import { DateField } from '../components/DateField';
 import { Attachments } from '../components/Attachments';
 import { InstructionsEditor } from '../components/InstructionsEditor';
@@ -55,14 +55,15 @@ export function CourseworkEditScreen({
   isAdmin,
   onSaved,
   onDeleted,
-  onCancel,
+  onOpenCourse,
 }: {
   cls: CourseRow;
   existing: CourseworkRow | null;
   isAdmin: boolean;
   onSaved: (courseworkId: string) => void;
   onDeleted: () => void;
-  onCancel: () => void;
+  /** Up to the course: the way off this page when it was opened from a link, with nothing under it. */
+  onOpenCourse: () => void;
 }) {
   const today = todayInZone(INSTITUTE_TIMEZONE);
   const firstDue = existing?.dueDate ?? addDays(today, DEFAULT_DUE_DAYS);
@@ -216,7 +217,13 @@ export function CourseworkEditScreen({
   const posted = existing?.status === 'posted';
   const others = (key: string) => active !== null && active !== key;
   return (
-    <Screen title={existing ? (posted ? 'Edit assignment' : 'Draft assignment') : 'New assignment'} subtitle={cls.name} width="read">
+    <Screen
+      title={existing ? (posted ? 'Edit assignment' : 'Draft assignment') : 'New assignment'}
+      // The way up, and the only one on a page opened from a link: there is no
+      // Cancel. Back, and this, leave through the guard like any other exit.
+      parent={{ label: cls.name, testID: 'up-to-course-from-edit', onPress: onOpenCourse }}
+      width="read"
+    >
       {guard.element}
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Card>
@@ -249,12 +256,12 @@ export function CourseworkEditScreen({
           onChange={setKind}
         />
         {kind === 'points' ? (
-          <Field testID="coursework-out-of" label="Out of" value={outOf} onChangeText={setOutOf} />
+          <InlineNumber testID="coursework-out-of" before="Out of" label="Out of" value={outOf} onChangeText={setOutOf} />
         ) : null}
         <SwitchRow
           testID="coursework-accept-late"
           label="Accept late work"
-          description="After the due date, students can still hand in until the date below. It shows as late."
+          description="It shows as late."
           on={acceptLate}
           onChange={setAcceptLate}
         />
@@ -274,7 +281,7 @@ export function CourseworkEditScreen({
         <Text testID="coursework-audience" style={styles.hint}>
           {students === null
             ? ''
-            : `Goes to the ${students} ${students === 1 ? 'student' : 'students'} in ${cls.name} when you post it, and to anyone who joins by ${unbreakableDate(dueDate)}. They are notified when you post.`}
+            : `Goes to the ${students} ${students === 1 ? 'student' : 'students'} in ${cls.name}, and anyone who joins by ${unbreakableDate(dueDate)}. Posting notifies them.`}
         </Text>
       ) : null}
 
@@ -341,7 +348,6 @@ export function CourseworkEditScreen({
               />
             </>
           )}
-          <Button label="Cancel" variant="quiet" onPress={onCancel} />
         </Row>
         {uploading ? <Text style={styles.waiting}>Ready once every file is up.</Text> : null}
         {posted && existing && existing.closedAt === null ? (

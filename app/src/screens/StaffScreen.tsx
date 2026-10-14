@@ -5,18 +5,21 @@ import {
   Button,
   Card,
   Collapsible,
+  EmailText,
   Empty,
   Grid,
+  IconButton,
+  ListRow,
   Notice,
   Row,
   Screen,
   SectionTitle,
-  StatusChip,
 } from '../components/ui';
+import { Sheet, SheetOption } from '../components/Sheet';
 import { setStaffAccess, useDecidedStaffState, usePendingStaffState, type StaffRow } from '../staff';
 
 const NO_STAFF: StaffRow[] = [];
-import { getTheme, spacing } from '../theme';
+import { getTheme } from '../theme';
 import { errorText } from '../errors';
 
 const t = getTheme();
@@ -137,21 +140,21 @@ export function StaffScreen({ selfUid, header }: { selfUid: string; header?: Rea
       ) : active.length === 0 ? (
         <Empty>No staff accounts yet.</Empty>
       ) : (
-        <Grid min={330}>
+        <Grid min={330} rows>
           {active.map((s) => (
-            <StaffCard key={s.uid} row={s} isSelf={s.uid === selfUid} busy={locked(s.uid)} act={act} />
+            <StaffRowItem key={s.uid} row={s} isSelf={s.uid === selfUid} busy={locked(s.uid)} act={act} />
           ))}
         </Grid>
       )}
 
       {/* Out of the way but reachable, exactly as a disabled student is: the
-          card keeps its Re-enable, so bringing a colleague back is one tap
-          once the section is open. */}
+          row keeps its menu, so bringing a colleague back is one menu away once
+          the section is open. */}
       {disabled.length > 0 ? (
         <Collapsible testID="staff-disabled" title="Disabled" count={disabled.length}>
-          <Grid min={330}>
+          <Grid min={330} rows>
             {disabled.map((s) => (
-              <StaffCard key={s.uid} row={s} isSelf={s.uid === selfUid} busy={locked(s.uid)} act={act} />
+              <StaffRowItem key={s.uid} row={s} isSelf={s.uid === selfUid} busy={locked(s.uid)} act={act} />
             ))}
           </Grid>
         </Collapsible>
@@ -160,7 +163,12 @@ export function StaffScreen({ selfUid, header }: { selfUid: string; header?: Rea
   );
 }
 
-function StaffCard({
+/**
+ * One colleague: name, address and role, and a ⋮ that holds what can be
+ * changed. Two buttons on every row made the list a wall of Make admin and
+ * Disable, and the one person whose row has neither — you — read as broken.
+ */
+function StaffRowItem({
   row: s,
   isSelf,
   busy,
@@ -171,68 +179,72 @@ function StaffCard({
   busy: boolean;
   act: (uid: string, change: Parameters<typeof setStaffAccess>[0]) => Promise<void>;
 }) {
+  const [open, setOpen] = useState(false);
+  const choose = (change: Parameters<typeof setStaffAccess>[0]) => {
+    setOpen(false);
+    void act(s.uid, change);
+  };
   return (
-    <Card>
-      <Person row={s} />
-      {isSelf ? (
-        // The server refuses this too; saying so up front is kinder than
-        // a permission error. Without the rule, the last admin could lock
-        // the institute out of its own user management.
-        <Text style={styles.selfNote}>This is you. You cannot change your own role or access.</Text>
-      ) : (
-        <Row>
-          <Button
-            testID={`staff-role-${s.email}`}
-            label={s.role === 'admin' ? 'Make manager' : 'Make admin'}
-            variant="secondary"
-            busy={busy}
-            onPress={() =>
-              void act(s.uid, {
-                uid: s.uid,
-                role: (s.role === 'admin' ? 'manager' : 'admin') as Extract<Role, 'admin' | 'manager'>,
-              })
-            }
-          />
-          <Button
-            testID={`staff-access-${s.email}`}
-            label={s.status === 'disabled' ? 'Re-enable' : 'Disable'}
-            // Secondary in BOTH directions, exactly as on a student's
-            // page. Disabling an account is reversible and is the
-            // RECOMMENDED action in this product; dressing one of the
-            // two Disables in the app as destructive and the other as
-            // routine teaches people the colour means nothing.
-            variant="secondary"
-            busy={busy}
-            onPress={() =>
-              void act(s.uid, {
-                uid: s.uid,
-                status: s.status === 'disabled' ? 'active' : 'disabled',
-              })
-            }
-          />
-        </Row>
-      )}
-    </Card>
+    <>
+      <ListRow
+        name={isSelf ? `${s.displayName} (you)` : s.displayName}
+        detail={<EmailText email={s.email} suffix={` · ${s.role}`} />}
+        actionsPinned
+        actions={
+          // None on your own row. The server refuses it too; without the rule,
+          // the last admin could lock the institute out of its own user
+          // management.
+          isSelf ? undefined : (
+            <IconButton
+              testID={`staff-actions-${s.email}`}
+              icon="more-vert"
+              bare
+              busy={busy}
+              label={`Change ${s.displayName}'s access`}
+              onPress={() => setOpen(true)}
+            />
+          )
+        }
+      />
+      <Sheet visible={open} title={s.displayName} onClose={() => setOpen(false)} closeAt="corner">
+        <SheetOption
+          testID={`staff-role-${s.email}`}
+          label={s.role === 'admin' ? 'Make manager' : 'Make admin'}
+          detail={
+            s.role === 'admin'
+              ? 'Sees only the courses they are given.'
+              : 'Manages staff, cohorts and every course.'
+          }
+          onPress={() =>
+            choose({ uid: s.uid, role: (s.role === 'admin' ? 'manager' : 'admin') as Extract<Role, 'admin' | 'manager'> })
+          }
+        />
+        {/* The normal tone in BOTH directions, exactly as on a student's page.
+            Disabling an account is reversible and is the RECOMMENDED action in
+            this product; dressing it as destructive teaches people the colour
+            means nothing. */}
+        <SheetOption
+          testID={`staff-access-${s.email}`}
+          label={s.status === 'disabled' ? 'Re-enable' : 'Disable'}
+          detail={s.status === 'disabled' ? 'They can sign in again.' : 'They can no longer sign in. You can re-enable them.'}
+          onPress={() => choose({ uid: s.uid, status: s.status === 'disabled' ? 'active' : 'disabled' })}
+        />
+      </Sheet>
+    </>
   );
 }
 
+/** A waiting account: who is asking. Its section says it is waiting. */
 function Person({ row }: { row: StaffRow }) {
   return (
-    <View>
+    <View style={styles.person}>
       <Text style={styles.name}>{row.displayName}</Text>
-      <Text style={styles.email}>{row.email}</Text>
-      <View style={styles.meta}>
-        <StatusChip status={row.status} />
-        <Text style={styles.role}>{row.role}</Text>
-      </View>
+      <EmailText email={row.email} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  person: { gap: 2 },
   name: { fontSize: 16, fontWeight: '600', color: t.text.primary },
-  email: { fontSize: 14, color: t.text.secondary, marginTop: 2 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: spacing(3), marginTop: spacing(2) },
-  role: { fontSize: 13, color: t.text.secondary },
-  selfNote: { fontSize: 13, color: t.text.secondary, marginTop: spacing(2) },
 });

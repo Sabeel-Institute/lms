@@ -83,7 +83,7 @@ the app sends you a "set your password" link — open it, choose a password, and
 you're ready. If you never received it or the link has expired, tap **Email me a
 password link** on this screen to get a fresh one.
 
-The **Staff** section at the top is only for teachers and administrators — you
+The **Staff** line at the bottom is only for teachers and administrators — you
 don't need it.
 
 ## 1.2 To do — everything you owe
@@ -143,6 +143,11 @@ next day.
 <figure class="wd"><img src="manual/img/03-player-desktop.png" alt="Player screen on a computer"><figcaption>On a computer</figcaption></figure>
 </div>
 
+The title is at the top. A long one slides slowly along its line — or, if your
+phone is set to reduce motion, ends in "…" — and tapping it shows it whole; tap
+again to fold it back. Under it are the day of the class and the last day you
+can play it.
+
 When a recording has video, the picture is at the top of the player. Tap the
 **full-screen icon** in its bottom corner to fill the screen with it. On an Android phone, leaving the
 app while a video plays shrinks it into a small window over your other apps;
@@ -170,13 +175,14 @@ The controls are the ones you'd expect from a podcast app:
 - **The big round button** plays and pauses.
 - The two side buttons **skip back 15 seconds** and **skip ahead 30 seconds** —
   handy for re-hearing a point or moving past a pause.
-- **1× / 1.25× / 1.5× / 2×** change the speed without changing the pitch.
 - Drag the **progress bar** to jump anywhere. The times below it show how far in
   you are and how much is left.
+- **The speed**, beside the times — 1× up to 2× — changes how fast it plays
+  without changing the pitch.
 
-A bar shows roughly how much of the recording you've played. **Your place is saved
-automatically**, so you can stop on your phone on the bus and pick up on your
-laptop at home — it remembers where you were.
+A line under the controls says how much of the recording you've played. **Your
+place is saved automatically**, so you can stop on your phone on the bus and
+pick up on your laptop at home — it remembers where you were.
 
 If the teacher left a note, it appears under **About this recording** — often
 "focus on this part" or "we'll discuss this next week."
@@ -243,7 +249,8 @@ When it's ready, tap **Hand in**. It needs an answer, a file, or both. Your
 teacher sees exactly what is on your screen at that moment.
 
 **Changed your mind?** Until the due date, and while your teacher hasn't
-returned it, tap **Take back**, change what you need to, and hand it in again.
+returned it, tap **Take back**, beside what you handed in, change what you need
+to, and hand it in again.
 
 **Late.** If your teacher accepts late work, you can still hand it in after the
 due date until the date the screen gives you; it is marked late. After that it
@@ -278,13 +285,14 @@ finished wait in a closed **Finished** section at the bottom; tap it to open it.
 Tap a class to open its page. A line at the top says what you owe in it, and it
 has two tabs:
 
-- **Sessions** — **your own attendance**. At the top is a tally: how many
+- **Sessions** — **your own attendance**. At the top, one line counts the
   meetings you were **present** for, **absent** from, and **excused** from.
   Below it, every meeting your teacher recorded you in, newest first, with the
   date and your own mark. Where you were excused, the row also says that a
   recording was required and whether you've completed it.
 - **Assignments** — every assignment in the class and where it stands: to do,
-  handed in, returned with its grade, or missed.
+  handed in, returned with its grade, or missed, under a line counting what you
+  handed in and what you missed.
 
 Two things this page is not: it isn't where you play a recording (that's
 **To do**), and it never shows anyone else's attendance or work.
@@ -372,8 +380,9 @@ done for you during setup.)
 </div>
 
 The app opens on **Today**: everything across your courses that is waiting on
-you, most urgent first. Every card is a link straight to the screen where you do
-the thing.
+you, most urgent first, under a heading that says what to do. Every row is a link
+straight to the screen where you do it, and says which class it is and how long
+it has waited.
 
 - **Attendance not taken** — a class has met and nobody has submitted the
   register. This is first and it's the one entry the screen tints, because until
@@ -387,7 +396,7 @@ the thing.
   to see who still hasn't finished.
 - **To grade** — work handed in and not yet graded, in the courses you manage
   (an admin sees it only for courses they are a manager of, so it never buries
-  the registers). It is never in the count on the tab. Tap a card to grade
+  the registers). It is never in the count on the tab. Tap a row to grade
   (Section 2.15).
 
 The number on the **Today** tab counts what is blocking access right now: a
@@ -402,7 +411,7 @@ If you run more courses than one screen can watch at once, Today says so above
 the list — the rest are still there under **Courses**, they are just not in this
 count.
 
-A card disappears the moment you close the gap, and the count goes with it. An
+A row disappears the moment you close the gap, and the count goes with it. An
 empty Today is the answer, not a blank screen: it means attendance is in, every
 recording is published, nothing closes this week, and no work is waiting to be
 graded.
@@ -428,14 +437,14 @@ audio, and often video too. An **assignment** is work set for the course
 Finished terms move into an **Archived** section at the bottom of the cohort
 list — tap the heading to open it.
 
-Open a cohort to see **its settings and its courses**, and open a course to work
-with it. Archived courses wait in a closed **Archived** section at the bottom;
-tap the heading to open it. The same goes for **Your courses**, a manager's
-list. The cohort's settings — **admins only**, like everything that shapes
-the structure — are where you **rename** it (change the name and tap
-**Rename**) and where you **archive** it, in the same way a course is renamed
-and archived from the course page. Archiving a cohort turns off every course in
-it; reactivating puts each course back to the setting it had.
+Open a cohort to see **its courses**, and open a course to work with it.
+Archived courses wait in a closed **Archived** section at the bottom; tap the
+heading to open it. The same goes for **Your courses**, a manager's list.
+Shaping the structure is for **admins only**: the **pencil** beside the cohort's
+name renames it, and **Settings**, under the courses, archives it — the same
+way a course is renamed and archived from the course page. Archiving a cohort
+turns off every course in it; reactivating puts each course back to the setting
+it had.
 
 <div class="pair">
 <figure class="ph"><img src="manual/img/14-courses-phone.png" alt="Courses in a cohort on a phone"><figcaption>On a phone</figcaption></figure>
@@ -449,27 +458,29 @@ The **course page** is your dashboard for that course:
 <figure class="wd"><img src="manual/img/15-course-detail-desktop.png" alt="Course detail on a computer"><figcaption>On a computer</figcaption></figure>
 </div>
 
-- **Sessions** takes you to the course's meetings, where attendance and
-  recordings live (Section 2.4).
-- **Assignments** takes you to the course's assignments: writing and posting
-  them (Section 2.14), and grading and returning work (Section 2.15).
-- **Attendance report** summarizes attendance and catch-up across the whole
-  course (Section 2.9).
-- The counts card has two lines. **Listening** — *N required / not complete /
-  missed* — is the whole course's required recordings at a glance;
-  **Assignments** counts what is posted, waiting to be graded, past due and
-  missed. It links straight to the course **Audit history**.
-- **Settings** (admins) lets you rename the course, **archive** it when the term
-  ends, and choose whether an archived course's recordings stay open to the
-  students they were required of (**Keep recordings open when archived** /
-  **Close recordings when archived**).
+- **Sessions**, **Assignments**, **Attendance report** and **Audit history**
+  are rows at the top, each opening that part of the course: the meetings,
+  where attendance and recordings live (Section 2.4); the assignments, written
+  and posted (Section 2.14), graded and returned (Section 2.15); attendance and
+  catch-up across the whole course (Section 2.9); and the course's history.
+  **Sessions** carries the course's listening at a glance — *N required · not
+  complete · missed* — and **Assignments** counts what is posted, waiting to be
+  graded, past due and missed.
+- **Export workbook**, under them, downloads the whole course — every student,
+  session, register and required recording — as one Excel file (Section 2.13).
+- **Roster** lists the enrolled students, one line each. Tap a student to see
+  their personal ledger for the course (Section 2.8). The **+** on its heading
+  adds students: it lists everyone not in the course, and stays open while you
+  add several. The grey **×** on a row takes that student off the course, after
+  asking — their history is kept, and you can add them back.
 - **Managers** (admins) lists the staff assigned to *this* course. Managers only
   ever see and act on the courses they're assigned to here — being in a cohort
-  grants nothing by itself. A manager's own course page has neither section.
-- **Roster** lists the enrolled students. Tap a student to see their personal
-  ledger for the course (Section 2.8).
-- **Export workbook** downloads the whole course — every student, session,
-  register and required recording — as one Excel file (Section 2.13).
+  grants nothing by itself.
+- **Settings** (admins), at the bottom: **Keep recordings open when archived**
+  decides whether an archived course's recordings stay open to the students they
+  were required of, and **Archive course** ends the term. The **pencil** beside
+  the course's name renames it. A manager's own course page has neither
+  Managers nor Settings.
 
 ## 2.4 Sessions, attendance, and adding a recording
 
@@ -478,10 +489,10 @@ The **course page** is your dashboard for that course:
 <figure class="wd"><img src="manual/img/16-sessions-desktop.png" alt="Sessions list on a computer"><figcaption>On a computer</figcaption></figure>
 </div>
 
-A **session** is one class meeting. Create one for each meeting — give it a
-title, its date, and a **Due by** date. Each session card shows at a glance
-whether **attendance** has been taken and whether a **recording** has been added,
-so you can see what's still outstanding.
+A **session** is one class meeting. Create one for each meeting with the **+** —
+give it a title, its date, and a **Due by** date. Each session's row says what is
+still outstanding — **Attendance not taken**, **No recording** — and nothing
+once it is done.
 
 **The "Due by" date is required, and it matters more than it looks.** It is
 the day the recording *closes* to the students you excused — after it, they can
@@ -529,17 +540,23 @@ Move the date forward first, then excuse them. Correcting a closed session in
 every other way still works, including changing someone from excused to present
 or absent, so the attendance record never becomes uncorrectable.
 
-**Add the recording.** In the same screen, **Import from Zoom**, or **Upload
-files…** from your own computer or phone. The recording takes its title, date,
-and notes from the session, so you don't retype them.
+**Add the recording.** In the same screen, **Upload files…** from your own
+computer or phone, or **Import from Zoom**. The recording takes its title, date,
+and notes from the session, so you don't retype them. Once there is a
+recording, the **+** beside its **Files** adds more: **Upload files**, or **Add
+from Zoom** — the second half of a class in another meeting, say.
+
+**Editing the session.** The **pencil** at the top opens its title, date, **Due
+by** date and notes. An admin deletes a session from there too, once it has no
+recording.
 
 **Importing from Zoom.** Every class in a cohort is held in the same recurring
 Zoom meeting, so every recording in the list has the same title. What tells them
 apart is when it ran: each card shows the date and the hours, for example
 *2026-10-08 · 6:02–8:18 PM*, so the 6 pm and 7 pm classes of one evening are two
 different cards. The list opens showing only recordings from the session's own
-date. Untick **Only recordings from this session's date** to see everything in
-the date range. Dates and hours are institute time (America/Chicago), so an
+date. Untick **Only recordings from this session's date** to choose a date
+range and load it. Dates and hours are institute time (America/Chicago), so an
 evening class is listed under the day it was held.
 
 Zoom keeps several files of one meeting, and each card lists them all:
@@ -549,8 +566,10 @@ with its size. If the meeting was stopped and restarted, its files come in
 stretch you import becomes one **part** of the recording, in order. Tick the
 files you want, or use a **quick pick** on the card — **Audio only**, **Video
 and audio**, or **Everything** — which ticks those files in every stretch at
-once. The **video / audio only** chips narrow the list to one kind, and a file
-Zoom is still processing cannot be ticked until it is ready.
+once. A file Zoom is still processing cannot be ticked until it is ready.
+**Filters** — the sliders beside the search — show recordings already imported
+too, narrow the list to one kind of file, or bring back recordings under two
+minutes; a line under the search says when they are doing any of that.
 
 Under the list, **Selected** adds it all up before anything is copied: how many
 files, their size, how much class they cover, and roughly what they will cost
@@ -565,16 +584,22 @@ with a link to where it went, and can't be imported twice.
 **The recording's files.** On the session, each recording lists its parts in
 order and, under each part, its versions, with their size or state:
 
-- **Play** opens the file in the player, so you can check it.
-- **Hide** keeps a file from students without deleting it, and **Show** puts it
-  back — for example a slides-only version nobody needs. A published recording
-  must keep at least one file students can play.
-- **Remove** deletes a file, so a bad one can be replaced. A file students can
-  play is removed only from a draft; once a recording has been published its
-  files are hidden, not removed.
-- **Move part up / down** fixes the order if the parts came in wrong.
+- **The file's name** is a link that plays it, so you can check it.
+- **The eye** hides a file from students without deleting it, and tapped again
+  puts it back — for example a slides-only version nobody needs. A published
+  recording must keep at least one file students can play.
+- **The red bin** deletes a file, so a bad one can be replaced. A file students
+  can play is removed only from a draft; once a recording has been published
+  its files are hidden, not removed.
+- **The arrows** on a part's line fix the order if the parts came in wrong.
 - **Students start on** chooses which version the player opens on when there
   is more than one — students can switch at any time.
+
+Above the files, one line gives the recording's status, its length and size, and
+**Progress ›** (Section 2.6). The **⋮** at its end holds the moves that take it
+away from students or back to work on — **Archive**, **Unpublish**, **Back to
+draft** — and **Delete**, for an admin, or **Discard** for an empty draft.
+**Publish** and **Play** are the buttons under the files.
 
 If a copy from Zoom fails, the file says why and **Retry import** tries again.
 
@@ -595,7 +620,7 @@ recording too; students see a new one only once it has arrived.
 
 **Stay on the page until the files say Added.** Leaving it, or tapping **Stop
 uploading**, stops the upload and keeps nothing of the unfinished file. A file
-that is still uploading, or that failed, can be taken off with **Remove** at
+that is still uploading, or that failed, can be taken off with its **bin** at
 any time, even on a published recording, since no student ever saw it.
 
 **Or say it wasn't recorded.** Some classes aren't, and until you say so the app
@@ -678,21 +703,23 @@ recorded is kept.
 </div>
 
 Open a recording's **Progress** (from its session, or from the
-library) to see exactly where things stand. Up top, four counts: **required**
-(the students you excused, the only ones who can open it), **completed**, **not
-complete**, and **missed**. An archived or unpublished recording keeps this
+library) to see exactly where things stand. Up top, one line of counts:
+**required** (the students you excused, the only ones who can open it),
+**completed**, **not complete**, and **missed**. An archived or unpublished recording keeps this
 page: the counts and rows are the record as it stood when it closed, and a
 grant that was still open then reads *Closed (recording archived)*. It is the
 only place that record survives — the course totals no longer include it
 (Section 2.6).
 
-The screen has five parts:
+**The required list** comes first — the students you excused, each with their
+status (**Completed**, **Not complete** or **Missed**), how much they've played
+and when they last played it. The **filter chips** — *Not complete / Missed /
+All* — open on **Not complete**, so you land on exactly the people who still
+need a nudge.
 
-- **The required list** — the students you excused, each with how much they've
-  played, when they last played it, and their status: **Completed**,
-  **Not complete**, or **Missed**. The **filter chips** — *Not complete / Missed
-  / All* — open on **Not complete**, so you land on exactly the people who still
-  need a nudge.
+Below it, closed sections hold everyone else, each with its count — tap one to
+open it:
+
 - **Present** — the students who were there. The recording is neither required
   for them nor open to them.
 - **Absent** — marked absent rather than excused, so it was never opened to them.
@@ -705,7 +732,7 @@ The screen has five parts:
   anything still inside its due date. A session whose date has already
   passed stays closed, so nobody comes back to an obligation they had no chance
   to meet.
-- **Also played** — progress from someone who no longer holds the recording,
+- **Also listened** — progress from someone who no longer holds the recording,
   for example a student you excused, who played it, and whom you then corrected
   to present. Kept as history.
 
@@ -721,7 +748,7 @@ recording in the course.
 </div>
 
 Sometimes the ledger and reality differ — a student caught up in person, or
-played it on someone else's device. Tap **Override** on their row to set the
+played it on someone else's device. Tap the **pencil** on their row to set the
 status yourself:
 
 - Enter a **reason** — it's **required**, and it's written into the audit history
@@ -730,8 +757,8 @@ status yourself:
 - Choose **Mark complete** or **Mark not complete**.
 
 An override **wins over the student's own mark**. If you mark someone complete and
-they later fiddle with their own status, your override stands. To undo it, open
-the row again and **Remove override** — the status falls back to whatever the
+they later fiddle with their own status, your override stands. To undo it, tap
+the pencil again and **Remove override** — the status falls back to whatever the
 student's own mark says. Every override, and every removal, is audited.
 
 **The student sees it too**, with the reason you typed — on their player, in
@@ -771,7 +798,7 @@ The course **workbook** (Section 2.13) carries the same numbers in a form you
 can keep: the **Students** and **Sessions** tabs are these two views, and the
 **Register** tab is the roster with every mark.
 
-**Tap any card to go straight to the detail.** A session opens that session — its
+**Tap any row to go straight to the detail.** A session opens that session — its
 attendance roster and its recording; a student opens that student's progress
 for the course. So the report is where you spot the problem, and one tap
 is where you deal with it.
@@ -784,18 +811,19 @@ is where you deal with it.
 </div>
 
 The **library** is every recording you can see, across all your courses, in one
-list — with a count summary and filters for **published / draft / archived /
-unpublished / needs attention**. It's the fastest way to answer "which recordings
-still need their files?" or "what's flagged?" without walking course by course. Admins
-see everything; managers see their assigned courses.
+list with a count summary. It's the fastest way to answer "which recordings
+still need their files?" or "what's flagged?" without walking course by course.
+Admins see everything; managers see their assigned courses. Each row starts with
+a large play button: **tap the row to play it**, and the small chart at its end
+to see its **Progress**.
 
-Two dropdowns narrow the list by where a recording belongs. Choose a **cohort**
-and leave the course alone to see everything in that term; choose a **course**
-as well to see just that course. The course list offers the courses in the
-cohort you chose — or every course, each with its term, when no cohort is
-chosen — and the count line describes whatever you have narrowed to. **Clear
-filters** appears whenever something is narrowing the list and puts everything
-back.
+Three dropdowns narrow the list. Choose a **cohort** and leave the course alone
+to see everything in that term; choose a **course** as well to see just that
+course. The course list offers the courses in the cohort you chose — or every
+course, each with its term, when no cohort is chosen — and the count line
+describes whatever you have narrowed to. **Status** narrows to published, draft,
+archived, unpublished or needs attention. The **×** after them appears whenever
+something is narrowing the list and puts everything back.
 
 ## 2.11 People — managing students
 
@@ -812,16 +840,16 @@ not do if the list were cut to the courses they already run. What a manager
 cannot see is anyone's *progress* outside their own courses: open a student and
 the page shows only the courses that manager runs.
 
-To add a student, tap **Add a student**, enter their **full name** and **email**,
+To add a student, tap the **+**, enter their **full name** and **email**,
 optionally **enrol them in a course** right away, and tap **Create account**. The
 app emails them a link to set their own password — you never handle passwords.
 The course list offers only courses that are running; an archived course, or one
 in an archived cohort, is not listed there (you can still enrol someone into it
 from the course's own page).
 
-**Creating accounts is done on the website, not in the phone apps.** The
-**Add a student** button in the figures above is a capture of the website at a
-phone's width; in the Android app it is simply absent. This is a store
+**Creating accounts is done on the website, not in the phone apps.** The **+**
+in the figures above is a capture of the website at a phone's width; in the
+Android app it is simply absent. This is a store
 requirement rather than a limitation we chose, and it only affects *creating* —
 changing roles, disabling an account and enrolling someone all work everywhere.
 
@@ -837,16 +865,15 @@ open it.
 <figure class="wd"><img src="manual/img/11b-student-page-desktop.png" alt="One student's page on a computer"><figcaption>On a computer</figcaption></figure>
 </div>
 
-It shows their name, address and whether they're **active** or **disabled**, and
-carries three actions:
+It shows their name, address and whether they're **active** or **disabled**.
+The **⋮** beside the name holds what can be done:
 
+- **Resend password link** — if they lost the email or the link expired.
 - **Export workbook** — one Excel file for this student across their courses
   (Section 2.13).
-- **Resend password link** — if they lost the email or the link expired.
 - **Disable account** — turns off access without deleting anything. (Disable,
   don't delete — deletion is a separate, deliberate, admin-only step.) Admins
-  only; managers see the state but not the switch, because access spans every
-  course.
+  only; a manager's menu does not have it, because access spans every course.
 
 Below that are **the courses they're in**. Tap one to open that student's
 progress for it.
@@ -986,7 +1013,7 @@ stands — how many have handed in, and what is waiting on you (**to grade**,
 <figure class="wd"><img src="manual/img/26-new-assignment-desktop.png" alt="A new assignment on a computer"><figcaption>On a computer</figcaption></figure>
 </div>
 
-Tap **New assignment**:
+Tap the **+** (New assignment):
 
 - **Title** and **Instructions**. Bold, italics, both kinds of list and links are
   on the bar above the box, and Arabic runs right to left. Select some words and
@@ -1008,7 +1035,7 @@ buttons says how many that is. Anyone who joins the class by the due date gets
 it too; anyone who joins after does not. **Save as draft** keeps it for the
 course's staff only, until you post it.
 
-**Changing it later.** Open it and tap **Edit**. A new due date reaches everyone
+**Changing it later.** Open it and tap the **pencil**. A new due date reaches everyone
 still working on it, and tells them — except a student you gave more time, who
 keeps their own date. If someone else changed the assignment while you had it
 open, your save is refused and says so, so their change is not lost; open it
@@ -1018,7 +1045,7 @@ asks before discarding them.
 **Stop taking work** closes it now: everyone with nothing handed in shows as
 missed, and work already in can still be graded.
 
-**Delete permanently** is for a mistake: a teacher can delete an assignment only
+**Delete assignment**, at the foot of the form, is for a mistake: a teacher can delete an assignment only
 while no student has started it. Once any student has a draft, a hand-in, a
 grade or a mark on it, only an admin can — close it instead, which keeps the
 record.
@@ -1030,8 +1057,9 @@ record.
 <figure class="wd"><img src="manual/img/24-assignment-page-desktop.png" alt="An assignment's page on a computer"><figcaption>On a computer</figcaption></figure>
 </div>
 
-Open an assignment to see the class: four counts — expected, handed in, not in
-yet (**past due** once the date has gone), missed — then the students by name,
+Open an assignment to see the class: one line of counts — how many of the class
+have handed in, how many are not in yet (**past due** once the date has gone),
+and how many missed — then the students by name,
 with filters for **To grade**, **Past due** and **Returned**. The list remembers
 its filter while you grade and come back. **Instructions** shows the assignment
 as students see it.
@@ -1041,8 +1069,10 @@ as students see it.
 <figure class="wd"><img src="manual/img/25-grade-desktop.png" alt="Grading on a computer"><figcaption>On a computer</figcaption></figure>
 </div>
 
-Tap **Grade**, or a student, to open their work: their answer, their files —
-tap one to open it — and the **hand-in history**, each hand-in and take-back with its time. Under it:
+Tap **Grade**, or a student, to open their work: when it was handed in, their
+answer and their files — tap one to open it — and, once there has been more
+than one hand-in or take-back, the **hand-in history**, each with its time.
+Under it:
 
 - **The grade and feedback** save as you type, as a draft only staff see. A
   student sees nothing until you return it.
@@ -1085,11 +1115,13 @@ in **Waiting for approval**. For each, you choose the role as you approve:
 - **Approve as manager** — they can run the courses you later assign to them.
 - **Approve as admin** — full access, including approving other staff.
 
-Below, **Staff** lists everyone with access. Your own account is marked "This is
-you" — you can't change your own role or access, which stops an admin from
-accidentally locking themselves out. Staff you've disabled move out of that
-list into a **Disabled** section at the bottom, exactly as disabled students
-do — tap the heading to open it, and **Re-enable** is still on the card.
+Below, **Staff** lists everyone with access, one line each with their address
+and role. The **⋮** at the end of a row changes their role or disables them.
+Your own row is marked *(you)* and has no ⋮ — you can't change your own role or
+access, which stops an admin from accidentally locking themselves out. Staff
+you've disabled move out of that list into a **Disabled** section at the
+bottom, exactly as disabled students do — tap the heading to open it;
+**Re-enable** is in the row's ⋮.
 
 Only staff on the institute's own Google domain can be approved at all — the app
 checks this on the server, not just in the browser.
@@ -1157,32 +1189,32 @@ confirmation, and is audited. Reach for disable, unpublish, or archive first.
 | **Catch up on a class I missed** | **To do** → tap the card → big round button. |
 | **Switch between video and audio** | Tap the version under the player — you carry on from the same moment. |
 | **Pick up where I left off** | Just reopen it — your place is saved automatically, on any device. |
-| **Slow down or speed up** | Tap **1×–2×** on the player. |
+| **Slow down or speed up** | Choose the speed beside the times on the player. |
 | **Mark something done** | Press play once, then **Mark complete** at the bottom of the player. |
 | **See my attendance for a class** | **Classes** → tap the class. |
 | **Set my student password** | Open the emailed link, or tap **Email me a password link** on sign-in. |
 | **Hand in an assignment** | **To do** → the assignment → write your answer and/or add files with the paperclip → **Hand in**. |
 | **Change what I handed in** | Open it → **Take back** (until the due date, and before it is returned) → change it → **Hand in**. |
 | **See my grade** | It appears on the assignment once your teacher returns it. |
-| **Add a session** *(staff)* | Course → **Sessions** → **Add a session** → title + date → **Create session**. |
+| **Add a session** *(staff)* | Course → **Sessions** → **+** → title + date → **Create session**. |
 | **Take attendance** *(staff)* | Session → mark Present / Absent / Excused → **Submit attendance**. |
 | **Add a recording** *(staff)* | Open the session → **Import from Zoom** → tick files or a quick pick → **Import**. Or **Upload files…** → choose → **Upload N files**. |
-| **Hide a version from students** *(staff)* | Session → the recording's file → **Hide**. |
+| **Hide a version from students** *(staff)* | Session → the **eye** beside the file. |
 | **Open a recording to students** *(staff)* | Mark them **Excused**, then **Publish** — that is the whole of it. |
-| **Change the closing date** *(staff)* | Session → **Edit session** → **Due by**. Moving it forward reopens a closed recording. |
+| **Change the closing date** *(staff)* | Session → the **pencil** → **Due by**. Moving it forward reopens a closed recording. |
 | **See who's behind** *(staff)* | Session → **Progress** → **Not complete** / **Missed**. |
-| **Post an assignment** *(staff)* | Course → **Assignments** → **New assignment** → title, instructions, date → **Post**. |
+| **Post an assignment** *(staff)* | Course → **Assignments** → **+** → title, instructions, date → **Post**. |
 | **Grade and return** *(staff)* | The assignment → **Grade** → grade + feedback → **Return now**, or **Next to grade ›** and **Return N graded** at the end. |
 | **Give one student more time** *(staff)* | Their work → **More time, or not required…** → reason + date → **Give more time**. |
-| **Give someone credit anyway** *(staff)* | Ledger → **Override** → reason (required) → **Mark complete**. |
+| **Give someone credit anyway** *(staff)* | Ledger → the **pencil** on their row → reason (required) → **Mark complete**. |
 | **Make a latecomer catch up on an old session** *(staff)* | Open that session → mark them **Excused** → **Submit attendance**. (Move **Due by** forward first if it has passed.) |
 | **See course attendance** *(staff)* | Course → **Attendance report** (toggle by session / by student). |
 | **Export a course for records** *(staff)* | Course page → **Export workbook**. |
-| **Export one student's record** *(staff)* | **People** → the student → **Export workbook**. |
+| **Export one student's record** *(staff)* | **People** → the student → **⋮** → **Export workbook**. |
 | **Turn a notification off** | **More** → **Notifications** → tap the one you don't want. |
 | **Approve a new teacher** *(admin)* | **People** → **Staff** → **Approve as manager / admin**. |
 | **Give a manager a course** *(admin)* | Course page → **Managers** → add them. |
-| **Create a student** *(staff)* | On the website: **People** → **Add a student** → name + email → **Create account**. |
+| **Create a student** *(staff)* | On the website: **People** → **+** → name + email → **Create account**. |
 | **See who changed what** *(admin)* | **More** → **Audit history**. |
 
 ## Troubleshooting
@@ -1193,7 +1225,8 @@ refresh needed. If you're stuck, contact your administrator.
 
 **A student can't sign in.** Check the email address matches the one on their
 account exactly, then open their page from the People screen and use
-**Resend password link** so they can set a fresh password. New students have no password until they use that link.
+**Resend password link**, in the **⋮** beside their name, so they can set a
+fresh password. New students have no password until they use that link.
 
 **A recording won't play.** Streaming needs a working connection — try switching
 between Wi-Fi and mobile data, or to **Audio only**, which needs far less of

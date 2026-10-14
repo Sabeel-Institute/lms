@@ -9,7 +9,7 @@ import {
   unbreakableDate,
   type StaffWorkState,
 } from '@sabeel/shared';
-import { Empty } from '../components/ui';
+import { Empty, RowList, useGridCell } from '../components/ui';
 import { useCourseCourseworkState, useCourseGradesState, useCourseSubmissionsState } from '../coursework';
 import type { CourseRow } from '../structure';
 import { getTheme, spacing } from '../theme';
@@ -74,34 +74,62 @@ export function StaffStudentWork({
           .filter(Boolean)
           .join(' · ')}
       </Text>
-      {rows.map(({ s, cw, g, st }) => {
-        const late = s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, INSTITUTE_TIMEZONE);
-        const grade = st === 'returned' ? s.returned?.grade : g?.grade;
-        return (
-          <Pressable
-            key={s.id}
-            testID={`student-work-${cw.title}`}
-            accessibilityRole="button"
-            accessibilityLabel={`Open their work on ${cw.title}`}
-            onPress={() => onOpenWork(cw.id)}
-            style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
-          >
-            <View style={styles.main}>
-              <Text style={styles.title}>{cw.title}</Text>
-              <Text style={styles.quiet}>
-                {s.handedInAt
+      <RowList>
+        {rows.map(({ s, cw, g, st }) => {
+          const late = s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, INSTITUTE_TIMEZONE);
+          const grade = st === 'returned' ? s.returned?.grade : g?.grade;
+          return (
+            <WorkRow
+              key={s.id}
+              title={cw.title}
+              when={
+                s.handedInAt
                   ? `Handed in ${unbreakableDate(todayInZone(INSTITUTE_TIMEZONE, s.handedInAt))}${late ? ' · late' : ''}`
-                  : `Hand in by ${unbreakableDate(s.dueDate)}`}
-              </Text>
-            </View>
-            <View style={styles.meta}>
-              {grade ? <Text style={styles.grade}>{gradeText(grade, cw.grading)}</Text> : null}
-              <Text style={styles.quiet}>{WORD[st]}</Text>
-            </View>
-          </Pressable>
-        );
-      })}
+                  : `Hand in by ${unbreakableDate(s.dueDate)}`
+              }
+              grade={grade ? gradeText(grade, cw.grading) : null}
+              word={WORD[st]}
+              onPress={() => onOpenWork(cw.id)}
+            />
+          );
+        })}
+      </RowList>
     </>
+  );
+}
+
+/** One assignment: when it went in, its grade, and where it stands. Opens their work. */
+function WorkRow({
+  title,
+  when,
+  grade,
+  word,
+  onPress,
+}: {
+  title: string;
+  when: string;
+  grade: string | null;
+  word: string;
+  onPress: () => void;
+}) {
+  const inGrid = useGridCell();
+  return (
+    <Pressable
+      testID={`student-work-${title}`}
+      accessibilityRole="button"
+      accessibilityLabel={`Open their work on ${title}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, inGrid, pressed ? styles.pressed : null]}
+    >
+      <View style={styles.main}>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.quiet}>{when}</Text>
+      </View>
+      <View style={styles.meta}>
+        {grade ? <Text style={styles.grade}>{grade}</Text> : null}
+        <Text style={styles.quiet}>{word}</Text>
+      </View>
+    </Pressable>
   );
 }
 

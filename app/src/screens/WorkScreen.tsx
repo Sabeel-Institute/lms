@@ -71,19 +71,25 @@ export function WorkScreen({
       }
     });
 
-  const instructions = (
-    <>
-      <SectionTitle>Instructions</SectionTitle>
-      <Card>
-        {cw.instructions ? <RichText markdown={cw.instructions} /> : <Text style={styles.quiet}>No written instructions.</Text>}
-        {Object.keys(cw.files).length > 0 ? (
-          <View style={styles.files}>
-            <Attachments target="coursework" courseworkId={cw.id} files={cw.files} editable={false} />
-          </View>
-        ) : null}
-      </Card>
-    </>
-  );
+  const hasFiles = Object.keys(cw.files).length > 0;
+  // Left out when there is nothing to read: a heading over "No written
+  // instructions" is a card that says there is no card.
+  const instructions =
+    cw.instructions || hasFiles ? (
+      <>
+        <SectionTitle>Instructions</SectionTitle>
+        <Card>
+          {cw.instructions ? <RichText markdown={cw.instructions} /> : null}
+          {hasFiles ? (
+            <View style={cw.instructions ? styles.files : null}>
+              <Attachments target="coursework" courseworkId={cw.id} files={cw.files} editable={false} />
+            </View>
+          ) : null}
+        </Card>
+      </>
+    ) : null;
+  const late = sub.handedInAt !== null && isLate(sub.handedInAt, sub.dueDate, INSTITUTE_TIMEZONE);
+  const takeBackNow = () => run('takeBack', () => takeBack({ courseworkId: cw.id }));
 
   return (
     <Screen
@@ -97,13 +103,24 @@ export function WorkScreen({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {cw.editedAt ? <Text style={styles.quiet}>Updated {dayOf(cw.editedAt)}</Text> : null}
-      <StateNotice state={state} sub={sub} today={today} onTakeBack={() => run('takeBack', () => takeBack({ courseworkId: cw.id }))} busy={active === 'takeBack'} />
+      <StateNotice state={state} sub={sub} today={today} />
 
       {sub.state === 'returned' && sub.returned ? <Returned returned={sub.returned} grading={cw.grading} /> : null}
 
       {handedIn ? (
         <>
-          <SectionTitle>What you handed in{sub.handedInAt ? ` · ${dayOf(sub.handedInAt)}` : ''}</SectionTitle>
+          {/* WHEN, AND THE WAY BACK, ON ITS HEADING: Take back belongs to the
+              work under it, as a file's bin belongs to its row. */}
+          <SectionTitle
+            action={
+              state === 'handedIn' && canTakeBack(sub, today) ? (
+                <Button testID="work-take-back" label="Take back" variant="quiet" hug busy={active === 'takeBack'} onPress={takeBackNow} />
+              ) : undefined
+            }
+          >
+            What you handed in{sub.handedInAt ? ` · ${dayOf(sub.handedInAt)}` : ''}
+            {late ? ' · late' : ''}
+          </SectionTitle>
           <Card>
             <HandedIn note={sub.note} files={sub.files} courseworkId={cw.id} uid={uid} />
           </Card>
@@ -148,14 +165,10 @@ function StateNotice({
   state,
   sub,
   today,
-  onTakeBack,
-  busy,
 }: {
   state: ReturnType<typeof workState>;
   sub: SubmissionRow;
   today: string;
-  onTakeBack: () => void;
-  busy: boolean;
 }) {
   const due = unbreakableDate(sub.dueDate);
   switch (state) {
@@ -185,19 +198,15 @@ function StateNotice({
       if (sub.returned?.retry) return <Notice tone="info">Your teacher asked for another try. Hand it in by {due}.</Notice>;
       if (sub.moreTime) return <Notice tone="info">Your teacher gave you until {due}: “{sub.moreTime.reason}”.</Notice>;
       return null;
-    case 'handedIn': {
-      const late = sub.handedInAt !== null && isLate(sub.handedInAt, sub.dueDate, INSTITUTE_TIMEZONE);
-      const back = canTakeBack(sub, today);
+    // When it went in, and whether late, are on the heading of the work below.
+    case 'handedIn':
       return (
         <View testID="work-handed-in">
           <Notice tone="success">
-            {`Handed in ${sub.handedInAt ? dayOf(sub.handedInAt) : ''}${late ? ', late' : ''}. Your teacher has not returned it yet.`}
-            {back ? ` You can take it back to change it until ${due}.` : ''}
+            {`Not returned yet.${canTakeBack(sub, today) ? ` You can take it back to change it until ${due}.` : ''}`}
           </Notice>
-          {back ? <Button testID="work-take-back" label="Take back" variant="secondary" hug busy={busy} onPress={onTakeBack} /> : null}
         </View>
       );
-    }
     case 'returned':
       return null;
   }

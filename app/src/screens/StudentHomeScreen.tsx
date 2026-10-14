@@ -17,7 +17,7 @@ import {
   type TodoBucket,
   type WorkState,
 } from '@sabeel/shared';
-import { Empty, Grid, Screen } from '../components/ui';
+import { Empty, Grid, Screen, useGridCell } from '../components/ui';
 import { PushNudge } from '../components/PushNudge';
 import { useMyAssignments, useMyCompletions } from '../completion';
 import { useMyDraftIds, useMySubmissions, type CourseworkRow, type SubmissionRow } from '../coursework';
@@ -177,12 +177,6 @@ export function StudentHomeScreen({
        */
       width="list"
       title="To do"
-      /*
-       * Two kinds of work, named plainly. A recording may be video, and its
-       * card says "Watch by"; an assignment's says "Hand in by". The list's
-       * own words name both and neither verb.
-       */
-      subtitle="Recordings and assignments, soonest first"
     >
       <PushNudge uid={uid} />
 
@@ -284,6 +278,7 @@ function Card({ item, onOpen }: { item: Item; onOpen: () => void }) {
   const done = item.bucket === 'done';
   const closed = item.bucket === 'missed' || item.bucket === 'archived';
   const tappable = item.kind === 'work' || !closed;
+  const inGrid = useGridCell();
   const body = (
     <>
       <MaterialIcons
@@ -293,6 +288,9 @@ function Card({ item, onOpen }: { item: Item; onOpen: () => void }) {
         style={styles.icon}
         accessibilityLabel={item.kind === 'recording' ? 'Recording' : 'Assignment'}
       />
+      {/* THE ICON STAYS OUT OF THE WRAP. Inside it, a phone's wrapped due
+          lines went to the start of the card's own line, under the icon. */}
+      <View style={styles.cardBody}>
       <View style={styles.cardMain}>
         <Text style={[styles.title, done || closed ? styles.titleDone : null]}>{item.title}</Text>
         <Text style={styles.course}>{item.cls.name}</Text>
@@ -318,12 +316,13 @@ function Card({ item, onOpen }: { item: Item; onOpen: () => void }) {
           </Text>
         ))}
       </View>
+      </View>
     </>
   );
 
   if (!tappable) {
     return (
-      <View testID={`task-${item.title}`} style={[styles.card, styles.cardClosed]}>
+      <View testID={`task-${item.title}`} style={[styles.card, inGrid, styles.cardClosed]}>
         {body}
       </View>
     );
@@ -334,7 +333,7 @@ function Card({ item, onOpen }: { item: Item; onOpen: () => void }) {
       accessibilityRole="button"
       accessibilityLabel={`${item.kind === 'recording' ? 'Play' : 'Open'} ${item.title}`}
       onPress={onOpen}
-      style={({ pressed }) => [styles.card, closed ? styles.cardClosed : null, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [styles.card, inGrid, closed ? styles.cardClosed : null, pressed ? styles.pressed : null]}
     >
       {body}
     </Pressable>
@@ -366,10 +365,6 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    // WRAPS AT 320: side by side, a title of any length got 117px beside a
-    // one-line date. Wrapping drops the date under the title.
-    flexWrap: 'wrap',
-    rowGap: spacing(2),
     backgroundColor: t.bg.surface,
     borderRadius: 12,
     padding: spacing(4),
@@ -380,13 +375,19 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
   cardClosed: { backgroundColor: t.bg.inset },
   icon: { marginRight: spacing(3) },
+  // WRAPS AT 320: side by side, a title of any length got 117px beside a
+  // one-line date. Wrapping drops the date under the title.
+  cardBody: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', rowGap: spacing(2) },
   // `minWidth` is what makes the wrap happen: below it the two blocks cannot
   // share a line, so the date moves to its own.
-  cardMain: { flexGrow: 1, flexShrink: 1, flexBasis: 200, minWidth: 200, paddingRight: spacing(3) },
+  cardMain: { flexGrow: 1, flexShrink: 1, flexBasis: 180, minWidth: 180, paddingRight: spacing(3) },
   title: { fontSize: 16, fontWeight: '600', color: t.text.primary },
   titleDone: { color: t.text.secondary },
   course: { fontSize: 13, color: t.text.secondary, marginTop: spacing(1) },
-  cardMeta: { alignItems: 'flex-end', flexShrink: 1, maxWidth: '100%' },
+  // Lines left-aligned to each other. The block sits at the right end of a
+  // wide card because the title beside it grows, and at the start of its own
+  // line, under the title, when it wraps.
+  cardMeta: { alignItems: 'flex-start', flexShrink: 1, maxWidth: '100%' },
   /*
    * THE LIVE DATE IS THE LOUD ONE: the app whispering the three things a
    * student can do and shouting the one they no longer can was the tone the

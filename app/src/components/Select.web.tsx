@@ -17,12 +17,14 @@ export function Select({
   options,
   onChange,
   testID,
+  disabled = false,
 }: {
   label: string;
   value: string;
   options: readonly SelectOption[];
   onChange: (next: string) => void;
   testID?: string;
+  disabled?: boolean;
 }) {
   const t = getTheme();
   return (
@@ -30,6 +32,7 @@ export function Select({
       data-testid={testID}
       value={value}
       aria-label={label}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
       style={{
         background: t.bg.inset,
@@ -53,6 +56,7 @@ export function Select({
         // The app is light-only; pin the native control so the browser does
         // not tint the dropdown arrow to a dark scheme.
         colorScheme: 'light',
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       {options.map((o) => (

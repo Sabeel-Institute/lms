@@ -11,8 +11,11 @@ import {
   playVerb,
   startingItem,
   todayInZone,
+  unbreakableDate,
 } from '@sabeel/shared';
 import { Chips, Notice } from '../components/ui';
+import { ScrollingTitle } from '../components/ScrollingTitle';
+import { Select } from '../components/Select';
 import { VideoSurface } from '../components/VideoSurface';
 import { Scrubber } from '../components/Scrubber';
 import { Transport } from '../components/Transport';
@@ -140,7 +143,7 @@ export function PlayerScreen({
             account of what they did, on the screen they have no other way to
             check. */}
         {listenerError ? <Notice tone="error">{listenerError}</Notice> : null}
-        <Hero recording={recording} courseName={cls.name} cohortName={cohortName} />
+        <Hero recording={recording} courseName={cls.name} cohortName={cohortName} video={false} closes={null} />
         {/* THREE REASONS, and each says something different to do about it.
             "Closed on <date>" needs a date; a student who holds no grant at all
             has none, and telling them a recording closed on `null` is worse
@@ -196,7 +199,16 @@ export function PlayerScreen({
         margin, not a second column.
       */}
       {current?.kind === 'video' ? <VideoSurface /> : null}
-      <Hero recording={recording} courseName={cls.name} cohortName={cohortName} />
+      {/* For a student the due date is not a nag, it is the day this recording
+          closes to them — an availability window, on the date line. Staff
+          previewing see the session's date plainly. */}
+      <Hero
+        recording={recording}
+        courseName={cls.name}
+        cohortName={cohortName}
+        video={current?.kind === 'video'}
+        closes={dueDate ? `${studentUid ? 'available until' : 'due'}\u00A0${unbreakableDate(dueDate)}` : null}
+      />
 
       {/* THE VERSIONS OF THIS PART, which share its timeline: switching keeps
           the place and plays on. "Audio only" is also the way to save data
@@ -226,6 +238,16 @@ export function PlayerScreen({
         <Text testID="player-elapsed" style={styles.time}>
           {formatClock(shownPositionMs)}
         </Text>
+        {/* THE SPEED, one dropdown between the times: four chips under the
+            transport were a second raspberry blob beside Play. */}
+        <Select
+          testID="player-rate"
+          label="Playback speed"
+          value={String(state.rate)}
+          options={PLAYBACK_RATES.map((r) => ({ value: String(r), label: `${r}×` }))}
+          onChange={(v) => setRate(Number(v))}
+          disabled={!state.ready}
+        />
         {/* Remaining, not total: mid-lecture, "how much is left" is the question
             anyone actually has. */}
         <Text style={styles.time}>−{formatClock(remainingMs)}</Text>
@@ -238,26 +260,6 @@ export function PlayerScreen({
         onBack={playback.skipBack}
         onForward={playback.skipForward}
       />
-
-      <View style={styles.speedRow}>
-        {PLAYBACK_RATES.map((r) => {
-          const on = state.rate === r;
-          return (
-            <Pressable
-              key={r}
-              testID={`player-rate-${r}`}
-              accessibilityRole="button"
-              aria-pressed={on}
-              accessibilityLabel={`Playback speed ${r} times`}
-              disabled={!state.ready}
-              onPress={() => setRate(r)}
-              style={[styles.speedChip, on ? styles.speedChipOn : null]}
-            >
-              <Text style={[styles.speedText, on ? styles.speedTextOn : null]}>{r}×</Text>
-            </Pressable>
-          );
-        })}
-      </View>
 
       {!state.ready && !state.error && playable ? <Text style={styles.preparing}>Preparing…</Text> : null}
 
@@ -308,10 +310,7 @@ export function PlayerScreen({
           <View style={styles.listenedTrack}>
             <View style={[styles.listenedFill, { width: `${Math.round(listened * 100)}%` }]} />
           </View>
-          <Text style={styles.body}>
-            {Math.round(listened * 100)}% of this recording played. Your place is saved
-            automatically, so you can carry on from another device.
-          </Text>
+          <Text style={styles.body}>{Math.round(listened * 100)}% played · your place is saved</Text>
           {/*
             LISTENED TIME ALONE. `positionMs > 0` counted a SEEK as playing — so
             opening a recording and tapping +30s once, with no audio played at
@@ -346,16 +345,6 @@ export function PlayerScreen({
         </>
       ) : null}
 
-      {/* For a student the due date is not a nag, it is the day this recording
-          closes to them — so it is stated as an availability window rather than
-          a deadline. Staff previewing see the session's date plainly. */}
-      {dueDate ? (
-        <Text style={styles.due}>
-          {studentUid
-            ? `Available to ${playVerb(recording.media).toLowerCase()} until ${dueDate}`
-            : `Due ${dueDate}`}
-        </Text>
-      ) : null}
     </ScrollView>
   );
 }
@@ -368,23 +357,30 @@ function Hero({
   recording,
   courseName,
   cohortName,
+  video,
+  closes,
 }: {
   recording: RecordingRow;
   courseName: string;
   cohortName: string;
+  /** Under a picture the panel is a caption, not a card. */
+  video: boolean;
+  /** "available until …" for a student, "due …" for staff; null when closed. */
+  closes: string | null;
 }) {
+  // Unbreakable dates: a wrap split them at their hyphens.
+  const dateLine = [recording.date ? `Recorded\u00A0${unbreakableDate(recording.date)}` : null, closes]
+    .filter(Boolean)
+    .join(' · ');
   return (
-    <View style={styles.hero}>
+    <View style={[styles.hero, video ? styles.heroCaption : null]}>
       <Text style={styles.heroCourse}>
         {courseName.toUpperCase()}
         {cohortName ? ` · ${cohortName.toUpperCase()}` : ''}
       </Text>
-      {/* Not clamped. Three lines cut the institute's longest title mid-word on
-          a phone — "…the Hikam of Ib…" — on a screen that had room below the
-          card for all six. The transport stays reachable because the screen
-          scrolls; a truncated title is simply the wrong name. */}
-      <Text style={styles.heroTitle}>{recording.title}</Text>
-      {recording.date ? <Text style={styles.heroDate}>Recorded {recording.date}</Text> : null}
+      {/* ONE LINE, sliding when it does not fit; a tap shows it whole. */}
+      <ScrollingTitle testID="player-title" text={recording.title} style={styles.heroTitle} />
+      {dateLine ? <Text style={styles.heroDate}>{dateLine}</Text> : null}
     </View>
   );
 }
@@ -551,14 +547,12 @@ const styles = StyleSheet.create({
   hero: {
     backgroundColor: t.bg.sage,
     borderRadius: 16,
-    paddingVertical: spacing(7),
+    paddingVertical: spacing(4),
     paddingHorizontal: spacing(5),
-    marginBottom: spacing(5),
-    // Tightened once video arrived: under a picture the card is a caption,
-    // and at 200px it pushed the transport a screen away from the video.
-    minHeight: 160,
-    justifyContent: 'center',
+    marginBottom: spacing(4),
   },
+  // Under a video: a caption, the picture above it is the anchor.
+  heroCaption: { backgroundColor: t.bg.canvas, borderRadius: 0, paddingHorizontal: 0, paddingTop: spacing(3), paddingBottom: 0 },
   heroCourse: {
     fontSize: 12,
     fontWeight: '700',
@@ -566,32 +560,10 @@ const styles = StyleSheet.create({
     color: t.text.secondary,
     marginBottom: spacing(2),
   },
-  heroTitle: { fontSize: 28, fontWeight: '700', color: t.text.primary },
+  heroTitle: { fontSize: 24, fontWeight: '700', color: t.text.primary },
   heroDate: { fontSize: 14, color: t.text.secondary, marginTop: spacing(2) },
-  times: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -spacing(1) },
+  times: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: -spacing(1) },
   time: { fontSize: 13, color: t.text.secondary, fontVariant: ['tabular-nums'] },
-  speedRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing(2),
-    marginTop: spacing(5),
-  },
-  speedChip: {
-    paddingVertical: spacing(2),
-    paddingHorizontal: spacing(3),
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: t.border.strong,
-    minWidth: 56,
-    // 44pt. These sit on the screen students spend the most time on, and they
-    // were 32px tall — under the minimum on the app's core control row.
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  speedChipOn: { backgroundColor: t.accent.base, borderColor: t.accent.base },
-  speedText: { fontSize: 14, fontWeight: '600', color: t.text.secondary },
-  speedTextOn: { color: t.accent.onAccent },
   preparing: { fontSize: 13, color: t.text.secondary, textAlign: 'center', marginTop: spacing(3) },
   versions: { marginTop: spacing(2), marginBottom: spacing(2) },
   parts: { marginTop: spacing(4), gap: spacing(2) },
@@ -606,7 +578,7 @@ const styles = StyleSheet.create({
   partOn: { backgroundColor: t.bg.accentSoft, borderColor: t.accent.base },
   partText: { fontSize: 14, color: t.text.primary },
   partTextOn: { fontWeight: '700', color: t.accent.base },
-  divider: { height: 1, backgroundColor: t.accent.gold, marginVertical: spacing(7) },
+  divider: { height: 1, backgroundColor: t.accent.gold, marginVertical: spacing(4) },
   sectionHeading: {
     fontSize: 13,
     fontWeight: '700',
@@ -628,7 +600,6 @@ const styles = StyleSheet.create({
   // secondary, not muted: this sentence is the only explanation of why there is
   // no Mark complete button, which makes it content rather than a caption.
   staffNote: { fontSize: 14, color: t.text.secondary, fontStyle: 'italic', lineHeight: 20 },
-  due: { fontSize: 14, color: t.text.secondary, marginTop: spacing(5) },
 
   completeButton: {
     marginTop: spacing(4),

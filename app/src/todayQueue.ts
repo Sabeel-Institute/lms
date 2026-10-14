@@ -36,7 +36,10 @@ export interface TodayItem {
   title: string;
   /** The session's meeting date, `YYYY-MM-DD`. */
   date: string;
-  /** What the reader has to do about it, in their own words. */
+  /**
+   * What is true of this row and no other, as a caption: "Met 4 days ago".
+   * The section heading says what kind of work it is.
+   */
   detail: string;
   recordingId: string | null;
   /** Days past due (negative = still to come). Drives the ordering. */
@@ -251,7 +254,7 @@ export function buildTodayQueue({
          * them — how long it has been waiting — two words at the head of a
          * sentence that was otherwise identical four times over.
          */
-        detail: met === 0 ? 'Met today.' : `Met ${met} ${met === 1 ? 'day' : 'days'} ago.`,
+        detail: met === 0 ? 'Met today' : `Met ${met} ${met === 1 ? 'day' : 'days'} ago`,
       });
       continue;
     }
@@ -267,7 +270,7 @@ export function buildTodayQueue({
           age: met,
           blocking: false,
           // The heading says the rest; this says when the class met.
-          detail: met === 0 ? 'Met today.' : `Met ${met} ${met === 1 ? 'day' : 'days'} ago.`,
+          detail: met === 0 ? 'Met today' : `Met ${met} ${met === 1 ? 'day' : 'days'} ago`,
         });
       }
       continue;
@@ -301,12 +304,12 @@ export function buildTodayQueue({
         blocking: revoked,
         detail:
           rec.status === 'needsAttention'
-            ? 'The import needs attention before it can be published.'
+            ? 'The import needs attention before it can be published'
             : rec.status === 'unpublished'
-              ? 'Unpublished, so nobody excused can open it.'
+              ? 'Unpublished, so nobody excused can open it'
               : rec.status === 'archived'
-                ? 'Archived before its due date, so nobody excused can open it.'
-                : 'A draft is waiting to be published.',
+                ? 'Archived before its due date, so nobody excused can open it'
+                : 'A draft is waiting to be published',
       });
       continue;
     }
@@ -324,9 +327,7 @@ export function buildTodayQueue({
           // the same descending comparison the overdue rows use.
           age: -left,
           detail:
-            left === 0
-              ? 'Access closes today. Check who still has not listened.'
-              : `Access closes in ${left} ${left === 1 ? 'day' : 'days'}.`,
+            left === 0 ? 'Access closes today' : `Access closes in ${left} ${left === 1 ? 'day' : 'days'}`,
         });
       }
     }
@@ -377,8 +378,8 @@ function gradingRows(grading: GradingInput | undefined, names: Map<string, strin
       date: cw.dueDate,
       detail:
         toGrade.length > 0
-          ? `${toGrade.length} handed in and not graded yet${late ? `, ${late} of them late` : ''}.`
-          : `All graded. ${toReturn} not returned yet.`,
+          ? `${toGrade.length} handed in and not graded yet${late ? `, ${late} of them late` : ''}`
+          : `All graded, ${toReturn} not returned yet`,
       action: toGrade.length > 0 ? 'Grade' : 'Return',
       recordingId: null,
       age: -daysUntilDue(cw.dueDate, today),

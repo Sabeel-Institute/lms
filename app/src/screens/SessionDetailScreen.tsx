@@ -21,12 +21,14 @@ import {
   ConfirmDanger,
   Empty,
   Field,
+  IconButton,
   Notice,
   Row,
   Screen,
   SectionTitle,
   StatusChip,
 } from '../components/ui';
+import { Sheet, SheetOption } from '../components/Sheet';
 import { DateField } from '../components/DateField';
 import {
   deleteSession,
@@ -92,6 +94,7 @@ export function SessionDetailScreen({
   const sessionState = useSessionState(sessionId);
   const session = sessionState.value;
   const recording = useRecording(session?.recordingId ?? null);
+  const [editing, setEditing] = useState(false);
 
   // Deleting a session leaves you standing on it, and a URL can point at one
   // that is already gone — so say which of the two this is rather than showing
@@ -118,8 +121,21 @@ export function SessionDetailScreen({
       // control 470px apart. The roster's three-way control is 330px wide, which
       // fits the reading column with room for the longest name in the institute.
       width="read"
+      actions={
+        editing ? undefined : (
+          <IconButton testID="session-edit" icon="edit" bare label="Edit session" onPress={() => setEditing(true)} />
+        )
+      }
     >
-      <SessionHeader session={session} isAdmin={isAdmin} />
+      {editing ? (
+        <SessionEditor session={session} isAdmin={isAdmin} onClose={() => setEditing(false)} />
+      ) : session.notes ? (
+        // Only when there are some: a card saying "No notes" is a card about
+        // nothing, on the screen staff open every class.
+        <Card>
+          <Text style={styles.notes}>{session.notes}</Text>
+        </Card>
+      ) : null}
       <AttendanceSection session={session} />
       <RecordingSection
         session={session}
@@ -133,10 +149,17 @@ export function SessionDetailScreen({
   );
 }
 
-// ---------------------------------------------------------------- header --
+// ---------------------------------------------------------------- editor --
 
-function SessionHeader({ session, isAdmin }: { session: SessionRow; isAdmin: boolean }) {
-  const [editing, setEditing] = useState(false);
+/**
+ * The session's title, dates and notes, and Delete under them.
+ *
+ * MOUNTED WHEN IT OPENS, so the form is seeded then, not when the screen
+ * loaded. Save writes all four fields back at once, so a form still holding
+ * what the session said an hour ago would silently revert every change made
+ * since — including another staff member's.
+ */
+function SessionEditor({ session, isAdmin, onClose }: { session: SessionRow; isAdmin: boolean; onClose: () => void }) {
   const [title, setTitle] = useState(session.title);
   const [date, setDate] = useState(session.date);
   const [dueDate, setDueDate] = useState(session.dueDate);
@@ -144,47 +167,41 @@ function SessionHeader({ session, isAdmin }: { session: SessionRow; isAdmin: boo
   const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
 
-  // Seed the form when the editor OPENS, not when the header mounts. Save writes
-  // all four fields back at once, so a form still holding what the session said
-  // when the screen loaded would silently revert every change made since —
-  // including another staff member's.
-  const openEditor = () => {
-    setTitle(session.title);
-    setDate(session.date);
-    setDueDate(session.dueDate);
-    setNotes(session.notes);
-    setEditing(true);
-  };
-
   const run = (key: string, fn: () => Promise<unknown>) =>
     void once(key, async () => {
       setError(null);
       try {
         await fn();
-        setEditing(false);
+        onClose();
       } catch (e) {
         setError(errorText(e));
       }
     });
 
-  if (editing) {
-    return (
-      <Card>
-        {error ? <Notice tone="error">{error}</Notice> : null}
-        <Field label="Title" value={title} onChangeText={setTitle} autoCapitalize="words" />
-        <DateField label="Date" value={date} onChange={setDate} />
-        <DateField label="Due by" value={dueDate} onChange={setDueDate} />
-        <Field
-          label="Notes (everyone with access sees these)"
-          value={notes}
-          onChangeText={setNotes}
-          multiline
-        />
+  return (
+    <Card>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <Field label="Title" value={title} onChangeText={setTitle} autoCapitalize="words" />
+      <DateField label="Date" value={date} onChange={setDate} />
+      <DateField label="Due by" value={dueDate} onChange={setDueDate} />
+      <Field label="Notes (everyone with access sees these)" value={notes} onChangeText={setNotes} multiline />
+      <ConfirmDanger
+        // A session with a recording is deleted by removing the recording first,
+        // which is the deliberate order — otherwise attendance would vanish out
+        // from under a recording students may already be accountable for.
+        enabled={isAdmin && !session.recordingId}
+        label="Delete session"
+        confirmLabel="Delete permanently"
+        warning="Permanently delete this session and its attendance? This can't be undone."
+        busy={busy === 'del'}
+        testID="session-delete"
+        confirmTestID="session-delete-confirm"
+        onConfirm={() => run('del', () => deleteSession({ sessionId: session.id }))}
+      >
         <Row>
           <Button
-            // The editor's own handle. It replaces the settings card rather than
-            // opening beside it, so nothing else on this screen identifies the
-            // editing state to a test.
+            // The editor's own handle: nothing else on this screen identifies
+            // the editing state to a test.
             testID="session-save"
             label="Save"
             busy={busy === 'save'}
@@ -202,37 +219,7 @@ function SessionHeader({ session, isAdmin }: { session: SessionRow; isAdmin: boo
           />
           {/* Quiet, like a sheet's dismiss. Filled, it was the loudest control
               in an editor whose Save is the reason the editor is open. */}
-          <Button label="Cancel" variant="quiet" onPress={() => setEditing(false)} />
-        </Row>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      {/* The listen-by date rides the heading line now — stating it again here
-          was the same sentence twice on one screen. */}
-      {session.notes ? (
-        <Text style={styles.notes}>{session.notes}</Text>
-      ) : (
-        <Text style={styles.meta}>No notes for this session.</Text>
-      )}
-      <ConfirmDanger
-        // A session with a recording is deleted by removing the recording first,
-        // which is the deliberate order — otherwise attendance would vanish out
-        // from under a recording students may already be accountable for.
-        enabled={isAdmin && !session.recordingId}
-        label="Delete session"
-        confirmLabel="Delete permanently"
-        warning="Permanently delete this session and its attendance? This can't be undone."
-        busy={busy === 'del'}
-        testID="session-delete"
-        confirmTestID="session-delete-confirm"
-        onConfirm={() => run('del', () => deleteSession({ sessionId: session.id }))}
-      >
-        <Row>
-          <Button label="Edit session" variant="secondary" onPress={openEditor} />
+          <Button label="Cancel" variant="quiet" onPress={onClose} />
         </Row>
       </ConfirmDanger>
     </Card>
@@ -316,7 +303,7 @@ function AttendanceSection({ session }: { session: SessionRow }) {
             : activeUids.length === 0
               ? 'Enrol students in this course first — attendance is taken from its roster.'
               : session.attendanceSubmittedAt
-              ? 'Submitted. Excused students are given the recording and can open it until the due date; present and absent students are not.'
+              ? 'Submitted. Only excused students get the recording.'
               : 'Everyone starts as Present — mark who was away, and excuse whoever should listen to the recording. Only excusing grants access, and nothing is granted until you submit.'}
         </Text>
         {rosterState === null ? null : activeUids.length === 0 ? (
@@ -471,28 +458,27 @@ function RecordingSection({
             </>
           ) : (
             <>
-              <Text style={styles.meta}>
-                No recording yet. Upload the files or import them from Zoom; the session&apos;s
-                title and date are used automatically.
-              </Text>
-              {/* WHERE THE BUTTON IS, so the files appear under the thumb that
-                  chose them. The state is this section's, so the panel moves
-                  into the card below, unbroken, once the first file has
+              <Text style={styles.meta}>No recording yet.</Text>
+              {/* WHERE THE BUTTONS ARE, so the files appear under the thumb
+                  that chose them. The state is this section's, so the panel
+                  moves into the card below, unbroken, once the first file has
                   created the recording. */}
               <UploadPanel uploads={uploads} recording={recording} />
-              <Button
-                testID="recording-upload"
-                label="Upload files…"
-                disabled={choosing}
-                onPress={() => void uploads.pick()}
-              />
-              <Button
-                testID="recording-import-zoom"
-                label="Import from Zoom"
-                variant="secondary"
-                disabled={choosing}
-                onPress={() => onImportZoom(session)}
-              />
+              <Row>
+                <Button
+                  testID="recording-upload"
+                  label="Upload files…"
+                  disabled={choosing}
+                  onPress={() => void uploads.pick()}
+                />
+                <Button
+                  testID="recording-import-zoom"
+                  label="Import from Zoom"
+                  variant="secondary"
+                  disabled={choosing}
+                  onPress={() => onImportZoom(session)}
+                />
+              </Row>
               {/*
                 THE WAY OUT OF A CARD THAT OTHERWISE NEVER LEAVES.
 
@@ -507,7 +493,8 @@ function RecordingSection({
               <Button
                 testID="session-not-recorded"
                 label="This class was not recorded"
-                variant="secondary"
+                variant="quiet"
+                hug
                 disabled={choosing}
                 busy={busy === 'notRecorded'}
                 onPress={() =>
@@ -623,6 +610,25 @@ function RecordingCard({
   // words "nothing is lost" over a term of listening history.
   const canDiscard = isDiscardable(r);
   const totalBytes = items.reduce((n, i) => n + (i.sizeBytes ?? 0), 0);
+  // Never for a live recording — the server refuses it too (unpublish or
+  // archive first), so offering it would only produce an error.
+  const canDelete = r.status !== 'published' && (isAdmin || canDiscard);
+  // The moves that take it out of students' hands, or back to work on: the
+  // ⋮'s. Publish stays a button, the one move that is the point of the card.
+  const otherMoves = moves.filter((to) => to !== 'published');
+  const [adding, setAdding] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const fromMenu = (fn: () => void) => {
+    setMenuOpen(false);
+    fn();
+  };
+  // Closed first and chosen in the same tap: the browser opens its file
+  // chooser only from inside the gesture that asked for it.
+  const fromMenuAdd = (fn: () => void) => {
+    setAdding(false);
+    fn();
+  };
 
   // Takes over the card for the same reason ConfirmDanger does: a confirmation
   // that leaves Publish and Delete tappable underneath it is not a confirmation.
@@ -660,10 +666,12 @@ function RecordingCard({
 
   return (
     <>
+      {/* THE STATE OF IT ON ONE LINE: status, size, the way to who has
+          listened, and the ⋮ that holds what takes it away. */}
       <View style={styles.recMeta}>
         <StatusChip status={r.status} />
         <Text style={styles.hint}>
-          {/* Silent while uploading — the progress bar above already says it,
+          {/* Silent while uploading — the progress bar below already says it,
               and two live descriptions of one operation just compete. */}
           {uploading
             ? ''
@@ -673,6 +681,24 @@ function RecordingCard({
                   .join(' · ')
               : 'no files yet'}
         </Text>
+        {hasLedger(r) ? (
+          <Text testID="recording-ledger" role="link" style={styles.link} onPress={() => onOpenLedger(r)}>
+            Progress ›
+          </Text>
+        ) : null}
+        {otherMoves.length > 0 || canDelete ? (
+          <View style={styles.recMenu}>
+            <IconButton
+              testID="recording-actions"
+              icon="more-vert"
+              bare
+              label="More actions for this recording"
+              busy={busy === `status-${r.id}`}
+              disabled={uploading}
+              onPress={() => setMenuOpen(true)}
+            />
+          </View>
+        ) : null}
       </View>
 
       {needsMedia ? (
@@ -686,10 +712,32 @@ function RecordingCard({
         <Notice tone="error">{r.attentionReason}</Notice>
       ) : null}
 
+      <Sheet visible={menuOpen} title={r.title} onClose={() => setMenuOpen(false)} closeAt="corner">
+        {otherMoves.map((to) => (
+          <SheetOption
+            key={to}
+            testID={`recording-${to}`}
+            label={LABELS[to]}
+            detail={MOVE_DETAIL[to]}
+            onPress={() =>
+              fromMenu(() => onRun(`status-${r.id}`, () => setRecordingStatus({ recordingId: r.id, status: to })))
+            }
+          />
+        ))}
+        {canDelete ? (
+          <SheetOption
+            testID="recording-delete"
+            label={canDiscard ? 'Discard recording' : 'Delete recording'}
+            detail={canDiscard ? 'Clears the empty recording off this session.' : 'Removes every file and every listening record.'}
+            tone="danger"
+            onPress={() => fromMenu(() => setConfirmDelete(true))}
+          />
+        ) : null}
+      </Sheet>
+
       <ConfirmDanger
-        // Never for a live recording — the server refuses it too (unpublish or
-        // archive first), so offering the button would only produce an error.
-        enabled={r.status !== 'published' && (isAdmin || canDiscard)}
+        enabled={canDelete}
+        opened={{ open: confirmDelete, close: () => setConfirmDelete(false) }}
         label={canDiscard ? 'Discard recording' : 'Delete recording'}
         confirmLabel={canDiscard ? 'Discard' : 'Delete permanently'}
         warning={
@@ -698,7 +746,6 @@ function RecordingCard({
             : "This permanently removes every file and every listening record for it — it can't be undone. Archiving keeps everything; delete only to free up storage."
         }
         busy={busy === `del-${r.id}`}
-        testID="recording-delete"
         confirmTestID="recording-delete-confirm"
         onConfirm={() => onRun(`del-${r.id}`, () => deleteRecording({ recordingId: r.id }))}
       >
@@ -707,6 +754,37 @@ function RecordingCard({
             tappable underneath "discard this?" — the exact flaw ConfirmDanger
             exists to prevent, and one only a native run in the needs-audio state
             surfaced. */}
+        {/* MORE FILES, in any state: each is a new part or another version of
+            one, from this device or from Zoom — the second half of a class in
+            another meeting is a part too — and students see it once it has
+            arrived. */}
+        <SectionTitle
+          action={
+            <IconButton
+              testID="recording-add"
+              icon="add"
+              label="Add files to this recording"
+              disabled={choosing || uploading}
+              onPress={() => setAdding(true)}
+            />
+          }
+        >
+          Files
+        </SectionTitle>
+        <Sheet visible={adding} title="Add files" onClose={() => setAdding(false)} closeAt="corner">
+          <SheetOption
+            testID="recording-upload"
+            label="Upload files"
+            detail="Audio or video from this device."
+            onPress={() => fromMenuAdd(() => onUpload())}
+          />
+          <SheetOption
+            testID="recording-import-zoom-more"
+            label={items.length > 0 ? 'Add from Zoom' : 'Import from Zoom'}
+            detail="A meeting's recording, copied here."
+            onPress={() => fromMenuAdd(() => onImportZoom(session))}
+          />
+        </Sheet>
         <MediaList
           recording={r}
           disabled={uploading || busy !== null}
@@ -716,61 +794,41 @@ function RecordingCard({
           onRemove={setConfirmRemove}
         />
         {uploadPanel}
-        <Row>
-          {/* MORE FILES, in any state, like more from Zoom: each is a new
-              part or another version of one, and students see it once it has
-              arrived. */}
-          <Button testID="recording-upload" label="Upload files…" variant="secondary" disabled={choosing} onPress={onUpload} />
-          {failedZoom ? (
-            <Button
-              testID="recording-retry-import"
-              label="Retry import"
-              variant="secondary"
-              busy={busy === `retry-${r.id}`}
-              disabled={uploading}
-              onPress={() => onRun(`retry-${r.id}`, () => retryZoomImport({ recordingId: r.id }))}
-            />
-          ) : null}
-          {/* MORE FROM ZOOM, in any state: the second half of a class in
-              another meeting is added as a part, and a published recording
-              shows it to students once it has arrived. */}
+        {failedZoom ? (
           <Button
-            testID="recording-import-zoom-more"
-            label={items.length > 0 ? 'Add from Zoom' : 'Import from Zoom'}
+            testID="recording-retry-import"
+            label="Retry import"
             variant="secondary"
+            hug
+            busy={busy === `retry-${r.id}`}
             disabled={uploading}
-            onPress={() => onImportZoom(session)}
+            onPress={() => onRun(`retry-${r.id}`, () => retryZoomImport({ recordingId: r.id }))}
           />
-        </Row>
-        <Row>
-          {/* PRIMARY, as it is on the library card — unless Publish is on offer,
-              which outranks it. Playing what was just published is the one
-              thing in this row that is not administration, and drawn like
-              Archive and Unpublish it was indistinguishable from the two
-              controls that take the recording away. Never two primaries. */}
-          {playable ? (
-            <Button
-              testID="recording-play"
-              label="Play"
-              variant={moves.includes('published') ? 'secondary' : 'primary'}
-              disabled={uploading}
-              onPress={() => onPlay(r, session)}
-            />
-          ) : null}
-          {moves.map((to) => (
-            <Button
-              key={to}
-              testID={`recording-${to}`}
-              label={LABELS[to]}
-              variant={to === 'published' ? 'primary' : 'secondary'}
-              disabled={
-                uploading || (to === 'published' && (blockers.length > 0 || deadlinePassed))
-              }
-              busy={busy === `status-${r.id}`}
-              onPress={() => onRun(`status-${r.id}`, () => setRecordingStatus({ recordingId: r.id, status: to }))}
-            />
-          ))}
-        </Row>
+        ) : null}
+        {playable || moves.includes('published') ? (
+          <Row>
+            {/* Publish is the primary when it is on offer; otherwise Play is.
+                Never two primaries. */}
+            {moves.includes('published') ? (
+              <Button
+                testID="recording-published"
+                label={LABELS.published}
+                disabled={uploading || blockers.length > 0 || deadlinePassed}
+                busy={busy === `status-${r.id}`}
+                onPress={() => onRun(`status-${r.id}`, () => setRecordingStatus({ recordingId: r.id, status: 'published' }))}
+              />
+            ) : null}
+            {playable ? (
+              <Button
+                testID="recording-play"
+                label="Play"
+                variant={moves.includes('published') ? 'secondary' : 'primary'}
+                disabled={uploading}
+                onPress={() => onPlay(r, session)}
+              />
+            ) : null}
+          </Row>
+        ) : null}
 
         {/* SAY WHY THE BUTTON IS OFF, or a greyed Publish reads as a broken app.
             Only when publishing is a move on offer at all — a live recording has
@@ -781,18 +839,6 @@ function RecordingCard({
             Move the date forward on the session above first.
           </Notice>
         ) : null}
-
-        {hasLedger(r) ? (
-          <View style={styles.ledgerRow}>
-            <Button
-              testID="recording-ledger"
-              label="Progress"
-              variant="secondary"
-              onPress={() => onOpenLedger(r)}
-            />
-          </View>
-        ) : null}
-        {/* SAY WHY PUBLISH IS OFF, beside the deadline's reason below. */}
         {moves.includes('published') && blockers.some((b) => b !== 'status') ? (
           <Notice tone="info">
             {blockers.includes('pending')
@@ -813,6 +859,15 @@ const LABELS: Record<RecordingStatus, string> = {
   archived: 'Archive',
   unpublished: 'Unpublish',
   needsAttention: 'Flag a problem',
+};
+
+/** What each move in the ⋮ does, under its name. */
+const MOVE_DETAIL: Record<RecordingStatus, string> = {
+  draft: 'Not visible to students. Fix it, then publish it again.',
+  published: 'Opens it to the students you excused.',
+  archived: 'Closes it to students and takes it out of the course totals. Publish puts it back.',
+  unpublished: 'Closes it to students. It goes back to draft before it is published again.',
+  needsAttention: 'Marks it as needing a fix before it can be published.',
 };
 
 function fmtDuration(s: number) {
@@ -881,8 +936,10 @@ const styles = StyleSheet.create({
   segBtnOn: { backgroundColor: t.accent.base },
   segText: { fontSize: 13, fontWeight: '600', color: t.text.secondary },
   segTextOn: { color: t.accent.onAccent },
-  recMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing(3), marginBottom: spacing(2) },
-  ledgerRow: { marginTop: spacing(3), paddingTop: spacing(3), borderTopWidth: 1, borderTopColor: t.border.subtle },
+  recMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: spacing(3), marginBottom: spacing(2) },
+  // Pinned to the end of the line, however much of it the words take.
+  recMenu: { marginLeft: 'auto' },
+  link: { fontSize: 13, color: t.text.accent, textDecorationLine: 'underline' },
   progressWrap: { marginTop: spacing(3), backgroundColor: t.bg.inset, borderRadius: 6, overflow: 'hidden', minHeight: 26, justifyContent: 'center' },
   progressBar: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: t.bg.sage },
   progressText: { fontSize: 12, color: t.text.primary, paddingHorizontal: spacing(2), paddingVertical: spacing(1) },

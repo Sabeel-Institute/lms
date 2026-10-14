@@ -121,12 +121,12 @@ describe('what becomes work', () => {
     const q = build([session('s1', { attendanceSubmittedAt: null, metDaysAgo: 3 })]);
     expect(q.items).toHaveLength(1);
     expect(q.items[0].kind).toBe('attendance');
-    expect(q.items[0].detail).toBe('Met 3 days ago.');
+    expect(q.items[0].detail).toBe('Met 3 days ago');
   });
 
   it('says "today" rather than "0 days ago"', () => {
     const q = build([session('s1', { attendanceSubmittedAt: null, metDaysAgo: 0 })]);
-    expect(q.items[0].detail).toBe('Met today.');
+    expect(q.items[0].detail).toBe('Met today');
   });
 
   it('a session that has NOT met yet is not work', () => {
@@ -139,7 +139,7 @@ describe('what becomes work', () => {
     expect(q.items[0].kind).toBe('recording');
     expect(q.items[0].recordingId).toBeNull();
     // The row says when the class met; its heading says what is missing.
-    expect(q.items[0].detail).toBe('Met 3 days ago.');
+    expect(q.items[0].detail).toBe('Met 3 days ago');
   });
 
   /*
@@ -186,7 +186,7 @@ describe('what becomes work', () => {
       [recording('r1', 'published')],
     );
     expect(q.items[0].kind).toBe('closing');
-    expect(q.items[0].detail).toBe('Access closes in 2 days.');
+    expect(q.items[0].detail).toBe('Access closes in 2 days');
   });
 
   /*
@@ -245,7 +245,7 @@ describe('what the badge counts', () => {
       [recording('r1', 'unpublished')],
     );
     expect(q.items[0].kind).toBe('publish');
-    expect(q.items[0].detail).toBe('Unpublished, so nobody excused can open it.');
+    expect(q.items[0].detail).toBe('Unpublished, so nobody excused can open it');
     expect(q.blocking).toBe(1);
   });
 
@@ -267,7 +267,7 @@ describe('what the badge counts', () => {
     );
     expect(q.items[0].kind).toBe('publish');
     expect(q.items[0].detail).toBe(
-      'Archived before its due date, so nobody excused can open it.',
+      'Archived before its due date, so nobody excused can open it',
     );
     expect(q.blocking).toBe(1);
   });
@@ -295,7 +295,7 @@ describe('what the badge counts', () => {
       [session('s1', { recordingId: 'r1' })],
       [recording('r1', 'needsAttention')],
     );
-    expect(q.items[0].detail).toBe('The import needs attention before it can be published.');
+    expect(q.items[0].detail).toBe('The import needs attention before it can be published');
     expect(q.blocking).toBe(0);
   });
 
@@ -525,14 +525,14 @@ describe('work to grade', () => {
   it('says how much is waiting, how much of it late, and never counts it in the badge', () => {
     const q = build([], [], { grading: grading() });
     expect(q.items).toEqual([
-      expect.objectContaining({ kind: 'grading', courseworkId: 'reflection', detail: '2 handed in and not graded yet, 1 of them late.', action: 'Grade', blocking: false }),
+      expect.objectContaining({ kind: 'grading', courseworkId: 'reflection', detail: '2 handed in and not graded yet, 1 of them late', action: 'Grade', blocking: false }),
     ]);
     expect(q.blocking).toBe(0);
   });
 
   it('turns into a reminder to return once everything is graded', () => {
     const q = build([], [], { grading: grading({ handedIn: [handedIn('u3', 'reflection', day(-3))] }) });
-    expect(q.items[0]).toMatchObject({ detail: 'All graded. 1 not returned yet.', action: 'Return' });
+    expect(q.items[0]).toMatchObject({ detail: 'All graded, 1 not returned yet', action: 'Return' });
   });
 
   it('only for courses the reader manages by name, and never for a draft', () => {

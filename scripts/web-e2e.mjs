@@ -287,6 +287,14 @@ const screenTitle = async (page) =>
     .replace(/\s*›\s*$/, '')
     .trim();
 
+/** Close the open menu or picker sheet by its corner ×. */
+const closeSheet = (page) =>
+  page.getByTestId('sheet-panel').filter({ visible: true }).getByRole('button', { name: 'Close' }).click();
+
+/** A student's home has opened: its own title, which no other screen shares (the tab says it too). */
+const onToDo = (page, timeout = 25000) =>
+  page.getByTestId('screen-title').filter({ visible: true, hasText: /^To do$/ }).first().waitFor({ timeout });
+
 /**
  * A page's visible text, with non-breaking punctuation normalised.
  *
@@ -475,6 +483,7 @@ await shot(admin, '04-courses');
 // document and the title reads the same document, so the heading follows the
 // write without a reload — and the list, reached fresh, carries the new name.
 // Renamed BACK afterwards, because every later step opens `Autumn 2026` by name.
+await tap(admin, 'cohort-rename-open');
 await admin.getByTestId('cohort-rename').fill('Autumn 2026 — Term 1');
 await tap(admin, 'cohort-rename-save');
 await sawText(admin, 'Autumn 2026 — Term 1');
@@ -487,6 +496,9 @@ check(
   await shows(admin, 'cohort-open-Autumn 2026 — Term 1'),
 );
 await tap(admin, 'cohort-open-Autumn 2026 — Term 1');
+await tap(admin, 'cohort-rename-open');
+// Seeded from the LIVE name each time the sheet opens.
+check('the rename sheet opens on the name as it now is', (await admin.getByTestId('cohort-rename').inputValue()) === 'Autumn 2026 — Term 1');
 await admin.getByTestId('cohort-rename').fill('Autumn 2026');
 await tap(admin, 'cohort-rename-save');
 // Exact, because the heading it replaces contains these words as a prefix.
@@ -629,8 +641,8 @@ await student.getByTestId('signin-email').fill('fatima@example.com');
 await student.getByTestId('signin-password').fill('StudentPass123!');
 await tap(student, 'signin-student');
 // The student lands on their task home ("To do"), not a staff greeting.
-await sawText(student, 'Recordings and assignments, soonest first', 25000);
-check('the student signs in with their own password', await showsText(student, 'Recordings and assignments, soonest first'));
+await onToDo(student);
+check('the student signs in with their own password', (await screenTitle(student)) === 'To do');
 await shot(student, '09-home-student');
 
 // ------------------------------------------------ session, attendance, publish --
@@ -876,6 +888,7 @@ await tap(student, 'player-play'); // pause, so the saved position settles
  * Switching to it must keep their place, show the picture, and play;
  * switching back must keep it again.
  */
+await tap(admin, 'recording-add');
 const moreFiles = admin.waitForEvent('filechooser');
 await tap(admin, 'recording-upload');
 await (await moreFiles).setFiles([VIDEO_FIXTURE, HEVC_FIXTURE]);
@@ -1337,7 +1350,7 @@ const overridden = await newSession('overridden');
 await overridden.getByTestId('signin-email').fill('bilal@example.com');
 await overridden.getByTestId('signin-password').fill('BilalPass123!');
 await tap(overridden, 'signin-student');
-await sawText(overridden, 'Recordings and assignments, soonest first', 25000);
+await onToDo(overridden);
 /*
  * THE GROUP, not the word — same reasoning as Fatima's completion above. The
  * claim is that the row sits under Completed, which is what the student reads;
@@ -1479,6 +1492,19 @@ check(
   /Overrode completion/.test(auditText) && /Attended the class live/.test(auditText),
 );
 await shot(admin, '18-audit');
+
+// The institute-wide view names each entry's course, with its term since a
+// course name recurs from term to term, where it printed the course's id.
+await goHome(admin);
+await tap(admin, 'tab-more');
+await tap(admin, 'more-audit');
+await admin.getByTestId('audit-list').waitFor({ timeout: 15000 });
+await admin.getByText('course: Hikam Foundations · Autumn 2026').first().waitFor({ timeout: 15000 }).catch(() => {});
+const wideAudit = await bodyText(admin);
+check(
+  'the institute-wide audit names each course and its term, not its id',
+  wideAudit.includes('course: Hikam Foundations · Autumn 2026') && !wideAudit.includes('courseId='),
+);
 
 // -------------------------------------------------------------- assignments --
 /*
@@ -1627,7 +1653,18 @@ check(
 await admin.getByTestId('coursework-post').filter({ visible: true }).first().dblclick();
 // A new assignment becomes its own page once posted.
 await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
-check('a posted assignment opens on its page, as posted', (await screenTitle(admin)) === CW && (await showsText(admin, 'posted')));
+// POSTED IS THE DOCUMENT'S STATE, and on the page the absence of the draft's
+// notice. A chip saying "posted" was the old evidence — and "Not posted", the
+// draft's own words, satisfied a check for the word just as well.
+const postedNow = (await readCollection('coursework')).filter((c) => c.fields.title.stringValue === CW);
+check(
+  'a posted assignment opens on its page, as posted',
+  (await screenTitle(admin)) === CW &&
+    postedNow.length === 1 &&
+    postedNow[0].fields.status?.stringValue === 'posted' &&
+    !(await showsText(admin, 'Not posted')),
+  postedNow.map((c) => c.fields.status?.stringValue).join(','),
+);
 // The page opens on Students; the files are with the instructions.
 await tap(admin, 'coursework-tab-instructions');
 await admin.getByTestId(`attachment-${NOTES}`).filter({ visible: true }).first().waitFor({ timeout: 20000 }).catch(() => {});
@@ -2107,6 +2144,7 @@ check(
 await goHome(admin);
 await tap(admin, 'tab-people');
 await tap(admin, 'student-open-bilal@example.com');
+await tap(admin, 'student-actions');
 await tap(admin, 'student-access');
 await admin.waitForTimeout(2500);
 await goHome(admin);
@@ -2128,6 +2166,7 @@ await shot(admin, '20b-students-disabled');
 
 // Put them back, so the audit assertions below read a tidy end state.
 await tap(admin, 'student-open-bilal@example.com');
+await tap(admin, 'student-actions');
 await tap(admin, 'student-access');
 await admin.waitForTimeout(2500);
 
@@ -2146,6 +2185,11 @@ check(
   'it is scoped to the courses they manage, and says so',
   mgrStudent.includes('courses you manage') && mgrStudent.includes('hikam foundations'),
 );
+await shot(mgr, '20c-student-page-manager');
+// COUNTED WITH THE MENU OPEN: closed, both are unmounted, and "no disable
+// control" would hold for a menu that offered it.
+await tap(mgr, 'student-actions');
+await mgr.getByTestId('student-resend').waitFor({ timeout: 10000 });
 check(
   'the admin-only disable control is absent for them',
   (await mgr.getByTestId('student-access').count()) === 0,
@@ -2154,7 +2198,7 @@ check(
   'resending a password link is still theirs to do',
   (await mgr.getByTestId('student-resend').count()) === 1,
 );
-await shot(mgr, '20c-student-page-manager');
+await closeSheet(mgr);
 
 // A student in NONE of the manager's courses. Each row owns its own enrollment
 // read and renders nothing when it does not match, so without an explicit empty
@@ -2214,6 +2258,29 @@ check(
   afterRemove === stillEnrolled - 1,
   `${stillEnrolled} → ${afterRemove}`,
 );
+
+// "…and you can add them back", the confirmation says — from the roster's +.
+// The picker STAYS OPEN for several, and offers only who is not already in.
+await tap(admin, 'roster-add');
+await admin.getByTestId('enrol-bilal@example.com').waitFor({ timeout: 10000 });
+check(
+  "the roster's + offers the student just removed, and not one still enrolled",
+  (await shows(admin, 'enrol-bilal@example.com')) && (await admin.getByTestId('enrol-fatima@example.com').count()) === 0,
+);
+await tap(admin, 'enrol-bilal@example.com');
+await admin.getByTestId('enrol-bilal@example.com').waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+const afterAdd = (await readCollection('enrollments')).filter((e) => e.fields.active?.booleanValue === true).length;
+check(
+  'a student added from the + is enrolled, and the picker stays open for the next',
+  afterAdd === stillEnrolled && (await shows(admin, 'sheet-panel')),
+  `${afterRemove} → ${afterAdd}`,
+);
+await closeSheet(admin);
+await admin.getByTestId('student-ledger-bilal@example.com').waitFor({ timeout: 10000 });
+// Removed again, so the run goes on from the state it was written against.
+await tap(admin, 'roster-remove-bilal@example.com');
+await tap(admin, 'roster-remove-confirm-bilal@example.com');
+await admin.getByTestId('student-ledger-bilal@example.com').waitFor({ state: 'detached', timeout: 20000 });
 
 console.log('\nUp to the course');
 // The header's Back arrow returns where you CAME FROM, which two screens into a
@@ -2283,7 +2350,7 @@ check(
   // open task — so the check passed on the accident that this student's one
   // grant was already complete, and any open assignment added above here would
   // have failed it for a reason unrelated to routing.
-  stuOnStaffUrl.includes('recordings and assignments, soonest first') && !stuOnStaffUrl.includes('excused students have until'),
+  (await screenTitle(student)) === 'To do' && !stuOnStaffUrl.includes('excused students have until'),
 );
 check('…so nothing on it is denied', !stuOnStaffUrl.includes('live data error'));
 
@@ -2440,6 +2507,7 @@ console.log('\nThe archive keeps the record');
 await openHikam(admin);
 await tap(admin, 'nav-sessions');
 await tap(admin, 'session-open-Session 1');
+await tap(admin, 'recording-actions');
 await tap(admin, 'recording-archived');
 // Archived shows Publish as its only move, which is what says the write landed.
 await admin.getByTestId('recording-published').waitFor({ timeout: 20000 });
@@ -2521,6 +2589,7 @@ check(
 await goHome(admin);
 await tap(admin, 'tab-people');
 await tap(admin, 'student-open-fatima@example.com');
+await tap(admin, 'student-actions');
 const studentBook = await readDownload(admin, 'student-export-workbook');
 check(
   'the student workbook is named for the student',
@@ -2731,6 +2800,7 @@ check('…without a single refused read', !mgrHistory.includes('live data error'
 // The manager's student workbook is the one export whose reads are NOT the
 // admin's: a course list by managerUids, one enrolment document per course,
 // and audit rows pinned to those courses. A refusal anywhere means no file.
+await tap(mgr, 'student-actions');
 const mgrBook = await readDownload(mgr, 'student-export-workbook').catch((e) => ({ name: String(e), sheets: [] }));
 const mgrSummary = tabOf(mgrBook, 'Summary');
 check(
@@ -2753,24 +2823,32 @@ await mgr.close();
 await goHome(admin);
 await tap(admin, 'tab-people');
 await tap(admin, 'segment-staff');
+await tap(admin, 'staff-actions-manager@oursabeel.com');
 await tap(admin, 'staff-access-manager@oursabeel.com');
 // The Disabled section appears only once somebody is in it — that is the
 // change landing, not a fixed wait that a slow snapshot outlives.
 await admin.getByTestId('staff-disabled').waitFor({ timeout: 10000 });
+// THE ROW'S OWN MENU, which is drawn while the row is: the options inside it
+// are unmounted with the sheet closed, so counting them proves nothing.
 check(
   'a disabled staff member leaves the main list',
-  (await admin.getByTestId('staff-role-manager@oursabeel.com').filter({ visible: true }).count()) === 0,
+  (await admin.getByTestId('staff-actions-manager@oursabeel.com').filter({ visible: true }).count()) === 0,
 );
 await tap(admin, 'staff-disabled');
+await admin.getByTestId('staff-actions-manager@oursabeel.com').waitFor({ timeout: 10000 });
+await tap(admin, 'staff-actions-manager@oursabeel.com');
 await admin.getByTestId('staff-access-manager@oursabeel.com').waitFor({ timeout: 10000 });
-check('…and is found by expanding Disabled, with Re-enable still on the card', await shows(admin, 'staff-access-manager@oursabeel.com'));
+check(
+  '…and is found by expanding Disabled, with Re-enable in its menu',
+  (await admin.getByTestId('staff-access-manager@oursabeel.com').innerText()).includes('Re-enable'),
+);
 await shot(admin, '29-staff-disabled');
 await tap(admin, 'staff-access-manager@oursabeel.com');
 await admin.waitForTimeout(2500);
 check(
   're-enabling from inside the section puts them back in the main list',
   (await admin.getByTestId('staff-disabled').count()) === 0 &&
-    (await shows(admin, 'staff-role-manager@oursabeel.com')),
+    (await shows(admin, 'staff-actions-manager@oursabeel.com')),
 );
 
 // -------------------------------------------------------------------- audit --

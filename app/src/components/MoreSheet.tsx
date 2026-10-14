@@ -50,7 +50,7 @@ export function MoreSheet({
   const isAdmin = role === 'admin';
 
   return (
-    <Sheet visible={visible} title="More" onClose={onClose}>
+    <Sheet visible={visible} title="More" onClose={onClose} closeAt="corner">
       {isAdmin ? (
         <>
           <SheetSection label="Institute" />
@@ -63,7 +63,8 @@ export function MoreSheet({
         </>
       ) : null}
 
-      <SheetSection label="You" />
+      {/* A label only when there is another section to tell it from. */}
+      {isAdmin ? <SheetSection label="You" /> : null}
       {/* A MANAGER'S OWN ACTIONS, which their class-scoped audit view cannot
           show: creating a student account without naming a course produces an
           entry belonging to no course, so the one thing a manager most needs to
