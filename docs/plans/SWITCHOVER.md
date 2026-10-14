@@ -124,7 +124,7 @@ Still to do (steps in `TODO.md`):
    every other secret).
 3. **Notifications go to staff only until switchover.** Done:
    `NOTIFY_AUDIENCE=staff` in `functions/.env.oursabeel-lms`; empty or absent
-   means nobody.
+   means nobody, which is its value while the live site is bug-hunted.
 4. Docs: `CLAUDE.md`, `docs/DEPLOY.md`, `docs/SECRETS.md`, `TODO.md` and
    `docs/DEV-TOOLING.md` rewritten for the new accounts, with the R2 move's
    docs (M6), so they are rewritten once.
@@ -175,7 +175,7 @@ sides, and fails on any difference.
 Once functions are deployed, a re-run's writes fire the triggers here
 (`onRecordingWritten`, `onSessionWritten`, `onAssignmentWritten`). They
 reconcile what was just copied and change nothing, and notifications go to
-staff only until switchover (`NOTIFY_AUDIENCE`).
+staff at most until switchover (`NOTIFY_AUDIENCE`).
 
 ## Switchover day
 

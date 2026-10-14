@@ -50,8 +50,9 @@ with the rest of the Phase 0 docs ([docs/plans/SWITCHOVER.md](docs/plans/SWITCHO
 - [ ] **DNS**: `firebase1._domainkey` CNAME is shown in NameSilo but was not
       published after two hours, while the other three records were. Delete
       and re-add it there.
-- Notifications go to staff only until switchover day (`NOTIFY_AUDIENCE=staff`
-  in `functions/.env.oursabeel-lms`). Done: the Web Push key and the Android
+- Notifications go to nobody while the live site is bug-hunted
+  (`NOTIFY_AUDIENCE=` empty in `functions/.env.oursabeel-lms`), then to staff
+  only (`staff`) until switchover day. Done: the Web Push key and the Android
   app registration (debug SHA-1, `google-services.json` in place).
 - `npm run check:queries` and `npm run check:push` take the oursabeel.com
   account's token through `CHECK_ACCESS_TOKEN` (`docs/DEPLOY.md`), because this

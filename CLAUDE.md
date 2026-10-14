@@ -26,10 +26,13 @@ until switchover day. Never point a command from this checkout at
   (`cloudflare/media-copier`, its own workspace with tests that run in workerd);
   what remains is listed in `docs/plans/MEDIA-ON-CLOUDFLARE.md`. The Worker
   deploys before the Functions that call it.
-- **Push notifications reach only staff** (`NOTIFY_AUDIENCE=staff` in
-  `functions/.env.oursabeel-lms`) until switchover day, when it becomes
+- **Push notifications reach nobody** (`NOTIFY_AUDIENCE=` empty in
+  `functions/.env.oursabeel-lms`) while the live site is bug-hunted; after
+  that, only staff (`staff`) until switchover day, when it becomes
   `everyone`. The project holds a copy of every real account while the live app
   still notifies them; without it a student would hear everything twice.
+  Notification work is tested on the emulators, or on the live site with
+  Faisal's own account, asking him what arrived.
 
 The plans:
 
