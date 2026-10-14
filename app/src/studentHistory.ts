@@ -61,6 +61,8 @@ export function describeStudentEvent(
         : e.detail?.status === 'active'
           ? 'Account re-enabled'
           : 'Account access changed';
+    case 'deleteAccount':
+      return 'Account deleted';
     default:
       return null;
   }

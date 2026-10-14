@@ -49,7 +49,7 @@ export function useDecidedStaffState(enabled: boolean): StaffRow[] | null {
       enabled
         ? query(
             collection(db, COLLECTIONS.staffUsers),
-            where('status', 'in', ['active', 'disabled']),
+            where('status', 'in', ['active', 'disabled', 'deleted']),
             orderBy('displayName', 'asc'),
           )
         : null,

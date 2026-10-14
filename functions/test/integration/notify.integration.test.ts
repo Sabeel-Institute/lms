@@ -191,9 +191,10 @@ async function seedGrant(studentUid: string, recordingId: string, dueDate?: stri
  * and no password, the shape `onUserCreate` leaves alone.
  */
 async function seedStudentAccount(uid: string) {
+  const email = `${uid}@example.com`;
   const doc: StudentDoc = {
     displayName: uid,
-    email: `${uid}@example.com`,
+    email,
     role: 'student',
     status: 'active',
     createdAt: 1,
@@ -203,13 +204,14 @@ async function seedStudentAccount(uid: string) {
   await getAuth()
     .deleteUser(uid)
     .catch(() => undefined);
-  await getAuth().createUser({ uid, email: doc.email });
+  await getAuth().createUser({ uid, email });
 }
 
 async function seedStaffAccount(uid: string) {
+  const email = `${uid}@oursabeel.com`;
   const doc: StaffUserDoc = {
     displayName: uid,
-    email: `${uid}@oursabeel.com`,
+    email,
     photoUrl: null,
     role: 'manager',
     status: 'active',
@@ -219,7 +221,7 @@ async function seedStaffAccount(uid: string) {
   await getAuth()
     .deleteUser(uid)
     .catch(() => undefined);
-  await getAuth().createUser({ uid, email: doc.email });
+  await getAuth().createUser({ uid, email });
 }
 
 async function seedSession(id: string, fields: Partial<SessionDoc>) {

@@ -53,8 +53,9 @@ export async function createEnrollmentRecord(callerUid: string, input: Enrollmen
   ]);
   if (!courseSnap.exists) throw new HttpsError('not-found', 'No such course.');
   if (!studentSnap.exists) throw new HttpsError('not-found', 'No such student.');
-  if ((studentSnap.data() as StudentDoc).status === 'disabled') {
-    throw new HttpsError('failed-precondition', 'That student account is disabled.');
+  const status = (studentSnap.data() as StudentDoc).status;
+  if (status !== 'active') {
+    throw new HttpsError('failed-precondition', status === 'deleted' ? 'That student account has been deleted.' : 'That student account is disabled.');
   }
 
   const id = enrollmentId(input.studentUid, input.courseId);
@@ -183,8 +184,8 @@ export async function applyEnrollmentActive(input: SetEnrollmentActiveInput) {
     const student = (
       await db.collection(COLLECTIONS.students).doc(input.studentUid).get()
     ).data() as StudentDoc | undefined;
-    if (student?.status === 'disabled') {
-      throw new HttpsError('failed-precondition', 'That student account is disabled.');
+    if (student && student.status !== 'active') {
+      throw new HttpsError('failed-precondition', student.status === 'deleted' ? 'That student account has been deleted.' : 'That student account is disabled.');
     }
   }
 

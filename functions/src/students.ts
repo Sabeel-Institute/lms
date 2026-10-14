@@ -225,7 +225,9 @@ export function validateStudentAccess(data: unknown): StudentAccessInput {
 export async function applyStudentAccess(input: StudentAccessInput) {
   const db = getFirestore();
   const ref = db.collection(COLLECTIONS.students).doc(input.uid);
-  if (!(await ref.get()).exists) throw new HttpsError('not-found', 'No such student.');
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'No such student.');
+  if ((snap.data() as StudentDoc).status === 'deleted') throw new HttpsError('failed-precondition', 'That account has been deleted.');
 
   if (input.status === 'disabled') await shutOutAccount(input.uid);
   else await getAuth().updateUser(input.uid, { disabled: false });

@@ -50,8 +50,9 @@ export function StudentsScreen({
 }) {
   const studentsState = useStudentsState(true);
   const students = studentsState ?? NO_STUDENTS;
-  const active = students.filter((s) => s.status !== 'disabled');
+  const active = students.filter((s) => s.status === 'active');
   const disabled = students.filter((s) => s.status === 'disabled');
+  const deleted = students.filter((s) => s.status === 'deleted');
   /*
    * THE CONFIRMATION BELONGS HERE, not inside the sheet that created the account.
    *
@@ -96,7 +97,7 @@ export function StudentsScreen({
           {active.map((s) => (
             <ListRow
               key={s.uid}
-              testID={`student-open-${s.email}`}
+              testID={`student-open-${s.email ?? s.uid}`}
               name={s.displayName}
               detail={<EmailText email={s.email} />}
               onPress={() => onOpenStudent(s.uid)}
@@ -112,11 +113,23 @@ export function StudentsScreen({
             {disabled.map((s) => (
               <ListRow
                 key={s.uid}
-                testID={`student-open-${s.email}`}
+                testID={`student-open-${s.email ?? s.uid}`}
                 name={s.displayName}
                 detail={<EmailText email={s.email} />}
                 onPress={() => onOpenStudent(s.uid)}
               />
+            ))}
+          </Grid>
+        </Collapsible>
+      ) : null}
+
+      {/* Their record is still theirs to open: the account went, the
+          attendance, listening, work and grades did not. */}
+      {deleted.length > 0 ? (
+        <Collapsible testID="students-deleted" title="Deleted" count={deleted.length}>
+          <Grid min={330} rows>
+            {deleted.map((s) => (
+              <ListRow key={s.uid} testID={`student-open-${s.uid}`} name={s.displayName} onPress={() => onOpenStudent(s.uid)} />
             ))}
           </Grid>
         </Collapsible>

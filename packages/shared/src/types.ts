@@ -9,7 +9,8 @@ import type { Role, UserStatus } from './auth';
 /** A staff member. Document id is the Firebase Auth uid. */
 export interface StaffUserDoc {
   displayName: string;
-  email: string;
+  /** Null once the account is deleted: the name stays with the record, the address goes. */
+  email: string | null;
   photoUrl: string | null;
   /** Mirror of the token claim; the token is what rules trust. */
   role: Extract<Role, 'admin' | 'manager'>;
@@ -22,7 +23,8 @@ export interface StaffUserDoc {
 /** A student. Document id is the Firebase Auth uid. */
 export interface StudentDoc {
   displayName: string;
-  email: string;
+  /** Null once the account is deleted: the name stays with the record, the address goes. */
+  email: string | null;
   /**
    * Always 'student'. Present so the mirror carries the same two fields as the
    * token for both populations — the session compares them to detect a token
@@ -31,7 +33,7 @@ export interface StudentDoc {
    */
   role: Extract<Role, 'student'>;
   /** Students are never pending — staff creating them is the approval. */
-  status: Extract<UserStatus, 'active' | 'disabled'>;
+  status: Extract<UserStatus, 'active' | 'disabled' | 'deleted'>;
   createdAt: number;
   createdBy: string;
 }

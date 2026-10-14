@@ -44,6 +44,7 @@ export async function applyStaffAccess(callerUid: string, input: StaffAccessInpu
   if (!snap.exists) throw new HttpsError('not-found', 'No such staff member.');
 
   const current = snap.data() as { role: Role; status: UserStatus };
+  if (current.status === 'deleted') throw new HttpsError('failed-precondition', 'That account has been deleted.');
 
   // An admin may not demote or disable themselves. Without this the last admin
   // can lock the institute out of its own user management, with no way back in

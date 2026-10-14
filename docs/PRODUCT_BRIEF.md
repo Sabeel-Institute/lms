@@ -464,6 +464,7 @@ A message is shown whether the app is open, in the background, or closed — on 
 - Admins and Managers can view audit/change history within their allowed class scopes.
 - Platform-level staff/admin changes belong in Admin surfaces.
 - Permanent deletion is Admin-only, requires strong confirmation, and is audited. Three deletions are a manager's: a completion override they set, a file on an unpublished draft recording, and an assignment no student has started.
+- **Deleting an account** (Faisal's choice, 2026-10-14) is an admin's, on the website, and only for an account already disabled. It removes the sign-in, the email address wherever it is held (the directory row, and the history rows that copied it), and the notification settings; a student leaves their classes and a colleague their courses. The name stays with the academic record, and the person is listed as deleted. Deleting in the Firebase console instead left an active-looking person every action failed on.
 - Posting, editing, closing, returning, changing a returned grade, giving more time and marking work not required are in the audit history. A grade becomes a record only when it is returned: drafts change constantly while a teacher works and are not logged keystroke by keystroke.
 - What students do with assignments — each hand-in and take-back, with its time — is kept in its own history, which staff see on the student's work, rather than in the audit history.
 

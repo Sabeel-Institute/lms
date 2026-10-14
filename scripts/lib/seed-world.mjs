@@ -277,6 +277,16 @@ export async function seedWorld({ db, auth, browser, base }) {
     createdAt: now - 60 * DAY,
     approvedAt: now - 59 * DAY,
   });
+  // And a colleague whose account was deleted: a name, and nothing else.
+  await db.collection('staffUsers').doc('sw-deleted').set({
+    email: null,
+    displayName: 'Bilqis Omar',
+    photoUrl: null,
+    role: 'manager',
+    status: 'deleted',
+    createdAt: now - 90 * DAY,
+    approvedAt: now - 89 * DAY,
+  });
 
   /**
    * A roster LONGER THAN ONE SCREEN, because the bug being looked for is what
@@ -342,6 +352,20 @@ export async function seedWorld({ db, auth, browser, base }) {
   const STUDENT = students[0];
   /** The one seeded as disabled — the only row inside the "Disabled" section. */
   const DISABLED_STUDENT = students[students.length - 1];
+  /**
+   * A DELETED account, as `deleteAccount` leaves one: the directory row with
+   * its name and no address, and no Auth user behind it. The only row inside
+   * the "Deleted" section, and the only page that has no address under its name.
+   */
+  const DELETED_STUDENT = { uid: 'sw-deleted-student', name: 'Yusra Haddad' };
+  await db.collection('students').doc(DELETED_STUDENT.uid).set({
+    displayName: DELETED_STUDENT.name,
+    email: null,
+    role: 'student',
+    status: 'deleted',
+    createdAt: now - 50 * DAY,
+    createdBy: adminUid,
+  });
 
   const COHORT = 'sw-autumn';
   const COURSE = 'sw-hikam';
@@ -769,7 +793,7 @@ export async function seedWorld({ db, auth, browser, base }) {
   // returned and four were read; the rest were a standing invitation to reach
   // past the fixture's own vocabulary into its internals.
   return {
-    STUDENT, DISABLED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived,
+    STUDENT, DISABLED_STUDENT, DELETED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived,
     HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE,
     /** A classmate whose hand-in on "Memorize the first hikma" is still to grade. */
     TO_GRADE: students[2],

@@ -2660,6 +2660,57 @@ check(
   !mgrNoMatch.includes('live data error'),
 );
 
+/*
+ * DELETING AN ACCOUNT, the second of two decisions: offered only once the
+ * account is disabled. Zayd's sign-in and address go; his name stays, under
+ * Deleted, with nothing left to do to him but read his record.
+ */
+await goHome(admin);
+await tap(admin, 'tab-people');
+await tap(admin, 'student-open-zayd@example.com');
+await tap(admin, 'student-actions');
+const deleteWhileActive = await admin.getByTestId('student-delete').count();
+await tap(admin, 'student-access');
+await admin.getByTestId('student-actions').filter({ visible: true }).first().waitFor({ timeout: 10000 });
+await admin.waitForTimeout(2500);
+await tap(admin, 'student-actions');
+await tap(admin, 'student-delete');
+await tap(admin, 'student-delete-confirm');
+let zaydDoc;
+for (let i = 0; i < 40 && !zaydDoc; i++) {
+  zaydDoc = (await readCollection('students')).find(
+    (d) => d.fields.displayName?.stringValue === 'Zayd Noor' && d.fields.status?.stringValue === 'deleted',
+  );
+  if (!zaydDoc) await admin.waitForTimeout(500);
+}
+const zaydUid = zaydDoc?.name.split('/').pop();
+const zaydLookup = await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/projects/${EMULATOR_PROJECT_ID}/accounts:lookup`, {
+  method: 'POST',
+  headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+  body: JSON.stringify({ localId: [zaydUid ?? 'none'] }),
+}).then((r) => r.json());
+check(
+  'a disabled student can be deleted: no sign-in, no address, the name kept',
+  deleteWhileActive === 0 && !!zaydDoc && 'nullValue' in (zaydDoc.fields.email ?? {}) && !(zaydLookup.users ?? []).length,
+  JSON.stringify({ deleteWhileActive, email: zaydDoc?.fields.email, users: zaydLookup.users?.length ?? 0 }),
+);
+await admin.getByText('deleted', { exact: true }).first().waitFor({ timeout: 10000 }).catch(() => {});
+await tap(admin, 'student-actions');
+check(
+  'their page shows no address, and offers their record and nothing else',
+  !(await showsText(admin, 'zayd@example.com')) &&
+    (await shows(admin, 'student-export-workbook')) &&
+    (await admin.getByTestId('student-access').count()) === 0 &&
+    (await admin.getByTestId('student-resend').count()) === 0 &&
+    (await admin.getByTestId('student-delete').count()) === 0,
+);
+await shot(admin, '20c-student-deleted');
+await closeSheet(admin);
+await goHome(admin);
+await tap(admin, 'tab-people');
+await tap(admin, 'students-deleted');
+check('…and is listed under Deleted', await shows(admin, `student-open-${zaydUid}`));
+
 // ------------------------------------------------- roster removal confirms --
 // The row opens the student's progress, so the × beside it must not remove
 // anyone on a single tap.

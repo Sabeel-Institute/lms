@@ -23,7 +23,11 @@ export const FIRST_ADMIN_EMAIL = `${FIRST_ADMIN_LOCAL_PART}@${ALLOWED_EMAIL_DOMA
  */
 export type Role = 'admin' | 'manager' | 'student';
 
-export type UserStatus = 'pending' | 'active' | 'disabled';
+/**
+ * `deleted` is a directory row's alone: the account it described is gone
+ * (`deleteAccount`), and no token carries it.
+ */
+export type UserStatus = 'pending' | 'active' | 'disabled' | 'deleted';
 
 /**
  * What security rules trust. Mirrored onto the user document for UI, but the

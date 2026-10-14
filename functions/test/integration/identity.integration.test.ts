@@ -41,16 +41,17 @@ async function clearAll() {
 }
 
 async function seedStaff(uid: string, role: 'admin' | 'manager', status: string) {
+  const email = `${uid}@oursabeel.com`;
   const doc: StaffUserDoc = {
     displayName: uid,
-    email: `${uid}@oursabeel.com`,
+    email,
     photoUrl: null,
     role,
     status: status as StaffUserDoc['status'],
     createdAt: 1,
   };
   await getFirestore().collection(COLLECTIONS.staffUsers).doc(uid).set(doc);
-  await getAuth().createUser({ uid, email: doc.email, emailVerified: true });
+  await getAuth().createUser({ uid, email, emailVerified: true });
   await getAuth().setCustomUserClaims(uid, { role, status });
 }
 

@@ -257,7 +257,6 @@ const ctx: WorkbookContext = {
     [S.ayesha, 'Ayesha Rahman'],
     ['mgr', 'Rukaiya Ahmed'],
   ]),
-  emails: new Map(),
   timeZone: ZONE,
   today: TODAY,
   exportedAt: T('2026-10-15', '16:42'),

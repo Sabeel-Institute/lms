@@ -98,7 +98,8 @@ async function lookupUids(uids) {
 
 const when = (ms) =>
   ms ? new Date(Number(ms)).toLocaleString('sv-SE', { timeZone: INSTITUTE_TIMEZONE, dateStyle: 'short', timeStyle: 'short' }) : 'never';
-const mask = (address) => String(address).replace(/^(.)[^@]*@/, '$1***@');
+// A deleted account's address is gone: null, printed as nothing.
+const mask = (address) => (address === null ? '' : String(address).replace(/^(.)[^@]*@/, '$1***@'));
 
 const nameTokens = (name) => String(name ?? '').toLowerCase().replace(/[^\p{L}\s]/gu, ' ').split(/\s+/).filter(Boolean);
 

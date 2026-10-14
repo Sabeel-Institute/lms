@@ -1231,6 +1231,16 @@ The app is built around **reversible** actions:
 Permanent deletion exists, but it's deliberately admin-only, asks for strong
 confirmation, and is audited. Reach for disable, unpublish, or archive first.
 
+**Deleting an account** is for a request to delete someone's data (the privacy
+policy's "Deleting your account"). On the website, an admin first **disables**
+the person; then, from their page's **⋮** (a colleague's, from their row in
+the Disabled section), **Delete account** asks once more. It removes their
+sign-in, their email address wherever it is held, and their notification
+settings; a student leaves the classes they were in, and a colleague stops
+managing their courses. Their name stays on the record — attendance,
+listening, work, grades and history — and they are listed under **Deleted**,
+where their record can still be opened and exported. It cannot be undone.
+
 ---
 
 # Part 4 — "How do I…?" quick answers

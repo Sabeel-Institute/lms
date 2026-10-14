@@ -74,19 +74,15 @@ const enrolment = (studentUid: string, courseId: string) =>
     query(collection(db, COLLECTIONS.enrollments), where('courseId', '==', courseId), where('studentUid', '==', studentUid)),
   );
 
-/** Everyone's name and address: the two directories every staff member may read. */
-async function directory(): Promise<Pick<WorkbookContext, 'names' | 'emails'>> {
+/** Everyone's name: the two directories every staff member may read. */
+async function directory(): Promise<Pick<WorkbookContext, 'names'>> {
   const [staff, students] = await Promise.all([
     rows(COLLECTIONS.staffUsers, query(collection(db, COLLECTIONS.staffUsers))),
     rows(COLLECTIONS.students, query(collection(db, COLLECTIONS.students))),
   ]);
   const names = new Map<string, string>();
-  const emails = new Map<string, string>();
-  for (const p of [...staff, ...students]) {
-    names.set(p.id, p.displayName);
-    emails.set(p.id, p.email);
-  }
-  return { names, emails };
+  for (const p of [...staff, ...students]) names.set(p.id, p.displayName);
+  return { names };
 }
 
 async function cohortName(cohortId: string): Promise<string> {
@@ -131,7 +127,7 @@ async function courseData(course: CourseDoc & { id: string }, forStudent?: strin
 }
 
 function context(
-  dir: Pick<WorkbookContext, 'names' | 'emails'>,
+  dir: Pick<WorkbookContext, 'names'>,
   exportedBy: string,
   scopeNote?: string,
 ): WorkbookContext {

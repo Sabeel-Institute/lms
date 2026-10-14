@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AUDIT_PAGE, INSTITUTE_TIMEZONE, QUEUE_SCOPE, stampInZone } from '@sabeel/shared';
 import {
   Card,
+  ConfirmDanger,
   EmailText,
   Empty,
   Grid,
@@ -15,6 +16,7 @@ import {
 } from '../components/ui';
 import { Sheet, SheetOption } from '../components/Sheet';
 import { resendPasswordSetup, setStudentAccess, useStudentState, type StudentRow } from '../students';
+import { deleteAccount } from '../accounts';
 import { useDecidedStaff } from '../staff';
 import { useStudentAudit, useStudentAuditIn } from '../ledger';
 import { studentHistory } from '../studentHistory';
@@ -67,6 +69,7 @@ export function StudentDetailScreen({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const run = (key: string, fn: () => Promise<void>) =>
     once(key, async () => {
@@ -81,6 +84,7 @@ export function StudentDetailScreen({
 
   const who = student?.displayName ?? '';
   const disabled = student?.status === 'disabled';
+  const email = student?.email ?? null;
 
   // The sheet closes as the action starts; the ⋮ turns into a spinner until it
   // is done, and the result is the notice at the top of the page.
@@ -92,7 +96,7 @@ export function StudentDetailScreen({
   return (
     <Screen
       title={who}
-      subtitle={student ? <EmailText email={student.email} lede /> : undefined}
+      subtitle={email !== null ? <EmailText email={email} lede /> : undefined}
       status={student ? student.status : undefined}
       width="list"
       actions={
@@ -110,6 +114,24 @@ export function StudentDetailScreen({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {info ? <Notice tone="success">{info}</Notice> : null}
+      {/* THE SECOND DECISION. Delete is offered only on a disabled account, and
+          asks again here, in the danger colour this app keeps for what cannot
+          be undone. */}
+      <ConfirmDanger
+        enabled={isAdmin && disabled}
+        opened={{ open: confirmDelete, close: () => setConfirmDelete(false) }}
+        label="Delete account"
+        confirmLabel="Delete account"
+        warning={`Delete ${who}’s account for good? They can no longer sign in, and their email address and notification settings are removed. They leave every class they are in. Their name stays on the record with their attendance, listening, work and grades. This cannot be undone.`}
+        busy={busy === 'delete'}
+        confirmTestID="student-delete-confirm"
+        onConfirm={() =>
+          void run('delete', async () => {
+            await deleteAccount(studentUid);
+            setConfirmDelete(false);
+          })
+        }
+      />
 
       {!student ? (
         <Empty>
@@ -120,19 +142,21 @@ export function StudentDetailScreen({
       ) : (
         <>
           <Sheet visible={menuOpen} title={who} onClose={() => setMenuOpen(false)} closeAt="corner">
-            <SheetOption
-              testID="student-resend"
-              label="Resend password link"
-              // "Them", not the address: it is under their name already, and
-              // in a sentence a long one broke across lines at a dot.
-              detail="Emails them a link to set their password."
-              onPress={() =>
-                choose('resend', async () => {
-                  await resendPasswordSetup(student.email);
-                  setInfo(`Password link sent to ${student.email}.`);
-                })
-              }
-            />
+            {email !== null ? (
+              <SheetOption
+                testID="student-resend"
+                label="Resend password link"
+                // "Them", not the address: it is under their name already, and
+                // in a sentence a long one broke across lines at a dot.
+                detail="Emails them a link to set their password."
+                onPress={() =>
+                  choose('resend', async () => {
+                    await resendPasswordSetup(email);
+                    setInfo(`Password link sent to ${email}.`);
+                  })
+                }
+              />
+            ) : null}
             {/* Everything about this student, across the courses the reader
                 may see, in one .xlsx — the student's counterpart of the course
                 workbook. */}
@@ -148,7 +172,7 @@ export function StudentDetailScreen({
                 disabling is the reversible, recommended action in this product,
                 and dressing it as destructive is how people learn to ignore the
                 colour that marks the genuinely irreversible ones. */}
-            {isAdmin ? (
+            {isAdmin && student.status !== 'deleted' ? (
               <SheetOption
                 testID="student-access"
                 label={disabled ? 'Re-enable account' : 'Disable account'}
@@ -158,6 +182,18 @@ export function StudentDetailScreen({
                     setStudentAccess({ uid: studentUid, status: disabled ? 'active' : 'disabled' }),
                   )
                 }
+              />
+            ) : null}
+            {isAdmin && disabled ? (
+              <SheetOption
+                testID="student-delete"
+                label="Delete account"
+                detail="For a request to delete their data. Their record stays."
+                tone="danger"
+                onPress={() => {
+                  setMenuOpen(false);
+                  setConfirmDelete(true);
+                }}
               />
             ) : null}
           </Sheet>

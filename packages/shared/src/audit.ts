@@ -81,4 +81,5 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   clearCompletionOverride: 'Removed override',
   authProvision: 'Staff account created',
   authReject: 'Rejected sign-up',
+  deleteAccount: 'Deleted an account',
 };

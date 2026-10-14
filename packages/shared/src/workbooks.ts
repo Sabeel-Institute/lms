@@ -118,8 +118,6 @@ export interface CourseData {
 export interface WorkbookContext {
   /** uid → display name, for staff and students alike. */
   names: Map<string, string>;
-  /** uid → email, where known. */
-  emails: Map<string, string>;
   timeZone: string;
   /** `YYYY-MM-DD` in the institute's zone. */
   today: string;
@@ -764,7 +762,7 @@ export interface StudentHistoryRow {
 }
 
 export interface StudentWorkbookInput {
-  student: { uid: string; name: string; email: string; status: string; createdAt: number };
+  student: { uid: string; name: string; email: string | null; status: string; createdAt: number };
   /** Every course the file covers, each with its documents. */
   courses: CourseData[];
   history: StudentHistoryRow[];
@@ -795,7 +793,7 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
     widths: [30, 60],
     rows: [
       [text(input.student.name, 'title'), text('')],
-      [text('Email', 'bold'), text(input.student.email)],
+      [text('Email', 'bold'), text(input.student.email ?? '')],
       [
         text('Account', 'bold'),
         text(`${input.student.status[0].toUpperCase()}${input.student.status.slice(1)} · created ${todayInZone(ctx.timeZone, input.student.createdAt)}`),

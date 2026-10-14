@@ -11,6 +11,7 @@ initializeApp();
 export { onUserCreate } from './authTrigger';
 export { setStaffAccess } from './staff';
 export { createStudent, setStudentAccess } from './students';
+export { deleteAccount } from './deleteAccount';
 export { createCohort, setCohortArchived, renameCohort } from './cohorts';
 export { createCourse, updateCourse, setCourseManagers } from './courses';
 export { createEnrollment, setEnrollmentActive } from './enrollments';

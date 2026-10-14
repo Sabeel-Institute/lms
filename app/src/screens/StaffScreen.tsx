@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Collapsible,
+  ConfirmDanger,
   EmailText,
   Empty,
   Grid,
@@ -17,6 +18,8 @@ import {
 } from '../components/ui';
 import { Sheet, SheetOption } from '../components/Sheet';
 import { setStaffAccess, useDecidedStaffState, usePendingStaffState, type StaffRow } from '../staff';
+import { deleteAccount } from '../accounts';
+import { useOneAtATime } from '../oneAtATime';
 
 const NO_STAFF: StaffRow[] = [];
 import { getTheme } from '../theme';
@@ -40,8 +43,11 @@ export function StaffScreen({ selfUid, header }: { selfUid: string; header?: Rea
   const decided = decidedState ?? NO_STAFF;
   // Split the way the student list is split: a disabled account is history,
   // not a colleague, and interleaved with the live ones it read as one.
-  const active = decided.filter((s) => s.status !== 'disabled');
+  const active = decided.filter((s) => s.status === 'active');
   const disabled = decided.filter((s) => s.status === 'disabled');
+  const deleted = decided.filter((s) => s.status === 'deleted');
+  const { active: deleting, run: once } = useOneAtATime();
+  const remove = (uid: string) => once(`delete-${uid}`, () => deleteAccount(uid));
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   /*
@@ -154,7 +160,26 @@ export function StaffScreen({ selfUid, header }: { selfUid: string; header?: Rea
         <Collapsible testID="staff-disabled" title="Disabled" count={disabled.length}>
           <Grid min={330} rows>
             {disabled.map((s) => (
-              <StaffRowItem key={s.uid} row={s} isSelf={s.uid === selfUid} busy={locked(s.uid)} act={act} />
+              <StaffRowItem
+                key={s.uid}
+                row={s}
+                isSelf={s.uid === selfUid}
+                busy={locked(s.uid) || deleting === `delete-${s.uid}`}
+                act={act}
+                remove={remove}
+              />
+            ))}
+          </Grid>
+        </Collapsible>
+      ) : null}
+
+      {/* Names only, and nothing to do: the account is gone, and what they did
+          stays in the history under their name. */}
+      {deleted.length > 0 ? (
+        <Collapsible testID="staff-deleted" title="Deleted" count={deleted.length}>
+          <Grid min={330} rows>
+            {deleted.map((s) => (
+              <ListRow key={s.uid} testID={`staff-deleted-${s.uid}`} name={s.displayName} />
             ))}
           </Grid>
         </Collapsible>
@@ -173,63 +198,100 @@ function StaffRowItem({
   isSelf,
   busy,
   act,
+  remove,
 }: {
   row: StaffRow;
   isSelf: boolean;
   busy: boolean;
   act: (uid: string, change: Parameters<typeof setStaffAccess>[0]) => Promise<void>;
+  /** Delete the account; offered on a disabled colleague's row only. */
+  remove?: (uid: string) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // Said on the row, under the confirm still open: the notice at the top of
+  // the page is a screen away from the Disabled section at the bottom.
+  const [failed, setFailed] = useState<string | null>(null);
   const choose = (change: Parameters<typeof setStaffAccess>[0]) => {
     setOpen(false);
     void act(s.uid, change);
   };
   return (
     <>
-      <ListRow
-        name={isSelf ? `${s.displayName} (you)` : s.displayName}
-        detail={<EmailText email={s.email} suffix={` · ${s.role}`} />}
-        actionsPinned
-        actions={
-          // None on your own row. The server refuses it too; without the rule,
-          // the last admin could lock the institute out of its own user
-          // management.
-          isSelf ? undefined : (
-            <IconButton
-              testID={`staff-actions-${s.email}`}
-              icon="more-vert"
-              bare
-              busy={busy}
-              label={`Change ${s.displayName}'s access`}
-              onPress={() => setOpen(true)}
+      <ConfirmDanger
+        enabled={remove !== undefined && s.status === 'disabled'}
+        opened={{ open: confirmDelete, close: () => setConfirmDelete(false) }}
+        label="Delete account"
+        confirmLabel="Delete account"
+        warning={`Delete ${s.displayName}’s account for good? They can no longer sign in, their email address and notification settings are removed, and they stop managing their courses. Their name stays in the history with everything they did. This cannot be undone.`}
+        busy={busy}
+        confirmTestID={`staff-delete-confirm-${s.uid}`}
+        onConfirm={() => {
+          setFailed(null);
+          void remove?.(s.uid).then(
+            () => setConfirmDelete(false),
+            (e: unknown) => setFailed(errorText(e)),
+          );
+        }}
+      >
+        <ListRow
+          name={isSelf ? `${s.displayName} (you)` : s.displayName}
+          detail={<EmailText email={s.email} suffix={` · ${s.role}`} />}
+          actionsPinned
+          actions={
+            // None on your own row. The server refuses it too; without the rule,
+            // the last admin could lock the institute out of its own user
+            // management.
+            isSelf ? undefined : (
+              <IconButton
+                testID={`staff-actions-${s.email}`}
+                icon="more-vert"
+                bare
+                busy={busy}
+                label={`Change ${s.displayName}'s access`}
+                onPress={() => setOpen(true)}
+              />
+            )
+          }
+        />
+        <Sheet visible={open} title={s.displayName} onClose={() => setOpen(false)} closeAt="corner">
+          <SheetOption
+            testID={`staff-role-${s.email}`}
+            label={s.role === 'admin' ? 'Make manager' : 'Make admin'}
+            detail={
+              s.role === 'admin'
+                ? 'Sees only the courses they are given.'
+                : 'Manages staff, cohorts and every course.'
+            }
+            onPress={() =>
+              choose({ uid: s.uid, role: (s.role === 'admin' ? 'manager' : 'admin') as Extract<Role, 'admin' | 'manager'> })
+            }
+          />
+          {/* The normal tone in BOTH directions, exactly as on a student's page.
+              Disabling an account is reversible and is the RECOMMENDED action in
+              this product; dressing it as destructive teaches people the colour
+              means nothing. */}
+          <SheetOption
+            testID={`staff-access-${s.email}`}
+            label={s.status === 'disabled' ? 'Re-enable' : 'Disable'}
+            detail={s.status === 'disabled' ? 'They can sign in again.' : 'They can no longer sign in. You can re-enable them.'}
+            onPress={() => choose({ uid: s.uid, status: s.status === 'disabled' ? 'active' : 'disabled' })}
+          />
+          {remove !== undefined && s.status === 'disabled' ? (
+            <SheetOption
+              testID={`staff-delete-${s.uid}`}
+              label="Delete account"
+              detail="For a request to delete their data. Their history stays."
+              tone="danger"
+              onPress={() => {
+                setOpen(false);
+                setConfirmDelete(true);
+              }}
             />
-          )
-        }
-      />
-      <Sheet visible={open} title={s.displayName} onClose={() => setOpen(false)} closeAt="corner">
-        <SheetOption
-          testID={`staff-role-${s.email}`}
-          label={s.role === 'admin' ? 'Make manager' : 'Make admin'}
-          detail={
-            s.role === 'admin'
-              ? 'Sees only the courses they are given.'
-              : 'Manages staff, cohorts and every course.'
-          }
-          onPress={() =>
-            choose({ uid: s.uid, role: (s.role === 'admin' ? 'manager' : 'admin') as Extract<Role, 'admin' | 'manager'> })
-          }
-        />
-        {/* The normal tone in BOTH directions, exactly as on a student's page.
-            Disabling an account is reversible and is the RECOMMENDED action in
-            this product; dressing it as destructive teaches people the colour
-            means nothing. */}
-        <SheetOption
-          testID={`staff-access-${s.email}`}
-          label={s.status === 'disabled' ? 'Re-enable' : 'Disable'}
-          detail={s.status === 'disabled' ? 'They can sign in again.' : 'They can no longer sign in. You can re-enable them.'}
-          onPress={() => choose({ uid: s.uid, status: s.status === 'disabled' ? 'active' : 'disabled' })}
-        />
-      </Sheet>
+          ) : null}
+        </Sheet>
+      </ConfirmDanger>
+      {failed ? <Notice tone="error">{failed}</Notice> : null}
     </>
   );
 }

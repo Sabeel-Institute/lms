@@ -272,7 +272,8 @@ export function EmailText({
   lede,
   testID,
 }: {
-  email: string;
+  /** None for a deleted account: its row is its name alone. */
+  email: string | null;
   /** Words after the address that never give way: " · admin". */
   suffix?: string;
   /** Set as a page's subtitle rather than a row's detail. */
@@ -280,6 +281,7 @@ export function EmailText({
   testID?: string;
 }) {
   const look = lede ? styles.ledeText : styles.rowDetail;
+  if (email === null) return null;
   return (
     <View testID={testID} style={styles.email}>
       <Text style={[look, styles.emailText]} numberOfLines={1} ellipsizeMode="middle">

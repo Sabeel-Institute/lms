@@ -45,7 +45,7 @@ const shapes = [
     () =>
       db
         .collection('staffUsers')
-        .where('status', 'in', ['active', 'disabled'])
+        .where('status', 'in', ['active', 'disabled', 'deleted'])
         .orderBy('displayName', 'asc'),
   ],
   [

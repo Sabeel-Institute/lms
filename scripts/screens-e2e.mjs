@@ -287,7 +287,7 @@ await resetEmulators();
 const browser = await chromium.launch();
 const world = await seedWorld({ db, auth, browser, base: BASE });
 const {
-  STUDENT, DISABLED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived, LONG_COURSE_NAME, UNENROLLED,
+  STUDENT, DISABLED_STUDENT, DELETED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived, LONG_COURSE_NAME, UNENROLLED,
   HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE, TO_GRADE,
 } = world;
 
@@ -1079,7 +1079,10 @@ const TAB_ROOTS = new Set([
   'people',
   'staff',
   'staff-disabled',
+  'staff-deleted',
+  'staff-delete-confirm',
   'students-disabled',
+  'students-deleted',
   'library',
   'library-filtered',
   'my-classes',
@@ -1162,6 +1165,21 @@ async function tourStaff(page, tag) {
     await tap(byId(page, 'segment-staff'));
     await tap(byId(page, 'staff-disabled'));
   }, 'staff-actions-yusuf.rahman@oursabeel.com');
+  // Delete, asked again on a disabled colleague's row: the warning takes the
+  // row's place, and exists in no other state.
+  await visit('staff-delete-confirm', async () => {
+    await tap(byId(page, 'tab-people'));
+    await tap(byId(page, 'segment-staff'));
+    await tap(byId(page, 'staff-disabled'));
+    await tap(byId(page, 'staff-actions-yusuf.rahman@oursabeel.com'));
+    await tap(byId(page, 'staff-delete-sw-disabled'));
+  }, 'staff-delete-confirm-sw-disabled');
+  // The deleted colleagues EXPANDED: names alone, with no menu.
+  await visit('staff-deleted', async () => {
+    await tap(byId(page, 'tab-people'));
+    await tap(byId(page, 'segment-staff'));
+    await tap(byId(page, 'staff-deleted'));
+  }, 'staff-deleted-sw-deleted');
   // The create sheet OPEN — a form that exists in no other state, and the one
   // affordance that is absent entirely on a native build.
   await visit('students-add', async () => {
@@ -1176,6 +1194,25 @@ async function tourStaff(page, tag) {
     // A ROW inside the section, not the section's own header: the collapsible's
     // Pressable renders open or closed, so anchoring on it asserts nothing.
   }, `student-open-${DISABLED_STUDENT.email}`);
+  // The deleted students EXPANDED, and one's page: a name with no address
+  // under it, and a menu that holds their record and nothing else.
+  await visit('students-deleted', async () => {
+    await tap(byId(page, 'tab-people'));
+    await tap(byId(page, 'students-deleted'));
+  }, `student-open-${DELETED_STUDENT.uid}`);
+  await visit('student-deleted', async () => {
+    await tap(byId(page, 'tab-people'));
+    await tap(byId(page, 'students-deleted'));
+    await tap(byId(page, `student-open-${DELETED_STUDENT.uid}`));
+  }, 'student-actions');
+  // Delete, asked again, on a disabled student's page.
+  await visit('student-delete-confirm', async () => {
+    await tap(byId(page, 'tab-people'));
+    await tap(byId(page, 'students-disabled'));
+    await tap(byId(page, `student-open-${DISABLED_STUDENT.email}`));
+    await tap(byId(page, 'student-actions'));
+    await tap(byId(page, 'student-delete'));
+  }, 'student-delete-confirm');
   // Anchored on the LAST seeded history row, not on the Access card: the
   // history is a second listener, and a page measured before it answered is a
   // page measured without the six rows at the bottom of it.

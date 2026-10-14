@@ -314,6 +314,7 @@ describe('the table covers every call site', () => {
     const ADMIN_ONLY = [
       'createCohort',
       'createCourse',
+      'deleteAccount',
       'renameCohort',
       'setCohortArchived',
       'setCourseManagers',
