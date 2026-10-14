@@ -43,6 +43,24 @@ const callable = vi.fn();
 vi.mock('firebase/functions', () => ({ httpsCallable: () => callable }));
 
 /**
+ * WHAT THE SCREENS ARE SHOWN: the session as `usePlayback` hands it to a
+ * component. React's two hooks stand in for one, so a test reads exactly what
+ * the player screen would render from.
+ */
+let shown: Record<string, unknown> | null = null;
+vi.mock('react', () => ({
+  useState: (initial: unknown) => [
+    initial,
+    (next: Record<string, unknown>) => {
+      shown = next;
+    },
+  ],
+  useEffect: (effect: () => void) => {
+    effect();
+  },
+}));
+
+/**
  * The progress documents, keyed by their path.
  *
  * ONE PER RECORDING, as Firestore has them. A single shared value looked like a
@@ -590,6 +608,41 @@ describe('who the progress belongs to', () => {
     await pb.closePlayback();
     await flush();
     expect(docOf('rec-a')?.positionMs).toBe(3_540_000);
+  });
+});
+
+/*
+ * WHAT THE STUDENT SEES BEFORE THE FILE LOADS. The bar and Mark complete read
+ * the session's listening, which was published only once the file had loaded:
+ * on a slow link the player said "0% played" and refused Mark complete for
+ * seconds, and offline it said so for good, with the SDK's own sentence in the
+ * error band.
+ */
+describe('before the file has loaded', () => {
+  it('shows the stored listening and place while the file is on its way', async () => {
+    const pb = await load();
+    pb.usePlayback();
+    seedDoc('rec-a', { positionMs: 120_000, listenedMs: 110_000, updatedAt: nowMs - 1000 });
+    holdMint = true;
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    expect(shown).toMatchObject({ ready: false, positionMs: 120_000, listenedMs: 110_000 });
+  });
+
+  it('offline, says so plainly and shows what this device recorded of the listening', async () => {
+    const pb = await load();
+    pb.usePlayback();
+    device.set(
+      'sabeel.progressJournal.v1:stu-1_rec-a',
+      JSON.stringify({ studentUid: 'stu-1', recordingId: 'rec-a', courseId: 'course-1', positionMs: 300_000, part: 1, version: 'audio', listenedMs: 290_000, updatedAt: nowMs - 1000 }),
+    );
+    getDoc.mockImplementationOnce(() =>
+      Promise.reject(Object.assign(new Error('Failed to get document because the client is offline.'), { code: 'unavailable' })),
+    );
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    await flush();
+    expect(shown).toMatchObject({ ready: false, listenedMs: 290_000, error: 'Cannot reach the server. Check your connection and try again.' });
   });
 });
 

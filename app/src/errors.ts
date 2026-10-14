@@ -26,6 +26,13 @@
 export function errorText(e: unknown): string {
   const err = e as { code?: string; message?: string } | null;
   const raw = (err?.message ?? '').trim();
+  // Offline, or the service down. Firestore says it in a sentence of its own
+  // ("Failed to get document because the client is offline."), which would
+  // otherwise pass the test below as one of ours.
+  if (err?.code === 'unavailable' || err?.code === 'functions/unavailable') {
+    console.warn('request failed', err.code);
+    return 'Cannot reach the server. Check your connection and try again.';
+  }
   // `Firebase:` and `Firebase Storage:` alike — the Storage SDK assembles
   // "Firebase Storage: User does not have permission to access
   // 'recordings/<id>/audio.m4a'. (storage/unauthorized)", which a manager whose

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   INSTITUTE_TIMEZONE,
@@ -13,7 +13,7 @@ import {
   todayInZone,
   unbreakableDate,
 } from '@sabeel/shared';
-import { Chips, Notice } from '../components/ui';
+import { Button, Chips, Notice } from '../components/ui';
 import { ScrollingTitle } from '../components/ScrollingTitle';
 import { Select } from '../components/Select';
 import { VideoSurface } from '../components/VideoSurface';
@@ -22,6 +22,7 @@ import { Transport } from '../components/Transport';
 import { IDLE, PLAYBACK_RATES, closePlayback, formatClock, openPlayback, playback, usePlayback } from '../playback';
 import { useCompletion, useMyListening, setCompleted } from '../completion';
 import { useListenerError } from '../liveQuery';
+import { useOneAtATime } from '../oneAtATime';
 import { useCohortName, type CourseRow } from '../structure';
 import type { RecordingRow } from '../recordings';
 import { getTheme, spacing } from '../theme';
@@ -81,6 +82,16 @@ export function PlayerScreen({
   const state = session.now?.recordingId === recording.id ? session : IDLE;
   const { play, pause, seek, setRate } = playback;
   /*
+   * WHAT THEY HAVE HEARD: the session's count, or the stored row's while the
+   * session has not read it, or cannot (offline), whichever is more. The
+   * session's alone said "0% played" and refused Mark complete until the file
+   * had loaded, and for good offline.
+   */
+  const stored = useMyListening(studentUid, recording.id).value;
+  const heardMs = Math.max(state.listenedMs, stored?.listenedMs ?? 0);
+  // Try again, for a session that cannot play: it opens afresh.
+  const { run: once } = useOneAtATime();
+  /*
    * THE GATE CLOSES ON A SESSION ALREADY PLAYING, not only on one about to
    * start.
    *
@@ -98,9 +109,8 @@ export function PlayerScreen({
   // view onto app-wide playback, and re-entering it for something already
   // playing must re-focus rather than restart. `openPlayback` is idempotent for
   // the loaded recording, so a re-render costs nothing.
-  useEffect(() => {
-    if (!allowed || !playable) return;
-    openPlayback({
+  const request = useMemo(
+    () => ({
       recordingId: recording.id,
       itemId: requested,
       courseId: recording.courseId,
@@ -110,20 +120,23 @@ export function PlayerScreen({
       defaultVersion: recording.defaultVersion,
       studentUid,
       dueDate,
-    });
-  }, [
-    allowed,
-    playable,
-    requested,
-    recording.id,
-    recording.title,
-    recording.media,
-    recording.defaultVersion,
-    recording.courseId,
-    cls.name,
-    studentUid,
-    dueDate,
-  ]);
+    }),
+    [
+      requested,
+      recording.id,
+      recording.title,
+      recording.media,
+      recording.defaultVersion,
+      recording.courseId,
+      cls.name,
+      studentUid,
+      dueDate,
+    ],
+  );
+  useEffect(() => {
+    if (!allowed || !playable) return;
+    openPlayback(request);
+  }, [allowed, playable, request]);
   // While the scrubber is being dragged it reports the previewed position; the
   // time readouts follow the thumb rather than the still-advancing playhead.
   const [scrubMs, setScrubMs] = useState<number | null>(null);
@@ -183,12 +196,24 @@ export function PlayerScreen({
   const remainingMs = Math.max(0, durationMs - shownPositionMs);
   // A file is on its way: the transport waits for it, and so do the choices.
   const preparing = !state.ready && !state.error;
-  const listened = listenedFraction(state.listenedMs, recording.durationSec);
+  const listened = listenedFraction(heardMs, recording.durationSec);
 
   return (
     <ScrollView style={styles.canvas} contentContainerStyle={styles.content}>
       {listenerError ? <Notice tone="error">{listenerError}</Notice> : null}
       {state.error ? <Notice tone="error">{state.error}</Notice> : null}
+      {/* A SESSION THAT CANNOT PLAY offers to open again, in place: offline
+          and back, or a link that failed. One that can is beside a working
+          transport, and its choices are the way to try again. */}
+      {state.error && !state.ready ? (
+        <Button
+          testID="player-retry"
+          label="Try again"
+          variant="secondary"
+          hug
+          onPress={() => void once('retry', async () => openPlayback(request))}
+        />
+      ) : null}
 
       {/*
         ONE COLUMN, CAPPED — at every width.
@@ -333,7 +358,7 @@ export function PlayerScreen({
             studentUid={studentUid}
             recordingId={recording.id}
             courseId={recording.courseId}
-            everPlayed={state.listenedMs > 0}
+            everPlayed={heardMs > 0}
           />
         </>
       ) : (

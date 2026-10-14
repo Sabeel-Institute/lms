@@ -31,6 +31,19 @@ describe('errorText', () => {
     },
   );
 
+  /*
+   * OFFLINE. Firestore's own sentence for it, "Failed to get document because
+   * the client is offline.", has spaces and no prefix, so it went through to a
+   * student's player as written.
+   */
+  it('says plainly that the server cannot be reached', () => {
+    const offline = Object.assign(new Error('Failed to get document because the client is offline.'), { code: 'unavailable' });
+    expect(errorText(offline)).toBe('Cannot reach the server. Check your connection and try again.');
+    expect(errorText(Object.assign(new Error('unavailable'), { code: 'functions/unavailable' }))).toBe(
+      'Cannot reach the server. Check your connection and try again.',
+    );
+  });
+
   it('turns away the SDK talking to a developer', () => {
     const e = Object.assign(new Error('Firebase: Error (auth/user-not-found).'), {
       code: 'auth/user-not-found',

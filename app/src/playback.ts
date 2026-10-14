@@ -609,15 +609,17 @@ export function openPlayback(req: OpenRequest): void {
   void (async () => {
     try {
       const id = now.studentUid ? progressId(now.studentUid, now.recordingId) : null;
-      const [saved, journaled] = await Promise.all([
-        id ? getDoc(doc(db, COLLECTIONS.listeningProgress, id)) : Promise.resolve(null),
-        id ? journaledProgress(id) : Promise.resolve(null),
-      ]);
-      if (generation !== gen) return;
       // THIS DEVICE'S OWN UNSENT SAVE COUNTS. Listening done on the lock screen
       // and then closed is in the journal, not on the server, until something
       // sends it — and resuming from the server alone put the student back
-      // where the screen went off.
+      // where the screen went off. Read first, from the device, and shown at
+      // once: until the server answers, and when it cannot, it is what the
+      // student sees of their listening rather than 0%.
+      const journaled = id ? await journaledProgress(id) : null;
+      if (generation !== gen) return;
+      if (journaled) set({ listenedMs: journaled.listenedMs });
+      const saved = id ? await getDoc(doc(db, COLLECTIONS.listeningProgress, id)) : null;
+      if (generation !== gen) return;
       const stored = saved ? readIfExists('listeningProgress', saved) : undefined;
       const prior = stored && journaled ? mergeProgress(stored, journaled) : (stored ?? journaled);
       // RESUME WHERE THEY WERE: their part, in their version if that part
@@ -635,6 +637,9 @@ export function openPlayback(req: OpenRequest): void {
       // open's file won, and one file played under the other's label.
       placeKnown = true;
       const sw = switches;
+      // Shown now, not once the file has loaded: the bar and Mark complete
+      // read it, and a file can take seconds to arrive.
+      set({ positionMs: position, listenedMs: listened });
       const minted = await playbackUrl(now.recordingId, item.id, itemMs(item));
       if (generation !== gen || switches !== sw) return;
       urlExpiresAt = minted.expiresAt;
