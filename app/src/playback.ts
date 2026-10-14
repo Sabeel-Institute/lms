@@ -496,9 +496,19 @@ export function openPlayback(req: OpenRequest): void {
           return;
         }
       }
+      const at = Date.now();
+      // A PAUSED ANDROID PLAYER STILL TICKS: expo-video's clock reports the
+      // same place every half second until the player is released. Taken as
+      // news, each tick re-rendered the screen and, every write interval,
+      // saved the stale place as the newest, over the place the student had
+      // since reached on another device. Nothing moved, so there is nothing
+      // to show or save; the tick still marks the time, as every tick does.
+      if (ms === position) {
+        lastTick = at;
+        return;
+      }
       // Count only forward movement at roughly real-time speed as "listened".
       // A seek forward must not manufacture listening that never happened.
-      const at = Date.now();
       if (lastTick !== null) {
         const advanced = ms - position;
         const elapsed = at - lastTick;

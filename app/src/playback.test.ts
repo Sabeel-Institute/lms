@@ -628,6 +628,35 @@ describe('counting listening', () => {
     expect(setDoc).toHaveBeenCalledTimes(1);
   });
 
+  /*
+   * A PAUSED ANDROID PLAYER STILL TICKS. expo-video's clock reports the same
+   * place every half second until the player is released, and each of those
+   * ticks was news: every fifteen seconds the idle phone saved its stale place
+   * as the newest, over the place the student had since reached elsewhere.
+   */
+  it('a paused player reporting the same place saves nothing over a newer place', async () => {
+    const pb = await load();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.playback.play();
+    players[0].events.onProgress(59_000);
+    wait(1_000);
+    players[0].events.onProgress(60_000);
+    pb.playback.pause();
+    await flush();
+    const writes = setDoc.mock.calls.length;
+    // The student listens on to 20:00 on the web.
+    seedDoc('rec-a', { positionMs: 1_200_000, listenedMs: 1_200_000, part: 1, version: 'audio', updatedAt: nowMs + 1 });
+    // A minute of the phone's paused clock.
+    for (let i = 0; i < 120; i += 1) {
+      wait(500);
+      players[0].events.onProgress(60_000);
+    }
+    await flush();
+    expect(setDoc.mock.calls.length).toBe(writes);
+    expect(docOf('rec-a')).toMatchObject({ positionMs: 1_200_000 });
+  });
+
   it('a forward SEEK manufactures no listening', async () => {
     const pb = await load();
     pb.openPlayback(recording('rec-a'));
@@ -915,9 +944,10 @@ describe('listening with the screen locked', () => {
     pb.openPlayback(recording('rec-a'));
     await flush();
     pb.playback.play();
-    // The first save goes out and stalls: the screen is off.
+    // The first save goes out and stalls: the screen is off. A save is of a
+    // place that moved, so the first is a second in.
     holdSet = true;
-    listen(players[0], 0, 0);
+    listen(players[0], 0, 1_000);
     await flush();
     // Ten minutes on the lock screen, then the lock-screen Pause — seven
     // seconds after the last throttled save, so only the pause holds them.
@@ -925,7 +955,7 @@ describe('listening with the screen locked', () => {
     players[0].events.onPlayingChanged(false);
     await flush();
     // Nothing has reached the server beyond the first, stalled save.
-    expect(docOf('rec-a')?.positionMs).toBe(0);
+    expect(docOf('rec-a')?.positionMs).toBeLessThanOrEqual(1_000);
 
     // Closed from recents, reopened later.
     pb = await load({ killed: true });
@@ -938,8 +968,10 @@ describe('listening with the screen locked', () => {
     seedDoc('rec-a', { positionMs: 60_000, listenedMs: 60_000, updatedAt: nowMs - 1_000 });
     pb.openPlayback(recording('rec-a'));
     await flush();
+    // Playing, so the lock-screen Pause below is a pause and saves the place.
+    pb.playback.play();
     holdSet = true;
-    listen(players[0], 60_000, 60_000);
+    listen(players[0], 60_000, 61_000);
     await flush();
     listen(players[0], 61_000, 300_000);
     players[0].events.onPlayingChanged(false);
@@ -963,7 +995,7 @@ describe('listening with the screen locked', () => {
     await flush();
     holdSet = true;
     // The first save stalls; an hour of throttled saves pile up behind it.
-    listen(players[0], 0, 0);
+    listen(players[0], 0, 1_000);
     await flush();
     listen(players[0], 1_000, 3_600_000);
     await flush();
