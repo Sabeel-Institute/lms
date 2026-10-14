@@ -576,15 +576,13 @@ function RecordingCard({
   const arriving = items.some((i) => i.status === 'uploading' || i.status === 'copying');
   const failedZoom = items.some((i) => i.status === 'failed' && i.zoom);
   /*
-   * WHO MAY REMOVE A FILE, as the server decides it: from a draft, whoever
-   * manages the class; from a recording taken down, an admin, for storage;
-   * from a live one, nobody — it is hidden instead, so nothing a student is
-   * part-way through vanishes.
+   * WHO MAY REMOVE A FILE, as the server decides it: from a draft never
+   * published, whoever manages the class; from one that has ever been
+   * published, an admin, for storage, whatever its status now; from a live
+   * one, nobody — it is hidden instead, so nothing a student is part-way
+   * through vanishes. (The server also asks the listening history.)
    */
-  const canRemoveReady =
-    r.status === 'draft' ||
-    r.status === 'needsAttention' ||
-    ((r.status === 'archived' || r.status === 'unpublished') && isAdmin);
+  const canRemoveReady = r.status !== 'published' && (isAdmin || !hasLedger(r));
   // A file students never saw — still arriving, or failed — can go in any
   // state: that is cancelling an upload or clearing a failed import.
   const canRemove = (item: MediaItem) => item.status !== 'ready' || canRemoveReady;

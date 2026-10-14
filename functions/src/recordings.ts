@@ -6,6 +6,7 @@ import {
   INSTITUTE_TIMEZONE,
   canTransition,
   deriveDurationSec,
+  hasLedger,
   isDiscardable,
   isPlayable,
   publishBlockers,
@@ -233,15 +234,22 @@ export const setRecordingStatus = auditedCall('setRecordingStatus', async (req, 
  * failed import being cleared, and nothing anyone played disappears. An upload
  * in flight is aborted with it.
  *
- * A READY file follows the recording. A draft's are its makers' to correct. A
- * live recording's are never removed — hidden instead, so nothing a student
- * is part-way through vanishes. One taken down (archived, unpublished) is an
- * admin's to clear out, for storage. The object goes, the item goes, and a
- * Zoom file's claim goes, so it can be imported again.
+ * A READY file follows the recording. A draft never published is its makers'
+ * to correct. A live recording's are never removed — hidden instead, so
+ * nothing a student is part-way through vanishes. One that has ever been
+ * published is an admin's to clear out, for storage, whatever its status now:
+ * published → unpublished → draft is a manager's path, and it made a file
+ * students had played that manager's to delete. Asked of the collections as
+ * well as the record, as deleting a whole recording is (`hasRecordingHistory`).
+ * The object goes, the item goes, and a Zoom file's claim goes, so it can be
+ * imported again.
  */
 export async function removeMedia(recordingId: string, itemId: string, asAdmin = false) {
   const db = getFirestore();
   const ref = db.collection(COLLECTIONS.recordings).doc(recordingId);
+  // History only grows, and none is made for a recording students cannot see,
+  // so asking before the transaction is enough.
+  const played = !asAdmin && (await hasRecordingHistory(recordingId));
   const removed = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
@@ -252,7 +260,7 @@ export async function removeMedia(recordingId: string, itemId: string, asAdmin =
       if (rec.status === 'published') {
         throw new HttpsError('failed-precondition', 'A published recording’s files are hidden, not removed. Hide it, or unpublish first.');
       }
-      if ((rec.status === 'archived' || rec.status === 'unpublished') && !asAdmin) {
+      if (!asAdmin && (hasLedger(rec) || played)) {
         throw new HttpsError('permission-denied', 'Only an admin can remove a file from a recording that has been published.');
       }
     }

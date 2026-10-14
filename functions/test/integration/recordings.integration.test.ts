@@ -366,6 +366,19 @@ describe('who may remove a file', () => {
     expect(await objectExists(key)).toBe(false);
     expect((await rec(id)).media.p2a).toBeUndefined();
   });
+
+  it('nor a manager, from a recording walked back to draft after it was published', async () => {
+    const id = await twoParts();
+    const key = (await rec(id)).media.p2a.storageKey;
+    await applyRecordingStatus({ recordingId: id, status: 'published' });
+    await applyRecordingStatus({ recordingId: id, status: 'unpublished' });
+    await applyRecordingStatus({ recordingId: id, status: 'draft' });
+    await expect(removeMedia(id, 'p2a', false)).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(await objectExists(key)).toBe(true);
+    expect((await rec(id)).media.p2a).toBeDefined();
+    await removeMedia(id, 'p2a', true);
+    expect(await objectExists(key)).toBe(false);
+  });
 });
 
 describe('applyDeleteRecording', () => {
@@ -510,7 +523,8 @@ describe('applyDeleteRecording', () => {
       await applyRecordingStatus({ recordingId: id, status: 'published' });
       await applyRecordingStatus({ recordingId: id, status: 'unpublished' });
       await applyRecordingStatus({ recordingId: id, status: 'draft' });
-      await removeMedia(id, (await onlyItem(id)).id);
+      // An admin clears its files for storage: no manager may, once it was published.
+      await removeMedia(id, (await onlyItem(id)).id, true);
 
       const walkedBack = await rec(id);
       // Indistinguishable by shape from a brand-new draft — which is the bug.
