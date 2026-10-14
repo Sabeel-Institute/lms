@@ -9,6 +9,7 @@ import {
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, MAX_ANSWER_CHARS, submissionId } from '@sabeel/shared';
 import { seedStaffRecords } from './staffRecords';
+import { setBackgroundTriggers } from '../backgroundTriggers';
 
 /**
  * Who reads and writes assignments (docs/plans/ASSIGNMENTS.md). The promises:
@@ -30,7 +31,13 @@ function hostPort(envName: string) {
   return { host: host || '127.0.0.1', port: Number(port) };
 }
 
+/*
+ * THE EMULATOR'S OWN TRIGGERS ARE OFF HERE: these tests are about the rules,
+ * and a tally recompute fired by one test's seed held its locks while the
+ * next test cleared the database, which then timed out.
+ */
 beforeAll(async () => {
+  await setBackgroundTriggers(false);
   testEnv = await initializeTestEnvironment({
     projectId: EMULATOR_PROJECT_ID,
     firestore: {
@@ -42,6 +49,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await testEnv?.cleanup();
+  await setBackgroundTriggers(true);
 });
 
 const ADMIN = 'admin1';
@@ -130,6 +138,19 @@ beforeEach(async () => {
         gradedAt: 1,
         withoutHandIn: false,
       }),
+      setDoc(doc(db, COLLECTIONS.courseworkTallies, CW), {
+        courseId: CLASS,
+        updatedAt: 1,
+        handedIn: 1,
+        late: 0,
+        toGrade: 0,
+        toReturn: 1,
+        returned: 0,
+        notRequired: 0,
+        shareSum: 0,
+        shareCount: 0,
+        waiting: [{ dueDate: '2026-10-20', lateUntil: null, closedEarly: false, count: 1 }],
+      }),
     ]);
   });
 });
@@ -203,6 +224,26 @@ describe('grades', () => {
     await assertFails(
       updateDoc(doc(mgrMine(), COLLECTIONS.grades, submissionId(CLASSMATE, CW)), { grade: { points: 10 } }),
     );
+  });
+});
+
+/*
+ * A CLASS'S FIGURES ARE ITS TEACHERS'. How many of the class have handed in,
+ * are graded or missed it is what the work says, added up, and read no wider
+ * than the work: its course's staff, never a student, never another class.
+ */
+describe('courseworkTallies', () => {
+  it('the class’s teachers read them; another class’s do not; no student does', async () => {
+    await assertSucceeds(getDocs(query(collection(mgrMine(), COLLECTIONS.courseworkTallies), where('courseId', '==', CLASS))));
+    await assertSucceeds(getDoc(doc(admin(), COLLECTIONS.courseworkTallies, CW)));
+    await assertFails(getDoc(doc(mgrTheirs(), COLLECTIONS.courseworkTallies, CW)));
+    await assertFails(getDocs(query(collection(mgrTheirs(), COLLECTIONS.courseworkTallies), where('courseId', '==', CLASS))));
+    await assertFails(getDoc(doc(student(), COLLECTIONS.courseworkTallies, CW)));
+  });
+
+  it('nobody writes one directly', async () => {
+    await assertFails(updateDoc(doc(mgrMine(), COLLECTIONS.courseworkTallies, CW), { handedIn: 5 }));
+    await assertFails(updateDoc(doc(admin(), COLLECTIONS.courseworkTallies, CW), { handedIn: 5 }));
   });
 });
 

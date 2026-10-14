@@ -7,7 +7,9 @@ import {
   canHandIn,
   canTakeBack,
   closesOn,
+  countsFromTally,
   courseworkCounts,
+  courseworkTally,
   defaultLateUntil,
   gradeFits,
   gradeText,
@@ -16,6 +18,7 @@ import {
   receivesOnJoining,
   returnsOnComingBack,
   staffWorkState,
+  tallyCounts,
   workTally,
   workBucket,
   workState,
@@ -260,5 +263,116 @@ describe('coming back to the class', () => {
   it('brings back anything handed in, and no open work the teacher stopped taking', () => {
     expect(returnsOnComingBack(sub({ state: 'handedIn' }), '2026-10-20')).toBe(true);
     expect(returnsOnComingBack(sub({ dueDate: '2026-10-24', closedEarly: true }), '2026-10-15')).toBe(false);
+  });
+});
+
+/*
+ * THE STORED TALLY SAYS WHAT THE WORK SAYS. A course's pages read one tally
+ * per assignment instead of every piece of work in it, so the tally must give
+ * the same figures, on any day, as counting the work directly — and the
+ * refactor that let both share one decision must not have moved a single
+ * state. Checked against two oracles over thousands of generated classes: the
+ * staff state as it was written before (copied verbatim below), and the sum
+ * of per-student tallies, which the workbooks still use.
+ */
+describe('the stored tally', () => {
+  /** `staffWorkState` as it was before it was split into settled and dated halves. */
+  function staffWorkStateBefore(
+    sub: Pick<SubmissionDoc, 'state' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly'>,
+    grade: { grade: { points: number } | { scale: 'satisfactory' | 'needsWork' } | null; withoutHandIn: boolean } | undefined,
+    today: string,
+    courseOpen: boolean,
+  ) {
+    const state = workState(sub, today, courseOpen);
+    const graded = !!grade && grade.grade !== null;
+    if (state === 'handedIn') return graded ? 'graded' : 'toGrade';
+    if (graded && grade.withoutHandIn && sub.state === 'open' && state !== 'notRequired') return 'graded';
+    return state;
+  }
+
+  /** A small deterministic generator, so a failure names its seed. */
+  function rng(seed: number) {
+    let x = seed >>> 0 || 1;
+    return () => {
+      x ^= x << 13;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      return (x >>> 0) / 2 ** 32;
+    };
+  }
+  const days = ['2026-10-01', '2026-10-05', '2026-10-09', '2026-10-13', '2026-10-17', '2026-10-21'];
+  const pick = <T>(r: () => number, xs: readonly T[]): T => xs[Math.floor(r() * xs.length)];
+
+  function aClass(seed: number) {
+    const r = rng(seed);
+    const grading = r() < 0.5 ? { kind: 'points' as const, outOf: 10 } : { kind: 'scale' as const };
+    const subs: SubmissionDoc[] = [];
+    const grades = new Map<string, { grade: { points: number } | { scale: 'satisfactory' | 'needsWork' } | null; withoutHandIn: boolean }>();
+    const n = Math.floor(r() * 25);
+    for (let i = 0; i < n; i++) {
+      const due = pick(r, days);
+      const lateUntil = r() < 0.4 ? null : pick(r, days.filter((d) => d >= due));
+      const state = pick(r, ['open', 'open', 'handedIn', 'returned'] as const);
+      const points = Math.round(r() * 20) / 2;
+      const grade = grading.kind === 'points' ? { points } : { scale: pick(r, ['satisfactory', 'needsWork'] as const) };
+      subs.push({
+        studentUid: `s${i}`,
+        courseworkId: 'cw',
+        courseId: 'c',
+        cohortId: 'h',
+        active: r() < 0.85,
+        dueDate: due,
+        lateUntil,
+        closedEarly: r() < 0.15,
+        state,
+        attempt: 1,
+        handedInAt: state === 'open' ? null : Date.parse(`${pick(r, days)}T12:00:00-05:00`),
+        note: '',
+        files: {},
+        returned: state === 'returned' ? { grade: r() < 0.9 ? grade : null, feedback: '', at: 1, seq: 1, retry: false } : null,
+        attempts: r() < 0.2 ? [{} as SubmissionDoc['attempts'][number]] : [],
+        notRequired: r() < 0.1 ? { reason: 'x', by: 't', at: 1 } : null,
+        moreTime: null,
+        assignedAt: 1,
+      } as SubmissionDoc);
+      if (r() < 0.5) grades.set(`s${i}`, { grade: r() < 0.85 ? grade : null, withoutHandIn: state === 'open' && r() < 0.5 });
+    }
+    return { grading, subs, grades };
+  }
+
+  it('moves no student’s state', () => {
+    for (let seed = 1; seed <= 2000; seed++) {
+      const { subs, grades } = aClass(seed);
+      for (const s of subs) {
+        for (const today of days) {
+          for (const courseOpen of [true, false]) {
+            expect(staffWorkState(s, grades.get(s.studentUid), today, courseOpen), `seed ${seed}`).toBe(
+              staffWorkStateBefore(s, grades.get(s.studentUid), today, courseOpen),
+            );
+          }
+        }
+      }
+    }
+  });
+
+  it('gives the same figures, on every day, as counting the work', () => {
+    for (let seed = 1; seed <= 2000; seed++) {
+      const { grading, subs, grades } = aClass(seed);
+      const tally = courseworkTally(grading, subs, grades, INSTITUTE_TIMEZONE);
+      for (const today of days) {
+        for (const courseOpen of [true, false]) {
+          const direct = tallyCounts(subs.map((s) => workTally(grading, s, grades.get(s.studentUid), today, courseOpen, INSTITUTE_TIMEZONE)));
+          expect(countsFromTally(tally, today, courseOpen), `seed ${seed} on ${today}`).toEqual(direct);
+        }
+      }
+    }
+  });
+
+  it('is stored the same when nothing changed, whatever order the work came in', () => {
+    const { grading, subs, grades } = aClass(7);
+    const reversed = [...subs].reverse();
+    expect(courseworkTally(grading, reversed, grades, INSTITUTE_TIMEZONE).waiting).toEqual(
+      courseworkTally(grading, subs, grades, INSTITUTE_TIMEZONE).waiting,
+    );
   });
 });

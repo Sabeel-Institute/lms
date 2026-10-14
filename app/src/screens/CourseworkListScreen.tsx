@@ -2,46 +2,35 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   INSTITUTE_TIMEZONE,
-  courseworkCounts,
+  countsFromTally,
+  courseworkTally,
   todayInZone,
   unbreakableDate,
   type CourseworkCounts,
 } from '@sabeel/shared';
 import { Empty, Grid, IconButton, Screen, SectionTitle, useGridCell } from '../components/ui';
-import {
-  useCourseCourseworkState,
-  useCourseGradesState,
-  useCourseSubmissionsState,
-  type CourseworkRow,
-  type GradeRow,
-  type SubmissionRow,
-} from '../coursework';
+import { useCourseCourseworkState, useCourseTalliesState, type CourseworkRow } from '../coursework';
 import { useRosterState, type CourseRow } from '../structure';
 import { gradingText } from './courseworkWords';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
 
-/** Each assignment's figures, from the one source the assignment page reads too. */
+/** Nothing yet: a draft, or an assignment whose tally the server is still writing. */
+const NO_WORK = courseworkTally({ kind: 'scale' }, [], new Map(), INSTITUTE_TIMEZONE);
+
+/**
+ * Each assignment's figures, from the tallies the server keeps: the same
+ * counts the assignment's own page makes from its work (`courseworkCounts` is
+ * `countsFromTally` of `courseworkTally`), worked out against today here.
+ */
 export function useCourseworkFigures(cls: CourseRow) {
-  const subs = useCourseSubmissionsState(cls.id);
-  const grades = useCourseGradesState(cls.id);
+  const tallies = useCourseTalliesState(cls.id);
   return useMemo(() => {
-    if (subs === null || grades === null) return null;
+    if (tallies === null) return null;
     const today = todayInZone(INSTITUTE_TIMEZONE);
-    const byWork = new Map<string, { subs: SubmissionRow[]; grades: Map<string, GradeRow> }>();
-    const slot = (id: string) => {
-      let s = byWork.get(id);
-      if (!s) byWork.set(id, (s = { subs: [], grades: new Map() }));
-      return s;
-    };
-    for (const s of subs) slot(s.courseworkId).subs.push(s);
-    for (const g of grades) slot(g.courseworkId).grades.set(g.studentUid, g);
-    return (cw: CourseworkRow): CourseworkCounts => {
-      const w = byWork.get(cw.id) ?? { subs: [], grades: new Map() };
-      return courseworkCounts(cw.grading, w.subs, w.grades, today, cls.effectiveActive, INSTITUTE_TIMEZONE);
-    };
-  }, [subs, grades, cls.effectiveActive]);
+    return (cw: CourseworkRow): CourseworkCounts => countsFromTally(tallies.get(cw.id) ?? NO_WORK, today, cls.effectiveActive);
+  }, [tallies, cls.effectiveActive]);
 }
 
 /**

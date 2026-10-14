@@ -318,10 +318,23 @@ export function workState(
   if (sub.notRequired) return 'notRequired';
   if (sub.state === 'returned') return 'returned';
   if (sub.state === 'handedIn') return 'handedIn';
+  return nothingInState(sub, today, courseOpen);
+}
+
+/**
+ * Where work with nothing in stands today: decided by its dates and the
+ * course alone. The one place the date moves a student's state, so the stored
+ * tallies (`countsFromTally`) and every screen say the same.
+ */
+export function nothingInState(
+  work: Pick<SubmissionDoc, 'dueDate' | 'lateUntil' | 'closedEarly'>,
+  today: string,
+  courseOpen: boolean,
+): 'closed' | 'missed' | 'toDo' | 'pastDue' {
   if (!courseOpen) return 'closed';
-  if (sub.closedEarly) return 'missed';
-  if (!isOverdue(sub.dueDate, today)) return 'toDo';
-  if (!isOverdue(closesOn(sub), today)) return 'pastDue';
+  if (work.closedEarly) return 'missed';
+  if (!isOverdue(work.dueDate, today)) return 'toDo';
+  if (!isOverdue(closesOn(work), today)) return 'pastDue';
   return 'missed';
 }
 
@@ -442,15 +455,27 @@ export function staffWorkState(
   today: string,
   courseOpen: boolean,
 ): StaffWorkState {
-  const state = workState(sub, today, courseOpen);
+  return settledState(sub, grade) ?? nothingInState(sub, today, courseOpen);
+}
+
+/**
+ * A teacher's view of work whose state the date does not move, or null for
+ * work with nothing in, which the date decides (`nothingInState`).
+ */
+function settledState(
+  sub: Pick<SubmissionDoc, 'state' | 'notRequired'>,
+  grade: Pick<GradeDoc, 'grade' | 'withoutHandIn'> | undefined,
+): 'notRequired' | 'returned' | 'toGrade' | 'graded' | null {
+  if (sub.notRequired) return 'notRequired';
+  if (sub.state === 'returned') return 'returned';
   // GRADED MEANS A GRADE. Feedback written first, or a grade cleared to come
   // back to, left a grades document with no grade in it: the work dropped out
   // of To grade while Return would not take it.
   const graded = !!grade && grade.grade !== null;
-  if (state === 'handedIn') return graded ? 'graded' : 'toGrade';
+  if (sub.state === 'handedIn') return graded ? 'graded' : 'toGrade';
   // Work done on paper, graded with nothing handed in and not yet returned.
-  if (graded && grade.withoutHandIn && sub.state === 'open' && state !== 'notRequired') return 'graded';
-  return state;
+  if (graded && grade.withoutHandIn) return 'graded';
+  return null;
 }
 
 export interface CourseworkCounts {
@@ -555,5 +580,107 @@ export function courseworkCounts(
   courseOpen: boolean,
   timeZone: string,
 ): CourseworkCounts {
-  return tallyCounts(subs.map((s) => workTally(grading, s, grades.get(s.studentUid), today, courseOpen, timeZone)));
+  return countsFromTally(courseworkTally(grading, subs, grades, timeZone), today, courseOpen);
+}
+
+/**
+ * ONE ASSIGNMENT'S FIGURES, AS STORED: everything the date does not move,
+ * counted, and the students with nothing in kept by the dates that decide what
+ * they are on any day. The server keeps one per assignment in
+ * `courseworkTallies` as work and grades change, so a course's pages show
+ * every assignment's figures without reading every piece of work in the
+ * course; `countsFromTally` turns it into the figures for today.
+ */
+export interface CourseworkTally {
+  handedIn: number;
+  late: number;
+  toGrade: number;
+  toReturn: number;
+  returned: number;
+  notRequired: number;
+  /** Returned grades in points, as shares of the points: their sum and how many. */
+  shareSum: number;
+  shareCount: number;
+  /** Students with nothing in, grouped by their dates. */
+  waiting: WaitingGroup[];
+}
+
+/** `courseworkTallies/{courseworkId}`: a tally as the server stores it. */
+export interface CourseworkTallyDoc extends CourseworkTally {
+  courseId: string;
+  updatedAt: number;
+}
+
+export interface WaitingGroup {
+  dueDate: string;
+  lateUntil: string | null;
+  closedEarly: boolean;
+  count: number;
+}
+
+export function courseworkTally(
+  grading: CourseworkGrading,
+  subs: Pick<SubmissionDoc, 'studentUid' | 'active' | 'state' | 'attempts' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly' | 'handedInAt' | 'returned'>[],
+  grades: Map<string, Pick<GradeDoc, 'grade' | 'withoutHandIn'>>,
+  timeZone: string,
+): CourseworkTally {
+  const t: CourseworkTally = {
+    handedIn: 0, late: 0, toGrade: 0, toReturn: 0, returned: 0, notRequired: 0, shareSum: 0, shareCount: 0, waiting: [],
+  };
+  const waiting = new Map<string, WaitingGroup>();
+  for (const s of subs) {
+    if (leftWithNothingIn(s)) continue;
+    const state = settledState(s, grades.get(s.studentUid));
+    if (state === 'notRequired') {
+      t.notRequired++;
+      continue;
+    }
+    if (state === null) {
+      const key = `${s.dueDate}|${s.lateUntil ?? ''}|${s.closedEarly}`;
+      const group = waiting.get(key) ?? { dueDate: s.dueDate, lateUntil: s.lateUntil, closedEarly: s.closedEarly, count: 0 };
+      group.count++;
+      waiting.set(key, group);
+      continue;
+    }
+    // Everything settled was handed in, or graded on paper, which counts as
+    // handed in on paper: as the student's page has always counted it.
+    t.handedIn++;
+    if (s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, timeZone)) t.late++;
+    if (state === 'toGrade') t.toGrade++;
+    else if (state === 'graded') t.toReturn++;
+    else t.returned++;
+    const g = s.returned?.grade;
+    if (state === 'returned' && g && 'points' in g && grading.kind === 'points') {
+      t.shareSum += g.points / grading.outOf;
+      t.shareCount++;
+    }
+  }
+  // In a fixed order, so a tally that did not change is stored the same.
+  t.waiting = [...waiting.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, g]) => g);
+  return t;
+}
+
+/** The figures a stored tally gives today. */
+export function countsFromTally(t: CourseworkTally, today: string, courseOpen: boolean): CourseworkCounts {
+  const c: CourseworkCounts = {
+    expected: t.toGrade + t.toReturn + t.returned,
+    handedIn: t.handedIn,
+    late: t.late,
+    toGrade: t.toGrade,
+    toReturn: t.toReturn,
+    returned: t.returned,
+    notInYet: 0,
+    pastDue: 0,
+    missed: 0,
+    notRequired: t.notRequired,
+    closed: 0,
+    average: t.shareCount ? t.shareSum / t.shareCount : null,
+  };
+  for (const g of t.waiting) {
+    c.expected += g.count;
+    const state = nothingInState(g, today, courseOpen);
+    if (state === 'toDo') c.notInYet += g.count;
+    else c[state] += g.count;
+  }
+  return c;
 }

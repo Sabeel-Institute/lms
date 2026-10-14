@@ -17,6 +17,7 @@ import type {
   CourseworkDoc,
   DraftDoc,
   GradeDoc,
+  CourseworkTallyDoc,
   SubmissionDoc,
   SubmissionEventDoc,
 } from './coursework';
@@ -70,6 +71,7 @@ export interface StoredDocs {
   drafts: DraftDoc;
   grades: GradeDoc;
   submissionEvents: SubmissionEventDoc;
+  courseworkTallies: CourseworkTallyDoc;
   assignments: AssignmentDoc;
   listeningProgress: ListeningProgressDoc;
   completions: CompletionDoc;
@@ -267,6 +269,19 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     attempt: 'required',
     at: 'required',
     late: 'required',
+  },
+  courseworkTallies: {
+    courseId: 'required',
+    updatedAt: 'required',
+    handedIn: 'required',
+    late: 'required',
+    toGrade: 'required',
+    toReturn: 'required',
+    returned: 'required',
+    notRequired: 'required',
+    shareSum: 'required',
+    shareCount: 'required',
+    waiting: { each: { dueDate: 'required', lateUntil: 'required', closedEarly: 'required', count: 'required' } },
   },
   assignments: {
     studentUid: 'required',

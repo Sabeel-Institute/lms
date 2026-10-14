@@ -486,6 +486,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // One assignment's figures, kept by the server: the course's staff read
+    // them, and nobody else, as the work they count.
+    match /courseworkTallies/{courseworkId} {
+      allow get, list: if staffManagesCourse(resource.data.courseId);
+      allow write: if false;
+    }
+
     // Each hand-in and take-back, append-only, written by the callables.
     match /submissionEvents/{eventId} {
       allow get, list: if (isStudent() && resource.data.studentUid == request.auth.uid)

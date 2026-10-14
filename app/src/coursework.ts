@@ -6,6 +6,7 @@ import {
   type AttachmentFile,
   type CourseworkDoc,
   type CourseworkGrading,
+  type CourseworkTallyDoc,
   type DraftDoc,
   type Grade,
   type GradeDoc,
@@ -172,14 +173,19 @@ export function useCourseCourseworkState(courseId: string | null): CourseworkRow
   );
 }
 
-/** Every student's work in a course, for the course's counts and one assignment's page. */
-export function useCourseSubmissionsState(courseId: string | null): SubmissionRow[] | null {
-  return useLiveQuery<SubmissionRow[] | null>(
-    () => (courseId ? query(collection(db, COLLECTIONS.submissions), where('courseId', '==', courseId)) : null),
+/**
+ * Each assignment's figures in a course, as the server keeps them
+ * (`courseworkTallies`): one small document per assignment. The course's page
+ * and its Assignments list read these; reading every piece of work and every
+ * grade in the course for four numbers a card was two seconds on a phone.
+ */
+export function useCourseTalliesState(courseId: string): Map<string, CourseworkTallyDoc> | null {
+  return useLiveQuery<Map<string, CourseworkTallyDoc> | null>(
+    () => query(collection(db, COLLECTIONS.courseworkTallies), where('courseId', '==', courseId)),
     [courseId],
     {
-      label: 'courseSubmissions',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('submissions', d) })),
+      label: 'courseTallies',
+      map: (snap) => new Map(snap.docs.map((d) => [d.id, read('courseworkTallies', d)])),
       empty: null,
     },
   );
@@ -236,19 +242,6 @@ export function useStudentCourseGradesState(courseId: string, studentUid: string
     [courseId, studentUid],
     {
       label: 'studentCourseGrades',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('grades', d) })),
-      empty: null,
-    },
-  );
-}
-
-/** Grades in a course as staff are writing them. Never student-readable. */
-export function useCourseGradesState(courseId: string | null): GradeRow[] | null {
-  return useLiveQuery<GradeRow[] | null>(
-    () => (courseId ? query(collection(db, COLLECTIONS.grades), where('courseId', '==', courseId)) : null),
-    [courseId],
-    {
-      label: 'courseGrades',
       map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('grades', d) })),
       empty: null,
     },

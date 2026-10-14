@@ -49,6 +49,10 @@ export const COLLECTIONS = {
   attachmentUploads: 'attachmentUploads',
   /** Each hand-in and take-back, append-only. */
   submissionEvents: 'submissionEvents',
+  /** One assignment's figures, kept by the server as its work and grades
+   *  change (`CourseworkTally`), keyed by the assignment's id: a course's pages
+   *  read these instead of every piece of work in the course. Staff only. */
+  courseworkTallies: 'courseworkTallies',
   /** Required-listening obligations, and the ONLY thing granting a student
    *  access to a recording (the excused of a session, until the due date). */
   assignments: 'assignments',

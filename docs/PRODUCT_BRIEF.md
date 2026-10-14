@@ -609,6 +609,7 @@ This is not the final schema. It captures the product objects that need first-cl
 | `drafts` | A student's unsent answer and files, readable by them alone. |
 | `grades` | Grades and feedback as staff write them. Never student-readable: a grade reaches the student only as `submissions.returned`. |
 | `submissionEvents` | Each hand-in and take-back, append-only. |
+| `courseworkTallies` | One assignment's figures, kept by the server as its work and grades change: handed in, to grade, returned, not required, and the students with nothing in grouped by their dates, so a course's pages work out what is past due or missed on the day they are read. Staff read it; nobody writes it. |
 | `notifications` | Notification preferences, registered devices, and sent-notification records. |
 | `backendStats` | Admin-facing operational metrics such as storage usage, recording counts, import failures, background jobs, and notification errors. |
 | `auditLog` | Staff and system changes that must remain inspectable. |
