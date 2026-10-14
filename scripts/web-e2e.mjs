@@ -2639,10 +2639,27 @@ check(
   courseBook.name,
 );
 check(
-  'it has the seven tabs, Definitions last',
-  courseBook.sheets.map((s) => s.name).join(',') === 'Summary,Students,Sessions,Register,Recordings,Detail,Definitions',
+  'it has the nine tabs, Definitions last',
+  courseBook.sheets.map((s) => s.name).join(',') ===
+    'Summary,Students,Sessions,Register,Recordings,Detail,Assignments,Grades,Definitions',
   courseBook.sheets.map((s) => s.name).join(','),
 );
+/*
+ * THE GRADE THIS RUN RETURNED, in the file: Fatima's "Hikma reflection" went
+ * back with 9/10 on her own screen. The Grades tab holds it as the number 9
+ * under that assignment, and the Assignments tab counts it returned.
+ */
+const gradesTab = tabOf(courseBook, 'Grades');
+const cwCol = gradesTab.rows[1].findIndex((h) => h.startsWith(`${CW}\n`));
+check(
+  'the Grades tab holds the grade returned on screen, as a number, under its assignment',
+  cwCol > 0 && rowOf(gradesTab, 'Fatima Ahmed')?.[cwCol] === '9' && /out of 10$/.test(gradesTab.rows[1][cwCol]),
+  cwCol > 0 ? `${gradesTab.rows[1][cwCol]}: ${rowOf(gradesTab, 'Fatima Ahmed')?.[cwCol]}` : gradesTab.rows[1].join(' | '),
+);
+const assignmentsTab = tabOf(courseBook, 'Assignments');
+const cwRow = rowOf(assignmentsTab, CW);
+const returnedCol = assignmentsTab.rows[1].indexOf('Returned');
+check('the Assignments tab counts it returned', !!cwRow && Number(cwRow[returnedCol]) >= 1, cwRow?.join(' | ') ?? 'no row');
 const students = tabOf(courseBook, 'Students');
 check(
   'the Students tab carries the grouped header',
@@ -2675,9 +2692,17 @@ check(
   studentBook.name,
 );
 check(
-  'it has the six tabs',
-  studentBook.sheets.map((s) => s.name).join(',') === 'Summary,Courses,Sessions,Recordings,History,Definitions',
+  'it has the seven tabs',
+  studentBook.sheets.map((s) => s.name).join(',') === 'Summary,Courses,Sessions,Recordings,Assignments,History,Definitions',
   studentBook.sheets.map((s) => s.name).join(','),
+);
+const herHeads = tabOf(studentBook, 'Assignments').rows[0];
+const herWork = tabOf(studentBook, 'Assignments').rows.slice(1).find((r) => r[herHeads.indexOf('Assignment')] === CW);
+const her = (head) => herWork?.[herHeads.indexOf(head)];
+check(
+  'her Assignments tab has the work returned to her: the grade and the feedback she was given',
+  her('Assignment') === CW && her('Where it stands') === 'Returned' && her('Grade') === '9' && her('Feedback') === 'Clear, and in your own words.',
+  herWork?.join(' | ') ?? 'no row',
 );
 const courseRow = rowOf(tabOf(studentBook, 'Courses'), 'Hikam Foundations');
 check('the Courses tab has a row for the course she is in', !!courseRow && courseRow[1] === 'Autumn 2026');

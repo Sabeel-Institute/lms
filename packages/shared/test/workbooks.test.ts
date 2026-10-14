@@ -4,6 +4,7 @@ import {
   buildXlsx,
   courseStudentStats,
   courseWorkbook,
+  courseworkCounts,
   excelSerial,
   readXlsx,
   studentWorkbook,
@@ -75,6 +76,74 @@ const grant = (studentUid: string, recordingId: string, sessionId: string, dueDa
   assignedAt: 1,
   assignedBy: 'system',
 });
+/** An assignment, posted unless it says otherwise. */
+function work(id: string, title: string, dueDate: string, lateUntil: string | null, grading: { kind: 'points'; outOf: number } | { kind: 'scale' }, status: 'posted' | 'draft' = 'posted') {
+  return {
+    id,
+    courseId: COURSE,
+    cohortId: 'aut26',
+    title,
+    instructions: '',
+    files: {},
+    dueDate,
+    lateUntil,
+    grading,
+    status,
+    closedAt: null,
+    postedAt: status === 'posted' ? T('2026-09-01') : null,
+    postedBy: status === 'posted' ? 'mgr' : null,
+    createdAt: 1,
+    createdBy: 'mgr',
+    updatedAt: 1,
+    editedAt: null,
+  };
+}
+type GradeIn = { points: number } | { scale: 'satisfactory' | 'needsWork' };
+/** One student's work: open by default; `inAt` hands it in; `back` returns it with a grade. */
+function sub(
+  studentUid: string,
+  courseworkId: string,
+  dueDate: string,
+  lateUntil: string | null,
+  o: { inAt?: string; back?: { grade: GradeIn; at: string }; active?: boolean; notRequired?: string; moreTime?: string; returnedWithoutHandIn?: GradeIn } = {},
+) {
+  const returned = o.back
+    ? { grade: o.back.grade, feedback: 'Well done.', at: T(o.back.at), seq: 1, retry: false }
+    : o.returnedWithoutHandIn
+      ? { grade: o.returnedWithoutHandIn, feedback: 'Recited in class.', at: T('2026-09-25'), seq: 1, retry: false }
+      : null;
+  return {
+    studentUid,
+    courseworkId,
+    courseId: COURSE,
+    cohortId: 'aut26',
+    active: o.active ?? true,
+    dueDate,
+    lateUntil,
+    closedEarly: false,
+    state: returned ? ('returned' as const) : o.inAt ? ('handedIn' as const) : ('open' as const),
+    attempt: 1,
+    handedInAt: o.inAt ? T(o.inAt) : null,
+    note: o.inAt ? 'My answer.' : '',
+    files: {},
+    returned,
+    attempts: [],
+    notRequired: o.notRequired ? { reason: o.notRequired, by: 'mgr', at: T('2026-09-20') } : null,
+    moreTime: o.moreTime ? { reason: o.moreTime, by: 'mgr', at: T('2026-10-05') } : null,
+    assignedAt: T('2026-09-01'),
+  };
+}
+const graded = (studentUid: string, courseworkId: string, grade: GradeIn, withoutHandIn = false) => ({
+  studentUid,
+  courseworkId,
+  courseId: COURSE,
+  grade,
+  feedback: withoutHandIn ? 'Recited in class.' : 'Well done.',
+  gradedBy: 'mgr',
+  gradedAt: T('2026-09-12'),
+  withoutHandIn,
+});
+
 const enrol = (studentUid: string, joined: string, left?: string) => ({
   studentUid,
   courseId: COURSE,
@@ -134,6 +203,46 @@ const world: CourseData = {
   progress: [
     { studentUid: S.fatima, recordingId: 'r1', courseId: COURSE, positionMs: 1, listenedMs: 2_232_000, updatedAt: T('2026-09-10') },
     { studentUid: S.aminah, recordingId: 'r2', courseId: COURSE, positionMs: 1, listenedMs: 540_000, updatedAt: T('2026-10-09') },
+  ],
+  // Every state a piece of work can be in, on four posted assignments and a draft.
+  coursework: [
+    work('cw1', 'Reflection on the first hikma', '2026-09-10', '2026-09-17', { kind: 'points', outOf: 10 }),
+    work('cw2', 'Recite the first hikma', '2026-09-24', null, { kind: 'scale' }),
+    work('cw3', 'Short answer: intention', '2026-10-20', '2026-10-27', { kind: 'points', outOf: 20 }),
+    work('cw4', 'Not posted yet', '2026-10-30', null, { kind: 'points', outOf: 10 }, 'draft'),
+    work('cw5', 'Vocabulary', '2026-10-08', '2026-10-22', { kind: 'points', outOf: 5 }),
+  ],
+  submissions: [
+    // cw1: on time and returned; late and returned; nothing in by the last
+    // day; handed in and returned before leaving the class.
+    sub(S.fatima, 'cw1', '2026-09-10', '2026-09-17', { inAt: '2026-09-09', back: { grade: { points: 8.5 }, at: '2026-09-12' } }),
+    sub(S.bilal, 'cw1', '2026-09-10', '2026-09-17', { inAt: '2026-09-12', back: { grade: { points: 6 }, at: '2026-09-14' } }),
+    sub(S.aminah, 'cw1', '2026-09-10', '2026-09-17'),
+    sub(S.idris, 'cw1', '2026-09-10', '2026-09-17', { inAt: '2026-09-09', back: { grade: { points: 9 }, at: '2026-09-12' }, active: false }),
+    // cw2: graded on paper and returned; let off; graded and not returned
+    // yet; left with nothing in, which counts nowhere.
+    sub(S.fatima, 'cw2', '2026-09-24', null, { returnedWithoutHandIn: { scale: 'satisfactory' } }),
+    sub(S.bilal, 'cw2', '2026-09-24', null, { notRequired: 'Recited to the teacher privately' }),
+    sub(S.aminah, 'cw2', '2026-09-24', null, { inAt: '2026-09-20' }),
+    sub(S.idris, 'cw2', '2026-09-24', null, { active: false }),
+    // cw3: due next week. One handed in, the rest not in yet.
+    sub(S.fatima, 'cw3', '2026-10-20', '2026-10-27', { inAt: '2026-10-14' }),
+    sub(S.bilal, 'cw3', '2026-10-20', '2026-10-27'),
+    sub(S.aminah, 'cw3', '2026-10-20', '2026-10-27'),
+    sub(S.ayesha, 'cw3', '2026-10-20', '2026-10-27'),
+    // cw5: past due with late work still taken; more time, so handed in on
+    // the student's own date and not late.
+    sub(S.fatima, 'cw5', '2026-10-08', '2026-10-22'),
+    sub(S.bilal, 'cw5', '2026-10-18', '2026-10-25', { inAt: '2026-10-12', back: { grade: { points: 5 }, at: '2026-10-13' }, moreTime: 'Away for a week' }),
+    sub(S.aminah, 'cw5', '2026-10-08', '2026-10-22'),
+  ],
+  grades: [
+    graded(S.fatima, 'cw1', { points: 8.5 }),
+    graded(S.bilal, 'cw1', { points: 6 }),
+    graded(S.idris, 'cw1', { points: 9 }),
+    graded(S.fatima, 'cw2', { scale: 'satisfactory' }, true),
+    graded(S.aminah, 'cw2', { scale: 'needsWork' }),
+    graded(S.bilal, 'cw5', { points: 5 }),
   ],
 };
 
@@ -227,8 +336,18 @@ describe('courseStudentStats', () => {
 describe('courseWorkbook', () => {
   const wb = courseWorkbook(world, ctx);
 
-  it('has the seven tabs, in order, with the Definitions last', () => {
-    expect(wb.sheets.map((s) => s.name)).toEqual(['Summary', 'Students', 'Sessions', 'Register', 'Recordings', 'Detail', 'Definitions']);
+  it('has the nine tabs, in order, with the Definitions last', () => {
+    expect(wb.sheets.map((s) => s.name)).toEqual([
+      'Summary',
+      'Students',
+      'Sessions',
+      'Register',
+      'Recordings',
+      'Detail',
+      'Assignments',
+      'Grades',
+      'Definitions',
+    ]);
     expect(sheet(wb, 'Definitions').rows).toHaveLength(WORKBOOK_DEFINITIONS.length + 1);
   });
 
@@ -300,6 +419,73 @@ describe('courseWorkbook', () => {
     expect(summary['Recordings published']).toBe('3 of 5 sessions');
   });
 
+  it('the Assignments tab counts each assignment as its own page does', () => {
+    const rows = table(wb, 'Assignments');
+    // Posted ones only, by due date: the draft is nowhere.
+    expect(rows.map((r) => r.Assignment)).toEqual(['Reflection on the first hikma', 'Recite the first hikma', 'Vocabulary', 'Short answer: intention']);
+    for (const r of rows) {
+      const cw = world.coursework.find((c) => c.title === r.Assignment)!;
+      const subs = world.submissions.filter((x) => x.courseworkId === cw.id);
+      const grades = new Map(world.grades.filter((g) => g.courseworkId === cw.id).map((g) => [g.studentUid, g]));
+      const n = courseworkCounts(cw.grading, subs, grades, TODAY, true, ZONE);
+      expect([r.Assigned, r['Handed in'], r.Late, r['To grade'], r['To return'], r.Returned]).toEqual([n.expected, n.handedIn, n.late, n.toGrade, n.toReturn, n.returned]);
+      expect([r['Not in yet'], r['Past due'], r.Missed, r['Not required']]).toEqual([n.notInYet, n.pastDue, n.missed, n.notRequired]);
+      expect(r.Average).toEqual(n.average ?? '—');
+    }
+    const cw1 = rows[0];
+    expect(cw1).toMatchObject({ Assigned: 4, 'Handed in': 3, Late: 1, Returned: 3, Missed: 1, Graded: 'out of 10' });
+    expect(cw1.Average).toBeCloseTo((0.85 + 0.6 + 0.9) / 3);
+    // Graded on paper counts as in; a student let off counts nowhere but its column.
+    expect(rows[1]).toMatchObject({ Assigned: 2, 'Handed in': 2, 'To return': 1, Returned: 1, 'Not required': 1, Average: '—' });
+  });
+
+  it('the Grades tab’s totals add up to the Assignments tab’s', () => {
+    const assignments = table(wb, 'Assignments');
+    const grades = table(wb, 'Grades');
+    const total = (rows: Record<string, unknown>[], k: string) => rows.reduce((n, r) => n + Number(r[k]), 0);
+    for (const k of ['Assigned', 'Handed in', 'Late', 'Returned', 'Missed']) {
+      expect(total(grades, k), k).toBe(total(assignments, k));
+    }
+  });
+
+  it('the Grades tab gives a returned grade as a number, and says where the rest stands', () => {
+    const grades = table(wb, 'Grades');
+    const heads = sheet(wb, 'Grades').rows[1].map((c) => String(c.v));
+    const col = (title: string) => heads.find((h) => h.startsWith(`${title}\n`))!;
+    const row = (who: string) => grades.find((r) => r.Student === who)!;
+    expect(col('Reflection on the first hikma')).toBe('Reflection on the first hikma\ndue 09-10 · out of 10');
+    expect(heads.some((h) => h.startsWith('Not posted yet'))).toBe(false);
+    const fatima = row('Fatima Ahmed');
+    expect(fatima[col('Reflection on the first hikma')]).toBe(8.5);
+    expect(fatima[col('Recite the first hikma')]).toBe('Satisfactory');
+    expect(fatima[col('Short answer: intention')]).toBe('to grade');
+    expect(fatima[col('Vocabulary')]).toBe('past due');
+    expect(fatima).toMatchObject({ Assigned: 4, 'Handed in': 3, Returned: 2, Missed: 0, Average: 0.85 });
+    const aminah = row('Aminah Bello');
+    expect(aminah[col('Reflection on the first hikma')]).toBe('missed');
+    expect(aminah[col('Recite the first hikma')]).toBe('Needs work · to return');
+    expect(aminah.Average).toBe('—');
+    expect(row('Bilal Khan')[col('Recite the first hikma')]).toBe('not required');
+    expect(row('Bilal Khan')[col('Short answer: intention')]).toBe('not in yet');
+    // More time moved Bilal's date: handed in on his own date is not late.
+    expect(row('Bilal Khan')).toMatchObject({ Late: 1, Average: (0.6 + 1) / 2 });
+    // Left with nothing in counts nowhere; never given it is empty.
+    expect(row('Idris Abubakar')[col('Recite the first hikma')]).toBe('');
+    expect(row('Idris Abubakar')).toMatchObject({ Assigned: 1, Returned: 1 });
+    expect(row('Ayesha Rahman')[col('Reflection on the first hikma')]).toBe('');
+    // The number is a number cell, halves and all.
+    const fatimaRow = sheet(wb, 'Grades').rows.find((r) => r[0].v === 'Fatima Ahmed')!;
+    expect(fatimaRow[1]).toEqual({ v: 8.5, style: 'num' });
+  });
+
+  it('the Summary states the assignments the tabs add up to', () => {
+    const summary = Object.fromEntries(sheet(wb, 'Summary').rows.map((r) => [String(r[0].v), String(r[1].v)]));
+    expect(summary['Assignments posted']).toBe('4');
+    expect(summary['Work to grade']).toBe('1');
+    // 0.85, 0.6, 0.9 and 1: every returned grade in points, each a share.
+    expect(summary['Average grade (returned, in points)']).toBe('84%');
+  });
+
   it('writes a workbook Excel can open: one part per sheet, merges, a frozen pane, a filter', () => {
     const files = unzipSync(buildXlsx(wb));
     expect(Object.keys(files)).toEqual(expect.arrayContaining(['[Content_Types].xml', 'xl/workbook.xml', 'xl/styles.xml', 'xl/worksheets/sheet2.xml', 'xl/worksheets/sheet7.xml']));
@@ -338,6 +524,9 @@ describe('studentWorkbook', () => {
     completions: [],
     overrides: [],
     progress: [],
+    coursework: [],
+    submissions: [],
+    grades: [],
   };
   const wb = studentWorkbook(
     {
@@ -351,8 +540,8 @@ describe('studentWorkbook', () => {
     { ...ctx, scopeNote: 'the courses you manage' },
   );
 
-  it('has the six tabs and one row per course', () => {
-    expect(wb.sheets.map((s) => s.name)).toEqual(['Summary', 'Courses', 'Sessions', 'Recordings', 'History', 'Definitions']);
+  it('has the seven tabs and one row per course', () => {
+    expect(wb.sheets.map((s) => s.name)).toEqual(['Summary', 'Courses', 'Sessions', 'Recordings', 'Assignments', 'History', 'Definitions']);
     expect(table(wb, 'Courses').map((r) => r.Course)).toEqual(['Hikam Foundations', 'Arabic I']);
   });
 
@@ -369,6 +558,22 @@ describe('studentWorkbook', () => {
     expect(rows[0]).toMatchObject({ Mark: 'Excused', Outcome: 'Missed deadline' });
     expect(rows[3].Mark).toBe('not taken');
     expect(rows[5].Mark).toBe('not marked');
+  });
+
+  it('lists their work on every assignment, soonest due first, with what they were given back', () => {
+    const rows = table(wb, 'Assignments', 1);
+    expect(rows.map((r) => `${r.Assignment}: ${r['Where it stands']}`)).toEqual([
+      'Reflection on the first hikma: Returned',
+      'Recite the first hikma: Returned',
+      'Vocabulary: Past due',
+      'Short answer: intention: To grade',
+    ]);
+    expect(rows[0]).toMatchObject({ Grade: 8.5, Feedback: 'Well done.', Late: '' });
+    expect(rows[1].Grade).toBe('Satisfactory');
+    const summary = Object.fromEntries(sheet(wb, 'Summary').rows.map((r) => [String(r[0].v), String(r[1].v)]));
+    expect(summary['Assignments, all courses']).toBe(
+      '4 assigned · 2 returned · 1 with the teacher · 1 not in yet · 0 missed · average grade 85%',
+    );
   });
 
   it('carries the scope and the history', () => {

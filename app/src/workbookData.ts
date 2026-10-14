@@ -64,7 +64,7 @@ async function courseData(course: CourseDoc & { id: string }, forStudent?: strin
     forStudent
       ? query(collection(db, name), where('studentUid', '==', forStudent), where('courseId', '==', course.id))
       : byCourse(name, course.id);
-  const [cohort, sessions, recordings, enrollments, assignments, completions, overrides, progress] =
+  const [cohort, sessions, recordings, enrollments, assignments, completions, overrides, progress, coursework, submissions, grades] =
     await Promise.all([
       cohortName(course.cohortId),
       rows(COLLECTIONS.sessions, byCourse(COLLECTIONS.sessions, course.id)),
@@ -78,8 +78,24 @@ async function courseData(course: CourseDoc & { id: string }, forStudent?: strin
       rows(COLLECTIONS.completions, pin(COLLECTIONS.completions)),
       rows(COLLECTIONS.completionOverrides, pin(COLLECTIONS.completionOverrides)),
       rows(COLLECTIONS.listeningProgress, pin(COLLECTIONS.listeningProgress)),
+      rows(COLLECTIONS.coursework, byCourse(COLLECTIONS.coursework, course.id)),
+      rows(COLLECTIONS.submissions, pin(COLLECTIONS.submissions)),
+      rows(COLLECTIONS.grades, pin(COLLECTIONS.grades)),
     ]);
-  return { course, cohortName: cohort, sessions, recordings, enrollments, assignments, completions, overrides, progress };
+  return {
+    course,
+    cohortName: cohort,
+    sessions,
+    recordings,
+    enrollments,
+    assignments,
+    completions,
+    overrides,
+    progress,
+    coursework,
+    submissions,
+    grades,
+  };
 }
 
 function context(
@@ -97,7 +113,7 @@ function context(
   };
 }
 
-/** The course workbook: every student, every session, every grant. */
+/** The course workbook: every student, every session, every grant, every assignment. */
 export async function exportCourseWorkbook(course: CourseDoc & { id: string }, byUid: string): Promise<void> {
   const [dir, data] = await Promise.all([directory(), courseData(course)]);
   const ctx = context(dir, byUid);

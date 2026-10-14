@@ -419,11 +419,75 @@ export interface CourseworkCounts {
   average: number | null;
 }
 
+/** One student's work on one assignment, as the figures count it. */
+export interface WorkTally {
+  state: StaffWorkState;
+  /** Anything given back or waiting with the teacher: handed in, or graded on paper. */
+  handedIn: boolean;
+  late: boolean;
+  /** A returned grade in points as a share of the points; null for anything else. */
+  share: number | null;
+}
+
+/**
+ * Where one student's work on one assignment stands, for the figures: null
+ * when it counts nowhere, which is work never handed in by a student who has
+ * since left the class. Every count of assignments adds these up, an
+ * assignment's (`courseworkCounts`) and a student's across a course (the
+ * workbook's Grades tab), so the two cannot disagree.
+ */
+export function workTally(
+  grading: CourseworkGrading,
+  sub: Pick<SubmissionDoc, 'active' | 'state' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly' | 'handedInAt' | 'returned'>,
+  grade: Pick<GradeDoc, 'grade' | 'withoutHandIn'> | undefined,
+  today: string,
+  courseOpen: boolean,
+  timeZone: string,
+): WorkTally | null {
+  if (!sub.active && sub.state === 'open') return null;
+  const state = staffWorkState(sub, grade, today, courseOpen);
+  const handedIn = state !== 'notRequired' && sub.state !== 'open';
+  const late = handedIn && sub.handedInAt !== null && isLate(sub.handedInAt, sub.dueDate, timeZone);
+  const g = sub.returned?.grade;
+  const share = state === 'returned' && g && 'points' in g && grading.kind === 'points' ? g.points / grading.outOf : null;
+  return { state, handedIn, late, share };
+}
+
+/** The figures a set of tallies add up to: one assignment's, or one student's. */
+export function tallyCounts(tallies: (WorkTally | null)[]): CourseworkCounts {
+  const c: CourseworkCounts = {
+    expected: 0, handedIn: 0, late: 0, toGrade: 0, toReturn: 0, returned: 0,
+    notInYet: 0, pastDue: 0, missed: 0, notRequired: 0, closed: 0, average: null,
+  };
+  const shares: number[] = [];
+  for (const t of tallies) {
+    if (!t) continue;
+    if (t.state === 'notRequired') {
+      c.notRequired++;
+      continue;
+    }
+    c.expected++;
+    if (t.handedIn) c.handedIn++;
+    if (t.late) c.late++;
+    if (t.state === 'toGrade') c.toGrade++;
+    else if (t.state === 'graded') c.toReturn++;
+    else if (t.state === 'returned') c.returned++;
+    else if (t.state === 'toDo') c.notInYet++;
+    else if (t.state === 'pastDue') c.pastDue++;
+    else if (t.state === 'missed') c.missed++;
+    else if (t.state === 'closed') c.closed++;
+    if (t.share !== null) shares.push(t.share);
+  }
+  c.average = shares.length ? shares.reduce((a, b) => a + b, 0) / shares.length : null;
+  return c;
+}
+
 /**
  * The figures for one assignment — the assignment page's tiles, its card on
- * the course's list, Today's "to grade" row. ONE SOURCE, as the proposal asks:
- * listening is counted twice in this app (screens and workbook), and the
- * counts for assignments should not repeat that.
+ * the course's list, Today's "to grade" row, the workbook's Assignments tab.
+ * ONE SOURCE, as the proposal asks: listening is counted twice in this app
+ * (screens and workbook), and the counts for assignments should not repeat
+ * that.
  *
  * The average counts only returned grades, so it never includes one a student
  * has not seen.
@@ -436,34 +500,5 @@ export function courseworkCounts(
   courseOpen: boolean,
   timeZone: string,
 ): CourseworkCounts {
-  const c: CourseworkCounts = {
-    expected: 0, handedIn: 0, late: 0, toGrade: 0, toReturn: 0, returned: 0,
-    notInYet: 0, pastDue: 0, missed: 0, notRequired: 0, closed: 0, average: null,
-  };
-  const points: number[] = [];
-  for (const s of subs) {
-    if (!s.active && s.state === 'open') continue;
-    const st = staffWorkState(s, grades.get(s.studentUid), today, courseOpen);
-    if (st === 'notRequired') {
-      c.notRequired++;
-      continue;
-    }
-    c.expected++;
-    if (s.state !== 'open') {
-      c.handedIn++;
-      if (s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, timeZone)) c.late++;
-    }
-    if (st === 'toGrade') c.toGrade++;
-    else if (st === 'graded') c.toReturn++;
-    else if (st === 'returned') {
-      c.returned++;
-      const g = s.returned?.grade;
-      if (g && 'points' in g && grading.kind === 'points') points.push(g.points / grading.outOf);
-    } else if (st === 'toDo') c.notInYet++;
-    else if (st === 'pastDue') c.pastDue++;
-    else if (st === 'missed') c.missed++;
-    else if (st === 'closed') c.closed++;
-  }
-  c.average = points.length ? points.reduce((a, b) => a + b, 0) / points.length : null;
-  return c;
+  return tallyCounts(subs.map((s) => workTally(grading, s, grades.get(s.studentUid), today, courseOpen, timeZone)));
 }

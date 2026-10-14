@@ -1,5 +1,7 @@
 import { isOverdue, stampInZone, todayInZone } from './assignments';
 import type { AssignmentDoc, CompletionDoc } from './assignments';
+import { SCALE_LABELS, gradeText, submissionId, tallyCounts, workTally, courseworkCounts } from './coursework';
+import type { CourseworkDoc, GradeDoc, StaffWorkState, SubmissionDoc, WorkTally } from './coursework';
 import { effectiveCompletion } from './ledger';
 import type { CompletionOverrideDoc } from './ledger';
 import { isVisibleToStudents, listenedShare } from './recordings';
@@ -21,6 +23,10 @@ import type { Cell, CellStyle, SheetSpec, WorkbookSpec } from './xlsx';
  *
  * THE VOCABULARY IS THE DEFINITIONS TAB, printed into every workbook and into
  * the manual (`workbookDefinitions.test.ts` holds the two to the same words).
+ *
+ * Assignments are counted by `workTally` in `coursework.ts`, the function the
+ * assignment screens count with, so a figure here is the figure there; the
+ * Assignments tab's columns add up to the Grades tab's.
  */
 
 // ------------------------------------------------------------ definitions --
@@ -50,12 +56,29 @@ export const WORKBOOK_DEFINITIONS: readonly [term: string, definition: string][]
   ],
   [
     'Closed',
-    'A required recording that was withdrawn from the student before its due date: they left the class, or the class was archived with its recordings closed. Neither completed nor missed.',
+    'Withdrawn before its date, so neither done nor missed: a required recording when the student left the class or the class was archived with its recordings closed; an assignment still open when its course was archived.',
   ],
   ['Catch-up rate', 'Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone.'],
   [
     'Played',
     'Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark.',
+  ],
+  [
+    'Assigned',
+    'Students an assignment went to, less any a teacher marked not required. Someone who left the class counts only if they handed something in first.',
+  ],
+  ['Handed in', 'Work given in, graded or not and late or not, and work graded on paper with nothing handed in.'],
+  ['Late', 'Handed in after the student’s due date: their own date, if they were given more time.'],
+  ['To grade', 'Handed in and not graded yet.'],
+  ['To return', 'Graded but not given back yet. The student does not see the grade.'],
+  ['Returned', 'Graded and given back. The grade is what the student sees.'],
+  ['Not in yet', 'Nothing handed in, and the due date has not passed.'],
+  ['Past due', 'Nothing handed in, the due date has passed, and late work is still taken.'],
+  ['Missed', 'Nothing handed in by the last day work was taken, or before the teacher stopped taking it.'],
+  ['Not required', 'A teacher let the student off the assignment, with a reason. It counts nowhere.'],
+  [
+    'Average grade',
+    'Returned grades on assignments graded in points, each as a share of its points. Satisfactory and Needs work are not averaged.',
   ],
   ['Times', 'Institute time (America/Chicago). Dates are real dates; sort and filter them in Excel.'],
 ];
@@ -71,6 +94,9 @@ export interface WorkbookSession extends SessionDoc {
 export interface WorkbookRecording extends RecordingDoc {
   id: string;
 }
+export interface WorkbookCoursework extends CourseworkDoc {
+  id: string;
+}
 
 /** One course's worth of documents, as the rules let staff read them. */
 export interface CourseData {
@@ -83,6 +109,10 @@ export interface CourseData {
   completions: CompletionDoc[];
   overrides: CompletionOverrideDoc[];
   progress: ListeningProgressDoc[];
+  /** Its assignments, drafts included; every tab leaves drafts out. */
+  coursework: WorkbookCoursework[];
+  submissions: SubmissionDoc[];
+  grades: GradeDoc[];
 }
 
 export interface WorkbookContext {
@@ -257,6 +287,34 @@ export function courseStudentStats(
   return stats;
 }
 
+// ------------------------------------------------------------ assignments --
+
+/** One student's work on one posted assignment, and what it counts as. */
+interface WorkItem {
+  coursework: WorkbookCoursework;
+  sub: SubmissionDoc;
+  grade: GradeDoc | undefined;
+  /** Null when it counts nowhere: they left the class with nothing in. */
+  tally: WorkTally | null;
+}
+
+/** A course's posted assignments, by due date, and every piece of work on them. */
+function courseWork(data: CourseData, ctx: WorkbookContext): { posted: WorkbookCoursework[]; work: WorkItem[] } {
+  const posted = data.coursework
+    .filter((cw) => cw.status === 'posted')
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.title.localeCompare(b.title));
+  const byId = new Map(posted.map((cw) => [cw.id, cw]));
+  const gradeOf = new Map(data.grades.map((g) => [submissionId(g.studentUid, g.courseworkId), g]));
+  const work = data.submissions.flatMap((sub) => {
+    const coursework = byId.get(sub.courseworkId);
+    if (!coursework) return [];
+    const grade = gradeOf.get(submissionId(sub.studentUid, sub.courseworkId));
+    const tally = workTally(coursework.grading, sub, grade, ctx.today, data.course.effectiveActive, ctx.timeZone);
+    return [{ coursework, sub, grade, tally }];
+  });
+  return { posted, work };
+}
+
 // ------------------------------------------------------------------ cells --
 
 const c = (v: Cell['v'], style?: CellStyle): Cell => ({ v, style });
@@ -278,6 +336,41 @@ const outcomeStyle = (o: ListeningOutcome): CellStyle =>
   o === 'completed' ? 'good' : o === 'open' ? 'open' : o === 'missed' ? 'missed' : 'dim';
 const outcomeIntStyle = (o: ListeningOutcome, n: number): CellStyle =>
   n > 0 && o === 'missed' ? 'missedInt' : n > 0 && o === 'open' ? 'openInt' : 'int';
+const gradingText = (cw: WorkbookCoursework) =>
+  cw.grading.kind === 'points' ? `out of ${cw.grading.outOf}` : 'Satisfactory / Needs work';
+const averageCell = (a: number | null): Cell => (a === null ? c('—', 'dim') : c(a, 'pct'));
+const averageText = (a: number | null) => (a === null ? '—' : `${Math.round(a * 100)}%`);
+const WORK_STATE_TEXT: Record<StaffWorkState, string> = {
+  returned: 'Returned',
+  graded: 'Graded, to return',
+  toGrade: 'To grade',
+  toDo: 'Not in yet',
+  pastDue: 'Past due',
+  missed: 'Missed',
+  notRequired: 'Not required',
+  closed: 'Closed',
+};
+const workStyle = (state: StaffWorkState): CellStyle =>
+  state === 'missed' ? 'missed' : state === 'toGrade' || state === 'graded' || state === 'pastDue' ? 'open' : state === 'returned' ? 'text' : 'dim';
+/** A grade as a cell: points as a number, so a column adds up; a scale mark in words. */
+function gradeCell(w: WorkItem): Cell {
+  if (w.tally?.state === 'returned') {
+    const g = w.sub.returned?.grade ?? null;
+    if (!g) return text('');
+    return 'points' in g ? c(g.points, 'num') : text(SCALE_LABELS[g.scale]);
+  }
+  if (w.tally?.state === 'graded' && w.grade?.grade) return text(`${gradeText(w.grade.grade, w.coursework.grading)} · to return`, 'open');
+  return text('');
+}
+/** One piece of work in the Grades grid: its grade once returned, where it stands otherwise. */
+function gradebookCell(w: WorkItem | undefined): Cell {
+  if (!w?.tally) return text('', 'dim');
+  if (w.tally.state === 'returned' || (w.tally.state === 'graded' && w.grade?.grade)) {
+    const cell = gradeCell(w);
+    if (cell.v !== '') return cell;
+  }
+  return text(WORK_STATE_TEXT[w.tally.state].toLowerCase(), workStyle(w.tally.state));
+}
 const shortDate = (d: string) => d.slice(5);
 const rate = (num: number, den: number) => (den > 0 ? `${Math.round((num / den) * 100)}%` : '—');
 
@@ -329,6 +422,9 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
   const status = !data.course.effectiveActive
     ? `Archived · recordings ${data.course.archivedAccess ? 'open' : 'closed'}`
     : 'Running';
+  const { posted, work } = courseWork(data, ctx);
+  const workOf = new Map(work.map((w) => [submissionId(w.sub.studentUid, w.coursework.id), w]));
+  const allWork = tallyCounts(work.map((w) => w.tally));
 
   // Summary
   const summary: SheetSpec = {
@@ -354,6 +450,9 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
         text('Still open', 'bold'),
         text(`${sum('open')} required recording${sum('open') === 1 ? '' : 's'}, ${all.filter((s) => s.open > 0).length} student${all.filter((s) => s.open > 0).length === 1 ? '' : 's'}`),
       ],
+      [text('Assignments posted', 'bold'), text(String(posted.length))],
+      [text('Work to grade', 'bold'), text(String(allWork.toGrade))],
+      [text('Average grade (returned, in points)', 'bold'), text(averageText(allWork.average))],
       [text('Exported', 'bold'), text(`${stampInZone(ctx.timeZone, ctx.exportedAt)} · by ${ctx.exportedBy}`)],
       ...(ctx.scopeNote ? [[text('Scope', 'bold'), text(ctx.scopeNote)]] : []),
     ],
@@ -558,7 +657,86 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
     filterRow: 2,
   };
 
-  return { sheets: [summary, students, sessionsSheet, register, listening, detail, definitionsSheet()] };
+  // Assignments: one row each, counted as the assignment's own page counts.
+  const assignmentsHeader = groupedHeader([
+    { title: '', cols: ['Assignment', 'Posted', 'Due', 'Late work until', 'Graded'] },
+    { title: 'Work', cols: ['Assigned', 'Handed in', 'Late', 'To grade', 'To return', 'Returned'] },
+    { title: 'Nothing in', cols: ['Not in yet', 'Past due', 'Missed'] },
+    { title: '', cols: ['Not required', 'Average', 'Note'] },
+  ]);
+  const assignmentRows = posted.map((cw) => {
+    const mine = work.filter((w) => w.coursework.id === cw.id);
+    const n = courseworkCounts(
+      cw.grading,
+      mine.map((w) => w.sub),
+      new Map(mine.filter((w) => w.grade).map((w) => [w.sub.studentUid, w.grade!])),
+      ctx.today,
+      data.course.effectiveActive,
+      ctx.timeZone,
+    );
+    const notes: string[] = [];
+    if (cw.closedAt !== null) notes.push(`stopped taking work ${todayInZone(ctx.timeZone, cw.closedAt)}`);
+    if (n.closed > 0) notes.push(`${n.closed} closed when the course was archived`);
+    return [
+      text(cw.title),
+      stamp(cw.postedAt, ctx.timeZone),
+      day(cw.dueDate),
+      day(cw.lateUntil),
+      text(gradingText(cw)),
+      int(n.expected),
+      int(n.handedIn),
+      int(n.late),
+      int(n.toGrade, n.toGrade > 0 ? 'openInt' : 'int'),
+      int(n.toReturn),
+      int(n.returned),
+      int(n.notInYet),
+      int(n.pastDue, n.pastDue > 0 ? 'openInt' : 'int'),
+      int(n.missed, n.missed > 0 ? 'missedInt' : 'int'),
+      int(n.notRequired),
+      averageCell(n.average),
+      text(notes.join(' · '), 'note'),
+    ];
+  });
+  const assignments: SheetSpec = {
+    name: 'Assignments',
+    widths: [40, 17, 12, 14, 24, 9, 10, 7, 9, 9, 9, 10, 9, 8, 12, 9, 40],
+    rows: [...assignmentsHeader.rows, ...assignmentRows],
+    merges: assignmentsHeader.merges,
+    freeze: { rows: 2, cols: 1 },
+    filterRow: 2,
+  };
+
+  // Grades: students down, assignments across, as Register is for sessions.
+  const gradesHeader = groupedHeader([
+    { title: '', cols: ['Student'] },
+    { title: 'Assignments', cols: posted.map((cw) => `${cw.title}\ndue ${shortDate(cw.dueDate)} · ${gradingText(cw)}`) },
+    { title: 'Totals', cols: ['Assigned', 'Handed in', 'Late', 'Returned', 'Missed', 'Average'] },
+  ]);
+  const gradeRows = roster.map((uid) => {
+    const mine = posted.map((cw) => workOf.get(submissionId(uid, cw.id)));
+    const n = tallyCounts(mine.map((w) => w?.tally ?? null));
+    return [
+      text(name(uid)),
+      ...mine.map(gradebookCell),
+      int(n.expected),
+      int(n.handedIn),
+      int(n.late),
+      int(n.returned),
+      int(n.missed, n.missed > 0 ? 'missedInt' : 'int'),
+      averageCell(n.average),
+    ];
+  });
+  const grades: SheetSpec = {
+    name: 'Grades',
+    widths: [28, ...posted.map(() => 18), 9, 10, 7, 9, 8, 9],
+    rows: [...gradesHeader.rows, ...gradeRows],
+    merges: gradesHeader.merges,
+    freeze: { rows: 2, cols: 1 },
+  };
+
+  return {
+    sheets: [summary, students, sessionsSheet, register, listening, detail, assignments, grades, definitionsSheet()],
+  };
 }
 
 // -------------------------------------------------------- student workbook --
@@ -588,6 +766,13 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
   const current = perCourse.filter(({ stats, data }) => stats.enrolled && data.course.effectiveActive).length;
   const status = (data: CourseData) =>
     !data.course.effectiveActive ? `Archived · recordings ${data.course.archivedAccess ? 'open' : 'closed'}` : 'Running';
+  // Their work on every posted assignment, soonest due first; work that
+  // counts nowhere (they left with nothing in) is not theirs to answer for.
+  const myWork = perCourse
+    .flatMap(({ data }) => courseWork(data, ctx).work.map((w) => ({ course: data.course.name, w })))
+    .filter(({ w }) => w.sub.studentUid === uid && w.tally !== null)
+    .sort((a, b) => a.w.sub.dueDate.localeCompare(b.w.sub.dueDate) || a.w.coursework.title.localeCompare(b.w.coursework.title));
+  const work = tallyCounts(myWork.map(({ w }) => w.tally));
 
   const summary: SheetSpec = {
     name: 'Summary',
@@ -607,6 +792,12 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
       [
         text('Catch-up, all courses', 'bold'),
         text(`${sum('completed')} completed · ${sum('open')} still open · ${sum('missed')} missed deadline${sum('closed') ? ` · ${sum('closed')} closed` : ''}`),
+      ],
+      [
+        text('Assignments, all courses', 'bold'),
+        text(
+          `${work.expected} assigned · ${work.returned} returned · ${work.toGrade + work.toReturn} with the teacher · ${work.notInYet + work.pastDue} not in yet · ${work.missed} missed · average grade ${averageText(work.average)}`,
+        ),
       ],
       [text('Scope', 'bold'), text(ctx.scopeNote ?? 'every course')],
       [text('Exported', 'bold'), text(`${stampInZone(ctx.timeZone, ctx.exportedAt)} · by ${ctx.exportedBy}`)],
@@ -716,6 +907,40 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
     filterRow: 1,
   };
 
+  const assignments: SheetSpec = {
+    name: 'Assignments',
+    widths: [26, 36, 12, 18, 17, 7, 14, 17, 50],
+    rows: [
+      [
+        text('Course', 'head'),
+        text('Assignment', 'head'),
+        text('Due', 'head'),
+        text('Where it stands', 'head'),
+        text('Handed in', 'head'),
+        text('Late', 'head'),
+        text('Grade', 'head'),
+        text('Returned', 'head'),
+        text('Feedback', 'head'),
+      ],
+      ...myWork.map(({ course, w }) => {
+        const state = w.tally!.state;
+        return [
+          text(course),
+          text(w.coursework.title),
+          day(w.sub.dueDate),
+          text(WORK_STATE_TEXT[state], workStyle(state)),
+          stamp(w.sub.handedInAt, ctx.timeZone),
+          text(w.tally!.late ? 'Late' : ''),
+          gradeCell(w),
+          stamp(state === 'returned' ? w.sub.returned?.at : null, ctx.timeZone),
+          text(state === 'returned' ? (w.sub.returned?.feedback ?? '') : '', 'note'),
+        ];
+      }),
+    ],
+    freeze: { rows: 1, cols: 0 },
+    filterRow: 1,
+  };
+
   const courseName = new Map(input.courses.map((d) => [d.course.id, d.course.name]));
   const history: SheetSpec = {
     name: 'History',
@@ -736,5 +961,5 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
     filterRow: 1,
   };
 
-  return { sheets: [summary, courses, sessions, listening, history, definitionsSheet()] };
+  return { sheets: [summary, courses, sessions, listening, assignments, history, definitionsSheet()] };
 }

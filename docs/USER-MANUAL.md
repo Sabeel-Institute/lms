@@ -941,8 +941,9 @@ it; on a computer it downloads.
 
 - **Summary** — the course's cohort, status and managers, the size of the
   roster, how many registers have been taken, the attendance and catch-up
-  rates for the class, how many required recordings are still open, and when
-  the file was made and by whom.
+  rates for the class, how many required recordings are still open, how many
+  assignments are posted, how much work waits to be graded, the average
+  grade, and when the file was made and by whom.
 - **Students** — one row per student: when they joined and left, their
   attendance counts and rate, and their catch-up on excused sessions —
   required, completed, still open, missed deadline, closed. Sorted so the
@@ -962,13 +963,22 @@ it; on a computer it downloads.
 - **Detail** — every required recording as its own row, with played, last
   played, completed at, and any override with its reason. This is the ledger
   of Section 2.6 for the whole course; filter it in Excel.
+- **Assignments** — one row per posted assignment: when it was posted, its
+  dates, how it is graded, and how the class stands on it — handed in, late,
+  to grade, to return, returned, not in yet, past due, missed, not required —
+  with the average grade. The same figures as the assignment's own page
+  (Section 2.15).
+- **Grades** — students down the side, assignments across the top: a
+  returned grade in each cell (points as a number, so a column adds up in
+  Excel), or where the work stands — *to grade*, *not in yet*, *missed*.
+  Each student's totals and average grade are at the end of their row.
 - **Definitions** — what every term in the file means, so the workbook explains
   itself to whoever you send it to.
 
 **Export workbook on a student's page** covers one person across courses:
 
 - **Summary** — their account, how many courses they are in, and their
-  attendance and catch-up totals across all of them.
+  attendance, catch-up and assignment totals across all of them.
 - **Courses** — one row per course, with the same enrolment, attendance and
   catch-up columns the course workbook gives each student.
 - **Sessions** — every meeting in the time they were enrolled, in date order
@@ -976,6 +986,9 @@ it; on a computer it downloads.
   and outcome.
 - **Recordings** — every recording they were required to play, with the
   evidence behind it.
+- **Assignments** — their work on every assignment, soonest due first: where
+  it stands, when they handed it in and whether late, the grade and when it
+  was returned, and the feedback they were given.
 - **History** — their record from the day the account was created: enrolments,
   removals and returns, account changes — each with who did it and when. It is
   the history the student's page shows (Section 2.11), plus the completion
@@ -997,16 +1010,24 @@ The file's **Definitions** tab reads:
 | **Completed** | The student marked the recording complete, or staff overrode it as complete (the override’s reason is recorded). |
 | **Still open** | Not yet completed, and the due date has not passed. |
 | **Missed deadline** | Not completed by the due date. Access has closed; nothing further can happen to it unless the date is moved. |
-| **Closed** | A required recording that was withdrawn from the student before its due date: they left the class, or the class was archived with its recordings closed. Neither completed nor missed. |
+| **Closed** | Withdrawn before its date, so neither done nor missed: a required recording when the student left the class or the class was archived with its recordings closed; an assignment still open when its course was archived. |
 | **Catch-up rate** | Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone. |
 | **Played** | Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark. |
+| **Assigned** | Students an assignment went to, less any a teacher marked not required. Someone who left the class counts only if they handed something in first. |
+| **Handed in** | Work given in, graded or not and late or not, and work graded on paper with nothing handed in. |
+| **Late** | Handed in after the student’s due date: their own date, if they were given more time. |
+| **To grade** | Handed in and not graded yet. |
+| **To return** | Graded but not given back yet. The student does not see the grade. |
+| **Returned** | Graded and given back. The grade is what the student sees. |
+| **Not in yet** | Nothing handed in, and the due date has not passed. |
+| **Past due** | Nothing handed in, the due date has passed, and late work is still taken. |
+| **Missed** | Nothing handed in by the last day work was taken, or before the teacher stopped taking it. |
+| **Not required** | A teacher let the student off the assignment, with a reason. It counts nowhere. |
+| **Average grade** | Returned grades on assignments graded in points, each as a share of its points. Satisfactory and Needs work are not averaged. |
 | **Times** | Institute time (America/Chicago). Dates are real dates; sort and filter them in Excel. |
 
 The columns hold real dates and real numbers, not text — so they sort, filter
 and add up in Excel. A rate shows a dash where there is nothing to divide by.
-
-Assignments and grades are not in the workbooks yet; an assignment's own page
-(Section 2.15) is the report for it.
 
 ## 2.14 Assignments — writing and posting
 

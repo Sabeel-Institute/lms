@@ -250,7 +250,7 @@ const shapes = [
   ['submissions — a course’s (staff pages)', () => db.collection('submissions').where('courseId', '==', ID)],
   ['submissions — handed in, Today', () => db.collection('submissions').where('courseId', 'in', [ID]).where('state', '==', 'handedIn')],
   ['submissions — one assignment’s (server)', () => db.collection('submissions').where('courseworkId', '==', ID)],
-  ['submissions — a student in a course (reconcile)', () => db.collection('submissions').where('courseId', '==', ID).where('studentUid', '==', ID)],
+  ['submissions — a student in a course (reconcile, student workbook)', () => db.collection('submissions').where('courseId', '==', ID).where('studentUid', '==', ID)],
   ['submissions — active in a course (reconcile)', () => db.collection('submissions').where('courseId', '==', ID).where('active', '==', true)],
   [
     'submissions — last day to hand in (7 AM sweep)',
@@ -258,6 +258,7 @@ const shapes = [
   ],
   ['drafts — a student’s own', () => db.collection('drafts').where('studentUid', '==', ID)],
   ['grades — a course’s (staff pages)', () => db.collection('grades').where('courseId', '==', ID)],
+  ['grades — a student in a course (student workbook)', () => db.collection('grades').where('studentUid', '==', ID).where('courseId', '==', ID)],
   ['grades — Today across managed courses', () => db.collection('grades').where('courseId', 'in', [ID])],
   ['grades — any on an assignment (server)', () => db.collection('grades').where('courseworkId', '==', ID).limit(1)],
   [

@@ -38,7 +38,9 @@ export type CellStyle =
   | 'dim'
   | 'note'
   | 'missedInt'
-  | 'openInt';
+  | 'openInt'
+  /** A number as written, halves and all: a grade in points. */
+  | 'num';
 
 export interface Cell {
   /** Text, a number, a date, or nothing. */
@@ -133,6 +135,7 @@ const XFS: { name: CellStyle; xf: Xf }[] = [
   { name: 'note', xf: { font: 3, fill: 0, numFmt: 0, wrap: true, border: true } },
   { name: 'missedInt', xf: { font: 5, fill: 4, numFmt: 1, align: 'right', border: true } },
   { name: 'openInt', xf: { font: 0, fill: 5, numFmt: 1, align: 'right', border: true } },
+  { name: 'num', xf: { font: 0, fill: 0, numFmt: 0, align: 'right', border: true } },
 ];
 const XF_INDEX = new Map(XFS.map((x, i) => [x.name, i]));
 
