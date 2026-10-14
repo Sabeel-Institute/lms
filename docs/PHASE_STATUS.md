@@ -37,6 +37,71 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-14 — **The workbooks carry assignments and grades** (Faisal:
+  staff need an exportable report of grades, as they have of attendance, in
+  the course's workbook). The course workbook gains an Assignments tab, one
+  row per posted assignment with the figures its own page shows, and a Grades
+  tab: students down, assignments across, a returned grade in each cell
+  (points as a number, so a column adds up), where the work stands
+  otherwise, and each student's totals and average. A student's workbook
+  gains an Assignments tab of their own work, with the grade and feedback
+  they were given, and both Summaries say where the assignments stand. Both
+  count through `workTally`, which `courseworkCounts` now adds up too, so
+  the file and the assignment screens cannot disagree; eleven terms join the
+  Definitions tab and the manual's copy of it.
+- 2026-10-14 — **Synthetic assignments on the live site, for evaluation**
+  (Faisal: three to ten graded assignments in every active course).
+  `scripts/seed-demo-coursework.mjs` wrote 62 assignments to the seven active
+  courses (48 graded and returned, 7 waiting to be graded, 7 due next week),
+  593 pieces of work, 418 grades and 473 hand-ins, in the shapes the
+  callables write and held to them before writing; no callable ran, so
+  nobody was notified and nothing was audited. Five test student accounts,
+  made the same day at Faisal's request, were enrolled in the test cohort's
+  empty Arabic course first (by hand, not by the script: the repo is public,
+  and their addresses are not for it). All of it is flagged `demoSeed` and
+  goes with `wipe-demo-prod.mjs`, which now sweeps assignments, work, grades
+  and their files; the switchover seed's wipe removes it regardless.
+- 2026-10-14 — **The help films wait for the app to settle** (Faisal: finish
+  the platform's changes before re-recording). "Cohorts and courses" shows
+  the managers list as it was; its script and narration are updated, and it
+  is recorded again with whatever else changes.
+
+- 2026-10-14 — **Staff see every help film** (Faisal: staff need the
+  students' films too, to help a student through one; a student needs only
+  theirs). `helpVideosFor` gives a student the students' films and staff all
+  nineteen, and `getHelpVideoUrl` signs by the same list. Staff see them in
+  three sections: Teaching, For students, Running the institute. Faisal kept
+  the voice, Aiden.
+- 2026-10-14 — **An off-domain sign-in says why, however it ends** (Faisal
+  agreed). The auth trigger deletes a Google account outside the domain;
+  when the deletion lands just after the sign-in, which is the usual case,
+  the person was sent back to sign-in with no word. The session now marks
+  that ending `refused` (an account that had no role yet, gone on a forced
+  refresh) and the sign-in screen gives the sentence it gives when the
+  deletion lands inside the sign-in. A revoked session of a provisioned
+  account, which fails the same way, is not marked.
+- 2026-10-14 — **Retired audit action names are migrated, not labelled**
+  (Faisal: yes). The 24 entries here under the live app's
+  `clearRecordingAudio` (10) and `importZoomRecording` (14) were renamed in
+  place to `removeRecordingMedia` and `importZoomFiles`: only `action`
+  written, in one commit, each on condition it had not changed since read.
+  `RETIRED_ACTION_LABELS` is gone. The audit screen's words moved to
+  `AUDIT_ACTION_LABELS` in `@sabeel/shared`, and `check:documents` fails on
+  an entry whose action has none, which is how the 24 were found before the
+  rename. The switchover seed renames them as it copies
+  (`scripts/lib/legacy-audit.mjs`), since the live app still writes those
+  names; its own log keeps them.
+- 2026-10-14 — **A course's managers list is everyone it counts** (Faisal:
+  the list should show them). It lists every active staff member, admins
+  included and marked: a course's managers get its attendance reminder and
+  its work to grade on Today, so an admin who teaches it is ticked like
+  anyone else. A disabled manager is listed, marked, while still on the
+  course, and can be taken off. Found with it: disabling a manager leaves
+  them in `managerUids`, and `setCourseManagers` checked every uid it was
+  sent, so no change to that course's managers could be saved until
+  somebody re-enabled them; it now checks only the uids added. The manual's
+  course figure showed "Managers (1)" over "No managers to assign yet".
+
 - 2026-10-14 — **Help films, in the app** (Faisal: a library of short
   tutorial videos for every teacher and student workflow, narrated, two
   versions each — phone and desktop — kept locally and played in the app
@@ -1765,6 +1830,34 @@ and commit messages, and renaming them would strand every one of those.
   reports nothing is worse than none.
 
 ## Verification log
+
+- 2026-10-14 — **The four decisions, staff help, grades in the workbooks,
+  and data to judge them by** (`767f055`–`6ae284c`; functions deployed,
+  hosting live at `v0.1.1 · 6ae284c`). Red first: `check:documents` on
+  production failed on exactly the 24 retired audit entries, and passed
+  once they were renamed; the new managers test fails against the old
+  every-uid check; and the late side of a refused sign-in, driven on the
+  live site with a throwaway account deleted while it waited on "Setting up
+  your account", was silent on `cdfbd58` and says why on `6ae284c`. Found
+  on the way: the Auth emulator answers a deleted account's refresh
+  INVALID_REFRESH_TOKEN where production answers USER_NOT_FOUND (probed),
+  so the SDK signs out in production and never on the emulator; the browser
+  suite now asserts the account is deleted, and the stack skill has the
+  entry. Also found and not fixed: a session's first poll is a direct call,
+  so when it fails for any other reason (a connection dropping at that
+  moment) nothing re-arms it, and the person waits on the sign-in screen,
+  signed in, until they reload. On the live site, as a temporary manager:
+  Help listed all nineteen films in their three sections and played a
+  students' film from its signed link, and the test course's workbook
+  downloaded through the production rules with nine tabs, a Grades row
+  per test student and nine Assignments rows. The five test students sign
+  in and see their work. The seven active courses' workbooks, built from
+  live data, agree tab to tab, and `check:documents` passes on the 63
+  assignments, 593 pieces of work, 418 grades and 473 hand-ins. Suites:
+  unit 726, `test:emulator` 598 passed and 2 skipped, browser 224 checks,
+  the sweep 1963 of 1963, lint, typecheck, knip and `smoke:prod`. The
+  manual's figures are recaptured (the course figure lists the admin it
+  counts) and its PDF rendered.
 
 - 2026-10-14 — **The help films, made and checked** (nineteen films, a
   phone and a computer cut each, 8.4 minutes of phone cut in all). Every
