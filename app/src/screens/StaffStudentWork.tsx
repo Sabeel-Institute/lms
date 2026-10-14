@@ -5,8 +5,10 @@ import {
   gradeText,
   isLate,
   staffWorkState,
+  tallyCounts,
   todayInZone,
   unbreakableDate,
+  workTally,
   type StaffWorkState,
 } from '@sabeel/shared';
 import { Empty, RowList, useGridCell } from '../components/ui';
@@ -57,19 +59,17 @@ export function StaffStudentWork({
 
   if (coursework === null || subs === null || grades === null) return <Empty>Checking their assignments…</Empty>;
   if (rows.length === 0) return <Empty>No assignments here.</Empty>;
-  const returned = rows.filter((r) => r.st === 'returned' && r.s.returned?.grade && 'points' in r.s.returned.grade && r.cw.grading.kind === 'points');
-  const average = returned.length
-    ? returned.reduce((n, r) => n + (r.s.returned!.grade as { points: number }).points / (r.cw.grading as { outOf: number }).outOf, 0) / returned.length
-    : null;
-  const count = (st: StaffWorkState[]) => rows.filter((r) => st.includes(r.st)).length;
+  // The figures every other count of assignments adds up: the assignment's
+  // page and both workbooks (`workTally`), so this page cannot disagree with them.
+  const counts = tallyCounts(rows.map((r) => workTally(r.cw.grading, r.s, r.g, today, cls.effectiveActive, INSTITUTE_TIMEZONE)));
   return (
     <>
       <Text style={styles.summary}>
         {[
-          `${count(['toGrade', 'graded', 'returned'])} handed in`,
-          `${count(['pastDue'])} past due`,
-          `${count(['missed'])} missed`,
-          average === null ? null : `average ${Math.round(average * 100)}%`,
+          `${counts.handedIn} handed in`,
+          `${counts.pastDue} past due`,
+          `${counts.missed} missed`,
+          counts.average === null ? null : `average ${Math.round(counts.average * 100)}%`,
         ]
           .filter(Boolean)
           .join(' · ')}

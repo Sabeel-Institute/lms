@@ -298,6 +298,10 @@ describe('grading and returning', () => {
     const id = await posted();
     await handedIn(AMINAH, id);
     await expect(returnWorkRecord(id, [AMINAH], null)).rejects.toThrow(/Grade the work/);
+    // Feedback written before the grade is not a grade.
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: null, feedback: 'Coming back to this' });
+    await expect(returnWorkRecord(id, [AMINAH], null)).rejects.toThrow(/Grade the work/);
+    expect((await sub(AMINAH, id))?.state).toBe('handedIn');
     await expect(
       saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 11 }, feedback: '' }),
     ).rejects.toThrow(/0 to 10/);

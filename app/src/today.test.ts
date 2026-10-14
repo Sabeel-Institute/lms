@@ -94,8 +94,27 @@ function coursework(id: string, over: Partial<CourseworkDoc> = {}): CourseworkDo
 }
 
 /** Work handed in on `onDay`, by student `uid`. */
-const handedIn = (uid: string, cwId: string, onDay: string): SubmissionDoc =>
-  ({ studentUid: uid, courseworkId: cwId, courseId: COURSE, state: 'handedIn', dueDate: day(-1), handedInAt: Date.parse(`${onDay}T17:00:00Z`) }) as SubmissionDoc;
+const handedIn = (uid: string, cwId: string, onDay: string, over: Partial<SubmissionDoc> = {}): SubmissionDoc => ({
+  studentUid: uid,
+  courseworkId: cwId,
+  courseId: COURSE,
+  cohortId: 'co1',
+  active: true,
+  dueDate: day(-1),
+  lateUntil: day(6),
+  closedEarly: false,
+  state: 'handedIn',
+  attempt: 1,
+  handedInAt: Date.parse(`${onDay}T17:00:00Z`),
+  note: 'Done',
+  files: {},
+  returned: null,
+  attempts: [],
+  notRequired: null,
+  moreTime: null,
+  assignedAt: 1,
+  ...over,
+});
 const graded = (uid: string, cwId: string): GradeDoc =>
   ({ studentUid: uid, courseworkId: cwId, courseId: COURSE, grade: { points: 8 }, feedback: '', gradedBy: 't', gradedAt: 1, withoutHandIn: false });
 
@@ -533,6 +552,24 @@ describe('work to grade', () => {
   it('turns into a reminder to return once everything is graded', () => {
     const q = build([], [], { grading: grading({ handedIn: [handedIn('u3', 'reflection', day(-3))] }) });
     expect(q.items[0]).toMatchObject({ detail: 'All graded, 1 not returned yet', action: 'Return' });
+  });
+
+  it('counts as the assignment’s page counts: not work let off after it went in, and not a grade with no grade in it', () => {
+    const q = build([], [], {
+      grading: grading({
+        handedIn: [
+          handedIn('u1', 'reflection', day(-2), { notRequired: { reason: 'Away', by: 't', at: 1 } }),
+          handedIn('u3', 'reflection', day(-3)),
+        ],
+        grades: [{ ...graded('u3', 'reflection'), grade: null, feedback: 'Coming back to this' }],
+      }),
+    });
+    expect(q.items).toEqual([expect.objectContaining({ detail: '1 handed in and not graded yet', action: 'Grade' })]);
+    // Only the work let off: nothing waits on its teacher, so no row at all.
+    const off = build([], [], {
+      grading: grading({ handedIn: [handedIn('u1', 'reflection', day(-2), { notRequired: { reason: 'Away', by: 't', at: 1 } })], grades: [] }),
+    });
+    expect(off.items).toEqual([]);
   });
 
   it('only for courses the reader manages by name, and never for a draft', () => {

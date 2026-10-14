@@ -12,7 +12,8 @@ import {
   DUE_SOON_DAYS,
   INSTITUTE_TIMEZONE,
   daysUntilDue,
-  isLate,
+  tallyCounts,
+  workTally,
   type CourseworkDoc,
   type GradeDoc,
   type RecordingDoc,
@@ -358,15 +359,22 @@ export function buildTodayQueue({
  */
 function gradingRows(grading: GradingInput | undefined, names: Map<string, string>, today: string): TodayItem[] {
   if (!grading?.coursework || !grading.handedIn || !grading.grades) return [];
-  const graded = new Set(grading.grades.map((g) => `${g.studentUid}_${g.courseworkId}`));
+  const gradeOf = new Map(grading.grades.map((g) => [`${g.studentUid}_${g.courseworkId}`, g]));
   const rows: TodayItem[] = [];
   for (const cw of grading.coursework) {
     if (cw.status !== 'posted' || !grading.managed.has(cw.courseId)) continue;
-    const work = grading.handedIn.filter((s) => s.courseworkId === cw.id);
-    const toGrade = work.filter((s) => !graded.has(`${s.studentUid}_${cw.id}`));
-    const late = toGrade.filter((s) => s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, INSTITUTE_TIMEZONE)).length;
-    const toReturn = work.length - toGrade.length;
-    if (work.length === 0) continue;
+    /*
+     * COUNTED AS THE ASSIGNMENT'S PAGE COUNTS (`workTally`), so the row and the
+     * page it opens agree: work marked not required after it went in is not
+     * waiting on anyone, and a grade with no grade in it is still to grade.
+     * Handed-in work is judged the same whether its course runs or not.
+     */
+    const tallies = grading.handedIn
+      .filter((s) => s.courseworkId === cw.id)
+      .map((s) => workTally(cw.grading, s, gradeOf.get(`${s.studentUid}_${cw.id}`), today, true, INSTITUTE_TIMEZONE));
+    const { toGrade, toReturn } = tallyCounts(tallies);
+    const late = tallies.filter((t) => t?.state === 'toGrade' && t.late).length;
+    if (toGrade + toReturn === 0) continue;
     rows.push({
       key: `grade-${cw.id}`,
       kind: 'grading',
@@ -377,10 +385,10 @@ function gradingRows(grading: GradingInput | undefined, names: Map<string, strin
       title: cw.title,
       date: cw.dueDate,
       detail:
-        toGrade.length > 0
-          ? `${toGrade.length} handed in and not graded yet${late ? `, ${late} of them late` : ''}`
+        toGrade > 0
+          ? `${toGrade} handed in and not graded yet${late ? `, ${late} of them late` : ''}`
           : `All graded, ${toReturn} not returned yet`,
-      action: toGrade.length > 0 ? 'Grade' : 'Return',
+      action: toGrade > 0 ? 'Grade' : 'Return',
       recordingId: null,
       age: -daysUntilDue(cw.dueDate, today),
       blocking: false,

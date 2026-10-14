@@ -419,9 +419,13 @@ export function staffWorkState(
   courseOpen: boolean,
 ): StaffWorkState {
   const state = workState(sub, today, courseOpen);
-  if (state === 'handedIn') return grade ? 'graded' : 'toGrade';
+  // GRADED MEANS A GRADE. Feedback written first, or a grade cleared to come
+  // back to, left a grades document with no grade in it: the work dropped out
+  // of To grade while Return would not take it.
+  const graded = !!grade && grade.grade !== null;
+  if (state === 'handedIn') return graded ? 'graded' : 'toGrade';
   // Work done on paper, graded with nothing handed in and not yet returned.
-  if (grade?.withoutHandIn && sub.state === 'open' && state !== 'notRequired') return 'graded';
+  if (graded && grade.withoutHandIn && sub.state === 'open' && state !== 'notRequired') return 'graded';
   return state;
 }
 
@@ -472,7 +476,9 @@ export function workTally(
 ): WorkTally | null {
   if (!sub.active && sub.state === 'open') return null;
   const state = staffWorkState(sub, grade, today, courseOpen);
-  const handedIn = state !== 'notRequired' && sub.state !== 'open';
+  // Graded on paper counts as handed in, on paper: as the student's page has
+  // always counted it, and as the comment above says.
+  const handedIn = state !== 'notRequired' && (sub.state !== 'open' || state === 'graded');
   const late = handedIn && sub.handedInAt !== null && isLate(sub.handedInAt, sub.dueDate, timeZone);
   const g = sub.returned?.grade;
   const share = state === 'returned' && g && 'points' in g && grading.kind === 'points' ? g.points / grading.outOf : null;

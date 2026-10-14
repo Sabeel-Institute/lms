@@ -15,6 +15,7 @@ import {
   nextDeadline,
   receivesOnJoining,
   staffWorkState,
+  workTally,
   workBucket,
   workState,
   type SubmissionDoc,
@@ -190,6 +191,16 @@ describe('what a teacher sees', () => {
     expect(staffWorkState(sub({ state: 'handedIn' }), undefined, '2026-10-12', true)).toBe('toGrade');
     expect(staffWorkState(sub({ state: 'handedIn' }), { grade: { points: 8 }, withoutHandIn: false }, '2026-10-12', true)).toBe('graded');
     expect(staffWorkState(sub({}), { grade: { points: 8 }, withoutHandIn: true }, '2026-10-12', true)).toBe('graded');
+  });
+
+  it('counts as graded only work with a grade: feedback first, or a grade cleared, is still to grade', () => {
+    expect(staffWorkState(sub({ state: 'handedIn' }), { grade: null, withoutHandIn: false }, '2026-10-12', true)).toBe('toGrade');
+    expect(staffWorkState(sub({}), { grade: null, withoutHandIn: true }, '2026-10-12', true)).toBe('toDo');
+  });
+
+  it('counts work graded on paper as handed in, as the student’s page does', () => {
+    const paper = workTally({ kind: 'points', outOf: 10 }, sub({}), { grade: { points: 9 }, withoutHandIn: true }, '2026-10-12', true, 'America/Chicago');
+    expect(paper).toMatchObject({ state: 'graded', handedIn: true });
   });
 
   it('counts a class: handed in, late, to grade, to return, past due, missed — and leaves out who is not required', () => {
