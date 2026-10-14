@@ -1798,7 +1798,11 @@ and commit messages, and renaming them would strand every one of those.
   plays with its captions, a standing film is drawn whole above the bar,
   and nothing reaches the top of any page unhandled, the outsider's
   included — and the sweep 1963 of 1963, the help list and a film open
-  among its screens at all five widths.
+  among its screens at all five widths. CI, run by hand, failed first: the
+  sweep's stand-in films are the first media it generates, and a fresh
+  checkout had no `e2e-shots/` to write them into, which the fixtures now
+  make (`383a52c`, red without it and green with it); green on `383a52c`
+  (run 38556032745).
 - 2026-10-14 — **A sign-in refused as it lands said "try again"**. An
   off-domain Google account is deleted by the auth trigger moments after it
   is created; when that lands inside the sign-in itself, the SDK's reload of
