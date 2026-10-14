@@ -32,6 +32,13 @@ describe('the sign-in screen\'s words for a failure', () => {
     expect(text).not.toMatch(/try again/i);
   });
 
+  it('tells a student at the Google door how students sign in, not to try again', () => {
+    const e = Object.assign(new Error('Firebase: Error (auth/account-exists-with-different-credential).'), {
+      code: 'auth/account-exists-with-different-credential',
+    });
+    expect(signInMessage(e)).toBe('Students sign in with their email address and password above.');
+  });
+
   it('says the same thing for a wrong password and an unknown address', () => {
     expect(signInMessage({ code: 'auth/wrong-password' })).toBe(signInMessage({ code: 'auth/user-not-found' }));
   });

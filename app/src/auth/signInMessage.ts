@@ -50,6 +50,14 @@ export function signInMessage(e: unknown): string {
       return REFUSED_ACCOUNT;
     case 'auth/user-disabled':
       return DISABLED_ACCOUNT;
+    case 'auth/account-exists-with-different-credential':
+      /*
+       * A STUDENT AT THE GOOGLE DOOR with their own address. The phone's
+       * chooser has no domain filter; their address is verified once they set
+       * a password, and Firebase then refuses a Google sign-in for it rather
+       * than join the two. "Try again in a moment" could never work.
+       */
+      return 'Students sign in with their email address and password above.';
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a few minutes and try again.';
     case 'auth/network-request-failed':
