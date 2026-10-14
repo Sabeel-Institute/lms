@@ -268,6 +268,25 @@ const shapes = [
     () =>
       db.collection('submissionEvents').where('courseId', '==', ID).where('courseworkId', '==', ID).where('studentUid', '==', ID),
   ],
+  // Shapes the app and functions send that were missing from this list
+  // (bug hunt, 2026-10-15). All are served by single-field indexes today; one
+  // gaining an orderBy or a range later fails here instead of on a screen.
+  ['completions — a student’s on one recording (player)', () => db.collection('completions').where('studentUid', '==', ID).where('recordingId', '==', ID)],
+  ['completions — a student’s in a course (ledger, student workbook)', () => db.collection('completions').where('studentUid', '==', ID).where('courseId', '==', ID)],
+  ['completionOverrides — a student’s in a course (ledger, student workbook)', () => db.collection('completionOverrides').where('studentUid', '==', ID).where('courseId', '==', ID)],
+  ['listeningProgress — a student’s in a course (ledger, student workbook)', () => db.collection('listeningProgress').where('studentUid', '==', ID).where('courseId', '==', ID)],
+  ['enrollments — one student in one class', () => db.collection('enrollments').where('courseId', '==', ID).where('studentUid', '==', ID)],
+  ['sessions — Today across managed courses', () => db.collection('sessions').where('courseId', 'in', [ID])],
+  ['recordings — Today across managed courses', () => db.collection('recordings').where('courseId', 'in', [ID])],
+  ['courses — every class, oldest first (admin)', () => db.collection('courses').orderBy('createdAt', 'asc')],
+  ['recordings — every recording, newest first (admin library)', () => db.collection('recordings').orderBy('createdAt', 'desc')],
+  ['mediaUploads — abandoned (daily sweep)', () => db.collection('mediaUploads').where('startedAt', '<', 1)],
+  ['sessions — a course’s (assignment fan-out)', () => db.collection('sessions').where('courseId', '==', ID)],
+  ['attachmentUploads — an assignment’s (delete)', () => db.collection('attachmentUploads').where('courseworkId', '==', ID)],
+  ['drafts — an assignment’s (delete)', () => db.collection('drafts').where('courseworkId', '==', ID)],
+  ['submissionEvents — an assignment’s (delete)', () => db.collection('submissionEvents').where('courseworkId', '==', ID)],
+  ['completionEvents — a recording’s (delete)', () => db.collection('completionEvents').where('recordingId', '==', ID)],
+  ['listeningProgress — a recording’s (delete, moving a part)', () => db.collection('listeningProgress').where('recordingId', '==', ID)],
   ['attachmentUploads — abandoned (daily sweep)', () => db.collection('attachmentUploads').where('startedAt', '<', 1)],
   [
     'attachmentUploads — one person’s pending on an assignment',
