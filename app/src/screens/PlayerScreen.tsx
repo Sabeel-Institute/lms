@@ -181,6 +181,8 @@ export function PlayerScreen({
   // In the same order as the staff file list, from the same helper.
   const versions = (current && parts.find((p) => p.part === current.part)?.items) || [];
   const remainingMs = Math.max(0, durationMs - shownPositionMs);
+  // A file is on its way: the transport waits for it, and so do the choices.
+  const preparing = !state.ready && !state.error;
   const listened = listenedFraction(state.listenedMs, recording.durationSec);
 
   return (
@@ -212,7 +214,9 @@ export function PlayerScreen({
 
       {/* THE VERSIONS OF THIS PART, which share its timeline: switching keeps
           the place and plays on. "Audio only" is also the way to save data
-          on the move. */}
+          on the move. Not while a file is being prepared: the place is not
+          known yet, or another file is on its way. After a failure they are
+          the way to try again. */}
       {versions.length > 1 && current ? (
         <View style={styles.versions}>
           <Chips
@@ -220,6 +224,7 @@ export function PlayerScreen({
             testIdPrefix="player-version"
             options={versions.map((i) => ({ value: i.id, label: VERSION_LABELS[i.version] }))}
             onChange={(id) => playback.selectItem(id)}
+            disabled={preparing}
           />
         </View>
       ) : null}
@@ -261,7 +266,7 @@ export function PlayerScreen({
         onForward={playback.skipForward}
       />
 
-      {!state.ready && !state.error && playable ? <Text style={styles.preparing}>Preparing…</Text> : null}
+      {preparing && playable ? <Text style={styles.preparing}>Preparing…</Text> : null}
 
       {/* THE PARTS, when the class was recorded in more than one stretch. At
           the end of one the next starts by itself; these are for jumping. */}
@@ -277,7 +282,7 @@ export function PlayerScreen({
                 accessibilityRole="button"
                 aria-pressed={here}
                 accessibilityLabel={`Part ${index + 1}${here ? ', playing' : ''}`}
-                disabled={here || !state.ready}
+                disabled={here || preparing}
                 onPress={() => playback.selectPart(part)}
                 style={[styles.part, here ? styles.partOn : null]}
               >

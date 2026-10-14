@@ -1328,6 +1328,131 @@ describe('parts and versions', () => {
     expect(callable.mock.calls.length).toBe(mints);
   });
 
+  /** Each file's URL names it, so a test can tell which one the player holds. */
+  const urlPerFile = () =>
+    callable.mockImplementation(({ itemId }: { itemId: string }) =>
+      Promise.resolve({ data: { url: `https://signed/${itemId}`, expiresAt: 1e15 } }),
+    );
+
+  /*
+   * A VERSION TAPPED WHILE THE RECORDING IS STILL OPENING. Before the place is
+   * read the session does not know where the student was, and a switch then
+   * saved a zero over it. Once the place is known but the file is still on its
+   * way, the open and the switch both loaded, and the open's file won: one
+   * file played under the other's label, and the place was saved against the
+   * wrong version.
+   */
+  it('a version tapped before the place is read is not taken, and the place is kept', async () => {
+    const pb = await load();
+    urlPerFile();
+    seedDoc('rec-a', { positionMs: 90_000, listenedMs: 90_000, part: 1, version: 'audio', updatedAt: nowMs - 1000 });
+    pb.openPlayback(twoParts('rec-a'));
+    pb.playback.selectItem('p1v');
+    await flush();
+    await flush();
+    expect(players[0]).toMatchObject({ loaded: 'https://signed/p1a', startedAt: 90_000 });
+    await pb.closePlayback();
+    expect(docOf('rec-a')).toMatchObject({ version: 'audio', positionMs: 90_000 });
+  });
+
+  it('a version tapped while the file is on its way is the one that plays, at the place', async () => {
+    const pb = await load();
+    urlPerFile();
+    seedDoc('rec-a', { positionMs: 90_000, listenedMs: 90_000, part: 1, version: 'audio', updatedAt: nowMs - 1000 });
+    callable.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishMint = resolve;
+        }),
+    );
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    pb.playback.selectItem('p1v');
+    await flush();
+    finishMint?.({ data: { url: 'https://signed/p1a', expiresAt: 1e15 } });
+    await flush();
+    await flush();
+    expect(players[0]).toMatchObject({ loaded: 'https://signed/p1v', startedAt: 90_000 });
+    players[0].events.onProgress(90_500);
+    wait(1_000);
+    players[0].events.onProgress(91_500);
+    await pb.closePlayback();
+    expect(docOf('rec-a')).toMatchObject({ version: 'speaker', positionMs: 91_500 });
+  });
+
+  /*
+   * A SWITCH WHOSE FILE CANNOT BE HAD. The URL for the version or part asked
+   * for did not come — the connection dropped, the function failed — and the
+   * old file played on behind a transport the session had taken down: Pause
+   * did nothing, nothing was counted, the chip showed a version that was not
+   * playing, and tapping it again did nothing because it was "already"
+   * selected. The file that was loaded is still in the player.
+   */
+  it('a version whose file cannot be had leaves the one that was playing, paused where it was', async () => {
+    const pb = await load();
+    urlPerFile();
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    pb.playback.play();
+    players[0].events.onProgress(0);
+    wait(10_000);
+    players[0].events.onProgress(10_000);
+    callable.mockRejectedValueOnce(Object.assign(new Error('internal'), { code: 'functions/internal' }));
+    pb.playback.selectItem('p1v');
+    await flush();
+    await flush();
+    // Not playing on behind a dead transport.
+    expect(players[0]).toMatchObject({ loaded: 'https://signed/p1a', playing: false });
+    // The student presses Play, and the audio they were on carries on, counted.
+    pb.playback.play();
+    expect(players[0].playing).toBe(true);
+    wait(10_000);
+    players[0].events.onProgress(20_000);
+    await pb.closePlayback();
+    expect(docOf('rec-a')).toMatchObject({ version: 'audio', positionMs: 20_000, listenedMs: 20_000 });
+  });
+
+  it('the version that could not be had can be tapped again, and then plays', async () => {
+    const pb = await load();
+    urlPerFile();
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    players[0].events.onProgress(0);
+    wait(10_000);
+    players[0].events.onProgress(10_000);
+    callable.mockRejectedValueOnce(Object.assign(new Error('internal'), { code: 'functions/internal' }));
+    pb.playback.selectItem('p1v');
+    await flush();
+    await flush();
+    pb.playback.selectItem('p1v');
+    await flush();
+    await flush();
+    expect(players[0]).toMatchObject({ loaded: 'https://signed/p1v', startedAt: 10_000 });
+    // And the transport is back: what is heard on it is counted.
+    pb.playback.play();
+    players[0].events.onProgress(10_000);
+    wait(5_000);
+    players[0].events.onProgress(15_000);
+    await pb.closePlayback();
+    expect(docOf('rec-a')).toMatchObject({ version: 'speaker', positionMs: 15_000, listenedMs: 15_000 });
+  });
+
+  it('a next part that cannot be had at a part\'s end can be asked for again', async () => {
+    const pb = await load();
+    urlPerFile();
+    pb.openPlayback(twoParts('rec-a'));
+    await flush();
+    callable.mockRejectedValueOnce(Object.assign(new Error('internal'), { code: 'functions/internal' }));
+    players[0].events.onEnded();
+    await flush();
+    await flush();
+    expect(players[0].loaded).toBe('https://signed/p1a');
+    pb.playback.selectPart(2);
+    await flush();
+    await flush();
+    expect(players[0]).toMatchObject({ loaded: 'https://signed/p2a', startedAt: 0 });
+  });
+
   it('does not give a student a hidden file, though staff may play it', async () => {
     const hidden = (uid: string | null) => {
       const r = twoParts('rec-a');

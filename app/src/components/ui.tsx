@@ -1037,12 +1037,14 @@ export function Chips<T extends string>({
   options,
   testIdPrefix,
   onChange,
+  disabled = false,
 }: {
   value: T;
   options: { value: T; label: string }[];
   /** Each pill gets `${testIdPrefix}-${value}`. */
   testIdPrefix: string;
   onChange: (value: T) => void;
+  disabled?: boolean;
 }) {
   return (
     <View style={styles.chips} accessibilityRole="radiogroup">
@@ -1054,9 +1056,11 @@ export function Chips<T extends string>({
             testID={`${testIdPrefix}-${o.value}`}
             accessibilityRole="radio"
             aria-checked={on}
+            aria-disabled={disabled}
             accessibilityLabel={o.label}
+            disabled={disabled}
             onPress={() => onChange(o.value)}
-            style={[styles.chip, on ? styles.chipOn : null]}
+            style={[styles.chip, on ? styles.chipOn : null, disabled ? styles.chipDisabled : null]}
           >
             <Text style={[styles.chipText, on ? styles.chipTextOn : null]}>{o.label}</Text>
           </Pressable>
@@ -1734,6 +1738,7 @@ const styles = StyleSheet.create({
   iconBtnDanger: { backgroundColor: t.bg.dangerSoft },
   iconBtnBarePressed: { opacity: 0.6 },
   iconBtnBareDisabled: { opacity: 0.4 },
+  chipDisabled: { opacity: 0.5 },
   iconGlyph: { fontSize: 20, lineHeight: 24, fontWeight: '700' },
   iconGlyphSecondary: { color: t.text.primary },
   iconGlyphDanger: { color: t.text.danger },

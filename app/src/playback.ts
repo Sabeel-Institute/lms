@@ -211,6 +211,12 @@ let seekTarget: number | null = null;
  * returned would enable the transport over a session that had not started.
  */
 let loadedOk = false;
+/**
+ * Whether the open has read where this listener was. Until it has, a version
+ * or part tapped would start from nowhere, and the save it makes on the way
+ * would write that over the student's place: so a switch waits for it.
+ */
+let placeKnown = false;
 /*
  * WHEN THE HOLD WAS SET, because a target the player can never report would
  * otherwise hold for ever.
@@ -469,6 +475,7 @@ export function openPlayback(req: OpenRequest): void {
   seekTarget = null;
   seekAt = 0;
   loadedOk = false;
+  placeKnown = false;
   state = { ...IDLE, now };
   listeners.forEach((l) => l(state));
 
@@ -613,10 +620,15 @@ export function openPlayback(req: OpenRequest): void {
       if (item.id !== now.itemId) set({ now: { ...now, itemId: item.id, durationMs: itemMs(item) } });
       listened = prior?.listenedMs ?? 0;
       position = prior && (prior.part ?? 1) === item.part ? prior.positionMs : 0;
+      // THE PLACE IS KNOWN, and a version or part tapped from here on starts
+      // from it. The open then gives way to that switch: both loading, the
+      // open's file won, and one file played under the other's label.
+      placeKnown = true;
+      const sw = switches;
       const url = await playbackUrl(now.recordingId, item.id, itemMs(item));
-      if (generation !== gen) return;
+      if (generation !== gen || switches !== sw) return;
       await p.load(url, position, { title: now.title, courseName: now.courseName });
-      if (generation !== gen) return;
+      if (generation !== gen || switches !== sw) return;
       // THE SOURCE IS LOADED — remembered, so `onError` can put the transport
       // back when a transient fault clears. NOT ready while an error stands:
       // `load` resolves on a failed source as well as a loaded one (on web it
@@ -687,24 +699,56 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
   persist();
   const gen = generation;
   const mine = ++switches;
+  const left = { itemId: now.itemId, durationMs: now.durationMs, positionMs: position };
+  // THE OLD FILE STOPS WHERE IT IS. Left playing while the new one's URL was
+  // fetched, its last seconds were heard again from the new file, and a
+  // switch that failed left it playing behind a transport that was down.
+  p.pause();
   position = startMs;
   lastTick = null;
   seekTarget = null;
-  set({ now: { ...now, itemId: item.id, durationMs: itemMs(item) }, positionMs: startMs, ready: false, ended: false });
+  // Any error is cleared here, so one standing after the load is the load's.
+  set({
+    now: { ...now, itemId: item.id, durationMs: itemMs(item) },
+    positionMs: startMs,
+    ready: false,
+    ended: false,
+    playing: false,
+    error: null,
+  });
   void (async () => {
+    let url: string;
     try {
-      const url = await playbackUrl(now.recordingId, item.id, itemMs(item));
+      url = await playbackUrl(now.recordingId, item.id, itemMs(item));
+    } catch (e) {
       if (generation !== gen || switches !== mine) return;
+      // NOTHING NEW WAS LOADED: the file that was is still in the player,
+      // paused where it was left. The session goes back to it, so what plays,
+      // what the screen names and what is saved agree, and the version or
+      // part that failed can be tapped again.
+      position = left.positionMs;
+      set({
+        now: { ...now, itemId: left.itemId, durationMs: left.durationMs },
+        positionMs: left.positionMs,
+        ready: loadedOk,
+        error: errorText(e),
+      });
+      return;
+    }
+    if (generation !== gen || switches !== mine) return;
+    try {
       await p.load(url, startMs, { title: now.title, courseName: now.courseName }, play);
-      if (generation !== gen || switches !== mine) return;
-      if (state.error) return;
-      set({ ready: true, playing: play });
-      // The new file is where the listener now is.
-      dirty = true;
-      persist();
     } catch (e) {
       if (generation === gen && switches === mine) set({ error: errorText(e) });
+      return;
     }
+    if (generation !== gen || switches !== mine) return;
+    loadedOk = true;
+    if (state.error) return;
+    set({ ready: true, playing: play });
+    // The new file is where the listener now is.
+    dirty = true;
+    persist();
   })();
 }
 
@@ -809,7 +853,9 @@ export const playback = {
   play: () => {
     lastTick = Date.now();
     player?.play();
-    set({ playing: true, ended: false });
+    // An error beside a ready transport is a switch that could not be made,
+    // over the file still playing: carrying on with it is the answer to it.
+    set({ playing: true, ended: false, ...(state.ready ? { error: null } : {}) });
   },
   pause: () => {
     player?.pause();
@@ -836,7 +882,7 @@ export const playback = {
    */
   selectItem: (itemId: string) => {
     const now = state.now;
-    if (!now || itemId === now.itemId) return;
+    if (!now || !placeKnown || itemId === now.itemId) return;
     const target = now.media[itemId];
     const current = now.media[now.itemId];
     if (!target || target.status !== 'ready' || (target.hidden && now.studentUid !== null)) return;
@@ -847,7 +893,7 @@ export const playback = {
   /** Play another part from its start, in the version being played if it has it. */
   selectPart: (part: number) => {
     const now = state.now;
-    if (!now) return;
+    if (!now || !placeKnown) return;
     const current = now.media[now.itemId];
     const target = fileInPart(now.media, part, current?.version ?? now.defaultVersion, now.defaultVersion);
     if (!target || target.id === now.itemId) return;
