@@ -40,7 +40,7 @@ import { Readable } from 'node:stream';
 import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 import { r2Config, s3For } from './lib/r2.mjs';
 import { ZOOM_IMPORTS, convertRecording, isLegacyRecording } from './lib/legacy-media.mjs';
-import { convertAuditEntry } from './lib/legacy-audit.mjs';
+import { RENAMED_AUDIT_ACTIONS, convertAuditEntry } from './lib/legacy-audit.mjs';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -250,7 +250,8 @@ for (let i = 0; i < srcUsers.length; i += 1000) {
 // 3. Firestore, recordings converted and retired audit actions renamed on the way.
 const docName = (rel) => `projects/${TARGET}/databases/(default)/documents/${rel}`;
 const writes = [];
-let renamed = 0;
+/** How many audit entries were renamed, by the live app's name for the action. */
+const renamed = new Map();
 for (const d of srcDocs) {
   const rel = relPath(d.name);
   const fields = d.fields ?? {};
@@ -260,13 +261,15 @@ for (const d of srcDocs) {
     if (conv.claim) writes.push({ update: { name: docName(`${ZOOM_IMPORTS}/${conv.claim.id}`), fields: conv.claim.fields } });
   } else if (shape(rel) === 'auditLog') {
     const entry = convertAuditEntry(fields);
-    if (entry !== fields) renamed++;
+    const from = fields.action?.stringValue;
+    if (entry !== fields) renamed.set(from, (renamed.get(from) ?? 0) + 1);
     writes.push({ update: { name: docName(rel), fields: entry } });
   } else {
     writes.push({ update: { name: docName(rel), fields } });
   }
 }
-console.log(`3/5  ${srcDocs.length} documents, ${writes.length - srcDocs.length} Zoom claims, ${renamed} audit entries renamed`);
+const renames = [...renamed].map(([from, n]) => `${n} ${from} → ${RENAMED_AUDIT_ACTIONS[from]}`).join(', ');
+console.log(`3/5  ${srcDocs.length} documents, ${writes.length - srcDocs.length} Zoom claims; audit entries renamed: ${renames || 'none'}`);
 await batchWrite(writes);
 
 // 4. Media.
