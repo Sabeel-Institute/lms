@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PROGRESS_WRITE_INTERVAL_MS, type MediaItem, type MediaMap } from '@sabeel/shared';
+import { PROGRESS_WRITE_INTERVAL_MS, SIGNED_URL_TTL_MS, type MediaItem, type MediaMap } from '@sabeel/shared';
 
 /**
  * The app-wide playback session.
@@ -1217,6 +1217,80 @@ describe('signed URLs', () => {
     await flush();
     expect(players).toHaveLength(2);
     expect(players[1].loaded).toBe('https://signed/audio.m4a');
+  });
+});
+
+/*
+ * A LINK THAT RUNS OUT UNDER A PAUSED LECTURE. A URL is minted to outlive one
+ * listen, but a lecture left paused overnight outlives the URL: Play then ran
+ * the buffer dry, every range request was refused, and after half a minute of
+ * silence under "Pause" the student was told to check their connection, with
+ * the transport down and nothing to fetch a new link but leaving the screen.
+ */
+describe('a link that runs out while paused', () => {
+  /** URLs valid for the real twelve hours from when they are minted. */
+  const realExpiry = () => {
+    let n = 0;
+    callable.mockImplementation(() => {
+      n += 1;
+      return Promise.resolve({ data: { url: `https://signed/${n}`, expiresAt: nowMs + SIGNED_URL_TTL_MS } });
+    });
+  };
+  const pausedAt = async (pb: Playback, ms: number) => {
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.playback.play();
+    players[0].events.onProgress(0);
+    wait(ms);
+    players[0].events.onProgress(ms);
+    pb.playback.pause();
+    await flush();
+  };
+
+  it('Play after a night away fetches a new link and carries on from the place', async () => {
+    const pb = await load();
+    realExpiry();
+    await pausedAt(pb, 600_000);
+    wait(SIGNED_URL_TTL_MS);
+    pb.playback.play();
+    await flush();
+    await flush();
+    expect(callable).toHaveBeenCalledTimes(2);
+    expect(players[0]).toMatchObject({ loaded: 'https://signed/2', startedAt: 600_000, keptPlaying: true });
+  });
+
+  it('a seek after a night away fetches a new link, at the place sought', async () => {
+    const pb = await load();
+    realExpiry();
+    await pausedAt(pb, 600_000);
+    wait(SIGNED_URL_TTL_MS);
+    pb.playback.seek(1_800_000);
+    await flush();
+    await flush();
+    expect(players[0]).toMatchObject({ loaded: 'https://signed/2', startedAt: 1_800_000, keptPlaying: false });
+  });
+
+  it('Play on the lock screen after a night away fetches a new link too', async () => {
+    const pb = await load();
+    realExpiry();
+    await pausedAt(pb, 600_000);
+    wait(SIGNED_URL_TTL_MS);
+    players[0].events.onPlayingChanged(true);
+    await flush();
+    await flush();
+    expect(players[0]).toMatchObject({ loaded: 'https://signed/2', startedAt: 600_000, keptPlaying: true });
+  });
+
+  it('a link with the rest of the lecture still in it is kept', async () => {
+    const pb = await load();
+    realExpiry();
+    await pausedAt(pb, 600_000);
+    wait(60 * 60_000);
+    pb.playback.play();
+    pb.playback.seek(1_200_000);
+    await flush();
+    expect(callable).toHaveBeenCalledTimes(1);
+    expect(players[0].loaded).toBe('https://signed/1');
   });
 });
 

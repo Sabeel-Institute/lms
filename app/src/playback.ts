@@ -78,14 +78,14 @@ const UNKNOWN_DURATION_MS = 3 * 60 * 60 * 1000;
  * error band came up, on the one listen it was meant to spare. So the cache
  * answers only when what is left covers the whole recording plus the window.
  */
-async function playbackUrl(recordingId: string, itemId: string, durationMs: number): Promise<string> {
+async function playbackUrl(recordingId: string, itemId: string, durationMs: number): Promise<Minted> {
   const hit = cache.get(itemId);
   const need = (durationMs > 0 ? durationMs : UNKNOWN_DURATION_MS) + SIGNED_URL_REFRESH_MS;
-  if (hit && hit.expiresAt - Date.now() > need) return hit.url;
+  if (hit && hit.expiresAt - Date.now() > need) return hit;
   const epoch = cacheEpoch;
   const fresh = await mintUrl(recordingId, itemId);
   if (epoch === cacheEpoch) cache.set(itemId, fresh);
-  return fresh.url;
+  return fresh;
 }
 
 /** What is loaded, so any surface can name it without re-fetching. */
@@ -217,6 +217,12 @@ let loadedOk = false;
  * would write that over the student's place: so a switch waits for it.
  */
 let placeKnown = false;
+/**
+ * When the URL the player holds stops working. Minted to outlive one listen,
+ * it does not outlive a lecture left paused overnight: picked up after that,
+ * the session fetches a new one first (`urlLasts`).
+ */
+let urlExpiresAt = 0;
 /*
  * WHEN THE HOLD WAS SET, because a target the player can never report would
  * otherwise hold for ever.
@@ -476,6 +482,7 @@ export function openPlayback(req: OpenRequest): void {
   seekAt = 0;
   loadedOk = false;
   placeKnown = false;
+  urlExpiresAt = 0;
   state = { ...IDLE, now };
   listeners.forEach((l) => l(state));
 
@@ -585,6 +592,9 @@ export function openPlayback(req: OpenRequest): void {
         // Saved like an in-app pause. The lock-screen Pause is the one a
         // background listener actually presses.
         if (!playing) persist();
+        // And the lock-screen Play, after a night away, on a link that has
+        // run out: the buffer would play and then nothing would.
+        else if (state.ready && !urlLasts(position)) renew(position, true);
       }
     },
     onRemoteSkip: (direction) => {
@@ -625,9 +635,10 @@ export function openPlayback(req: OpenRequest): void {
       // open's file won, and one file played under the other's label.
       placeKnown = true;
       const sw = switches;
-      const url = await playbackUrl(now.recordingId, item.id, itemMs(item));
+      const minted = await playbackUrl(now.recordingId, item.id, itemMs(item));
       if (generation !== gen || switches !== sw) return;
-      await p.load(url, position, { title: now.title, courseName: now.courseName });
+      urlExpiresAt = minted.expiresAt;
+      await p.load(minted.url, position, { title: now.title, courseName: now.courseName });
       if (generation !== gen || switches !== sw) return;
       // THE SOURCE IS LOADED — remembered, so `onError` can put the transport
       // back when a transient fault clears. NOT ready while an error stands:
@@ -717,9 +728,9 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
     error: null,
   });
   void (async () => {
-    let url: string;
+    let minted: Minted;
     try {
-      url = await playbackUrl(now.recordingId, item.id, itemMs(item));
+      minted = await playbackUrl(now.recordingId, item.id, itemMs(item));
     } catch (e) {
       if (generation !== gen || switches !== mine) return;
       // NOTHING NEW WAS LOADED: the file that was is still in the player,
@@ -736,8 +747,9 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
       return;
     }
     if (generation !== gen || switches !== mine) return;
+    urlExpiresAt = minted.expiresAt;
     try {
-      await p.load(url, startMs, { title: now.title, courseName: now.courseName }, play);
+      await p.load(minted.url, startMs, { title: now.title, courseName: now.courseName }, play);
     } catch (e) {
       if (generation === gen && switches === mine) set({ error: errorText(e) });
       return;
@@ -750,6 +762,23 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
     dirty = true;
     persist();
   })();
+}
+
+/**
+ * Whether the URL the player holds lasts through the rest of the file from
+ * `fromMs`, with the refresh window to spare: the cache's rule, asked again
+ * when a paused session is picked up.
+ */
+function urlLasts(fromMs: number): boolean {
+  const length = state.now?.durationMs ?? 0;
+  const left = length > 0 ? Math.max(0, length - fromMs) : UNKNOWN_DURATION_MS;
+  return urlExpiresAt - Date.now() > left + SIGNED_URL_REFRESH_MS;
+}
+
+/** The file being played again, on a fresh URL, from `fromMs`. */
+function renew(fromMs: number, play: boolean): void {
+  const item = state.now ? state.now.media[state.now.itemId] : undefined;
+  if (item) switchTo(item, fromMs, play);
 }
 
 /**
@@ -851,6 +880,10 @@ export function formatClock(ms: number): string {
 
 export const playback = {
   play: () => {
+    if (state.ready && !urlLasts(position)) {
+      renew(position, true);
+      return;
+    }
     lastTick = Date.now();
     player?.play();
     // An error beside a ready transport is a switch that could not be made,
@@ -864,6 +897,10 @@ export const playback = {
     persist();
   },
   seek: (ms: number) => {
+    if (state.ready && !urlLasts(ms)) {
+      renew(ms, state.playing);
+      return;
+    }
     player?.seek(ms);
     position = ms;
     seekTarget = ms;
