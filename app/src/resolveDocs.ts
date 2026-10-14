@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
-import { COLLECTIONS, type CourseDoc } from '@sabeel/shared';
+import { COLLECTIONS, type StoredCollection, type StoredDocs } from '@sabeel/shared';
+import { read, readIfExists } from './documents';
 import { db } from './firebase';
 import { captureError } from './sentry';
 import type { CourseRow } from './structure';
@@ -46,8 +47,11 @@ export interface Resolved<T> {
  * escaped before the state was set, so nothing resolved and the student read
  * "Nothing required right now".
  */
-export function useResolvedDocs<T extends { courseId: string }>(
-  collectionPath: string,
+/** The collections whose documents name the course they belong to. */
+type InACourse = { [C in StoredCollection]: StoredDocs[C] extends { courseId: string } ? C : never }[StoredCollection];
+
+export function useResolvedDocs<C extends InACourse, T extends StoredDocs[C] & { courseId: string } = StoredDocs[C] & { courseId: string }>(
+  collectionPath: C,
   ids: string[],
 ): {
   resolved: Map<string, Resolved<T>>;
@@ -74,10 +78,11 @@ export function useResolvedDocs<T extends { courseId: string }>(
         for (const id of list) {
           const snap = await readIfPermitted(collectionPath, id);
           if (!snap) continue;
-          const item = { id: snap.id, ...(snap.data() as T) };
+          const item = { id: snap.id, ...(read(collectionPath, snap) as T) };
           if (!courseCache.has(item.courseId)) {
             const cSnap = await readIfPermitted(COLLECTIONS.courses, item.courseId);
-            courseCache.set(item.courseId, cSnap ? { id: cSnap.id, ...(cSnap.data() as CourseDoc) } : null);
+            const course = cSnap ? readIfExists('courses', cSnap) : undefined;
+            courseCache.set(item.courseId, cSnap && course ? { id: cSnap.id, ...course } : null);
           }
           const cls = courseCache.get(item.courseId);
           if (cls) out.set(id, { doc: item, cls });

@@ -15,10 +15,9 @@ import {
   type AttendanceReport,
   type AttendanceStatus,
   type AuditEntryDoc,
-  type CompletionDoc,
-  type CompletionOverrideDoc,
   type LedgerRollup,
-  type ListeningProgressDoc,
+  type StoredCollection,
+  type StoredDocs,
 } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useListenerFailed, useLiveQuery } from './liveQuery';
@@ -27,6 +26,7 @@ import { useCourseSessionsState } from './sessions';
 import { useRosterState, type EnrollmentRow } from './structure';
 import type { RecordingRow } from './recordings';
 import type { SessionRow } from './sessions';
+import { read } from './documents';
 
 // --------------------------------------------------------------- callables --
 
@@ -62,15 +62,15 @@ export const clearCompletionOverride = call<{
 // while admins saw nothing wrong (their arm reads no documents and depends on no
 // `resource.data`). See the shape assertions in rules.ledger.test.ts.
 
-function useScopedMap<T, V>(
+function useScopedMap<C extends StoredCollection, V>(
   label: string,
-  coll: string,
+  coll: C,
   /** The course scope the rules require. Null until it is known. */
   courseId: string | null,
   /** Narrows the course scope to one recording; null reads the whole course. */
   recordingId: string | null,
-  pick: (data: T, pending: boolean) => V,
-  keyOf: (data: T) => string,
+  pick: (data: StoredDocs[C], pending: boolean) => V,
+  keyOf: (data: StoredDocs[C]) => string,
   metadata = false,
 ) {
   return useLiveQuery<Map<string, V>>(
@@ -91,7 +91,10 @@ function useScopedMap<T, V>(
       label: label,
       map: (snap) => {
         const m = new Map<string, V>();
-        for (const d of snap.docs) m.set(keyOf(d.data() as T), pick(d.data() as T, d.metadata.hasPendingWrites));
+        for (const d of snap.docs) {
+          const data = read(coll, d);
+          m.set(keyOf(data), pick(data, d.metadata.hasPendingWrites));
+        }
         return m;
       },
       empty: new Map(),
@@ -222,11 +225,11 @@ export function useRecordingLedger(
     [cid, rid],
     {
       label: 'ledgerAssignments',
-      map: (snap) => new Map(snap.docs.map((d) => [(d.data() as AssignmentDoc).studentUid, d.data() as AssignmentDoc])),
+      map: (snap) => new Map(snap.docs.map((d) => [read('assignments', d).studentUid, read('assignments', d)])),
       empty: null,
     },
   );
-  const completions = useScopedMap<CompletionDoc, { completed: boolean; completedAt: number | null; pending: boolean }>(
+  const completions = useScopedMap(
     'ledgerCompletions',
     COLLECTIONS.completions,
     cid,
@@ -235,7 +238,7 @@ export function useRecordingLedger(
     (d) => d.studentUid,
     true,
   );
-  const overrides = useScopedMap<CompletionOverrideDoc, CompletionOverrideDoc>(
+  const overrides = useScopedMap(
     'ledgerOverrides',
     COLLECTIONS.completionOverrides,
     cid,
@@ -243,7 +246,7 @@ export function useRecordingLedger(
     (d) => d,
     (d) => d.studentUid,
   );
-  const progress = useScopedMap<ListeningProgressDoc, { listenedMs: number; updatedAt: number }>(
+  const progress = useScopedMap(
     'ledgerProgress',
     COLLECTIONS.listeningProgress,
     cid,
@@ -419,12 +422,12 @@ export function useCourseLedger(courseId: string | null, today: string): CourseL
     [courseId],
     {
       label: 'courseLedgerAssignments',
-      map: (snap) => snap.docs.map((d) => d.data() as AssignmentDoc),
+      map: (snap) => snap.docs.map((d) => read('assignments', d)),
       empty: null,
     },
   );
   const assignments = granted ?? NO_ASSIGNMENTS;
-  const completions = useScopedMap<CompletionDoc, boolean>(
+  const completions = useScopedMap(
     'courseLedgerCompletions',
     COLLECTIONS.completions,
     courseId,
@@ -432,7 +435,7 @@ export function useCourseLedger(courseId: string | null, today: string): CourseL
     (d) => d.completed,
     (d) => `${d.studentUid}_${d.recordingId}`,
   );
-  const overrides = useScopedMap<CompletionOverrideDoc, CompletionOverrideDoc>(
+  const overrides = useScopedMap(
     'courseLedgerOverrides',
     COLLECTIONS.completionOverrides,
     courseId,
@@ -534,18 +537,18 @@ export function useStudentLedger(studentUid: string | null, courseId: string): S
     [studentUid, courseId],
     {
       label: 'studentLedgerAssignments',
-      map: (snap) => snap.docs.map((d) => d.data() as AssignmentDoc).filter((a) => a.active),
+      map: (snap) => snap.docs.map((d) => read('assignments', d)).filter((a) => a.active),
       empty: null,
     },
   );
-  const completions = useStudentCourseMap<CompletionDoc, boolean>(
+  const completions = useStudentCourseMap(
     'studentLedgerCompletions',
     COLLECTIONS.completions,
     studentUid,
     courseId,
     (d) => d.completed,
   );
-  const overrides = useStudentCourseMap<CompletionOverrideDoc, CompletionOverrideDoc>(
+  const overrides = useStudentCourseMap(
     'studentLedgerOverrides',
     COLLECTIONS.completionOverrides,
     studentUid,
@@ -572,12 +575,12 @@ export function useStudentLedger(studentUid: string | null, courseId: string): S
   );
 }
 
-function useStudentCourseMap<T extends { recordingId: string }, V>(
+function useStudentCourseMap<C extends 'completions' | 'completionOverrides', V>(
   label: string,
-  coll: string,
+  coll: C,
   studentUid: string | null,
   courseId: string,
-  pick: (data: T) => V,
+  pick: (data: StoredDocs[C]) => V,
 ) {
   return useLiveQuery<Map<string, V>>(
     () =>
@@ -592,7 +595,13 @@ function useStudentCourseMap<T extends { recordingId: string }, V>(
     [studentUid, courseId, coll],
     {
       label: label,
-      map: (snap) => new Map(snap.docs.map((d) => [(d.data() as T).recordingId, pick(d.data() as T)])),
+      map: (snap) =>
+        new Map(
+          snap.docs.map((d) => {
+            const data = read(coll, d);
+            return [data.recordingId, pick(data)];
+          }),
+        ),
       empty: new Map(),
     },
   );
@@ -627,7 +636,7 @@ export function useMyAudit(uid: string | null): AuditRow[] {
     [uid],
     {
       label: 'myAudit',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as AuditEntryDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('auditLog', d) })),
       empty: [],
     },
   );
@@ -656,7 +665,7 @@ export function useAuditState(courseId: string | null, enabled = true): AuditRow
     [courseId, enabled],
     {
       label: 'audit',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as AuditEntryDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('auditLog', d) })),
       empty: null,
     },
   );
@@ -685,7 +694,7 @@ export function useStudentAudit(studentUid: string | null): AuditRow[] {
     [studentUid],
     {
       label: 'studentAudit',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as AuditEntryDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('auditLog', d) })),
       empty: [],
     },
   );
@@ -725,7 +734,7 @@ export function useStudentAuditIn(
     [studentUid, scope],
     {
       label: 'studentAuditScoped',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as AuditEntryDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('auditLog', d) })),
       empty: [],
     },
   );

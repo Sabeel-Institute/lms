@@ -85,6 +85,20 @@ export default tseslint.config(
           selector: "Literal[value=/^(?:rgb|rgba|hsl|hsla)\\(/]",
           message: 'Hardcoded color. Use a semantic token from src/theme.',
         },
+        // A Firestore document is read through its collection's shape
+        // (src/documents.ts), never cast: it can be older than the code — a
+        // browser's cached copy from before a field existed — and a recording
+        // cast without its `media` blanked the live site. Here, in the one
+        // array, because a second no-restricted-syntax block would replace
+        // the colour rule for these files rather than add to it.
+        {
+          selector: "TSAsExpression > CallExpression[callee.property.name='data']",
+          message: 'Read the document with read()/readIfExists() (src/documents.ts): a document can be older than the code.',
+        },
+        {
+          selector: "TSAsExpression > ChainExpression > CallExpression[callee.property.name='data']",
+          message: 'Read the document with read()/readIfExists() (src/documents.ts): a document can be older than the code.',
+        },
       ],
     },
   },

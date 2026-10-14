@@ -10,7 +10,6 @@ import {
   progressId,
   startingItem,
   isPlayable,
-  type ListeningProgressDoc,
   type MediaItem,
   type MediaMap,
   type MediaVersion,
@@ -20,6 +19,7 @@ import { db, functions } from './firebase';
 import { createPlayer } from './player';
 import { forgetProgress, journaledFor, journaledProgress, journalProgress } from './progressJournal';
 import type { Player } from './playerTypes';
+import { readIfExists } from './documents';
 
 interface Minted {
   url: string;
@@ -330,7 +330,7 @@ async function writeProgress(save: Save): Promise<void> {
     // Merge against whatever is already there rather than overwriting: another
     // device may have listened further, and total listening must never go
     // backwards.
-    const existing = (await getDoc(ref)).data() as ListeningProgressDoc | undefined;
+    const existing = readIfExists('listeningProgress', await getDoc(ref));
     const merged = existing ? mergeProgress(mine, existing) : mine;
     await setDoc(ref, { ...who, ...merged });
     void forgetProgress(id, mine.updatedAt);
@@ -591,7 +591,7 @@ export function openPlayback(req: OpenRequest): void {
       // and then closed is in the journal, not on the server, until something
       // sends it — and resuming from the server alone put the student back
       // where the screen went off.
-      const stored = saved?.data() as ListeningProgressDoc | undefined;
+      const stored = saved ? readIfExists('listeningProgress', saved) : undefined;
       const prior = stored && journaled ? mergeProgress(stored, journaled) : (stored ?? journaled);
       // RESUME WHERE THEY WERE: their part, in their version if that part
       // still has it — unless a particular file was asked for. A row from

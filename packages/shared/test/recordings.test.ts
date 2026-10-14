@@ -183,8 +183,9 @@ describe('isEmptyDraft', () => {
     expect(publishBlockers(empty)).toContain('media');
     // The same shape, once published: still "needs media", and no longer
     // something anyone may discard.
-    expect(isEmptyDraft({ ...empty, publishedAt: 1 })).toBe(true);
-    expect(isDiscardable({ ...empty, publishedAt: 1 })).toBe(false);
+    const published = { ...empty, publishedAt: 1 };
+    expect(isEmptyDraft(published)).toBe(true);
+    expect(isDiscardable(published)).toBe(false);
   });
 });
 

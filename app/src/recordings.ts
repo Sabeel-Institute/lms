@@ -4,7 +4,7 @@ import { COLLECTIONS, type MediaEdit, type RecordingDoc, type RecordingStatus } 
 import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
 import type { UploadApi } from './upload';
-import { recordingRow } from './recordingRow';
+import { read } from './documents';
 
 export interface RecordingRow extends RecordingDoc {
   id: string;
@@ -38,7 +38,7 @@ export function useCourseRecordingsState(courseId: string | null): RecordingRow[
     [courseId],
     {
       label: 'courseRecordings',
-      map: (snap) => snap.docs.map((d) => recordingRow(d.id, d.data() as RecordingDoc)),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('recordings', d) })),
       empty: null,
       // The library mounts one of these per course a manager teaches, so the
       // label alone cannot say which course a denial came from. Carry the id.
@@ -61,7 +61,7 @@ export function useAllRecordingsState(enabled: boolean): RecordingRow[] | null {
     [enabled],
     {
       label: 'allRecordings',
-      map: (snap) => snap.docs.map((d) => recordingRow(d.id, d.data() as RecordingDoc)),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('recordings', d) })),
       empty: null,
     },
   );
@@ -108,7 +108,7 @@ export function useRecordingState(
     {
       label: 'recording',
       context: scope ? { scope } : undefined,
-      map: (snap) => recordingRow(snap.id, snap.data() as RecordingDoc),
+      map: (snap) => ({ id: snap.id, ...read('recordings', snap) }),
       empty: null,
       denialIsAnswer,
     },

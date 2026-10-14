@@ -13,8 +13,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   onSnapshot,
   type DocumentReference,
-  type DocumentSnapshot,
   type Query,
+  type QueryDocumentSnapshot,
   type QuerySnapshot,
 } from 'firebase/firestore';
 import { captureError } from './sentry';
@@ -316,7 +316,8 @@ export function useLiveQuery<T>(
 
 export interface LiveDocOptions<T> {
   label: string;
-  map: (snap: DocumentSnapshot) => T;
+  /** Called only for a document that exists. */
+  map: (snap: QueryDocumentSnapshot) => T;
   /** Rendered before the first snapshot, on an error, and when the doc is absent. */
   empty: T;
   /**

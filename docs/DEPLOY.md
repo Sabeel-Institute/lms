@@ -117,17 +117,21 @@ both afterwards.
 
 A release bumps one version and ships it to both surfaces. In order:
 
-0. **Run the two production checks**, which nothing else runs — they
+0. **Run the three production checks**, which nothing else runs — they
    authenticate against the live project, so neither CI nor the emulator suite
    can: `npm run check:queries` (every query shape the app sends, against the
-   real indexes) and `npm run check:push` (FCM credentials and the VAPID key).
-   This machine's Application Default Credentials belong to another Google
-   account, so run both with the owner's token:
+   real indexes), `npm run check:documents` (every live document the app reads,
+   against the fields its type requires — a failure is data to migrate before
+   the release, not code to bend around it) and `npm run check:push` (FCM
+   credentials and the VAPID key). This machine's Application Default
+   Credentials belong to another Google account, so run them with the owner's
+   token:
    ```sh
    export CHECK_ACCESS_TOKEN="$(gcloud auth print-access-token --account=faisal.shah@oursabeel.com)"
-   npm run check:queries && npm run check:push
+   npm run check:queries && npm run check:documents && npm run check:push
    ```
-   See `docs/DEV-TOOLING.md`.
+   Run `check:documents` again after any migration of live data. See
+   `docs/DEV-TOOLING.md`.
 
 1. **Bump the version in BOTH files, together:**
    - `app/app.json` → `expo.version` (drives the sign-in build label and the
@@ -159,6 +163,15 @@ A release bumps one version and ships it to both surfaces. In order:
    - the bundle's `.map` URL answers `text/html` (the SPA rewrite for a stripped
      file), not a served map — the CONTENT-TYPE, since the status is 200 either
      way.
+
+   **Then read Sentry for what the release brought** — a crash on the live site
+   reached Sentry within minutes once and nobody looked (2026-10-13). Search
+   the three app projects (`sabeel-recording-web`, `-android`, `-functions`)
+   for issues first seen since the deploy: `firstSeen:-1h is:unresolved`, or
+   since the deploy time, in Sentry's Issues view or through the Sentry
+   connector. Sentry also emails every new or returning issue in those
+   projects (the alert "Every new or returning issue: Sabeel recordings and
+   LMS"), but a release is not finished until someone has looked.
 
 3. **Android:** from `app/android`,
    `EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) ./gradlew assembleRelease`

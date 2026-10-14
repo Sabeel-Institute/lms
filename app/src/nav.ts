@@ -60,4 +60,5 @@ export type RootStackParamList = {
   Player: { recordingId: string; dueDate?: string | null; itemId?: string };
   MyCourses: undefined;
   Tokens: undefined;
+  Crash: undefined;
 };

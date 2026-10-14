@@ -5,14 +5,13 @@ import {
   type AssignmentDoc,
   type CompletionDoc,
   type CompletionEventDoc,
-  type CompletionOverrideDoc,
-  type ListeningProgressDoc,
   assignmentId,
   progressId,
 } from '@sabeel/shared';
 import { db } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
 import { persistCompletionState } from './completionOutbox';
+import { read } from './documents';
 
 export interface AssignmentRow extends AssignmentDoc {
   id: string;
@@ -61,7 +60,7 @@ export function useMyAssignments(uid: string | null): AssignmentRow[] | null {
     [uid],
     {
       label: 'myAssignments',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as AssignmentDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('assignments', d) })),
       empty: null,
     },
   );
@@ -86,7 +85,7 @@ export function useMyCompletions(uid: string | null): Map<string, CompletionStat
       map: (snap) => {
         const map = new Map<string, CompletionState>();
         for (const d of snap.docs) {
-          const data = d.data() as CompletionDoc;
+          const data = read('completions', d);
           map.set(data.recordingId, {
             completed: data.completed,
             pending: d.metadata.hasPendingWrites,
@@ -159,7 +158,7 @@ export function useMyListening(
     {
       label: 'myListening',
       map: (snap) =>
-        snap.exists() ? { listenedMs: (snap.data() as ListeningProgressDoc).listenedMs } : null,
+        snap.exists() ? { listenedMs: read('listeningProgress', snap).listenedMs } : null,
       empty: null,
     },
   );
@@ -189,7 +188,7 @@ export function useMyAssignmentState(
     {
       label: 'myAssignment',
       context: scope ? { scope } : undefined,
-      map: (snap) => (snap.exists() ? { id: snap.id, ...(snap.data() as AssignmentDoc) } : null),
+      map: (snap) => (snap.exists() ? { id: snap.id, ...read('assignments', snap) } : null),
       empty: null,
     },
   );
@@ -229,7 +228,7 @@ function useMyOverrides(uid: string | null): Map<string, { completed: boolean; r
       map: (snap) =>
         new Map(
           snap.docs.map((d) => {
-            const data = d.data() as CompletionOverrideDoc;
+            const data = read('completionOverrides', d);
             return [data.recordingId, { completed: data.completed, reason: data.reason }];
           }),
         ),
@@ -258,7 +257,7 @@ export function useCompletion(uid: string | null, recordingId: string): Completi
       map: (snap) => {
         const d = snap.docs[0];
         if (!d) return { completed: false, pending: false, completedAt: null };
-        const data = d.data() as CompletionDoc;
+        const data = read('completions', d);
         return {
           completed: data.completed,
           pending: d.metadata.hasPendingWrites,

@@ -54,6 +54,8 @@ export const STAFF_PATHS = {
   MyAudit: 'my-actions',
   MyCourses: 'my-courses',
   Tokens: 'tokens',
+  /** Emulator builds only: a screen that throws, for the browser suite (CrashScreen). */
+  Crash: 'crash-test',
 } as const;
 
 export const STUDENT_PATHS = {

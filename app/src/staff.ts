@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { COLLECTIONS, type Role, type StaffUserDoc, type UserStatus } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useLiveQuery } from './liveQuery';
+import { read } from './documents';
 
 export interface StaffRow extends StaffUserDoc {
   uid: string;
@@ -29,7 +30,7 @@ export function usePendingStaffState(enabled: boolean): StaffRow[] | null {
     [enabled],
     {
       label: 'pendingStaff',
-      map: (snap) => snap.docs.map((d) => ({ uid: d.id, ...(d.data() as StaffUserDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ uid: d.id, ...read('staffUsers', d) })),
       empty: null,
     },
   );
@@ -55,7 +56,7 @@ export function useDecidedStaffState(enabled: boolean): StaffRow[] | null {
     [enabled],
     {
       label: 'decidedStaff',
-      map: (snap) => snap.docs.map((d) => ({ uid: d.id, ...(d.data() as StaffUserDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ uid: d.id, ...read('staffUsers', d) })),
       empty: null,
     },
   );

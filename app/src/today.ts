@@ -19,7 +19,7 @@ import { buildTodayQueue, queueScope, type TodayQueue } from './todayQueue';
 import { db } from './firebase';
 import { useListenerFailed, useLiveQuery } from './liveQuery';
 import { useAllCoursesSource, useMyCoursesSource, type CourseRow } from './structure';
-import { recordingRow } from './recordingRow';
+import { read } from './documents';
 
 /**
  * The staff work queue, derived — never stored.
@@ -112,7 +112,7 @@ function useTodayQueue(
     [scope],
     {
       label: 'todaySessions',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as SessionDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('sessions', d) })),
       empty: null,
       expectDenial,
       extra: { scope: key },
@@ -128,7 +128,7 @@ function useTodayQueue(
     {
       label: 'todayRecordings',
       map: (snap) =>
-        new Map(snap.docs.map((d) => [d.id, recordingRow(d.id, d.data() as RecordingDoc)])),
+        new Map(snap.docs.map((d) => [d.id, { id: d.id, ...read('recordings', d) }])),
       empty: null,
       expectDenial,
       extra: { scope: key },
@@ -170,7 +170,7 @@ function useTodayQueue(
     [scope],
     {
       label: 'todayCoursework',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as CourseworkDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('coursework', d) })),
       empty: null,
       expectDenial,
       extra: { scope: key },
@@ -188,7 +188,7 @@ function useTodayQueue(
     [scope],
     {
       label: 'todayHandedIn',
-      map: (snap) => snap.docs.map((d) => d.data() as SubmissionDoc),
+      map: (snap) => snap.docs.map((d) => read('submissions', d)),
       empty: null,
       expectDenial,
       extra: { scope: key },
@@ -200,7 +200,7 @@ function useTodayQueue(
     [scope],
     {
       label: 'todayGrades',
-      map: (snap) => snap.docs.map((d) => d.data() as GradeDoc),
+      map: (snap) => snap.docs.map((d) => read('grades', d)),
       empty: null,
       expectDenial,
       extra: { scope: key },

@@ -4,6 +4,7 @@ import { httpsCallable } from 'firebase/functions';
 import { COLLECTIONS, type StudentDoc, type UserStatus } from '@sabeel/shared';
 import { auth, db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
+import { read } from './documents';
 
 export interface StudentRow extends StudentDoc {
   uid: string;
@@ -27,7 +28,7 @@ export function useStudentState(uid: string | null) {
     [uid],
     {
       label: 'student',
-      map: (snap) => ({ uid: snap.id, ...(snap.data() as StudentDoc) }),
+      map: (snap) => ({ uid: snap.id, ...read('students', snap) }),
       empty: null,
     },
   );
@@ -50,7 +51,7 @@ export function useStudentsState(enabled: boolean): StudentRow[] | null {
     [enabled],
     {
       label: 'students',
-      map: (snap) => snap.docs.map((d) => ({ uid: d.id, ...(d.data() as StudentDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ uid: d.id, ...read('students', d) })),
       empty: null,
     },
   );

@@ -15,3 +15,4 @@ export * from './notifications';
 export * from './zoom';
 export * from './xlsx';
 export * from './workbooks';
+export * from './documentShapes';

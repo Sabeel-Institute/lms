@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { COLLECTIONS, type AttendanceStatus, type SessionDoc } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
+import { read } from './documents';
 
 export interface SessionRow extends SessionDoc {
   id: string;
@@ -47,7 +48,7 @@ export function useCourseSessionsState(courseId: string | null): SessionRow[] | 
     [courseId],
     {
       label: 'courseSessions',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as SessionDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('sessions', d) })),
       empty: null,
     },
   );
@@ -68,7 +69,7 @@ export function useSessionState(sessionId: string | null) {
     [sessionId],
     {
       label: 'session',
-      map: (snap) => ({ id: snap.id, ...(snap.data() as SessionDoc) }),
+      map: (snap) => ({ id: snap.id, ...read('sessions', snap) }),
       empty: null,
     },
   );

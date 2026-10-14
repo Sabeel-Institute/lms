@@ -37,6 +37,24 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **Old data is migrated, never accommodated** (Faisal: "greenfield
+  mindset"). After the library's white page, the plan to catch documents
+  older than the code included reading them around their gaps: defaults for
+  fields added since a collection's first release, a cached legacy recording
+  converted on read, old shapes planted in the test worlds. Those parts went
+  before they shipped. What stands: every field of every document type the
+  app reads is listed `required` or `optional` in `documentShapes`, checked
+  against the type by the compiler; the app reads documents only through
+  `read()`/`readIfExists()`, and ESLint refuses `.data() as` anywhere else;
+  `npm run check:documents` reads every live document against its type before
+  a release and after a migration, and its failures are data to migrate. The
+  web app's cache is NOT cleared when a type changes: on the web it is where
+  unsent completions and listening progress wait (there is no separate
+  outbox), so clearing it could lose a student's offline work. A stale cached
+  shape is contained instead — every screen sits in `ScreenBoundary`, which a
+  browser check now proves with a screen that throws on purpose (emulator
+  builds only). And Sentry now emails every new or returning issue in the
+  three app projects, with a release step to read what a deploy brought.
 - 2026-10-13 — **A file is a link** (Faisal's choice), modelled on the kanban
   app's attachments: a paperclip adds files (on a phone it asks: choose
   files, or take a photo), and each file is one line — what it is, its name,

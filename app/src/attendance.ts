@@ -2,6 +2,7 @@ import { collection, query, where } from 'firebase/firestore';
 import { COLLECTIONS, type AttendanceRecordDoc } from '@sabeel/shared';
 import { db } from './firebase';
 import { useLiveQuery } from './liveQuery';
+import { read } from './documents';
 
 export interface AttendanceRecordRow extends AttendanceRecordDoc {
   id: string;
@@ -35,7 +36,7 @@ export function useMyAttendanceState(uid: string | null, courseId: string | null
     [uid, courseId],
     {
       label: 'myAttendance',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as AttendanceRecordDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('attendanceRecords', d) })),
       empty: null,
     },
   );

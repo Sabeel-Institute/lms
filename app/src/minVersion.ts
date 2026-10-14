@@ -4,6 +4,7 @@ import { APP_CONFIG_DOC, COLLECTIONS, isBuildOutdated, type AppConfigDoc } from 
 import { BUILD_VERSION_CODE } from './buildInfo';
 import { db } from './firebase';
 import { useLiveDocState } from './liveQuery';
+import { read } from './documents';
 
 /**
  * Is this build too old to run?
@@ -26,7 +27,7 @@ export function useMinVersion(): { outdated: boolean; minVersionCode: number | n
     [],
     {
       label: 'appConfig',
-      map: (snap) => snap.data() as AppConfigDoc,
+      map: (snap) => read('config', snap),
       empty: null,
       denialIsAnswer: true,
     },

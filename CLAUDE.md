@@ -414,14 +414,20 @@ Manager, never in the app bundle.**
   built by `pushPaths` in `@sabeel/shared`, and `app/src/linkPaths.test.ts` holds
   every one to the route tables. Never name an FCM data key `body`: expo-
   notifications reads it as the whole payload.
-- **A document can be older than the code.** The web app keeps Firestore's
-  persistent cache and a listener answers from it first, so a phone draws what
-  it cached before a shape change for a moment before the server's copy
-  arrives — and a recording without `media` blanked the live site that way.
-  When a document gains a field the screens rely on, read it through a
-  function that supplies the default (`app/src/recordingRow.ts`), never the
-  type alone. Every screen sits in `ScreenBoundary` (the stack's
-  `screenLayout`), so one that still cannot be drawn says so and the bar works.
+- **Old data is migrated, never accommodated.** A document is read through
+  `read()`/`readIfExists()` (`app/src/documents.ts`), typed by its collection,
+  and ESLint allows `.data() as` nowhere else in the app. Every field of every
+  document type the app reads is listed `required` or `optional` in
+  `documentShapes` (`@sabeel/shared`) — a type and its list that disagree fail
+  to compile — and `npm run check:documents` reads every live document against
+  them: run it before a release and after a migration, and migrate whatever it
+  reports instead of reading around it. A browser's persistent cache can still
+  hold a document from before a migration for a moment (a recording without
+  `media` blanked the live site that way), so every screen sits in
+  `ScreenBoundary` (the stack's `screenLayout`): one that cannot be drawn says
+  so, the bar works, and Try again draws the server's copy. The cache is never
+  cleared to avoid this: on the web it is where unsent completions and
+  listening progress wait.
 - Never `git add` a binary. The APK ships as a GitHub Release asset; committing
   per-release APKs bloated the sibling pages repo's history and had to be
   rewritten out. `*.apk` is gitignored as the backstop.

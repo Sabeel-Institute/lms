@@ -14,6 +14,7 @@ import {
 } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
+import { read } from './documents';
 
 /**
  * Assignments, from the app's side (docs/plans/ASSIGNMENTS.md). The records
@@ -46,7 +47,7 @@ export function useMySubmissions(uid: string | null): SubmissionRow[] | null {
     [uid],
     {
       label: 'mySubmissions',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as SubmissionDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('submissions', d) })),
       empty: null,
     },
   );
@@ -59,7 +60,7 @@ export function useMyDraftIds(uid: string | null): Set<string> {
     [uid],
     {
       label: 'myDrafts',
-      map: (snap) => new Set(snap.docs.map((d) => (d.data() as DraftDoc).courseworkId)),
+      map: (snap) => new Set(snap.docs.map((d) => read('drafts', d).courseworkId)),
       empty: new Set(),
     },
   );
@@ -72,7 +73,7 @@ export function useCourseworkState(id: string | null, denialIsAnswer = false) {
     [id],
     {
       label: 'coursework',
-      map: (snap) => ({ id: snap.id, ...(snap.data() as CourseworkDoc) }),
+      map: (snap) => ({ id: snap.id, ...read('coursework', snap) }),
       empty: null,
       denialIsAnswer,
     },
@@ -86,7 +87,7 @@ export function useSubmissionState(studentUid: string | null, courseworkId: stri
     [studentUid, courseworkId],
     {
       label: 'submission',
-      map: (snap) => ({ id: snap.id, ...(snap.data() as SubmissionDoc) }),
+      map: (snap) => ({ id: snap.id, ...read('submissions', snap) }),
       empty: null,
     },
   );
@@ -100,7 +101,7 @@ export function useMyDraftState(uid: string | null, courseworkId: string) {
   return useLiveDocState<DraftDoc | null>(
     () => (uid ? doc(db, COLLECTIONS.drafts, submissionId(uid, courseworkId)) : null),
     [uid, courseworkId],
-    { label: 'myDraft', map: (snap) => snap.data() as DraftDoc, empty: null },
+    { label: 'myDraft', map: (snap) => read('drafts', snap), empty: null },
   );
 }
 
@@ -161,7 +162,7 @@ export function useCourseCourseworkState(courseId: string | null): CourseworkRow
     [courseId],
     {
       label: 'courseCoursework',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as CourseworkDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('coursework', d) })),
       empty: null,
     },
   );
@@ -174,7 +175,7 @@ export function useCourseSubmissionsState(courseId: string | null): SubmissionRo
     [courseId],
     {
       label: 'courseSubmissions',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as SubmissionDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('submissions', d) })),
       empty: null,
     },
   );
@@ -187,7 +188,7 @@ export function useCourseGradesState(courseId: string | null): GradeRow[] | null
     [courseId],
     {
       label: 'courseGrades',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as GradeDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('grades', d) })),
       empty: null,
     },
   );
@@ -215,7 +216,7 @@ export function useSubmissionEventsState(courseId: string, courseworkId: string,
     {
       label: 'submissionEvents',
       map: (snap) =>
-        snap.docs.map((d) => ({ id: d.id, ...(d.data() as SubmissionEventDoc) })).sort((a, b) => a.at - b.at),
+        snap.docs.map((d) => ({ id: d.id, ...read('submissionEvents', d) })).sort((a, b) => a.at - b.at),
       empty: null,
     },
   );

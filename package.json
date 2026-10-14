@@ -30,6 +30,7 @@
     "seed:emulators": "node scripts/seed-emulator-world.mjs",
     "smoke:prod": "node scripts/prod-smoke.mjs",
     "check:queries": "node scripts/check-query-shapes.mjs",
+    "check:documents": "node scripts/check-documents.mjs",
     "check:push": "node scripts/check-push.mjs",
     "students:report": "node scripts/students-report.mjs"
   },

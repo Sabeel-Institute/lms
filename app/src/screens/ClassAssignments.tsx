@@ -9,7 +9,6 @@ import {
   todayInZone,
   unbreakableDate,
   workState,
-  type CourseworkDoc,
   type WorkState,
 } from '@sabeel/shared';
 import { Card, Empty } from '../components/ui';
@@ -59,7 +58,7 @@ export function ClassAssignments({
 }) {
   const today = todayInZone(INSTITUTE_TIMEZONE);
   const ids = useMemo(() => work.map((s) => s.courseworkId), [work]);
-  const { resolved, resolving } = useResolvedDocs<CourseworkDoc>(COLLECTIONS.coursework, ids);
+  const { resolved, resolving } = useResolvedDocs(COLLECTIONS.coursework, ids);
   const tally = workTally(work, cls, today);
   const rows = work
     .map((s) => ({ s, cw: resolved.get(s.courseworkId)?.doc }))

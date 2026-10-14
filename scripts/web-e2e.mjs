@@ -2647,47 +2647,25 @@ check(
 await shot(admin, '27-library-filters');
 
 /*
- * A RECORDING IN THE OLD SHAPE does not blank the library. The web app answers
- * a listener from its cache first, and a cache can hold recordings written
- * before they carried `media` (one audio file, `audioPath`); the live site went
- * white over one on a staff phone (SABEEL-RECORDING-WEB-7). Planted here on the
- * server, which reaches the same reading code. A draft, so no trigger fans it
- * out, and taken out again after.
+ * A SCREEN THAT CANNOT BE DRAWN SAYS SO, and the app around it still works.
+ * One that throws — an emulator-only route, never in a production build —
+ * shows "This page could not be shown" inside the app, with the bar, rather
+ * than the white page a document the code could not read once made of the
+ * live site (SABEEL-RECORDING-WEB-7). The bar is the proof: an app-wide
+ * boundary alone would show the message with no way out.
  */
-const hikamCourse = (await readCollection('courses')).find((c) => c.fields.name.stringValue === 'Hikam Foundations');
-const LEGACY_TITLE = 'Recorded before media';
-const legacyUrl = `${FS_READ}/recordings/legacy-shape`;
-const now = Date.now();
-const planted = await fetch(legacyUrl, {
-  method: 'PATCH',
-  headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    fields: {
-      sessionId: { stringValue: 'legacy-session' },
-      courseId: { stringValue: hikamCourse.name.split('/').pop() },
-      cohortId: { stringValue: hikamCourse.fields.cohortId.stringValue },
-      title: { stringValue: LEGACY_TITLE },
-      notes: { stringValue: '' },
-      date: { stringValue: '2026-09-01' },
-      status: { stringValue: 'draft' },
-      source: { stringValue: 'manual' },
-      audioPath: { stringValue: 'recordings/legacy-shape/audio.m4a' },
-      sizeBytes: { integerValue: '1000' },
-      durationSec: { integerValue: '3600' },
-      createdAt: { integerValue: String(now) },
-      createdBy: { stringValue: 'legacy' },
-      updatedAt: { integerValue: String(now) },
-    },
-  }),
-});
-await goHome(admin);
+await admin.goto(`${WEB}crash-test`, { waitUntil: 'domcontentloaded' });
+await admin.getByTestId('page-failed').filter({ visible: true }).first().waitFor({ timeout: 30000 }).catch(() => {});
+const contained = await shows(admin, 'page-failed');
+await shot(admin, '27b-page-failed');
 await tap(admin, 'tab-library');
-const legacyListed = await admin.getByText(LEGACY_TITLE).filter({ visible: true }).first().waitFor({ timeout: 20000 }).then(() => true, () => false);
-check(
-  'a recording in the old shape, without media, is listed and the library is drawn',
-  planted.ok && legacyListed && (await shows(admin, 'library-play-Session 1')) && (await admin.getByTestId('page-failed').count()) === 0,
-);
-await fetch(legacyUrl, { method: 'DELETE', headers: { Authorization: 'Bearer owner' } });
+const barWorks = await admin
+  .getByTestId('library-play-Session 1')
+  .filter({ visible: true })
+  .first()
+  .waitFor({ timeout: 20000 })
+  .then(() => true, () => false);
+check('a screen that throws says it could not be shown, and the bar still works', contained && barWorks);
 
 // ---------------------------------------------------- a student's history --
 console.log('\nStudent history');

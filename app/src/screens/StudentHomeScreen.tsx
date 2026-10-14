@@ -14,8 +14,6 @@ import {
   unbreakableDate,
   workBucket,
   workState,
-  type CourseworkDoc,
-  type RecordingDoc,
   type TodoBucket,
   type WorkState,
 } from '@sabeel/shared';
@@ -27,7 +25,6 @@ import { useListenerFailed } from '../liveQuery';
 import { drainCompletionOutbox } from '../completionOutbox';
 import { drainProgressJournal } from '../playback';
 import { useResolvedDocs } from '../resolveDocs';
-import { recordingRow } from '../recordingRow';
 import { arrangeTodo, type TodoEntry } from '../todo';
 import type { CourseRow } from '../structure';
 import type { RecordingRow } from '../recordings';
@@ -92,8 +89,8 @@ export function StudentHomeScreen({
   const failed = useListenerFailed(['myAssignments', 'mySubmissions']);
   const completions = useMyCompletions(uid);
   const drafts = useMyDraftIds(uid);
-  const recordings = useResolvedDocs<RecordingDoc>(COLLECTIONS.recordings, useMemo(() => grants.map((a) => a.recordingId), [grants]));
-  const coursework = useResolvedDocs<CourseworkDoc>(COLLECTIONS.coursework, useMemo(() => work.map((s) => s.courseworkId), [work]));
+  const recordings = useResolvedDocs(COLLECTIONS.recordings, useMemo(() => grants.map((a) => a.recordingId), [grants]));
+  const coursework = useResolvedDocs(COLLECTIONS.coursework, useMemo(() => work.map((s) => s.courseworkId), [work]));
 
   // On launch, replay what this device saved and then lost to an app kill
   // before it synced: a completion marked offline, and listening done with the
@@ -127,8 +124,7 @@ export function StudentHomeScreen({
         bucket: todo,
         deadline: todo === 'dueSoon' || todo === 'upcoming' ? a.dueDate : null,
         doneAt: state?.completedAt ?? null,
-        // Read as every recording is (recordingRow.ts): a cached copy can predate `media`.
-        recording: recordingRow(r.doc.id, r.doc),
+        recording: r.doc,
         cls: r.cls,
         dueDate: a.dueDate,
         pending: state?.pending ?? false,

@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, type DocumentData, type Query } from 'firebase/firestore';
 import {
   AUDIT_PAGE,
   COLLECTIONS,
@@ -9,25 +9,18 @@ import {
   studentWorkbook,
   todayInZone,
   workbookFilename,
-  type AssignmentDoc,
-  type AuditEntryDoc,
-  type CohortDoc,
-  type CompletionDoc,
-  type CompletionOverrideDoc,
   type CourseData,
   type CourseDoc,
-  type EnrollmentDoc,
-  type ListeningProgressDoc,
-  type RecordingDoc,
-  type SessionDoc,
-  type StaffUserDoc,
   type StudentDoc,
+  type StoredCollection,
+  type StoredDocs,
   type StudentHistoryRow,
   type WorkbookContext,
 } from '@sabeel/shared';
 import { db } from './firebase';
 import { saveWorkbook } from './exportWorkbook';
 import { describeHistoryRow } from './studentHistory';
+import { read, readIfExists } from './documents';
 
 /**
  * The reads behind the two export buttons, and the file each produces.
@@ -40,16 +33,16 @@ import { describeHistoryRow } from './studentHistory';
  * file only fetches, joins and saves.
  */
 
-const rows = async <T>(q: ReturnType<typeof query>): Promise<(T & { id: string })[]> =>
-  (await getDocs(q)).docs.map((d) => ({ id: d.id, ...(d.data() as T) }));
+const rows = async <C extends StoredCollection>(coll: C, q: Query<DocumentData>): Promise<(StoredDocs[C] & { id: string })[]> =>
+  (await getDocs(q)).docs.map((d) => ({ id: d.id, ...read(coll, d) }));
 const byCourse = (name: string, courseId: string) =>
   query(collection(db, name), where('courseId', '==', courseId));
 
 /** Everyone's name and address: the two directories every staff member may read. */
 async function directory(): Promise<Pick<WorkbookContext, 'names' | 'emails'>> {
   const [staff, students] = await Promise.all([
-    rows<StaffUserDoc>(query(collection(db, COLLECTIONS.staffUsers))),
-    rows<StudentDoc>(query(collection(db, COLLECTIONS.students))),
+    rows(COLLECTIONS.staffUsers, query(collection(db, COLLECTIONS.staffUsers))),
+    rows(COLLECTIONS.students, query(collection(db, COLLECTIONS.students))),
   ]);
   const names = new Map<string, string>();
   const emails = new Map<string, string>();
@@ -62,7 +55,7 @@ async function directory(): Promise<Pick<WorkbookContext, 'names' | 'emails'>> {
 
 async function cohortName(cohortId: string): Promise<string> {
   const snap = await getDoc(doc(db, COLLECTIONS.cohorts, cohortId));
-  return (snap.data() as CohortDoc | undefined)?.name ?? '';
+  return readIfExists('cohorts', snap)?.name ?? '';
 }
 
 /** A course and everything the workbook needs about it. */
@@ -74,17 +67,17 @@ async function courseData(course: CourseDoc & { id: string }, forStudent?: strin
   const [cohort, sessions, recordings, enrollments, assignments, completions, overrides, progress] =
     await Promise.all([
       cohortName(course.cohortId),
-      rows<SessionDoc>(byCourse(COLLECTIONS.sessions, course.id)),
-      rows<RecordingDoc>(byCourse(COLLECTIONS.recordings, course.id)),
+      rows(COLLECTIONS.sessions, byCourse(COLLECTIONS.sessions, course.id)),
+      rows(COLLECTIONS.recordings, byCourse(COLLECTIONS.recordings, course.id)),
       forStudent
         ? getDoc(doc(db, COLLECTIONS.enrollments, enrollmentId(forStudent, course.id))).then((s) =>
-            s.exists() ? [{ id: s.id, ...(s.data() as EnrollmentDoc) }] : [],
+            s.exists() ? [{ id: s.id, ...read('enrollments', s) }] : [],
           )
-        : rows<EnrollmentDoc>(byCourse(COLLECTIONS.enrollments, course.id)),
-      rows<AssignmentDoc>(pin(COLLECTIONS.assignments)),
-      rows<CompletionDoc>(pin(COLLECTIONS.completions)),
-      rows<CompletionOverrideDoc>(pin(COLLECTIONS.completionOverrides)),
-      rows<ListeningProgressDoc>(pin(COLLECTIONS.listeningProgress)),
+        : rows(COLLECTIONS.enrollments, byCourse(COLLECTIONS.enrollments, course.id)),
+      rows(COLLECTIONS.assignments, pin(COLLECTIONS.assignments)),
+      rows(COLLECTIONS.completions, pin(COLLECTIONS.completions)),
+      rows(COLLECTIONS.completionOverrides, pin(COLLECTIONS.completionOverrides)),
+      rows(COLLECTIONS.listeningProgress, pin(COLLECTIONS.listeningProgress)),
     ]);
   return { course, cohortName: cohort, sessions, recordings, enrollments, assignments, completions, overrides, progress };
 }
@@ -126,13 +119,15 @@ export async function exportStudentWorkbook(
   const dir = await directory();
   let courses: (CourseDoc & { id: string })[];
   if (isAdmin) {
-    const enrolled = await rows<EnrollmentDoc>(
+    const enrolled = await rows(
+      COLLECTIONS.enrollments,
       query(collection(db, COLLECTIONS.enrollments), where('studentUid', '==', student.uid)),
     );
     const snaps = await Promise.all(enrolled.map((e) => getDoc(doc(db, COLLECTIONS.courses, e.courseId))));
-    courses = snaps.filter((s) => s.exists()).map((s) => ({ id: s.id, ...(s.data() as CourseDoc) }));
+    courses = snaps.flatMap((s) => (s.exists() ? [{ id: s.id, ...read('courses', s) }] : []));
   } else {
-    courses = await rows<CourseDoc>(
+    courses = await rows(
+      COLLECTIONS.courses,
       query(collection(db, COLLECTIONS.courses), where('managerUids', 'array-contains', byUid)),
     );
   }
@@ -143,7 +138,8 @@ export async function exportStudentWorkbook(
   const audit =
     scope.length === 0
       ? []
-      : await rows<AuditEntryDoc>(
+      : await rows(
+          COLLECTIONS.auditLog,
           isAdmin
             ? query(
                 collection(db, COLLECTIONS.auditLog),

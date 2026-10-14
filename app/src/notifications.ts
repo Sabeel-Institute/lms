@@ -8,6 +8,7 @@ import {
 import { db } from './firebase';
 import { useLiveDocState } from './liveQuery';
 import { devicePushToken, pushPlatform } from './push';
+import { read } from './documents';
 
 /**
  * A person's notification switches, and this device's registration.
@@ -25,7 +26,7 @@ export function useNotificationPrefs(uid: string | null): NotificationPrefsDoc {
     [uid],
     {
       label: 'notificationPrefs',
-      map: (snap) => snap.data() as NotificationPrefsDoc,
+      map: (snap) => read('notifications', snap),
       // An empty object is the right absent value here, not null: every switch
       // defaults to ON, so "no document" and "nothing turned off" are the same
       // state and the screen should not have to tell them apart.

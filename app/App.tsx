@@ -50,6 +50,8 @@ import { useCourseworkState, useSubmissionState } from './src/coursework';
 import { PlayerScreen } from './src/screens/PlayerScreen';
 import { MyCoursesScreen } from './src/screens/MyCoursesScreen';
 import { TokensScreen } from './src/screens/TokensScreen';
+import { CrashScreen } from './src/screens/CrashScreen';
+import { USE_EMULATORS } from './src/env';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { AppNav } from './src/components/AppNav';
 import { ScreenBoundary } from './src/components/ScreenBoundary';
@@ -361,6 +363,9 @@ export default function App() {
                     component={TokensScreen}
                     options={screenOptions('Tokens', 'Design tokens')}
                   />
+                  {USE_EMULATORS ? (
+                    <Stack.Screen name="Crash" component={CrashScreen} options={screenOptions('Crash', 'Crash test')} />
+                  ) : null}
                 </>
               )}
               {/* Both: staff open the player from the library and from a session. */}

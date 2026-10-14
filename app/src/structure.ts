@@ -9,6 +9,7 @@ import {
 } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
+import { read } from './documents';
 
 export interface CohortRow extends CohortDoc {
   id: string;
@@ -51,7 +52,7 @@ export function useCohortState(cohortId: string | null) {
     [cohortId],
     {
       label: 'cohort',
-      map: (snap) => ({ id: snap.id, ...(snap.data() as CohortDoc) }),
+      map: (snap) => ({ id: snap.id, ...read('cohorts', snap) }),
       empty: null,
     },
   );
@@ -74,7 +75,7 @@ export function useCohortsState(enabled: boolean): CohortRow[] | null {
     [enabled],
     {
       label: 'cohorts',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as CohortDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('cohorts', d) })),
       empty: null,
     },
   );
@@ -96,7 +97,7 @@ export function useCoursesInCohortState(cohortId: string | null): CourseRow[] | 
     [cohortId],
     {
       label: 'coursesInCohort',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as CourseDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('courses', d) })),
       empty: null,
     },
   );
@@ -133,7 +134,7 @@ export function useCourseState(courseId: string | null, scope?: string) {
     {
       label: 'course',
       context: scope ? { scope } : undefined,
-      map: (snap) => ({ id: snap.id, ...(snap.data() as CourseDoc) }),
+      map: (snap) => ({ id: snap.id, ...read('courses', snap) }),
       empty: null,
     },
   );
@@ -170,7 +171,7 @@ export function useAllCoursesState(enabled: boolean, scope?: string): CourseRow[
     {
       label: 'allCourses',
       context: scope ? { scope } : undefined,
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as CourseDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('courses', d) })),
       empty: null,
     },
   );
@@ -208,7 +209,7 @@ export function useAllCoursesSource(enabled: boolean, scope?: string): CourseSou
       context: scope ? { scope } : undefined,
       includeMetadataChanges: true,
       map: (snap) => ({
-        rows: snap.docs.map((d) => ({ id: d.id, ...(d.data() as CourseDoc) })),
+        rows: snap.docs.map((d) => ({ id: d.id, ...read('courses', d) })),
         fromCache: snap.metadata.fromCache,
       }),
       empty: UNCONFIRMED,
@@ -228,7 +229,7 @@ export function useMyCoursesSource(uid: string | null, scope?: string): CourseSo
       context: scope ? { scope } : undefined,
       includeMetadataChanges: true,
       map: (snap) => ({
-        rows: snap.docs.map((d) => ({ id: d.id, ...(d.data() as CourseDoc) })),
+        rows: snap.docs.map((d) => ({ id: d.id, ...read('courses', d) })),
         fromCache: snap.metadata.fromCache,
       }),
       empty: UNCONFIRMED,
@@ -259,7 +260,7 @@ export function useMyCoursesState(uid: string | null, scope?: string): CourseRow
     {
       label: 'myCourses',
       context: scope ? { scope } : undefined,
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as CourseDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('courses', d) })),
       empty: null,
     },
   );
@@ -298,7 +299,7 @@ export function useRosterState(courseId: string | null): EnrollmentRow[] | null 
     [courseId],
     {
       label: 'roster',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as EnrollmentDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('enrollments', d) })),
       empty: null,
     },
   );
@@ -331,7 +332,7 @@ export function useStudentEnrollmentsState(uid: string | null): EnrollmentRow[] 
     [uid],
     {
       label: 'studentEnrollments',
-      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...(d.data() as EnrollmentDoc) })),
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('enrollments', d) })),
       empty: null,
     },
   );
@@ -373,7 +374,7 @@ export function useEnrollmentIn(
       label: 'studentEnrollment',
       map: (snap) => {
         const d = snap.docs[0];
-        return { value: d ? { id: d.id, ...(d.data() as EnrollmentDoc) } : null, resolved: true };
+        return { value: d ? { id: d.id, ...read('enrollments', d) } : null, resolved: true };
       },
       // A listener error leaves this unresolved, deliberately: "we could not find
       // out" is not "they are not enrolled", and the app-wide live-data banner is

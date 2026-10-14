@@ -24,6 +24,7 @@ import { doc, runTransaction, setDoc } from 'firebase/firestore';
 import { COLLECTIONS, completionId, type CompletionDoc } from '@sabeel/shared';
 import { db } from './firebase';
 import { captureError } from './sentry';
+import { readIfExists } from './documents';
 
 const KEY = 'sabeel.completionOutbox.v1';
 
@@ -85,7 +86,7 @@ function forget(id: string, updatedAt: number): Promise<void> {
 async function replay(id: string, state: CompletionDoc): Promise<void> {
   const ref = doc(db, COLLECTIONS.completions, id);
   await runTransaction(db, async (tx) => {
-    const current = (await tx.get(ref)).data() as CompletionDoc | undefined;
+    const current = readIfExists('completions', await tx.get(ref));
     if (current && current.updatedAt > state.updatedAt) return;
     tx.set(ref, state);
   });
