@@ -5,21 +5,52 @@
 // the console. Without that gate every local run would pollute the production
 // Sentry project. The DSN is a client value baked in at build time (see
 // app/.env.local); if it is absent the seam is a silent console-only no-op.
-import * as Sentry from '@sentry/browser';
+import type * as SentryBrowser from '@sentry/browser';
 import { IS_DEV } from './env';
 import { BUILD_LABEL } from './buildInfo';
 
 const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN_WEB;
 const ENABLED = !!DSN && !IS_DEV;
+
+/*
+ * LOADED AT THE FIRST REPORT, NOT AT START-UP. @sentry/browser was a fifth of
+ * the web bundle (632 KB, 133 KB compressed), fetched and parsed on every page
+ * load, on every phone, for a library most visits never call. It is its own
+ * file now, fetched when there is something to report.
+ *
+ * Until then this module's own listeners stand where Sentry's would: an error
+ * that reaches the top of the page is reported through `captureError`, and
+ * Sentry's global handlers stay off, so nothing is reported twice once it has
+ * loaded.
+ */
+let sentry: Promise<typeof SentryBrowser> | null = null;
+let role = 'none';
+
+function loaded(): Promise<typeof SentryBrowser> {
+  sentry ??= import('@sentry/browser').then((S) => {
+    // `release` is the sign-in screen's own label — version and commit — so an
+    // event says which build produced it. Three WEB-4 incidents arrived without
+    // one, and the first question about each was "which build was that?".
+    S.init({
+      dsn: DSN,
+      tracesSampleRate: 0,
+      environment: 'production',
+      release: BUILD_LABEL,
+      integrations: (defaults) => defaults.filter((i) => i.name !== 'GlobalHandlers'),
+    });
+    S.setTag('role', role);
+    return S;
+  });
+  return sentry;
+}
+
 let started = false;
 
 export function initSentry(): void {
   if (started || !ENABLED) return;
-  // `release` is the sign-in screen's own label — version and commit — so an
-  // event says which build produced it. Three WEB-4 incidents arrived without
-  // one, and the first question about each was "which build was that?".
-  Sentry.init({ dsn: DSN, tracesSampleRate: 0, environment: 'production', release: BUILD_LABEL });
   started = true;
+  window.addEventListener('error', (ev) => captureError(ev.error ?? new Error(ev.message)));
+  window.addEventListener('unhandledrejection', (ev) => captureError(ev.reason));
 }
 
 /**
@@ -27,14 +58,16 @@ export function initSentry(): void {
  *
  * The privacy policy promises that crash reports carry no name, no email
  * address and no account identifier, and that this is enforced in the code:
- * `app/src/sentry.test.ts` holds that line. A role is not an identity, and it
- * is the one fact that tells a refused admin read from a refused manager read
- * when the two share a listener label.
+ * `functions/test/unit/sentryIdentity.test.ts` holds that line. A role is not
+ * an identity, and it is the one fact that tells a refused admin read from a
+ * refused manager read when the two share a listener label.
  */
-export function setSentryRole(role: string | null): void {
+export function setSentryRole(next: string | null): void {
   if (!ENABLED) return;
-  initSentry();
-  Sentry.setTag('role', role ?? 'none');
+  role = next ?? 'none';
+  // Only once it has loaded: until then the role waits here, and goes on with
+  // the first report.
+  void sentry?.then((S) => S.setTag('role', role)).catch(() => undefined);
 }
 
 export function captureError(
@@ -42,18 +75,26 @@ export function captureError(
   context?: Record<string, string>,
   extra?: Record<string, unknown>,
 ): void {
-  if (ENABLED) {
-    initSentry();
-    // `fingerprint`, when the caller sets one, groups the event by what it
-    // names rather than by the reporting frame; everything else in `extra`
-    // rides along as event data.
-    const { fingerprint, ...rest } = extra ?? {};
-    Sentry.captureException(e, {
-      ...(context ? { tags: context } : {}),
-      ...(Object.keys(rest).length ? { extra: rest } : {}),
-      ...(Array.isArray(fingerprint) ? { fingerprint: fingerprint as string[] } : {}),
-    });
-  } else {
+  if (!ENABLED) {
     console.warn('captureError', context ?? {}, extra ?? {}, e);
+    return;
   }
+  // `fingerprint`, when the caller sets one, groups the event by what it
+  // names rather than by the reporting frame; everything else in `extra`
+  // rides along as event data.
+  const { fingerprint, ...rest } = extra ?? {};
+  loaded()
+    .then((S) => {
+      S.captureException(e, {
+        ...(context ? { tags: context } : {}),
+        ...(Object.keys(rest).length ? { extra: rest } : {}),
+        ...(Array.isArray(fingerprint) ? { fingerprint: fingerprint as string[] } : {}),
+      });
+    })
+    // NEVER A REJECTION OF ITS OWN: the listener above reports unhandled
+    // rejections, so a file that failed to load (offline) would report its
+    // own failure, which would load it again. The next report tries afresh.
+    .catch(() => {
+      sentry = null;
+    });
 }

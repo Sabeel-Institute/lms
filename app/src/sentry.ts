@@ -27,7 +27,7 @@ export function initSentry(): void {
 }
 
 /** The account's role on every event from here on — never who they are; see
- *  the web sibling and `sentry.test.ts`. */
+ *  the web sibling and `functions/test/unit/sentryIdentity.test.ts`. */
 export function setSentryRole(role: string | null): void {
   if (!ENABLED) return;
   initSentry();
