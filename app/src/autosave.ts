@@ -12,7 +12,8 @@
  *   nothing, and a reload in them lost all of it;
  * - sends one at a time, in order, each after the last has answered;
  * - `flush()` sends what is waiting NOW and resolves once everything has been
- *   answered — true only if all of it was stored;
+ *   answered — true only if all of it was stored — or, given a time, false
+ *   once that runs out;
  * - keeps a value whose save failed, so the next `flush()` tries it again,
  *   unless something newer has been typed over it;
  * - `discard()` drops what has not gone yet, for input that must not be sent.
@@ -32,7 +33,13 @@ export type AutosaveState =
 
 export interface Autosave<T> {
   queue(value: T): void;
-  flush(): Promise<boolean>;
+  /**
+   * Send what waits and resolve once everything has answered: true if it was
+   * all stored. Given `withinMs`, false once that runs out, with the save
+   * still on its way: offline a write never answers until the connection is
+   * back, and a person waiting on it was left with a spinner.
+   */
+  flush(withinMs?: number): Promise<boolean>;
   discard(): void;
   /** True while anything typed is not yet stored: waiting, saving or failed. */
   unsaved(): boolean;
@@ -119,11 +126,18 @@ export function createAutosave<T>(opts: {
       }, delay);
       emit();
     },
-    async flush() {
+    flush(withinMs) {
       stopTimer();
       waitingSince = null;
-      await send();
-      return pending === null && lastError === null;
+      const stored = send().then(() => pending === null && lastError === null);
+      if (withinMs === undefined) return stored;
+      return new Promise<boolean>((resolve) => {
+        const limit = setTimer(() => resolve(false), withinMs);
+        void stored.then((ok) => {
+          clearTimer(limit);
+          resolve(ok);
+        });
+      });
     },
     discard() {
       stopTimer();

@@ -32,6 +32,18 @@ import { getTheme, spacing } from '../theme';
 const t = getTheme();
 const dayOf = (ms: number) => unbreakableDate(todayInZone(INSTITUTE_TIMEZONE, ms));
 
+/*
+ * OFFLINE, A SAVE NEVER ANSWERS: the write waits for the connection. These
+ * are how long the page waits on one before saying so, rather than "Saving…"
+ * and a spinning Hand in for as long as the connection is down.
+ */
+/** Hand in waits this long for the answer to be stored, then says it is not. */
+const HAND_IN_WAIT_MS = 10_000;
+/** Leaving waits this long for the answer, then asks. */
+const LEAVE_WAIT_MS = 5_000;
+/** A save on its way this long is said to be not sent yet. */
+const SLOW_SAVE_MS = 5_000;
+
 /**
  * One assignment, as the student sees it: the teacher's instructions and
  * files, and their own work (docs/proposals/lms-assignments-proposal.html,
@@ -369,6 +381,14 @@ function YourWork({
 
   const failed = saveState.kind === 'failed';
   const over = shown.length - MAX_ANSWER_CHARS;
+  // A save on its way too long to be the network being slow.
+  const [unanswered, setUnanswered] = useState(false);
+  useEffect(() => {
+    setUnanswered(false);
+    if (saveState.kind !== 'saving') return;
+    const timer = setTimeout(() => setUnanswered(true), SLOW_SAVE_MS);
+    return () => clearTimeout(timer);
+  }, [saveState.kind]);
   const guard = useLeaveGuard({
     // Waiting or on its way counts too: a reload or a closed tab in that moment
     // lost the typing with no word (in-app ways out send it first, below).
@@ -376,7 +396,7 @@ function YourWork({
     // A failed answer gets one more try before anyone is asked; a file on its
     // way cannot be hurried, nor an answer too long to store, so those are
     // asked at once.
-    settle: uploading || over > 0 ? undefined : () => saver.flush(),
+    settle: uploading || over > 0 ? undefined : () => saver.flush(LEAVE_WAIT_MS),
     prompt: uploading
       ? {
           title: 'A file is still uploading',
@@ -419,17 +439,19 @@ function YourWork({
         <Text testID="work-saved" style={[styles.quiet, failed || over > 0 ? styles.failed : null]}>
           {over > 0
             ? `Too long to save: ${over.toLocaleString('en')} characters over the ${MAX_ANSWER_CHARS.toLocaleString('en')} an answer can have. Shorten it, or put the long part in a document and attach that.`
-            : saveState.kind === 'waiting' || saveState.kind === 'saving'
-              ? 'Saving…'
-              : failed
-                ? (saveState.error as { code?: string } | null)?.code === 'permission-denied'
-                  ? 'Not saved: this work is no longer open to changes. Your answer is still here.'
-                  : 'Not saved. Check the connection; your answer is still here.'
-                : `${followed ? 'Brought up to date with what you wrote on another device. ' : ''}${empty ? '' : 'Saved. '}Only you can see this until you hand it in.${
-                    shown.length > MAX_ANSWER_CHARS * 0.9
-                      ? ` ${shown.length.toLocaleString('en')} of ${MAX_ANSWER_CHARS.toLocaleString('en')} characters.`
-                      : ''
-                  }`}
+            : unanswered
+              ? 'Not sent yet. Check the connection: it goes as soon as you are back online. Your answer is still here.'
+              : saveState.kind === 'waiting' || saveState.kind === 'saving'
+                ? 'Saving…'
+                : failed
+                  ? (saveState.error as { code?: string } | null)?.code === 'permission-denied'
+                    ? 'Not saved: this work is no longer open to changes. Your answer is still here.'
+                    : 'Not saved. Check the connection; your answer is still here.'
+                  : `${followed ? 'Brought up to date with what you wrote on another device. ' : ''}${empty ? '' : 'Saved. '}Only you can see this until you hand it in.${
+                      shown.length > MAX_ANSWER_CHARS * 0.9
+                        ? ` ${shown.length.toLocaleString('en')} of ${MAX_ANSWER_CHARS.toLocaleString('en')} characters.`
+                        : ''
+                    }`}
         </Text>
         {refused ? <Notice tone="error">{refused}</Notice> : null}
         <Button
@@ -437,7 +459,7 @@ function YourWork({
           label="Hand in"
           busy={busy}
           disabled={empty || uploading || over > 0}
-          onPress={() => onHandIn(() => saver.flush())}
+          onPress={() => onHandIn(() => saver.flush(HAND_IN_WAIT_MS))}
         />
         {uploading ? <Text style={styles.quiet}>Ready once every file is up.</Text> : null}
       </Card>

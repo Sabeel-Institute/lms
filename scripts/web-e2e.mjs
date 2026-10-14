@@ -2094,6 +2094,40 @@ check(
     keyIn((await readCollection('drafts')).filter((d) => d.fields.courseworkId?.stringValue === cwId), OUTLINE) === undefined,
 );
 
+/*
+ * OFFLINE, A SAVE NEVER ANSWERS until the connection is back. The answer
+ * said "Saving…" for as long as it was down, and Hand in spun without a
+ * word. It now says the answer is not sent yet, and Hand in says why it
+ * cannot; back online, the answer goes.
+ */
+await student.context().setOffline(true);
+await student.getByTestId('work-note').click();
+await student.keyboard.press('ControlOrMeta+End');
+await student.keyboard.type(' Written offline.');
+const notSentYet = await student
+  .getByText('Not sent yet', { exact: false })
+  .filter({ visible: true })
+  .first()
+  .waitFor({ timeout: 15000 })
+  .then(() => true, () => false);
+await tap(student, 'work-hand-in');
+const handInSaysWhy = await student
+  .getByTestId('notice-error')
+  .filter({ hasText: 'not saved yet' })
+  .waitFor({ timeout: 20000 })
+  .then(() => true, () => false);
+await student.context().setOffline(false);
+const sentWhenBack = await student
+  .getByTestId('work-saved')
+  .filter({ hasText: 'Saved.' })
+  .waitFor({ timeout: 30000 })
+  .then(() => true, () => false);
+check(
+  'offline, the answer says it is not sent yet, Hand in says why it cannot, and back online it goes',
+  notSentYet && handInSaysWhy && sentWhenBack,
+  JSON.stringify({ notSentYet, handInSaysWhy, sentWhenBack }),
+);
+
 // DOUBLE-CLICKED: handed in once, and no refusal shown over work that went in.
 await student.getByTestId('work-hand-in').filter({ visible: true }).first().dblclick();
 await student.getByTestId('work-handed-in').waitFor({ timeout: 20000 });

@@ -166,6 +166,44 @@ describe('autosave', () => {
     expect(saved).toEqual(['9']);
   });
 
+  /*
+   * OFFLINE, A SAVE NEVER ANSWERS: the SDK holds the write until the
+   * connection is back. Hand in waited on it with a spinner and no word, and
+   * Back did nothing at all. Given a time, flush says "not stored" when it
+   * runs out, and the save goes on for when the connection returns.
+   */
+  it('a flush given a time says not stored when the server does not answer within it', async () => {
+    const server = slowServer();
+    const a = make(server.save);
+    a.queue('my answer');
+    const flushed = a.flush(10_000);
+    let result: boolean | null = null;
+    void flushed.then((ok) => {
+      result = ok;
+    });
+    vi.advanceTimersByTime(9_999);
+    await tick();
+    expect(result).toBeNull();
+    vi.advanceTimersByTime(1);
+    await tick();
+    expect(result).toBe(false);
+    // Still on its way, and stored when the server answers.
+    server.calls[0].answer.resolve();
+    await tick();
+    expect(server.stored).toEqual(['my answer']);
+    expect(states.at(-1)).toBe('saved');
+  });
+
+  it('a flush given a time says stored when the server answers within it', async () => {
+    const server = slowServer();
+    const a = make(server.save);
+    a.queue('my answer');
+    const flushed = a.flush(10_000);
+    await tick();
+    server.calls[0].answer.resolve();
+    expect(await flushed).toBe(true);
+  });
+
   it('discard drops what has not gone, so input that must not be sent is not', async () => {
     const saved: string[] = [];
     const a = make(async (v) => void saved.push(v));
