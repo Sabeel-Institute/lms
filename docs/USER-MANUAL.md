@@ -481,9 +481,14 @@ The **course page** is your dashboard for that course:
   adds students: it lists everyone not in the course, and stays open while you
   add several. The grey **×** on a row takes that student off the course, after
   asking — their history is kept, and you can add them back.
-- **Managers** (admins) lists the staff assigned to *this* course. Managers only
-  ever see and act on the courses they're assigned to here — being in a cohort
-  grants nothing by itself.
+- **Managers** (admins) lists the staff, with a tick on each who manages *this*
+  course; tap a row to tick or untick it. Everyone ticked gets the course's
+  reminder when attendance has not been taken, and its work to grade on
+  **Today**. Managers only ever see and act on the courses they're ticked on
+  here — being in a cohort grants nothing by itself. Admins see every course
+  already; tick one who teaches the course, and it is marked *admin*. A
+  manager who has been disabled stays ticked on their courses, marked
+  *disabled*, until you untick them.
 - **Settings** (admins), at the bottom: **Keep recordings open when archived**
   decides whether an archived course's recordings stay open to the students they
   were required of, and **Archive course** ends the term. The **pencil** beside

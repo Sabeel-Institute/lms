@@ -610,6 +610,40 @@ await tap(admin, 'course-manager-manager@oursabeel.com');
 check('un-assigning clears it — the next write reads the LIVE list', (await tickState()) === 'false');
 await tap(admin, 'course-manager-manager@oursabeel.com');
 check('re-assigning ticks it again', (await tickState()) === 'true');
+/*
+ * EVERY MANAGER THE COUNT COUNTS IS ON THE LIST, ADMINS INCLUDED. A course's
+ * managers get its reminders and its work to grade, and an admin among them
+ * was counted in "Managers (N)" and listed nowhere. The admin's own row is
+ * offered, marked; ticked, it is listed and counted. It is taken off again, so
+ * the rest of the run sees an admin who manages no class.
+ */
+const adminTick = 'course-manager-faisal.shah@oursabeel.com';
+const managerFigures = () =>
+  admin.evaluate(() => {
+    const rows = [...document.querySelectorAll('[data-testid^="course-manager-"]')].filter((e) => e.checkVisibility());
+    return {
+      counted: Number(/Managers \((\d+)\)/i.exec(document.body.innerText)?.[1]),
+      ticked: rows.filter((e) => e.getAttribute('aria-checked') === 'true').length,
+    };
+  });
+check(
+  'the admin’s own row is offered, marked as an admin',
+  (await admin.getByTestId(adminTick).filter({ visible: true }).first().innerText()).includes('· admin'),
+);
+await tap(admin, adminTick);
+await admin.waitForTimeout(2500);
+const withAdmin = await managerFigures();
+check(
+  'an admin ticked as a manager is listed and counted: every manager counted is ticked on the list',
+  (await admin.getByTestId(adminTick).getAttribute('aria-checked')) === 'true' &&
+    withAdmin.ticked === 2 &&
+    withAdmin.counted === 2,
+  JSON.stringify(withAdmin),
+);
+await tap(admin, adminTick);
+await admin.waitForTimeout(2500);
+const withoutAdmin = await managerFigures();
+check('…and taken off again', withoutAdmin.ticked === 1 && withoutAdmin.counted === 1, JSON.stringify(withoutAdmin));
 await shot(admin, '05-course-detail');
 
 await tap(mgr, 'tab-courses');

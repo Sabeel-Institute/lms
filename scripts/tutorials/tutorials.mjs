@@ -255,7 +255,7 @@ export const TUTORIALS = [
     steps: [
       { say: 'Courses lists the cohorts: each a term, and the courses taught in it.', do: (t) => t.tap('tab-courses') },
       { say: 'Open a cohort to see its courses. The plus adds one, and the pencil renames the cohort.', do: async (t) => { await t.tap('cohort-open-Autumn 2026'); await t.highlight('courses-add'); } },
-      { say: 'On a course, Managers gives a member of staff that course, and only that course.', do: async (t) => { await t.tap('course-open-Hikam Foundations'); await t.scrollTo('course-archive'); } },
+      { say: 'On a course, tick who manages it: a manager sees only the courses they are ticked on, and an admin who teaches the course can be ticked too.', do: async (t) => { await t.tap('course-open-Hikam Foundations'); await t.highlight('course-manager-faisal.shah@oursabeel.com'); } },
       { say: 'Its settings decide whether recordings stay open after the course is archived, and archive it when the term ends.', do: (t) => t.highlight('course-archived-access') },
     ],
   },

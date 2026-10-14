@@ -148,10 +148,16 @@ export function validateSetCourseManagers(data: unknown): SetCourseManagersInput
 /**
  * Replace the set of managers scoped to a class.
  *
- * Every uid is checked against `staffUsers` first. `managerUids` is not a label
- * — the security rules read it directly, so writing an invented or disabled uid
- * into it *is* granting access. Validating here is the only place that can be
- * caught, since clients cannot write the collection at all.
+ * Every uid ADDED is checked against `staffUsers` first. `managerUids` is not a
+ * label — the security rules read it directly, so writing an invented or
+ * disabled uid into it *is* granting access. Validating here is the only place
+ * that can be caught, since clients cannot write the collection at all.
+ *
+ * Only the added ones: a manager who was disabled stays on their courses, where
+ * they can open nothing while disabled and have them back if enabled, and the
+ * screen sends the whole list. Checking every uid refused every later change to
+ * such a course — the next manager could not be added until somebody took the
+ * disabled one off, which the screen gave no way to do.
  */
 export async function applyCourseManagers(input: SetCourseManagersInput) {
   const db = getFirestore();
@@ -160,16 +166,12 @@ export async function applyCourseManagers(input: SetCourseManagersInput) {
   if (!snap.exists) throw new HttpsError('not-found', 'No such class.');
   const before = (snap.data() as CourseDoc).managerUids ?? [];
 
-  const checks = await Promise.all(
-    input.managerUids.map((uid) => db.collection(COLLECTIONS.staffUsers).doc(uid).get()),
-  );
+  const adding = input.managerUids.filter((uid) => !before.includes(uid));
+  const checks = await Promise.all(adding.map((uid) => db.collection(COLLECTIONS.staffUsers).doc(uid).get()));
   checks.forEach((snap, i) => {
     const staff = snap.data() as StaffUserDoc | undefined;
     if (!snap.exists || staff?.status !== 'active') {
-      throw new HttpsError(
-        'failed-precondition',
-        `${input.managerUids[i]} is not an active staff member.`,
-      );
+      throw new HttpsError('failed-precondition', `${adding[i]} is not an active staff member.`);
     }
   });
 

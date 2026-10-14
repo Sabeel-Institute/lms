@@ -204,6 +204,31 @@ describe('setCourseManagers', () => {
     expect((await classDoc(id)).managerUids).toEqual([]);
   });
 
+  it('keeps a manager who was disabled, and still takes another or lets them go', async () => {
+    // Disabling a manager leaves them on their courses, where they can open
+    // nothing while disabled, and the screen sends the whole list. Checking
+    // every uid refused every later change to such a course: the next manager
+    // could not be added until somebody took the disabled one off.
+    const { id: cohortId } = await createCohortRecord(ADMIN, 'C');
+    const { id } = await createCourseRecord(ADMIN, { cohortId, name: 'K' });
+    await applyCourseManagers({ courseId: id, managerUids: [MGR] });
+    await seedStaff(MGR, 'manager', 'disabled');
+    await seedStaff('mgr2', 'manager', 'active');
+
+    await applyCourseManagers({ courseId: id, managerUids: [MGR, 'mgr2'] });
+    expect((await classDoc(id)).managerUids).toEqual([MGR, 'mgr2']);
+
+    const off = await applyCourseManagers({ courseId: id, managerUids: ['mgr2'] });
+    expect(off.removed).toEqual([MGR]);
+    expect((await classDoc(id)).managerUids).toEqual(['mgr2']);
+
+    // Once off, a disabled manager is added like anyone else: refused.
+    await expect(applyCourseManagers({ courseId: id, managerUids: ['mgr2', MGR] })).rejects.toThrow(
+      /not an active staff member/,
+    );
+    expect((await classDoc(id)).managerUids).toEqual(['mgr2']);
+  });
+
   it('de-duplicates', () => {
     expect(
       validateSetCourseManagers({ courseId: 'c', managerUids: ['a', 'a', 'b'] }).managerUids,

@@ -524,7 +524,9 @@ A message is shown whether the app is open, in the background, or closed — on 
 - Full platform access.
 - Seeded initial Admin account.
 - Approve staff and assign Admin/Manager roles.
-- Assign Managers class by class.
+- Assign Managers class by class. An admin can be one of a class's managers
+  too, and then gets its attendance reminder and its work to grade, as a
+  manager does; it grants them nothing they did not have.
 - Configure approved Zoom source.
 - Manage cohorts/classes globally.
 - Manage students globally.

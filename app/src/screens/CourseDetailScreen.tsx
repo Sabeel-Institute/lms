@@ -24,7 +24,7 @@ import { RenameAction } from '../components/RenameAction';
 import { Sheet } from '../components/Sheet';
 import { INSTITUTE_TIMEZONE, todayInZone } from '@sabeel/shared';
 import { useCourseLedger } from '../ledger';
-import { useDecidedStaff } from '../staff';
+import { useDecidedStaffState } from '../staff';
 import { useStudentsState, type StudentRow } from '../students';
 import {
   createEnrollment,
@@ -79,13 +79,21 @@ export function CourseDetailScreen({
   const roster = rosterState ?? NO_ROSTER;
   const studentsState = useStudentsState(true);
   const students = studentsState ?? NO_STUDENTS;
-  const staff = useDecidedStaff(isAdmin);
-  // Only non-admin active staff can be *assigned* a course — an admin already has
-  // every course, so offering to "make them a manager" is a no-op that reads as
-  // broken (the confusion a solo admin hits: they can't usefully pick themself).
-  const assignableManagers = useMemo(
-    () => staff.filter((s) => s.status === 'active' && s.role !== 'admin'),
-    [staff],
+  const staff = useDecidedStaffState(isAdmin);
+  /*
+   * EVERYONE THE COUNT COUNTS, AND EVERYONE WHO COULD BE ADDED.
+   *
+   * A course's managers get its attendance reminders and its work to grade on
+   * Today, admins included, so an admin who teaches a course is ticked here
+   * like anyone else. The list was managers only, and an admin in the array (a
+   * manager since promoted, or one who teaches) was counted in "Managers (1)"
+   * and listed nowhere. A disabled manager stays on their courses until taken
+   * off (`applyCourseManagers`), so they are listed, marked, while they are on
+   * one, and can be taken off; nobody disabled can be added.
+   */
+  const managerChoices = useMemo(
+    () => (staff ?? []).filter((s) => s.status === 'active' || cls.managerUids.includes(s.uid)),
+    [staff, cls.managerUids],
   );
   const today = todayInZone(INSTITUTE_TIMEZONE);
   const ledger = useCourseLedger(cls.id, today);
@@ -448,74 +456,76 @@ export function CourseDetailScreen({
         <>
           <SectionTitle>Managers ({cls.managerUids.length})</SectionTitle>
           <Card>
-            {/* Managers are scoped-DOWN staff — access to just this course.
-                Admins already have every course, so listing them here (or the
-                admin themselves) only invites a pointless, confusing self-toggle;
-                exclude them. */}
             <Text style={styles.managerLede}>
-              Managers get access to just this course. You — and other admins —
-              already have access to every course.
+              Ticked staff manage this course: they get its attendance reminders, and its work to
+              grade on Today. A manager can open only the courses they manage; admins can open
+              every course.
             </Text>
-            {assignableManagers.length === 0 ? (
-              <Empty>
-                No managers to assign yet. Staff who sign in with Google appear here once you
-                approve them as a manager, then you can give them this course.
-              </Empty>
-            ) : (
-              assignableManagers.map((s) => {
-                  const on = cls.managerUids.includes(s.uid);
-                  const pending = managerWriteInFlight && managerBusy?.uid === s.uid;
-                  return (
-                    <Pressable
-                      key={s.uid}
-                      testID={`course-manager-${s.email}`}
-                      accessibilityRole="checkbox"
-                      // aria-*, not accessibilityState: react-native-web has no
-                      // mapping for accessibilityState, so it reaches the DOM as
-                      // nothing at all and the checkbox exposes no checked state
-                      // to assistive tech. RN supports the aria props natively.
-                      aria-checked={on}
-                      aria-disabled={managerWriteInFlight}
-                      accessibilityLabel={`${on ? 'Remove' : 'Assign'} ${s.displayName}`}
-                      // Locked while ANY manager write is in flight: this sends the
-                      // whole array, so a second tap computed from the pre-write
-                      // list would silently undo the first.
-                      disabled={managerWriteInFlight}
-                      onPress={() =>
-                        void runManager(s.uid, !on, () =>
-                          setCourseManagers({
-                            courseId: cls.id,
-                            managerUids: on
-                              ? cls.managerUids.filter((u) => u !== s.uid)
-                              : [...cls.managerUids, s.uid],
-                          }),
-                        )
-                      }
-                      style={[
-                        styles.pickRow,
-                        managerWriteInFlight && !pending ? styles.rowWaiting : null,
-                      ]}
-                    >
-                      {pending ? (
-                        <ActivityIndicator style={styles.tick} color={t.accent.base} />
-                      ) : (
-                        /* A TICK, not just a fill. A bare filled square is the
-                           app's only checkbox and its checked state was colour
-                           alone, which reads as an image that failed to load —
-                           and says nothing at all to a screen reader's user who
-                           is also colour-blind. */
-                        <View style={[styles.tick, on ? styles.tickOn : null]}>
-                          {on ? <Text style={styles.tickMark}>✓</Text> : null}
-                        </View>
-                      )}
-                      <View style={styles.pickText}>
-                        <Text style={styles.name}>{s.displayName}</Text>
-                        <EmailText email={s.email} />
-                      </View>
-                    </Pressable>
-                  );
-                })
-            )}
+            {managerChoices.map((s) => {
+              const on = cls.managerUids.includes(s.uid);
+              const pending = managerWriteInFlight && managerBusy?.uid === s.uid;
+              return (
+                <Pressable
+                  key={s.uid}
+                  testID={`course-manager-${s.email}`}
+                  accessibilityRole="checkbox"
+                  // aria-*, not accessibilityState: react-native-web has no
+                  // mapping for accessibilityState, so it reaches the DOM as
+                  // nothing at all and the checkbox exposes no checked state
+                  // to assistive tech. RN supports the aria props natively.
+                  aria-checked={on}
+                  aria-disabled={managerWriteInFlight}
+                  accessibilityLabel={`${on ? 'Remove' : 'Assign'} ${s.displayName}`}
+                  // Locked while ANY manager write is in flight: this sends the
+                  // whole array, so a second tap computed from the pre-write
+                  // list would silently undo the first.
+                  disabled={managerWriteInFlight}
+                  onPress={() =>
+                    void runManager(s.uid, !on, () =>
+                      setCourseManagers({
+                        courseId: cls.id,
+                        managerUids: on
+                          ? cls.managerUids.filter((u) => u !== s.uid)
+                          : [...cls.managerUids, s.uid],
+                      }),
+                    )
+                  }
+                  style={[
+                    styles.pickRow,
+                    managerWriteInFlight && !pending ? styles.rowWaiting : null,
+                  ]}
+                >
+                  {pending ? (
+                    <ActivityIndicator style={styles.tick} color={t.accent.base} />
+                  ) : (
+                    /* A TICK, not just a fill. A bare filled square is the
+                       app's only checkbox and its checked state was colour
+                       alone, which reads as an image that failed to load —
+                       and says nothing at all to a screen reader's user who
+                       is also colour-blind. */
+                    <View style={[styles.tick, on ? styles.tickOn : null]}>
+                      {on ? <Text style={styles.tickMark}>✓</Text> : null}
+                    </View>
+                  )}
+                  <View style={styles.pickText}>
+                    <Text style={styles.name}>{s.uid === uid ? `${s.displayName} (you)` : s.displayName}</Text>
+                    {/* Marked as the staff list marks them, because these two
+                        rows mean something different: ticking an admin adds
+                        the reminders and the grading, never access, and a
+                        disabled manager can be taken off but not put back. */}
+                    <EmailText
+                      email={s.email}
+                      suffix={s.status === 'disabled' ? ' · disabled' : s.role === 'admin' ? ' · admin' : undefined}
+                    />
+                  </View>
+                </Pressable>
+              );
+            })}
+            {staff !== null && !managerChoices.some((s) => s.role === 'manager' && s.status === 'active') ? (
+              <Text style={styles.hint}>
+                Staff who sign in with Google appear here once you approve them.
+              </Text>
+            ) : null}
           </Card>
 
           <SectionTitle>Settings</SectionTitle>

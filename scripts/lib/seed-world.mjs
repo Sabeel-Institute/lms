@@ -378,8 +378,10 @@ export async function seedWorld({ db, auth, browser, base }) {
       ...extra,
     });
   // The manager is scoped to ONE course, which is the whole of their access —
-  // cohort membership grants nothing. Their tour is the read of that.
-  await course(COURSE, COHORT, 'Hikam Foundations', { managerUids: [managerUid] });
+  // cohort membership grants nothing. Their tour is the read of that. The
+  // disabled one is still on it, as disabling leaves a manager on their
+  // courses, so the course page's managers list draws its marked row.
+  await course(COURSE, COHORT, 'Hikam Foundations', { managerUids: [managerUid, 'sw-disabled'] });
   await course(LONG_COURSE, COHORT, LONG_COURSE_NAME);
   await course('sw-past-course', 'sw-past', 'Seerah Survey', { effectiveActive: false });
 
