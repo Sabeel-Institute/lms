@@ -371,7 +371,8 @@ marked; managers see only the courses they've been assigned to.*
 ## 2.1 Signing in and getting approved
 
 Staff sign in differently from students. On the sign-in screen, use **Sign in
-with Google** with your Sabeel Google account.
+with Google** with your Sabeel Google account. Any other Google account is
+turned away, and the sign-in screen says so.
 
 **The first time, you'll wait for approval.** New staff accounts start as
 *pending* — an administrator has to approve you and choose your role before you

@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { APP_NAME, FIRST_ADMIN_LOCAL_PART } from '@sabeel/shared';
 import { auth } from '../firebase';
 import { signInWithGoogle } from '../auth/google';
-import { signInMessage } from '../auth/signInMessage';
+import { REFUSED_ACCOUNT, signInMessage } from '../auth/signInMessage';
 import { devSignIn, devSignInAvailable } from '../auth/devSignIn';
 import { Button, Field, Notice, Screen } from '../components/ui';
 import { BUILD_LABEL } from '../buildInfo';
@@ -20,12 +20,18 @@ const t = getTheme();
  * most common way to blow the palette's proportion budget. Raspberry appears
  * only on the primary button.
  */
-export function SignInScreen() {
+export function SignInScreen({ refused }: { refused: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // THE DOOR'S ANSWER, when it came after the sign-in rather than inside it:
+  // the session learns of the refusal as this screen comes back, or a moment
+  // later. The next attempt clears it like any other error.
+  useEffect(() => {
+    if (refused) setError(REFUSED_ACCOUNT);
+  }, [refused]);
 
   // `fn` is called inside the press, before any await, so the Google popup
   // still opens from the tap that asked for it.

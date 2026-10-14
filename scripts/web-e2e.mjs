@@ -404,6 +404,35 @@ check(
   'an off-domain sign-in is deleted and lands back at sign-in',
   (await bodyText(outsider)).includes('Emulator sign-in'),
 );
+// The promise itself: the account is gone, not marked. Looked up as the
+// Admin SDK would; an empty answer is the account not existing.
+let outsiderLeft = null;
+for (let i = 0; i < 10; i++) {
+  outsiderLeft = await (
+    await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/projects/${EMULATOR_PROJECT_ID}/accounts:lookup`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: ['someone@gmail.com'] }),
+    })
+  ).json();
+  if (!outsiderLeft.users?.length) break;
+  await outsider.waitForTimeout(1000);
+}
+check('…and its account no longer exists', !outsiderLeft.users?.length && !outsiderLeft.error, JSON.stringify(outsiderLeft).slice(0, 200));
+/*
+ * WHAT THE PERSON IS TOLD CANNOT BE CHECKED HERE, only that they are back at
+ * sign-in. The trigger deletes the account inside the sign-in or just after
+ * it. Inside, the sign-in fails `auth/user-token-expired` and the screen says
+ * why (`signInMessage.test.ts`). Just after, which is the usual case in
+ * production, the session's first forced refresh is answered USER_NOT_FOUND:
+ * the SDK reports `auth/user-token-expired` and signs out, and the session
+ * marks that ending refused, so the sign-in screen says why. The Auth emulator
+ * answers that refresh INVALID_REFRESH_TOKEN instead, which the SDK reports as
+ * `auth/invalid-refresh-token` and does not sign out on, so here the session
+ * never leaves the sign-in screen and nothing is said. The usual case was
+ * checked on the live site: silent before the session change, saying why
+ * after it (docs/PHASE_STATUS.md, 2026-10-14).
+ */
 
 // A stranger self-registering with email/password must also be deleted.
 //

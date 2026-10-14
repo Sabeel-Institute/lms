@@ -23,7 +23,8 @@ export type Profile =
 
 export type Session =
   | { phase: 'loading' }
-  | { phase: 'signedOut' }
+  /** `refused`: the account just signed out was refused at the door — see `useSession`. */
+  | { phase: 'signedOut'; refused: boolean }
   | { phase: 'signedIn'; user: User; profile: Profile | null; claims: TokenClaims };
 
 /** How long sign-out waits for the final progress write before giving up. */
@@ -140,6 +141,21 @@ export function useSession(): Session {
      * earlier sign-in is never allowed to re-arm (`pollChain.ts`).
      */
     const chain = createPollChain();
+    /*
+     * REFUSED AT THE DOOR: the account went before it was ever provisioned.
+     *
+     * The auth trigger deletes a Google account outside the staff domain
+     * moments after it is created. When that lands inside the sign-in, the
+     * sign-in itself fails and its screen says why (`signInMessage`). Usually
+     * it lands just after: the person is signed in, waiting on the
+     * provisioning screen, when the poll's forced refresh finds the account
+     * gone and the SDK signs them out. That ending used to say nothing at all.
+     *
+     * Only an account that never had a role: staff and students are given one
+     * before they can do anything, so for them the same error is a revoked
+     * session, not a refusal, and the message would be false.
+     */
+    let refused = false;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       const gen = chain.claim();
@@ -166,9 +182,13 @@ export function useSession(): Session {
         // credential is gone, and stopping is the point.
         void closePlayback();
         forgetPlaybackUrls();
-        setSession({ phase: 'signedOut' });
+        setSession({ phase: 'signedOut', refused });
         return;
       }
+      // A new sign-in: whatever ended the last one is not news any more.
+      refused = false;
+      /** Whether this sign-in has ever had a role: an account the door refuses never does. */
+      let provisioned = false;
 
       const toProfile = (
         role: Role | undefined,
@@ -183,6 +203,7 @@ export function useSession(): Session {
       const publish = (profile: Profile | null, claims: TokenClaims) => {
         // The observer has moved on — signed out, or a different account.
         if (cancelled || !chain.owns(gen)) return;
+        if (claims.role) provisioned = true;
         const ready = isReady(claims, profile);
         // A gated account — pending, disabled, or not yet provisioned — is
         // denied by every rule, so denials while it is in that state say
@@ -278,7 +299,14 @@ export function useSession(): Session {
           // wait for a poll tick.
           if (claims.role) armListener(claims.role);
         } catch (e) {
-          console.warn('session poll', (e as { code?: string }).code ?? (e as Error).message);
+          const code = (e as { code?: string }).code;
+          // The SDK has signed this account out before rethrowing, so the
+          // signed-out branch above may already have run: say it either way.
+          if (code === 'auth/user-token-expired' && !provisioned && auth.currentUser === null) {
+            refused = true;
+            setSession((s) => (s.phase === 'signedOut' ? { phase: 'signedOut', refused: true } : s));
+          }
+          console.warn('session poll', code ?? (e as Error).message);
         }
       };
 

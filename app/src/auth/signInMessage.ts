@@ -1,6 +1,14 @@
 import { errorText } from '../errors';
 
 /**
+ * What a person is told when the app refuses their account at the door: a
+ * Google account outside the staff domain, which the auth trigger deletes. The
+ * sign-in screen shows it whether the deletion landed inside the sign-in
+ * (below) or a moment after it (`refused` on the session).
+ */
+export const REFUSED_ACCOUNT = "That account can't sign in here. Staff use their Sabeel Google account.";
+
+/**
  * The sentence the sign-in screen shows for a failed attempt.
  *
  * Auth codes get the words a person needs; anything else goes through
@@ -36,7 +44,7 @@ export function signInMessage(e: unknown): string {
        * itself, this is how the sign-in fails. "Try again in a moment" sent the
        * person round the same loop.
        */
-      return "That account can't sign in here. Staff use their Sabeel Google account.";
+      return REFUSED_ACCOUNT;
     case 'auth/user-disabled':
       // Staff are disabled the same way, and a manager has no teacher to ask.
       return 'That account has been disabled. Contact your teacher or an administrator.';
