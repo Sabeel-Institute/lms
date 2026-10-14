@@ -135,8 +135,9 @@ export async function notifyReturned(db: Firestore, courseworkId: string, studen
 /**
  * 7 AM: everyone whose work is due today and who has nothing in — on their own
  * date when they were given more time, which is the date their record holds.
- * Not for a course that has been archived, nor an assignment a teacher stopped
- * taking work on, nor anyone let off it.
+ * Not for a course that has been archived, nor anyone let off it, nor anyone
+ * whose work a teacher stopped taking: that is their own record's
+ * `closedEarly`, since stopping leaves a student with dates of their own open.
  */
 export async function notifyHandInLastDay(db: Firestore, today: string): Promise<number> {
   const due = await db
@@ -154,7 +155,7 @@ export async function notifyHandInLastDay(db: Firestore, today: string): Promise
     if (!stillWorking(s) || s.closedEarly) continue;
     if (!cws.has(s.courseworkId)) cws.set(s.courseworkId, await readCw(db, s.courseworkId));
     const cw = cws.get(s.courseworkId);
-    if (!cw || cw.status !== 'posted' || cw.closedAt !== null) continue;
+    if (!cw || cw.status !== 'posted') continue;
     if (!courses.has(cw.courseId)) courses.set(cw.courseId, await readCourse(db, cw.courseId));
     const course = courses.get(cw.courseId);
     if (!course?.effectiveActive) continue;

@@ -24,6 +24,7 @@ import {
   deleteCoursework,
   postCoursework,
   removeAttachment,
+  reopenCoursework,
   updateCoursework,
   type CourseworkInput,
   type CourseworkRow,
@@ -356,13 +357,35 @@ export function CourseworkEditScreen({
           )}
         </Row>
         {uploading ? <Text style={styles.waiting}>Ready once every file is up.</Text> : null}
+        {posted && existing && existing.closedAt !== null ? (
+          <View style={styles.close}>
+            <Text testID="coursework-closed" style={styles.hint}>
+              Stopped taking work on {unbreakableDate(todayInZone(INSTITUTE_TIMEZONE, existing.closedAt))}. Anyone given
+              more time or another try can still hand in by their own date.
+            </Text>
+            <Button
+              testID="coursework-reopen"
+              label="Take work again"
+              variant="secondary"
+              busy={active === 'reopen'}
+              disabled={others('reopen')}
+              onPress={() =>
+                act('reopen', async () => {
+                  await reopenCoursework({ courseworkId: existing.id });
+                })
+              }
+            />
+            <Text style={styles.hint}>Students marked missed when you stopped go back to the assignment’s dates.</Text>
+          </View>
+        ) : null}
         {posted && existing && existing.closedAt === null ? (
           <View style={styles.close}>
             {confirmClose ? (
               <Card>
                 <Text style={styles.confirm}>
-                  Stop taking work for the whole class now? Everyone with nothing handed in will show as missed. Work
-                  already in can still be graded.
+                  Stop taking work for the whole class now? Everyone with nothing handed in will show as missed, except
+                  anyone you gave more time or another try, who keeps their own date. Work already in can still be
+                  graded, and you can take work again later.
                 </Text>
                 <Row>
                   <Button
@@ -390,7 +413,10 @@ export function CourseworkEditScreen({
                   disabled={others('close')}
                   onPress={() => setConfirmClose(true)}
                 />
-                <Text style={styles.hint}>Everyone with nothing handed in will show as missed. Work already in can still be graded.</Text>
+                <Text style={styles.hint}>
+                  Everyone with nothing handed in will show as missed, except anyone given more time or another try. Work
+                  already in can still be graded.
+                </Text>
               </>
             )}
           </View>

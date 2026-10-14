@@ -1080,8 +1080,13 @@ open, your save is refused and says so, so their change is not lost; open it
 again to see it. If you leave the form with changes you haven't saved, the app
 asks before discarding them.
 
-**Stop taking work** closes it now: everyone with nothing handed in shows as
-missed, and work already in can still be graded.
+**Stop taking work**, on the same form, closes it now: everyone with nothing
+handed in shows as missed, and work already in can still be graded. A student
+you gave more time or another try keeps their own date and can still hand in
+until then. Stopped too early, or by mistake? **Take work again** opens it
+until its dates once more: the students it marked missed are back to work on
+it, and anyone who joined the class meanwhile gets it if its due date hasn't
+passed.
 
 **Delete assignment**, at the foot of the form, is for a mistake: a teacher can delete an assignment only
 while no student has started it. Once any student has a draft, a hand-in, a
@@ -1248,6 +1253,7 @@ confirmation, and is audited. Reach for disable, unpublish, or archive first.
 | **Post an assignment** *(staff)* | Course → **Assignments** → **+** → title, instructions, date → **Post**. |
 | **Grade and return** *(staff)* | The assignment → **Grade** → grade + feedback → **Return now**, or **Next to grade ›** and **Return N graded** at the end. |
 | **Give one student more time** *(staff)* | Their work → **More time, or not required…** → reason + date → **Give more time**. |
+| **Stop taking work, or take it again** *(staff)* | The assignment → the **pencil** → **Stop taking work** (or **Take work again**). |
 | **Give someone credit anyway** *(staff)* | Ledger → the **pencil** on their row → reason (required) → **Mark complete**. |
 | **Make a latecomer catch up on an old session** *(staff)* | Open that session → mark them **Excused** → **Submit attendance**. (Move **Due by** forward first if it has passed.) |
 | **See course attendance** *(staff)* | Course → **Attendance report** (toggle by session / by student). |

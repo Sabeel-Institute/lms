@@ -17,6 +17,7 @@ import { createCohortRecord } from '../../src/cohorts';
 import { applyCourseUpdate, createCourseRecord } from '../../src/courses';
 import { createEnrollmentRecord } from '../../src/enrollments';
 import {
+  closeCourseworkRecord,
   createCourseworkRecord,
   giveMoreTimeRecord,
   handInWork,
@@ -225,6 +226,27 @@ describe('the last day to hand in, at 7 AM', () => {
     // Carol's own last day comes on her own date.
     await notifyHandInLastDay(db(), inDays(3));
     expect(told()).toEqual([AMINAH, CAROL]);
+  });
+
+  /*
+   * STOPPING LEAVES A STUDENT'S OWN DATE STANDING (decided 2026-10-14), so
+   * their reminder stands with it. Closed for the class, the reminder was
+   * skipped for everyone, the student with a week more among them.
+   */
+  it('after work stops, tells only those given more time, on their own last day', async () => {
+    const id = await postedThroughTheApp();
+    await db().collection(COLLECTIONS.coursework).doc(id).update({ dueDate: today, lateUntil: null });
+    for (const uid of [AMINAH, BILAL, CAROL]) {
+      await db().collection(COLLECTIONS.submissions).doc(submissionId(uid, id)).update({ dueDate: today, lateUntil: null });
+    }
+    await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: CAROL, dates: { dueDate: inDays(3), lateUntil: null }, reason: 'Ill' });
+    await closeCourseworkRecord(id);
+    outbox = [];
+    // Aminah's and Bilal's last day was today, but work has stopped for them.
+    await notifyHandInLastDay(db(), today);
+    expect(told()).toEqual([]);
+    await notifyHandInLastDay(db(), inDays(3));
+    expect(told()).toEqual([CAROL]);
   });
 
   it('says nothing for a course that has been archived', async () => {

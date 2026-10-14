@@ -27,6 +27,7 @@ export {
   updateCoursework,
   postCoursework,
   closeCoursework,
+  reopenCoursework,
   deleteCoursework,
   handIn,
   takeBack,

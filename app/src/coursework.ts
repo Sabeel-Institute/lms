@@ -308,6 +308,7 @@ export const updateCoursework = call<
 >('updateCoursework');
 export const postCoursework = call<{ courseworkId: string }, { id: string; students: number }>('postCoursework');
 export const closeCoursework = call<{ courseworkId: string }, unknown>('closeCoursework');
+export const reopenCoursework = call<{ courseworkId: string }, unknown>('reopenCoursework');
 export const deleteCoursework = call<{ courseworkId: string }, unknown>('deleteCoursework');
 export const saveGrade = call<
   {

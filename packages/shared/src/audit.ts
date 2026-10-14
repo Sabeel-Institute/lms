@@ -68,6 +68,7 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   updateCoursework: 'Edited assignment',
   postCoursework: 'Posted assignment',
   closeCoursework: 'Stopped taking work',
+  reopenCoursework: 'Took work again',
   deleteCoursework: 'Deleted assignment',
   saveGrade: 'Changed a returned grade',
   returnWork: 'Returned work',

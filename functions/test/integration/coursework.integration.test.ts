@@ -6,6 +6,7 @@ import {
   EMULATOR_PROJECT_ID,
   INSTITUTE_TIMEZONE,
   addDays,
+  canTakeBack,
   enrollmentId,
   isLate,
   submissionId,
@@ -26,6 +27,7 @@ import {
   giveMoreTimeRecord,
   handInWork,
   postCourseworkRecord,
+  reopenCourseworkRecord,
   returnWorkRecord,
   saveGradeRecord,
   setNotRequiredRecord,
@@ -110,6 +112,12 @@ async function classTimePasses(cwId: string, dates: { dueDate: string; lateUntil
 }
 
 const stateOf = async (uid: string, cwId: string) => workState((await sub(uid, cwId))!, today, true);
+
+/** Something written, and handed in. */
+async function handedIn(uid: string, id: string) {
+  await writeNote(uid, id, `${uid}'s work`);
+  await handInWork(uid, id);
+}
 
 describe('who receives an assignment', () => {
   it('a draft reaches no student; posting it gives every enrolled student their own work', async () => {
@@ -334,11 +342,6 @@ describe('taking work back', () => {
 });
 
 describe('grading and returning', () => {
-  async function handedIn(uid: string, id: string) {
-    await writeNote(uid, id, `${uid}'s work`);
-    await handInWork(uid, id);
-  }
-
   it('a student cannot see a grade until it is returned, then sees exactly it', async () => {
     const id = await posted();
     await handedIn(AMINAH, id);
@@ -597,6 +600,95 @@ describe('closing and archiving', () => {
     await closeCourseworkRecord(id);
     expect(await stateOf(BILAL, id)).toBe('missed');
     expect(await stateOf(AMINAH, id)).toBe('handedIn');
+  });
+
+  /*
+   * STOPPING KEEPS A PROMISE MADE TO ONE STUDENT (decided 2026-10-14). A
+   * student given more time, or another try, was marked missed with the rest
+   * of the class the moment work stopped, days before the date they had been
+   * given.
+   */
+  it('stopping early leaves anyone given more time or another try open, until their own date', async () => {
+    const id = await posted();
+    await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, dates: { dueDate: inDays(15), lateUntil: null }, reason: 'Travel' });
+    await handedIn(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 4 }, feedback: 'Again, please.' });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(5), lateUntil: null });
+    await createEnrollmentRecord(TEACHER, { studentUid: LATECOMER, courseId });
+    await closeCourseworkRecord(id);
+    expect(await stateOf(LATECOMER, id)).toBe('missed');
+    expect(await stateOf(BILAL, id)).toBe('toDo');
+    expect(await stateOf(AMINAH, id)).toBe('toDo');
+    // And they can hand in, by their own date.
+    await writeNote(BILAL, id, 'Back from travel');
+    await handInWork(BILAL, id);
+    await writeNote(AMINAH, id, 'Second go');
+    await handInWork(AMINAH, id);
+    expect((await sub(BILAL, id))?.state).toBe('handedIn');
+    expect((await sub(AMINAH, id))?.state).toBe('handedIn');
+  });
+
+  /*
+   * TAKING WORK AGAIN (decided 2026-10-14): stopping, undone. Before it, a
+   * stop pressed by mistake, or too early, could only be answered student by
+   * student with more time.
+   */
+  it('taking work again puts the students it closed back on the assignment’s dates', async () => {
+    const id = await posted();
+    await handedIn(AMINAH, id);
+    await closeCourseworkRecord(id);
+    expect(await stateOf(BILAL, id)).toBe('missed');
+    expect(canTakeBack((await sub(AMINAH, id))!, today, true)).toBe(false);
+    expect((await reopenCourseworkRecord(id)).changed).toBe(true);
+    expect((await cw(id))?.closedAt).toBeNull();
+    expect(await stateOf(BILAL, id)).toBe('toDo');
+    await writeNote(BILAL, id, 'Now');
+    await handInWork(BILAL, id);
+    expect((await sub(BILAL, id))?.state).toBe('handedIn');
+    // Work in before the stop can be taken back again while it is open.
+    expect(canTakeBack((await sub(AMINAH, id))!, today, true)).toBe(true);
+  });
+
+  it('taking work again keeps a student’s own dates, and the class’s dates still decide the rest', async () => {
+    const id = await posted();
+    await closeCourseworkRecord(id);
+    // More time given while it was closed: the student's own dates.
+    await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, dates: { dueDate: inDays(15), lateUntil: null }, reason: 'Ill' });
+    // The class's due date has gone by while it was closed; late work is still taken.
+    await classTimePasses(id, { dueDate: inDays(-1), lateUntil: inDays(6) });
+    await timePasses(BILAL, id, { dueDate: inDays(-1), lateUntil: inDays(6) });
+    await reopenCourseworkRecord(id);
+    expect(await sub(AMINAH, id)).toMatchObject({ dueDate: inDays(15), lateUntil: null, closedEarly: false });
+    expect(await stateOf(AMINAH, id)).toBe('toDo');
+    expect(await stateOf(BILAL, id)).toBe('pastDue');
+  });
+
+  it('a student who joined while it was closed receives it when work is taken again, if its due date has not gone', async () => {
+    const id = await posted();
+    await closeCourseworkRecord(id);
+    await createEnrollmentRecord(TEACHER, { studentUid: LATECOMER, courseId });
+    expect(await sub(LATECOMER, id)).toBeUndefined();
+    expect((await reopenCourseworkRecord(id)).given).toBe(1);
+    expect(await stateOf(LATECOMER, id)).toBe('toDo');
+    // Past its due date, a joiner owes nothing: as for anyone joining late.
+    const late = await posted();
+    await closeCourseworkRecord(late);
+    await db().collection(COLLECTIONS.students).doc('stu-later').set({ displayName: 'Later', email: 'later@example.com', status: 'active' });
+    await createEnrollmentRecord(TEACHER, { studentUid: 'stu-later', courseId });
+    await classTimePasses(late, { dueDate: inDays(-1), lateUntil: inDays(6) });
+    expect((await reopenCourseworkRecord(late)).given).toBe(0);
+    expect(await sub('stu-later', late)).toBeUndefined();
+  });
+
+  it('taking work again is refused on a draft or an archived course, and changes nothing on open work', async () => {
+    const { id: draft } = await createCourseworkRecord(TEACHER, courseId, fields() as never);
+    await expect(reopenCourseworkRecord(draft)).rejects.toThrow(/Only a posted assignment/);
+    const id = await posted();
+    expect(await reopenCourseworkRecord(id)).toMatchObject({ changed: false });
+    await closeCourseworkRecord(id);
+    await applyCourseUpdate({ courseId, archived: true });
+    await expect(reopenCourseworkRecord(id)).rejects.toThrow(/archived/);
+    expect(typeof (await cw(id))?.closedAt).toBe('number');
   });
 
   it('archiving the course closes open work rather than marking it missed', async () => {

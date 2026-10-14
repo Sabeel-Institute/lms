@@ -150,6 +150,12 @@ async function readCoursework(id: string): Promise<CourseworkDoc> {
   return snap.data() as CourseworkDoc;
 }
 
+async function readCourseworkIn(tx: FirebaseFirestore.Transaction, id: string): Promise<CourseworkDoc> {
+  const snap = await tx.get(cwRef(id));
+  if (!snap.exists) throw new HttpsError('not-found', 'No such assignment.');
+  return snap.data() as CourseworkDoc;
+}
+
 async function readCourse(courseId: string): Promise<CourseDoc> {
   const snap = await db().collection(COLLECTIONS.courses).doc(courseId).get();
   if (!snap.exists) throw new HttpsError('not-found', 'No such class.');
@@ -489,18 +495,64 @@ export const updateCoursework = auditedCall('updateCoursework', async (req, audi
   return { id, changed: res.changed };
 });
 
-/** Stop taking work before its dates: every student with nothing in has missed it. */
+/**
+ * Stop taking work before its dates: every student with nothing in has
+ * missed it. Except a student whose dates are their own, given more time or
+ * another try (decided 2026-10-14): a student promised Friday is not marked
+ * missed on Tuesday, and hands in by their own date.
+ *
+ * ONE TRANSACTION, so a student given more time while the class is being
+ * closed is either closed and then given it, or given it and left open, and
+ * never given it and then closed. A transaction writes at most 500
+ * documents, far more students than a class has.
+ */
 export async function closeCourseworkRecord(id: string) {
-  const cw = await readCoursework(id);
-  if (cw.status !== 'posted') throw new HttpsError('failed-precondition', 'Only a posted assignment can be closed.');
-  if (cw.closedAt !== null) return { id, changed: false };
-  const now = Date.now();
-  // Not `editedAt`: what the students read did not change, and the page says
-  // the work is closed in its own words.
-  await cwRef(id).update({ closedAt: now, updatedAt: now });
-  const subs = await db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id).get();
-  await inBatches(subs.docs, (batch, s) => batch.update(s.ref, { closedEarly: true }));
-  return { id, changed: true };
+  return db().runTransaction(async (tx) => {
+    const cw = await readCourseworkIn(tx, id);
+    if (cw.status !== 'posted') throw new HttpsError('failed-precondition', 'Only a posted assignment can be closed.');
+    if (cw.closedAt !== null) return { id, changed: false };
+    const subs = await tx.get(db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id));
+    const now = Date.now();
+    // Not `editedAt`: what the students read did not change, and the page says
+    // the work is closed in its own words.
+    tx.update(cwRef(id), { closedAt: now, updatedAt: now });
+    for (const s of subs.docs) {
+      if (!hasOwnDates(s.data() as SubmissionDoc)) tx.update(s.ref, { closedEarly: true });
+    }
+    return { id, changed: true };
+  });
+}
+
+/**
+ * Take work again (decided 2026-10-14): "Stop taking work" undone. The
+ * assignment is open until its dates once more: a student the stop marked
+ * missed goes back to what the dates make it, to do or past due, and a student
+ * who joined the class while it was closed receives it as anyone joining by
+ * the due date does. Anyone with dates of their own was never closed, and
+ * keeps them. One transaction, as closing is.
+ */
+export async function reopenCourseworkRecord(id: string) {
+  const todayIs = today();
+  // As posting is: an archived course takes no work.
+  if (!(await readCourse((await readCoursework(id)).courseId)).effectiveActive) {
+    throw new HttpsError('failed-precondition', 'This course is archived.');
+  }
+  return db().runTransaction(async (tx) => {
+    const cw = await readCourseworkIn(tx, id);
+    if (cw.status !== 'posted') throw new HttpsError('failed-precondition', 'Only a posted assignment can be reopened.');
+    if (cw.closedAt === null) return { id, changed: false, given: 0 };
+    const open: CourseworkDoc = { ...cw, closedAt: null, updatedAt: Date.now() };
+    const subs = await tx.get(db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id));
+    const enrolled = receivesOnJoining(open, todayIs)
+      ? await tx.get(db().collection(COLLECTIONS.enrollments).where('courseId', '==', cw.courseId).where('active', '==', true))
+      : null;
+    tx.update(cwRef(id), { closedAt: null, updatedAt: open.updatedAt });
+    for (const s of subs.docs) if (s.data().closedEarly === true) tx.update(s.ref, { closedEarly: false });
+    const has = new Set(subs.docs.map((s) => s.data().studentUid as string));
+    const joined = (enrolled?.docs ?? []).map((e) => e.data().studentUid as string).filter((uid) => !has.has(uid));
+    for (const uid of joined) tx.set(subRef(uid, id), freshSubmission(id, open, uid));
+    return { id, changed: true, given: joined.length };
+  });
 }
 
 export const closeCoursework = auditedCall('closeCoursework', async (req, audit) => {
@@ -511,6 +563,18 @@ export const closeCoursework = auditedCall('closeCoursework', async (req, audit)
   audit.targets = { courseworkId: id };
   const res = await closeCourseworkRecord(id);
   audit.noop = !res.changed;
+  return res;
+});
+
+export const reopenCoursework = auditedCall('reopenCoursework', async (req, audit) => {
+  const id = idOf((req.data as { courseworkId?: unknown })?.courseworkId, 'courseworkId');
+  const cw = await readCoursework(id);
+  await requireCourseScope(req, cw.courseId);
+  audit.courseId = cw.courseId;
+  audit.targets = { courseworkId: id };
+  const res = await reopenCourseworkRecord(id);
+  audit.noop = !res.changed;
+  if (res.given > 0) audit.detail = { given: res.given };
   return res;
 });
 

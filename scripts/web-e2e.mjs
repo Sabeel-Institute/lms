@@ -2374,6 +2374,41 @@ check(
   `${midway} → ${sentText}, return ${returnedSeq}`,
 );
 
+/*
+ * STOPPED, AND TAKEN AGAIN. Stopping marks everyone without dates of their
+ * own as missed; Take work again puts them back on the assignment's dates.
+ * Asserted on the records the students' screens read, with a floor: an
+ * empty class would pass any "every".
+ */
+const ownDates = (d) => !!d.fields.moreTime?.mapValue || d.fields.returned?.mapValue?.fields?.retry?.booleanValue === true;
+const subsOf = async () => (await readCollection('submissions')).filter((d) => d.fields.courseworkId?.stringValue === cwId);
+await admin.goBack();
+await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
+await tap(admin, 'coursework-edit');
+await tap(admin, 'coursework-close');
+await tap(admin, 'coursework-close-confirm');
+await admin.getByTestId('coursework-reopen').filter({ visible: true }).first().waitFor({ timeout: 20000 }).catch(() => {});
+const stopped = await subsOf();
+check(
+  'stopping work closes everyone without dates of their own, and says when',
+  stopped.some((d) => !ownDates(d)) &&
+    stopped.every((d) => d.fields.closedEarly?.booleanValue === !ownDates(d)) &&
+    (await showsText(admin, 'Stopped taking work on')),
+  JSON.stringify(stopped.map((d) => [d.fields.studentUid.stringValue, d.fields.closedEarly?.booleanValue, ownDates(d)])),
+);
+await shot(admin, '42b-coursework-stopped');
+await tap(admin, 'coursework-reopen');
+await admin.getByTestId('coursework-close').filter({ visible: true }).first().waitFor({ timeout: 20000 }).catch(() => {});
+const takenAgain = await subsOf();
+const reopenedCw = (await readCollection('coursework')).find((c) => c.name.endsWith(`/${cwId}`));
+check(
+  'taking work again opens it for everyone it closed',
+  takenAgain.length === stopped.length &&
+    takenAgain.every((d) => d.fields.closedEarly?.booleanValue === false) &&
+    'nullValue' in (reopenedCw?.fields.closedAt ?? {}),
+  JSON.stringify(takenAgain.map((d) => [d.fields.studentUid.stringValue, d.fields.closedEarly?.booleanValue])),
+);
+
 // A TAPPED NOTIFICATION'S WEB END is its link: the app's address plus the path
 // the message carries (pushPaths). Opened cold, it lands on the assignment.
 await student.goto(`${WEB}${pushPaths.work(cwId)}`, { waitUntil: 'domcontentloaded' });
