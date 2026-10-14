@@ -198,13 +198,17 @@ A release bumps one version and ships it to both surfaces. In order:
      pages repo — do NOT skip it):
      ```bash
      git tag vX.Y.Z <build-commit> && git push origin vX.Y.Z   # tag first
+     out=app/android/app/build/outputs/apk/release
+     cp $out/app-arm64-v8a-release.apk /tmp/sabeel-institute-lms-arm64-v8a.apk
+     cp $out/app-universal-release.apk /tmp/sabeel-institute-lms-universal.apk
      gh release create vX.Y.Z -R Sabeel-Institute/lms \
        --title "vX.Y.Z — Android" --notes-file NOTES.md \
-       "app-arm64-v8a-release.apk#sabeel-institute-lms-arm64-v8a.apk" \
-       "app-universal-release.apk#sabeel-institute-lms-universal.apk"
+       /tmp/sabeel-institute-lms-arm64-v8a.apk /tmp/sabeel-institute-lms-universal.apk
      ```
-     The repo is public, so these assets ARE the public download: the
-     unversioned names make
+     **Copied under the published names, not labelled.** `gh`'s `file#label`
+     sets only a display label: the asset keeps the file's own name, and the
+     download URL is the name. The repo is public, so these assets ARE the
+     public download: the unversioned names make
      `https://github.com/Sabeel-Institute/lms/releases/latest/download/sabeel-institute-lms-<abi>.apk`
      always the newest release. (`gh release create --target <sha>` on a
      not-yet-tagged release 422s; create and push the tag first, then the

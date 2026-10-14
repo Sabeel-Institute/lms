@@ -1746,6 +1746,35 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-14 — **v0.1.1 shipped to every surface** (build commit `57160d8`,
+  versionCode 36): the screen-by-screen batch and its device-pass fixes.
+  `check:queries`, `check:documents` (482 audit entries and every other
+  document read, every screen check run) and `check:push` green against the
+  live project; hosting only (no function changed), `smoke:prod` green at
+  `v0.1.1 · 57160d8`, no new Sentry issue. Device pass, debug build against
+  the seeded emulators: Today, a cohort, a course, the roster's picker, a
+  session's files, the ledger and its override, the library, People and a
+  student's menu, a colleague's menu, an assignment, grading, the assignment
+  form, the Zoom picker's filters, and the student's To do, class page,
+  assignments and handed-in work, all laid out by Yoga at 412 dp; the rename
+  and override sheets and the number fields with the keyboard up; the file
+  picker opened from the recording's + sheet, a file uploaded and added as a
+  part; a file attached to an assignment before its first save (a fake PDF
+  refused by the content check, as it should be); a tapped attachment opened
+  in Chrome and played from its signed link; the title sliding on the
+  player, the speed sheet, and playback carrying on at 1.5× behind the home
+  screen. It found three things, fixed in `57160d8`: a sheet's foot sat
+  under the keyboard (sheets now centre above it), the recording's ⋮ stayed
+  live beside an open delete confirmation, and a menu line broke an email
+  address. Release APK on the AVD: 0.1.1 / 36, labelled `v0.1.1 · 57160d8`,
+  no dev panel, and a temporary production student — excused from a
+  temporary session whose recording pointed at an existing file, granted by
+  the real trigger — played it from a production signed link; everything
+  made for it removed after, the file untouched (checked). Tagged and
+  published as a pre-release with both APKs; the download page and its
+  manual copy carry 0.1.1. The APK assets had first gone up under their
+  build names — `gh`'s `file#label` sets a label, not the name — and were
+  replaced; DEPLOY.md now copies them under the published names.
 - 2026-10-13 — **A downloaded file was named after its storage key**
   ("f1.pdf", in production a random id) and left a blank tab behind, found on
   the AVD's Chrome while checking that files open as links; the old Open
