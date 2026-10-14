@@ -6,8 +6,10 @@ import {
   courseWorkbook,
   courseworkCounts,
   excelSerial,
+  MAX_CELL_CHARS,
   readXlsx,
   studentWorkbook,
+  workbookFilename,
   WORKBOOK_DEFINITIONS,
   type CourseData,
   type WorkbookContext,
@@ -519,6 +521,21 @@ describe('courseWorkbook', () => {
     expect(workbook).toMatch(/_xlnm\._FilterDatabase/);
     // A date is a serial number with the date style, not text.
     expect(excelSerial(new Date('2026-09-15T00:00:00Z'))).toBe(46280);
+  });
+
+  it('opens whatever was typed into a title: the characters XML forbids go, and a cell over Excel\'s limit is cut short', () => {
+    const odd = { name: 'Odd', rows: [[{ v: 'Session\uffff 1\fwith a form feed' }], [{ v: 'x'.repeat(40_000) }]] };
+    const file = buildXlsx({ sheets: [odd] } as unknown as Parameters<typeof buildXlsx>[0]);
+    const xml = strFromU8(unzipSync(file)['xl/worksheets/sheet1.xml']);
+    expect(xml).not.toMatch(/[\uffff\f]/);
+    const back = readXlsx(file)[0].rows;
+    expect(back[0][0]).toBe('Session 1with a form feed');
+    expect(String(back[1][0]).length).toBe(MAX_CELL_CHARS);
+    expect(String(back[1][0]).endsWith('…')).toBe(true);
+  });
+
+  it('names a file the way every system accepts, # and % included', () => {
+    expect(workbookFilename('Arabic #2 — 100% done: A/B')).toBe('Arabic -2 — 100- done- A-B.xlsx');
   });
 
   it('reads back every row it wrote — the grids\' headers carry a newline', () => {

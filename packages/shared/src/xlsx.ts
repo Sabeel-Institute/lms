@@ -179,9 +179,18 @@ function stylesXml(): string {
 // ------------------------------------------------------------------- cells --
 
 // XML 1.0 forbids these code points outright; Excel refuses the file if one
-// is in a cell (a title pasted from a PDF can carry a form feed).
+// is in a cell (a title pasted from a PDF can carry a form feed): the C0
+// controls but tab, newline and return, and the noncharacters U+FFFE and
+// U+FFFF. A surrogate with no partner needs nothing here: the encoder writes
+// it as U+FFFD.
 // eslint-disable-next-line no-control-regex
-const XML_FORBIDDEN = /[\x00-\x08\x0b\x0c\x0e-\x1f]/g;
+const XML_FORBIDDEN = /[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]/g;
+
+/** The most a cell may hold: past it Excel calls the file corrupt and "repairs" it. */
+export const MAX_CELL_CHARS = 32_767;
+
+/** Text as a cell may hold it: cut short, and said to be, past Excel's limit. */
+const cellText = (s: string) => (s.length > MAX_CELL_CHARS ? `${s.slice(0, MAX_CELL_CHARS - 1)}…` : s);
 
 function escapeXml(s: string): string {
   return s
@@ -223,7 +232,7 @@ function cellXml(cell: Cell, r: number, c: number): string {
   if (cell.v === null || cell.v === undefined || cell.v === '') return `<c r="${ref}"${s}/>`;
   if (cell.v instanceof Date) return `<c r="${ref}"${s}><v>${excelSerial(cell.v)}</v></c>`;
   if (typeof cell.v === 'number') return `<c r="${ref}"${s}><v>${cell.v}</v></c>`;
-  return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${escapeXml(cell.v)}</t></is></c>`;
+  return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${escapeXml(cellText(cell.v))}</t></is></c>`;
 }
 
 function sheetXml(sheet: SheetSpec): string {
@@ -333,9 +342,15 @@ export function buildXlsx(workbook: WorkbookSpec): Uint8Array {
   return zipSync(files, { level: 6 });
 }
 
-/** A filename the share sheet and every filesystem accept. */
+/**
+ * A filename the share sheet and every filesystem accept. Not `#` or `%`
+ * either: on a phone the file is handed over as a URI, where `#` starts a
+ * fragment and `%` an escape, and "Arabic #2" went out as "Arabic " with no
+ * extension.
+ */
 export function workbookFilename(name: string): string {
-  const safe = name.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
+  // eslint-disable-next-line no-control-regex
+  const safe = name.replace(/[\\/:*?"<>|#%\x00-\x1f]/g, '-').replace(/\s+/g, ' ').trim();
   return `${safe || 'export'}.xlsx`;
 }
 
