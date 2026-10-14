@@ -1854,6 +1854,31 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-15 — **Bug hunt, round 1: checkpoint deploy** (`2f9da51`–`3d2f022`;
+  rules, functions and hosting deployed, live at `v0.1.1 · 3d2f022`). Eight
+  reviewers read everything since the fork and drove it on the live site
+  and the emulators: 106 findings so far, 61 settled, each fix with a test
+  seen failing first. In this deploy: a staff member disabled, or an admin
+  made a manager, kept their reach through the token they held for up to an
+  hour (the rules now ask the staff record too; on the live site both were
+  refused straight away); recording uploads from the app had failed since
+  2026-10-13 for want of a public invoker on one function (bound, and
+  `smoke:prod` now asks every callable to answer for itself); the first
+  poll of a new staff sign-in that failed is retried (found and not fixed
+  in the entry below); grading, returns, more time and another try (taking
+  work back after it closed, the dates of a student with their own,
+  returned grades sent explicitly, one student's refusal no longer stopping
+  Return all); workbook counts (marks outside the enrolment window, a
+  student who left); answers saved while typing steadily and sent on
+  leaving; refusals that are the answer no longer shown as live-data
+  faults; and the web bundle 0.9 MB smaller, with sign-in no longer waiting
+  on Google's iframe. Data: eight Zoom items given their segment start, and
+  one audit row flattened. Push notifications are off for everyone while
+  the hunt runs. Suites: unit 750, `test:emulator` 629 passed and 2
+  skipped, browser 231 checks, the sweep 1963 of 1963, a staff Google
+  sign-in through the emulator's popup, lint, typecheck, knip, `smoke:prod`
+  (46 callables), `check:documents` and `check:queries`.
+
 - 2026-10-14 — **The four decisions, staff help, grades in the workbooks,
   and data to judge them by** (`767f055`–`6ae284c`; functions deployed,
   hosting live at `v0.1.1 · 6ae284c`). Red first: `check:documents` on
