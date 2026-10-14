@@ -2896,8 +2896,8 @@ const courseRow = rowOf(tabOf(studentBook, 'Courses'), 'Hikam Foundations');
 check('the Courses tab has a row for the course she is in', !!courseRow && courseRow[1] === 'Autumn 2026');
 const historyRows = tabOf(studentBook, 'History').rows.slice(1);
 check(
-  'the History tab starts with her enrolment',
-  historyRows.length > 0 && /Enrolled in Hikam Foundations/.test(historyRows[0][2] ?? ''),
+  'the History tab starts with her account, then her enrolment, as her page does',
+  historyRows[0]?.[2] === 'Account created' && /Enrolled in Hikam Foundations/.test(historyRows[1]?.[2] ?? ''),
   historyRows.map((r) => r[2]).join(' | '),
 );
 
