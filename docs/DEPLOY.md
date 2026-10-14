@@ -135,12 +135,12 @@ A release bumps one version and ships it to both surfaces. In order:
 
 1. **Bump the version in BOTH files, together:**
    - `app/app.json` → `expo.version` (drives the sign-in build label and the
-     manual cover).
+     manual cover) **and** `expo.android.versionCode`.
    - `app/android/app/build.gradle` → `versionName` **and** `versionCode` — the
      code MUST increment or Android refuses the upgrade.
 
-   `functions/test/unit/appVersion.test.ts` fails if the two `versionName`s
-   diverge, so forgetting one is caught by `npm test` rather than on a device.
+   `functions/test/unit/appVersion.test.ts` fails if the two files disagree on
+   either, so forgetting one is caught by `npm test` rather than on a device.
 
    Commit the bump **first**, so the build carries that commit: the sign-in label
    is `v<version> · <commit>`, injected from `EXPO_PUBLIC_COMMIT` (the
