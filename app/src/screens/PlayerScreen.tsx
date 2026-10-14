@@ -294,8 +294,10 @@ export function PlayerScreen({
       {preparing && playable ? <Text style={styles.preparing}>Preparing…</Text> : null}
 
       {/* THE PARTS, when the class was recorded in more than one stretch. At
-          the end of one the next starts by itself; these are for jumping. */}
-      {parts.length > 1 && current ? (
+          the end of one the next starts by itself; these are for jumping.
+          Shown too when the part playing was hidden under the student, so
+          the one still there can be reached. */}
+      {current && parts.length > 0 && (parts.length > 1 || parts[0].part !== current.part) ? (
         <View style={styles.parts}>
           {parts.map(({ part, items }, index) => {
             const longest = Math.max(0, ...items.map((i) => i.durationSec ?? 0));

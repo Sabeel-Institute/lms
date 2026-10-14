@@ -687,11 +687,14 @@ function fileInPart(
   );
 }
 
-/** The part after the one being played, in play order, or null at the last. */
+/**
+ * The playable part after the one being played, in play order, or null at the
+ * last. By number, not by place among the playable parts: the part being
+ * played may have been hidden under the student, and then it has no place
+ * among them, and the recording "ended" with the next part unplayed.
+ */
 function nextPart(media: MediaMap, part: number): number | null {
-  const parts = mediaParts(Object.values(media).filter(isPlayable)).map((p) => p.part);
-  const at = parts.indexOf(part);
-  return at >= 0 && at < parts.length - 1 ? parts[at + 1] : null;
+  return mediaParts(Object.values(media).filter(isPlayable)).find((p) => p.part > part)?.part ?? null;
 }
 
 /** Bumped on every switch of file; a switch overtaken by a newer one is dropped. */

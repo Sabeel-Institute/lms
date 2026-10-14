@@ -1463,6 +1463,25 @@ describe('parts and versions', () => {
     expect(players[0]).toMatchObject({ startedAt: 0, keptPlaying: true });
   });
 
+  /*
+   * THE PART PLAYING HIDDEN UNDER THE STUDENT. Staff may hide a part while
+   * another stays visible; the next part was looked up among the visible ones
+   * by the hidden part's place in them, which is nowhere, so the recording
+   * "ended" there with Part 2 unplayed.
+   */
+  it('goes on to the next part when the one playing was hidden under it', async () => {
+    const pb = await load();
+    const rec = twoParts('rec-a');
+    pb.openPlayback(rec);
+    await flush();
+    const hide = (i: MediaItem) => ({ ...i, hidden: true });
+    pb.openPlayback({ ...rec, media: { ...rec.media, p1a: hide(rec.media.p1a), p1v: hide(rec.media.p1v) } });
+    players[0].events.onEnded();
+    await flush();
+    expect(lastMinted()).toBe('p2a');
+    expect(players[0]).toMatchObject({ startedAt: 0, keptPlaying: true });
+  });
+
   it('stops at the end of the last part, where the student marks it complete', async () => {
     const pb = await load();
     pb.openPlayback(twoParts('rec-a'));
