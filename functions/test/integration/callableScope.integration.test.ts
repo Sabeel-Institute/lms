@@ -235,6 +235,7 @@ const SCOPED: Array<{
   { name: 'editRecordingMedia', call: (r) => editRecordingMedia.run(r), data: { recordingId: RECORDING, op: 'hide', itemId: 'item1' } },
   { name: 'removeRecordingMedia', call: (r) => removeRecordingMedia.run(r), data: { recordingId: RECORDING, itemId: 'item1' } },
   { name: 'deleteRecording', call: (r) => deleteRecording.run(r), data: { recordingId: RECORDING } },
+  { name: 'deleteRecording, only if still empty', call: (r) => deleteRecording.run(r), data: { recordingId: RECORDING, ifEmpty: true } },
   { name: 'createStudent', call: (r) => createStudent.run(r), data: { displayName: 'New Student', email: `scoped-${Date.now()}@example.com`, courseId: THEIRS } },
   { name: 'createCoursework', call: (r) => createCoursework.run(r), data: { courseId: THEIRS, title: 'New', instructions: '', dueDate: '2099-03-01', lateUntil: null, grading: { kind: 'scale' } } },
   { name: 'updateCoursework', call: (r) => updateCoursework.run(r), data: { courseworkId: COURSEWORK, title: 'Renamed', instructions: '', dueDate: '2099-03-01', lateUntil: null, grading: { kind: 'scale' } } },
