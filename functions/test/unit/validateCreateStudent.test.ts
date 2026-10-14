@@ -4,6 +4,10 @@ import { validateCreateStudent } from '../../src/students';
 const base = { displayName: 'Fatima Ahmed', email: 'Fatima@Example.com ' };
 
 describe('validateCreateStudent', () => {
+  it('refuses a name longer than anyone’s', () => {
+    expect(() => validateCreateStudent({ ...base, displayName: 'x'.repeat(121) })).toThrow(/too long/);
+  });
+
   it('normalises the name and address', () => {
     const out = validateCreateStudent({ ...base });
     expect(out).toEqual({ displayName: 'Fatima Ahmed', email: 'fatima@example.com' });

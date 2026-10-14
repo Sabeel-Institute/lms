@@ -447,6 +447,11 @@ describe('validators', () => {
     expect(validateUpdateCourse({ courseId: 'c', name: '  K  ' }).name).toBe('K');
   });
 
+  it('a rename is held to the length a new class may have', () => {
+    expect(() => validateUpdateCourse({ courseId: 'c', name: 'x'.repeat(121) })).toThrow(/too long/);
+    expect(validateUpdateCourse({ courseId: 'c', name: 'x'.repeat(120) }).name).toHaveLength(120);
+  });
+
   it('createCourse requires a cohort and a name', () => {
     for (const bad of [null, {}, { cohortId: 'c' }, { name: 'K' }, { cohortId: 'c', name: ' ' }]) {
       expect(() => validateCreateCourse(bad)).toThrow();

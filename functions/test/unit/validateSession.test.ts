@@ -60,6 +60,19 @@ describe('validateCreateSession', () => {
 });
 
 describe('validateUpdateSession', () => {
+  /*
+   * AN EDIT IS HELD TO WHAT A CREATE IS. Renaming took any length at all, so a
+   * page pasted into a title, or 300,000 characters of notes, went into every
+   * workbook of the course, past Excel's limit for a cell.
+   */
+  it('caps the title and the notes as creating one does', () => {
+    expect(() => validateUpdateSession({ sessionId: 's1', title: 'x'.repeat(201) })).toThrow(/too long/);
+    expect(() => create({ title: 'x'.repeat(201) })).toThrow(/too long/);
+    expect(() => validateUpdateSession({ sessionId: 's1', notes: 'x'.repeat(5001) })).toThrow(/too long/);
+    expect(() => create({ notes: 'x'.repeat(5001) })).toThrow(/too long/);
+    expect(validateUpdateSession({ sessionId: 's1', title: 'x'.repeat(200), notes: 'x'.repeat(5000) }).title).toHaveLength(200);
+  });
+
   it('leaves the due date alone when it is not being changed', () => {
     const out = validateUpdateSession({ sessionId: 's1', title: 'Renamed' });
     expect(out).toEqual({ sessionId: 's1', title: 'Renamed' });

@@ -29,6 +29,7 @@ export function validateCreateStudent(data: unknown): CreateStudentInput {
   const displayName = typeof d?.displayName === 'string' ? d.displayName.trim() : '';
   const email = typeof d?.email === 'string' ? d.email.trim().toLowerCase() : '';
   if (!displayName) throw new HttpsError('invalid-argument', 'Full name is required.');
+  if (displayName.length > 120) throw new HttpsError('invalid-argument', 'That name is too long.');
   // Deliberately loose: Firebase Auth is the real validator and rejects a
   // malformed address on creation. Duplicating its rules here would only add a
   // second, subtly different definition of "valid email".

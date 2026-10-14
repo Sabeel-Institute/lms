@@ -84,6 +84,21 @@ export interface CreateSessionInput {
   notes: string;
 }
 
+/** A session's title, the same on create and on edit: a pasted page is not a title. */
+function sessionTitle(v: unknown, empty: string): string {
+  const title = typeof v === 'string' ? v.trim() : '';
+  if (!title) throw new HttpsError('invalid-argument', empty);
+  if (title.length > 200) throw new HttpsError('invalid-argument', 'That title is too long.');
+  return title;
+}
+
+/** A session's notes, which students read beside the recording. */
+function sessionNotes(v: unknown): string {
+  if (typeof v !== 'string') throw new HttpsError('invalid-argument', 'notes must be text.');
+  if (v.length > 5000) throw new HttpsError('invalid-argument', 'Those notes are too long (5,000 characters at most).');
+  return v;
+}
+
 export function validateCreateSession(
   data: unknown,
   today: string = todayInZone(INSTITUTE_TIMEZONE),
@@ -95,11 +110,9 @@ export function validateCreateSession(
   if (typeof d.date !== 'string' || !isCalendarDate(d.date)) {
     throw new HttpsError('invalid-argument', 'date must be YYYY-MM-DD.');
   }
-  const title = typeof d.title === 'string' ? d.title.trim() : '';
-  if (!title) throw new HttpsError('invalid-argument', 'A title is required.');
-  if (title.length > 200) throw new HttpsError('invalid-argument', 'That title is too long.');
+  const title = sessionTitle(d.title, 'A title is required.');
   const dueDate = validateDueDate(d.dueDate, today);
-  const notes = typeof d.notes === 'string' ? d.notes : '';
+  const notes = d.notes === undefined ? '' : sessionNotes(d.notes);
   return { courseId: d.courseId, date: d.date, title, dueDate, notes };
 }
 
@@ -163,18 +176,11 @@ export function validateUpdateSession(data: unknown): UpdateSessionInput {
     }
     out.date = d.date;
   }
-  if (d.title !== undefined) {
-    const title = typeof d.title === 'string' ? d.title.trim() : '';
-    if (!title) throw new HttpsError('invalid-argument', 'A title cannot be empty.');
-    out.title = title;
-  }
+  if (d.title !== undefined) out.title = sessionTitle(d.title, 'A title cannot be empty.');
   if (d.dueDate !== undefined) {
     out.dueDate = validateDueDateShape(d.dueDate);
   }
-  if (d.notes !== undefined) {
-    if (typeof d.notes !== 'string') throw new HttpsError('invalid-argument', 'notes must be text.');
-    out.notes = d.notes;
-  }
+  if (d.notes !== undefined) out.notes = sessionNotes(d.notes);
   if (d.notRecorded !== undefined) {
     // Not truthiness: a string 'false' arriving from a hand-built call would set
     // the flag it names the opposite of, and silence a class for the term.

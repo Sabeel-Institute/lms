@@ -15,15 +15,20 @@ export interface CreateCourseInput {
   name: string;
 }
 
+/** A class's name, the same on create and on rename. */
+function courseName(v: unknown, empty: string): string {
+  const name = typeof v === 'string' ? v.trim() : '';
+  if (!name) throw new HttpsError('invalid-argument', empty);
+  if (name.length > 120) throw new HttpsError('invalid-argument', 'That name is too long.');
+  return name;
+}
+
 export function validateCreateCourse(data: unknown): CreateCourseInput {
   const d = data as { cohortId?: unknown; name?: unknown } | null;
   if (typeof d?.cohortId !== 'string' || !d.cohortId) {
     throw new HttpsError('invalid-argument', 'cohortId is required.');
   }
-  const name = typeof d.name === 'string' ? d.name.trim() : '';
-  if (!name) throw new HttpsError('invalid-argument', 'A class name is required.');
-  if (name.length > 120) throw new HttpsError('invalid-argument', 'That name is too long.');
-  return { cohortId: d.cohortId, name };
+  return { cohortId: d.cohortId, name: courseName(d.name, 'A class name is required.') };
 }
 
 export async function createCourseRecord(callerUid: string, input: CreateCourseInput) {
@@ -69,11 +74,7 @@ export function validateUpdateCourse(data: unknown): UpdateCourseInput {
     throw new HttpsError('invalid-argument', 'courseId is required.');
   }
   const out: UpdateCourseInput = { courseId: d.courseId };
-  if (d.name !== undefined) {
-    const name = typeof d.name === 'string' ? d.name.trim() : '';
-    if (!name) throw new HttpsError('invalid-argument', 'A class name cannot be empty.');
-    out.name = name;
-  }
+  if (d.name !== undefined) out.name = courseName(d.name, 'A class name cannot be empty.');
   if (d.archived !== undefined) {
     if (typeof d.archived !== 'boolean') {
       throw new HttpsError('invalid-argument', 'archived must be a boolean.');
