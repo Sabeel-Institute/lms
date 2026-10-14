@@ -7,6 +7,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { crc32 } from 'node:zlib';
 
 /** The audio fixture's length. A substitute supplied via E2E_AUDIO must match it. */
 export const AUDIO_SECONDS = 720;
@@ -66,13 +67,46 @@ export function ensureHevcFixture() {
 
 /**
  * A photographed page, as a student hands one in: a PNG, made in memory and
- * never written to disk. Large enough to read in a screenshot, so a picture
- * that failed to load shows as the empty box it is.
+ * never written to disk, large enough to read when it is opened.
  */
 export function pagePhoto() {
   return execFileSync('ffmpeg', [
     '-f', 'lavfi', '-i', 'testsrc=size=480x360', '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'png', '-',
   ], { stdio: ['ignore', 'pipe', 'ignore'] });
+}
+
+/**
+ * A Word file, as far as its bytes go: a ZIP holding one short text, stored
+ * uncompressed, which is what the server checks a `.docx` for. Made in memory.
+ */
+export function wordFile(text) {
+  const name = Buffer.from('outline.txt');
+  const data = Buffer.from(text);
+  const crc = crc32(data);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0); // local file header
+  local.writeUInt16LE(20, 4); // version needed
+  local.writeUInt32LE(crc, 14);
+  local.writeUInt32LE(data.length, 18); // compressed size, stored as is
+  local.writeUInt32LE(data.length, 22);
+  local.writeUInt16LE(name.length, 26);
+  const entry = Buffer.concat([local, name, data]);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0); // central directory header
+  central.writeUInt16LE(20, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt32LE(crc, 16);
+  central.writeUInt32LE(data.length, 20);
+  central.writeUInt32LE(data.length, 24);
+  central.writeUInt16LE(name.length, 28);
+  const directory = Buffer.concat([central, name]);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); // end of central directory
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(entry.length, 16);
+  return Buffer.concat([entry, directory, end]);
 }
 
 /**

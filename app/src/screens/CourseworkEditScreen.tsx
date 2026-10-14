@@ -222,10 +222,6 @@ export function CourseworkEditScreen({
       <Card>
         <Field testID="coursework-title" label="Title" value={title} onChangeText={setTitle} autoCapitalize="words" />
         <InstructionsEditor value={instructions} onChange={setInstructions} />
-      </Card>
-
-      <SectionTitle>Files</SectionTitle>
-      <Card>
         <Attachments
           target="coursework"
           courseworkId={existing?.id ?? reservedId}

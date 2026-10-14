@@ -1,18 +1,21 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { Image, Linking, Platform, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentProps, type Dispatch, type SetStateAction } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
-  attachmentKind,
+  attachmentContentType,
   attachmentProblem,
   type AttachmentFile,
   type AttachmentMap,
 } from '@sabeel/shared';
-import { Button, Row } from './ui';
-import { AttachmentAudio } from './AttachmentAudio';
+import { IconButton, inputLook } from './ui';
+import { Sheet, SheetOption } from './Sheet';
 import { canTakePhoto, pickAttachmentFiles, takePhoto } from '../attachmentFiles';
 import { readPart, sendPart } from '../mediaFiles';
 import type { PickedFile } from '../mediaFileTypes';
 import { finalizeAttachment, getAttachmentUrl, removeAttachment, startAttachmentUpload } from '../coursework';
 import { errorText } from '../errors';
+import { openFile } from '../openFile';
+import { useOneAtATime } from '../oneAtATime';
 import { formatClock } from '../playback';
 import { getTheme, spacing } from '../theme';
 
@@ -21,7 +24,21 @@ const t = getTheme();
 const size = (bytes: number) =>
   bytes >= 2 ** 20 ? `${(bytes / 2 ** 20).toFixed(1)}\u00a0MB` : `${Math.max(1, Math.round(bytes / 1024))}\u00a0KB`;
 
-const KIND_WORD = { document: 'Document', image: 'Picture', audio: 'Audio' } as const;
+/** What a file is, in the word its own name ends with: PDF, DOCX, M4A. */
+const typeWord = (name: string) => name.match(/\.([a-z0-9]{1,4})$/i)?.[1].toUpperCase() ?? 'FILE';
+
+type IconName = ComponentProps<typeof MaterialIcons>['name'];
+
+/** The pictogram for a file, from what it is stored as. */
+function glyphFor(contentType: string | null): IconName {
+  if (!contentType) return 'insert-drive-file';
+  if (contentType === 'application/pdf') return 'picture-as-pdf';
+  if (contentType.startsWith('image/')) return 'image';
+  if (contentType.startsWith('audio/')) return 'audiotrack';
+  if (/presentation|powerpoint/.test(contentType)) return 'slideshow';
+  if (/sheet|excel/.test(contentType)) return 'table-chart';
+  return 'description';
+}
 
 /** A file on its way in, shown under the ones that have arrived. */
 interface Pending {
@@ -34,12 +51,17 @@ interface Pending {
 
 /**
  * The files on an assignment, or on a student's own work, and — where the
- * person may change them — the way to add more.
+ * person may change them — the paperclip to add more and a bin on each.
+ *
+ * A file is a link: tapping it opens it in the phone's or the browser's own
+ * viewer, whatever it is — a worksheet, a picture, a recitation — or saves it
+ * under its own name where the browser only downloads that kind (`openFile`).
+ * Nothing is drawn or played in place (Faisal, 2026-10-13).
  *
  * Each file uploads the moment it is chosen, with its own line; the server
  * checks it on arrival and either adds it to the list (the live record shows
  * it) or says why not. `busy` tells the screen something is still on its way,
- * so "Hand in" can wait for it.
+ * so "Hand in", "Post" and "Save" can wait for it.
  */
 export function Attachments({
   target,
@@ -123,6 +145,7 @@ export function Attachments({
   const picking = useRef(false);
   const removing = useRef(new Set<string>());
   const [removingIds, setRemovingIds] = useState<string[]>([]);
+  const [choosing, setChoosing] = useState(false);
   const add = async (pick: () => Promise<PickedFile[] | PickedFile | null>) => {
     if (picking.current) return;
     picking.current = true;
@@ -137,6 +160,12 @@ export function Attachments({
     } finally {
       picking.current = false;
     }
+  };
+  // Where a file can come from: the files, or — on a phone — the camera too.
+  const attach = () => (canTakePhoto ? setChoosing(true) : void add(pickAttachmentFiles));
+  const from = (pick: () => Promise<PickedFile[] | PickedFile | null>) => {
+    setChoosing(false);
+    void add(pick);
   };
   const remove = async (fileId: string) => {
     if (removing.current.has(fileId)) return;
@@ -154,142 +183,138 @@ export function Attachments({
     }
   };
 
+  /*
+   * ONE FILE OPENING AT A TIME. Its link is minted for the tap, so a second
+   * tap while the first is on its way would open the file twice.
+   */
+  const opener = useOneAtATime();
+  const [openFailed, setOpenFailed] = useState<{ id: string; text: string } | null>(null);
+  const open = (file: AttachmentFile) =>
+    void opener.run(file.id, async () => {
+      setOpenFailed(null);
+      try {
+        await openFile(file, () => getAttachmentUrl({ courseworkId, fileId: file.id, studentUid }).then((r) => r.url));
+      } catch (e) {
+        setOpenFailed({ id: file.id, text: errorText(e) });
+      }
+    });
+
   const list = Object.values(files).sort((a, b) => a.addedAt - b.addedAt);
   return (
     <View testID={`attachments-${target}`}>
-      {list.map((f) => (
-        <FileRow
-          key={f.id}
-          file={f}
-          courseworkId={courseworkId}
-          studentUid={studentUid}
-          onRemove={editable ? () => void remove(f.id) : undefined}
-          removing={removingIds.includes(f.id)}
-        />
-      ))}
+      {editable ? (
+        <View style={styles.head}>
+          <Text style={[inputLook.label, styles.title]}>{list.length ? `Files (${list.length})` : 'Files'}</Text>
+          <IconButton testID={`attachments-add-${target}`} icon="attach-file" label="Add files" bare onPress={attach} />
+        </View>
+      ) : null}
+      {list.map((f) => {
+        const isOpening = opener.active === f.id;
+        const failed = openFailed?.id === f.id ? openFailed.text : null;
+        return (
+          <View key={f.id} testID={`attachment-${f.name}`} style={styles.row}>
+            <Pressable
+              testID={`attachment-open-${f.name}`}
+              accessibilityRole="link"
+              accessibilityLabel={isOpening ? `Opening ${f.name}` : `Open ${f.name}`}
+              accessibilityState={{ busy: isOpening }}
+              onPress={() => open(f)}
+              style={({ pressed }) => [styles.face, pressed ? styles.pressed : null]}
+            >
+              {isOpening ? (
+                // The glyph's own box, so the row does not jump as it starts and stops.
+                <ActivityIndicator size="small" color={t.accent.base} style={styles.glyph} />
+              ) : (
+                <MaterialIcons name={glyphFor(f.contentType)} size={20} color={t.text.secondary} style={styles.glyph} />
+              )}
+              <View style={styles.text}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {f.name}
+                </Text>
+                <Text style={[styles.meta, failed ? styles.failed : null]}>
+                  {isOpening
+                    ? 'Opening…'
+                    : (failed ??
+                      [typeWord(f.name), f.durationSec ? formatClock(f.durationSec * 1000) : null, size(f.sizeBytes)]
+                        .filter(Boolean)
+                        .join(' · '))}
+                </Text>
+              </View>
+            </Pressable>
+            {editable ? (
+              <IconButton
+                testID={`attachment-remove-${f.name}`}
+                icon="delete-outline"
+                label={`Remove ${f.name}`}
+                variant="danger"
+                bare
+                busy={removingIds.includes(f.id)}
+                onPress={() => void remove(f.id)}
+              />
+            ) : null}
+          </View>
+        );
+      })}
       {pending.map((p) => (
-        <View key={p.key} style={styles.file}>
-          <Text style={styles.name}>{p.name}</Text>
-          <Text style={[styles.meta, p.error ? styles.failed : null]}>
-            {p.error ?? (p.waiting ? 'Waiting to upload…' : 'Uploading…')}
-          </Text>
+        <View key={p.key} style={styles.row}>
+          <View style={styles.face}>
+            {p.error ? (
+              <MaterialIcons name="error-outline" size={20} color={t.text.danger} style={styles.glyph} />
+            ) : p.waiting ? (
+              <MaterialIcons name={glyphFor(attachmentContentType(p.name))} size={20} color={t.text.muted} style={styles.glyph} />
+            ) : (
+              <ActivityIndicator size="small" color={t.accent.base} style={styles.glyph} />
+            )}
+            <View style={styles.text}>
+              <Text style={styles.pendingName} numberOfLines={1}>
+                {p.name}
+              </Text>
+              <Text style={[styles.meta, p.error ? styles.failed : null]}>
+                {p.error ?? (p.waiting ? 'Waiting to upload…' : 'Uploading…')}
+              </Text>
+            </View>
+          </View>
           {p.error ? (
-            <Button
-              label="Dismiss"
-              variant="quiet"
-              hug
+            <IconButton
+              icon="close"
+              label={`Dismiss ${p.name}`}
+              bare
               onPress={() => setPending((x) => x.filter((y) => y.key !== p.key))}
             />
           ) : null}
         </View>
       ))}
       {error ? <Text style={[styles.meta, styles.failed]}>{error}</Text> : null}
-      {editable ? (
-        <Row>
-          <Button testID={`attachments-add-${target}`} label="Add files" variant="secondary" hug onPress={() => void add(pickAttachmentFiles)} />
-          {canTakePhoto ? (
-            <Button testID={`attachments-photo-${target}`} label="Take a photo" variant="secondary" hug onPress={() => void add(takePhoto)} />
-          ) : null}
-        </Row>
-      ) : null}
-    </View>
-  );
-}
-
-/**
- * One file: a picture shown, audio playable in place, a document opened in the
- * phone's or the browser's own viewer. Links are minted on demand and last an
- * hour.
- */
-function FileRow({
-  file,
-  courseworkId,
-  studentUid,
-  onRemove,
-  removing,
-}: {
-  file: AttachmentFile;
-  courseworkId: string;
-  studentUid?: string;
-  onRemove?: () => void;
-  removing?: boolean;
-}) {
-  const kind = attachmentKind(file.contentType);
-  const [url, setUrl] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const link = () => getAttachmentUrl({ courseworkId, fileId: file.id, studentUid }).then((r) => r.url);
-  // Pictures and audio are shown in place, so their link is fetched at once.
-  useEffect(() => {
-    if (kind === 'document') return;
-    let live = true;
-    link().then((u) => live && setUrl(u), (e) => live && setError(errorText(e)));
-    return () => {
-      live = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one link per file
-  }, [file.id]);
-
-  // One new link at a time, however often "Try again" is pressed.
-  const retrying = useRef(false);
-  const retry = () => {
-    if (retrying.current) return;
-    retrying.current = true;
-    setError(null);
-    void link()
-      .then(
-        (u) => {
-          setUrl(u);
-          setAttempt((n) => n + 1);
-        },
-        (e) => setError(errorText(e)),
-      )
-      .finally(() => {
-        retrying.current = false;
-      });
-  };
-
-  const open = async () => {
-    try {
-      const u = await link();
-      if (Platform.OS === 'web') window.open(u, '_blank', 'noopener');
-      else await Linking.openURL(u);
-    } catch (e) {
-      setError(errorText(e));
-    }
-  };
-
-  return (
-    <View testID={`attachment-${file.name}`} style={styles.file}>
-      <Text style={styles.name}>{file.name}</Text>
-      <Text style={styles.meta}>
-        {[KIND_WORD[kind], file.durationSec ? formatClock(file.durationSec * 1000) : null, size(file.sizeBytes)].filter(Boolean).join(' · ')}
-      </Text>
-      {kind === 'image' && url ? (
-        <Image source={{ uri: url }} style={styles.picture} resizeMode="contain" accessibilityLabel={file.name} />
-      ) : null}
-      {kind === 'audio' && url ? (
-        <AttachmentAudio
-          url={url}
-          attempt={attempt}
-          name={file.name}
-          durationMs={(file.durationSec ?? 0) * 1000}
-          onRetry={retry}
+      <Sheet visible={choosing} title="Where from?" onClose={() => setChoosing(false)} closeLabel="Cancel">
+        <SheetOption
+          testID={`attachments-files-${target}`}
+          label="Choose files"
+          detail="Documents, pictures or audio"
+          onPress={() => from(pickAttachmentFiles)}
         />
-      ) : null}
-      {error ? <Text style={[styles.meta, styles.failed]}>{error}</Text> : null}
-      <Row>
-        {kind === 'document' ? <Button label="Open" variant="secondary" hug onPress={() => void open()} /> : null}
-        {onRemove ? <Button testID={`attachment-remove-${file.name}`} label="Remove" variant="quiet" hug busy={removing} onPress={onRemove} /> : null}
-      </Row>
+        <SheetOption
+          testID={`attachments-photo-${target}`}
+          label="Take a photo"
+          detail="Use the camera now"
+          onPress={() => from(takePhoto)}
+        />
+      </Sheet>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  file: { marginBottom: spacing(3) },
-  name: { fontSize: 14, fontWeight: '600', color: t.text.primary },
-  meta: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(1) },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { marginBottom: 0 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), minHeight: 44 },
+  face: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing(2), paddingVertical: spacing(1) },
+  pressed: { opacity: 0.6 },
+  glyph: { width: 20, height: 20 },
+  // minWidth 0: a flex child keeps its content's width on the web unless
+  // told it may shrink, and a long name would push the bin off the row.
+  text: { flex: 1, minWidth: 0 },
+  name: { fontSize: 15, color: t.text.accent, textDecorationLine: 'underline' },
+  pendingName: { fontSize: 15, color: t.text.primary },
+  meta: { fontSize: 13, color: t.text.secondary },
   failed: { color: t.feedback.danger },
-  picture: { width: '100%', aspectRatio: 4 / 3, backgroundColor: t.bg.inset, borderRadius: 8, marginVertical: spacing(1) },
 });

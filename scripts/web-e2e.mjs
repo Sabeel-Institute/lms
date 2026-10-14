@@ -44,6 +44,7 @@ import {
   ensureHevcFixture,
   ensureVideoFixture,
   pagePhoto,
+  wordFile,
 } from './lib/media-fixtures.mjs';
 
 const WEB = process.env.E2E_WEB ?? `http://127.0.0.1:${WEB_PORTS.e2e}/`;
@@ -206,6 +207,35 @@ async function tap(page, testId, timeout = 20000) {
   await el.waitFor({ timeout });
   await el.click();
 }
+
+/*
+ * A FILE OPENS: tapping it opens a tab of its own on the file itself, from a
+ * link minted for the tap. The proof is the store serving that tab — a row
+ * that merely exists, or a tab on a dead link, would pass anything less.
+ * Returns the key the store served, or null.
+ */
+async function opens(page, name) {
+  const served = page
+    .context()
+    .waitForEvent('response', {
+      predicate: (r) => r.url().includes(`127.0.0.1:${MEDIA_STORE_PORTS.s3}/`) && r.request().resourceType() === 'document',
+      timeout: 20000,
+    })
+    .catch(() => null);
+  const tab = page.waitForEvent('popup', { timeout: 20000 }).catch(() => null);
+  await tap(page, `attachment-open-${name}`);
+  const [res, opened] = await Promise.all([served, tab]);
+  await opened?.close();
+  if (!opened || !res || res.status() !== 200) return null;
+  // Path-style: /<bucket>/<key>
+  return decodeURIComponent(new URL(res.url()).pathname).split('/').slice(2).join('/');
+}
+
+/** The stored key of the file called `name` in a document's `files` map, from the emulator. */
+const keyIn = (docs, name) =>
+  docs
+    .flatMap((d) => Object.values(d.fields.files?.mapValue?.fields ?? {}).map((f) => f.mapValue.fields))
+    .find((f) => f.name.stringValue === name)?.storageKey.stringValue;
 
 /** Same trap, same fix: `.first()` means document order, not "the one on screen". */
 const sawText = (page, text, timeout = 20000) =>
@@ -1708,26 +1738,15 @@ await student.unroute(mediaStore);
 check('Stay lets the upload finish', await shows(student, `attachment-${PAGE}`));
 
 /*
- * A RECITATION ATTACHED, AND ONE SOUND AT A TIME.
+ * FILES ARE LINKS (Faisal, 2026-10-13): tapping one opens it in a tab of its
+ * own, whatever it is, and nothing is drawn or played on the page.
  *
  * A recitation and a note chosen together, the large one first, are listed in
  * the order chosen — not the order they arrive, which put the small one first
- * and swapped the rows as they landed. The class recording plays on in the
- * docked bar; playing the recitation pauses it, and playing the recording
- * again pauses the recitation. Nothing else makes the two agree: a browser
- * plays two media elements over each other without a word.
+ * and swapped the rows as they landed.
  */
 const RECITATION = 'Recitation.m4a';
 const NOTE_FILE = 'Notes.txt';
-await goHome(student);
-await tap(student, 'task-Session 1');
-await student.getByTestId('player-play').waitFor({ timeout: 25000 });
-await tap(student, 'player-play');
-await student.waitForTimeout(1500);
-// By the tab, not by address: loading a page ends what is playing.
-await tap(student, 'tab-todo');
-await cwCard.click();
-await student.getByTestId('work-note').waitFor({ timeout: 20000 });
 const twoChooser = student.waitForEvent('filechooser');
 await tap(student, 'attachments-add-work');
 await (await twoChooser).setFiles([
@@ -1740,7 +1759,7 @@ const attachedOrder = await student.evaluate(() =>
   [...document.querySelectorAll('[data-testid^="attachment-"]')]
     .filter((e) => e.checkVisibility())
     .map((e) => e.getAttribute('data-testid'))
-    .filter((id) => !id.startsWith('attachment-remove-')),
+    .filter((id) => !/^attachment-(open|remove)-/.test(id)),
 );
 check(
   'files chosen together are listed in the order chosen, the large one first',
@@ -1748,85 +1767,75 @@ check(
     attachedOrder.indexOf(`attachment-${RECITATION}`) < attachedOrder.indexOf(`attachment-${NOTE_FILE}`),
   attachedOrder.join(', '),
 );
-const labelsAre = (clip, dock) =>
-  student
-    .waitForFunction(
-      ([name, clipWant, dockWant]) => {
-        const visible = (id) => [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.checkVisibility());
-        return (
-          visible(`clip-play-${name}`)?.getAttribute('aria-label') === `${clipWant} ${name}` &&
-          visible('mini-player-toggle')?.getAttribute('aria-label') === dockWant
-        );
-      },
-      [RECITATION, clip, dock],
-      { timeout: 15000 },
-    )
-    .then(() => true, () => false);
-check('the class recording is playing in the docked bar', await labelsAre('Play', 'Pause'));
-await tap(student, `clip-play-${RECITATION}`);
-check('playing the recitation pauses the class recording', await labelsAre('Pause', 'Play'));
-/*
- * AT THE SPEED CHOSEN: the place moves about twice as far in the same time
- * at 2× as at 1×. The audio element is never on the page, so its own rate
- * cannot be read; how far the place moves is what a listener hears.
- */
-const clipSeconds = async () => {
-  const text = await student.getByTestId(`clip-time-${RECITATION}`).filter({ visible: true }).first().innerText();
-  const [m, s] = text.split(' / ')[0].split(':').map(Number);
-  return m * 60 + s;
-};
-// Four seconds a side: the element reports its time about four times a
-// second and the reading is whole seconds, so three left a second's slack.
-const atOneFrom = await clipSeconds();
-await student.waitForTimeout(4000);
-const atOne = (await clipSeconds()) - atOneFrom;
-for (let i = 0; i < 3; i++) await tap(student, `clip-speed-${RECITATION}`);
-const speedShown = await student.getByTestId(`clip-speed-${RECITATION}`).filter({ visible: true }).first().innerText();
-const atTwoFrom = await clipSeconds();
-await student.waitForTimeout(4000);
-const atTwo = (await clipSeconds()) - atTwoFrom;
-check(
-  'the recitation plays at the speed chosen',
-  speedShown === '2×' && atOne >= 3 && atTwo >= atOne + 3,
-  `${atOne}s at 1× and ${atTwo}s at ${speedShown} in 4s each`,
+const recitationKey = keyIn(
+  (await readCollection('drafts')).filter((d) => d.fields.courseworkId?.stringValue === cwId),
+  RECITATION,
 );
-await tap(student, 'mini-player-toggle');
-check('playing the class recording again pauses the recitation', await labelsAre('Play', 'Pause'));
-await tap(student, 'mini-player-toggle');
+check(
+  'a recitation is a link: it opens in a tab of its own, on the recitation',
+  recitationKey !== undefined && (await opens(student, RECITATION)) === recitationKey,
+);
+check(
+  '…and nothing is drawn or played in the list',
+  (await student.locator('[data-testid="attachments-work"] :is(img, audio, video)').count()) === 0,
+);
 
 /*
- * A LINK THAT HAS RUN OUT. An attachment's link lasts an hour, so a page left
- * open and played later is refused by the store. The row says the audio
- * stopped loading, and Try again fetches a new link, which plays.
+ * OPENED ONCE, however hurried the hand: the link is minted for the tap, and a
+ * second tap while it is on its way must not open a second tab. The link is
+ * slowed so there is a moment to tap in; FORCED, as a tap is.
  */
-const draftFiles = Object.values(
-  (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.files?.mapValue?.fields ?? {},
-).map((f) => f.mapValue.fields);
-const recitationKey = draftFiles.find((f) => f.name.stringValue === RECITATION)?.storageKey.stringValue;
-const expiredLink = (url) => url.port === String(MEDIA_STORE_PORTS.s3) && url.pathname.endsWith(`/${recitationKey}`);
-await student.route(expiredLink, (route) =>
-  route.fulfill({ status: 403, contentType: 'application/xml', body: '<Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>' }),
+const mintLink = '**/getAttachmentUrl';
+await student.route(mintLink, async (route) => {
+  await new Promise((r) => setTimeout(r, 1500));
+  return route.continue();
+});
+const tabs = [];
+const countTab = (tab) => tabs.push(tab);
+student.on('popup', countTab);
+await tap(student, `attachment-open-${NOTE_FILE}`);
+const openingSaid = await showsText(student, 'Opening…');
+await student.getByTestId(`attachment-open-${NOTE_FILE}`).filter({ visible: true }).first().click({ force: true });
+await student.waitForTimeout(4000);
+student.off('popup', countTab);
+await student.unroute(mintLink);
+check('a file tapped twice while it opens opens once, and says it is opening', openingSaid && tabs.length === 1, `${tabs.length} tabs`);
+for (const tab of tabs) await tab.close();
+
+/*
+ * A FILE THE BROWSER ONLY DOWNLOADS — a Word file anywhere, a PDF where there
+ * is no viewer — is saved from the page under its own name, with no tab left
+ * blank behind it. Then the bin takes it off again.
+ */
+const OUTLINE = 'Outline.docx';
+const outlineChooser = student.waitForEvent('filechooser');
+await tap(student, 'attachments-add-work');
+await (await outlineChooser).setFiles({
+  name: OUTLINE,
+  mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  buffer: wordFile('Three points, then the conclusion.'),
+});
+await student.getByTestId(`attachment-${OUTLINE}`).filter({ visible: true }).first().waitFor({ timeout: 60000 });
+const outlineTabs = [];
+const countOutlineTab = (tab) => outlineTabs.push(tab);
+student.on('popup', countOutlineTab);
+const saving = student.waitForEvent('download', { timeout: 20000 }).catch(() => null);
+await tap(student, `attachment-open-${OUTLINE}`);
+const saved = await saving;
+await student.waitForTimeout(1500);
+student.off('popup', countOutlineTab);
+check(
+  'a Word file is saved under its own name, and no tab opens for it',
+  saved?.suggestedFilename() === OUTLINE && outlineTabs.length === 0,
+  `${saved?.suggestedFilename()} · ${outlineTabs.length} tabs`,
 );
-await goHome(student);
-await cwCard.click();
-await student.getByTestId(`clip-failed-${RECITATION}`).waitFor({ timeout: 20000 }).catch(() => {});
-check('a link that has run out says the audio stopped loading', await showsText(student, 'The audio stopped loading.'));
-await student.unroute(expiredLink);
-await tap(student, `clip-retry-${RECITATION}`);
-await tap(student, `clip-play-${RECITATION}`);
-const playsAgain = await student
-  .waitForFunction(
-    (id) => {
-      const el = [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.checkVisibility());
-      const [m, s] = (el?.textContent ?? '0:00').split(' / ')[0].split(':').map(Number);
-      return m * 60 + s >= 2;
-    },
-    `clip-time-${RECITATION}`,
-    { timeout: 20000 },
-  )
-  .then(() => true, () => false);
-check('Try again fetches a new link, and the audio plays', playsAgain && recitationKey !== undefined);
-await tap(student, `clip-play-${RECITATION}`);
+await tap(student, `attachment-remove-${OUTLINE}`);
+await student.getByTestId(`attachment-${OUTLINE}`).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+check(
+  'the bin takes a file off',
+  !(await shows(student, `attachment-${OUTLINE}`)) &&
+    keyIn((await readCollection('drafts')).filter((d) => d.fields.courseworkId?.stringValue === cwId), OUTLINE) === undefined,
+);
 
 // DOUBLE-CLICKED: handed in once, and no refusal shown over work that went in.
 await student.getByTestId('work-hand-in').filter({ visible: true }).first().dblclick();
@@ -1840,18 +1849,18 @@ check(
   (await shows(student, 'work-handed-in')) && handIns === 1 && !(await shows(student, 'notice-error')),
   `hand-ins recorded: ${handIns}`,
 );
-// The picture LOADS, from a link only a party to the work is given — a box
-// with nothing in it would pass a check that the row exists.
-const pictureLoads = (page) =>
-  page.waitForFunction(
-    (id) => {
-      const img = document.querySelector(`[data-testid="${id}"] img`);
-      return !!img && img.complete && img.naturalWidth > 0;
-    },
-    `attachment-${PAGE}`,
-    { timeout: 20000 },
-  ).then(() => true, () => false);
-check('the handed-in page shows as a picture', await pictureLoads(student));
+// The page handed in is a link like any other: no preview in the row, and
+// tapping it opens the picture itself.
+const pageKey = keyIn(
+  (await readCollection('submissions')).filter((d) => d.fields.courseworkId?.stringValue === cwId),
+  PAGE,
+);
+check(
+  'the handed-in page is a link to the picture, with nothing drawn in its row',
+  (await student.locator(`[data-testid="attachment-${PAGE}"] img`).count()) === 0 &&
+    pageKey !== undefined &&
+    (await opens(student, PAGE)) === pageKey,
+);
 await shot(student, '40-work-handed-in');
 
 // Take back, and the work is theirs to change again; hand in again.
@@ -1883,8 +1892,8 @@ const boldGod = await admin.evaluate(() => {
   return el ? getComputedStyle(el).fontWeight : null;
 });
 check(
-  'the teacher sees the answer, formatted, and the page',
-  (await showsText(admin, 'hope rests on')) && boldGod === '700' && (await pictureLoads(admin)),
+  'the teacher sees the answer, formatted, and opens the page',
+  (await showsText(admin, 'hope rests on')) && boldGod === '700' && (await opens(admin, PAGE)) === pageKey,
   `bold: ${boldGod}`,
 );
 const handInHistory = await admin.getByTestId('grade-history').innerText().catch(() => '');

@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useState,
+  type ComponentProps,
   type ReactNode,
 } from 'react';
 import {
@@ -271,12 +272,11 @@ export function Button({
 /**
  * A single-glyph action for a list row — remove, disable, re-enable.
  *
- * Glyphs are TEXT-presentation characters (`×`, `↺`), never emoji: an emoji
+ * A `glyph` is a TEXT-presentation character (`×`, `↺`), never emoji: an emoji
  * renders as a colour bitmap that ignores `color`, so a control that should
- * read as destructive would not. The app does carry MaterialIcons — for the
- * navigation, the transport and the disclosure carets — but `×` and `↺` are
- * typographic marks rather than pictograms, and the icon set draws them worse
- * than the font does.
+ * read as destructive would not. `×` and `↺` are typographic marks, which the
+ * font draws better than the icon set does. An `icon` is a MaterialIcons
+ * pictogram, for what no mark says: a file's bin, the paperclip that adds one.
  *
  * Icon-only means the label is invisible, so `label` is required and becomes the
  * accessibility name — a screen reader gets "Remove Fatima Ahmed from the
@@ -285,23 +285,30 @@ export function Button({
  */
 export function IconButton({
   glyph,
+  icon,
   label,
   variant = 'secondary',
+  bare,
   busy,
   disabled,
   onPress,
   testID,
-}: {
-  glyph: string;
+}: ({ glyph: string; icon?: undefined } | { icon: ComponentProps<typeof MaterialIcons>['name']; glyph?: undefined }) & {
   /** Required: with no visible text this IS the button's name. */
   label: string;
   variant?: 'secondary' | 'danger';
+  /**
+   * No tile behind it: the bin and the paperclip a list of files carries
+   * inline, where a tinted square on every row would outshout the files.
+   */
+  bare?: boolean;
   busy?: boolean;
   disabled?: boolean;
   onPress: () => void;
   testID?: string;
 }) {
   const isDisabled = disabled || busy;
+  const ink = variant === 'danger' ? t.text.danger : bare ? t.text.secondary : t.text.primary;
   return (
     <Pressable
       testID={testID}
@@ -311,13 +318,15 @@ export function IconButton({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.iconBtn,
-        variant === 'danger' ? styles.iconBtnDanger : styles.iconBtnSecondary,
-        pressed && !isDisabled ? styles.btnPressed : null,
-        isDisabled ? styles.btnDisabled : null,
+        bare ? null : variant === 'danger' ? styles.iconBtnDanger : styles.iconBtnSecondary,
+        pressed && !isDisabled ? (bare ? styles.iconBtnBarePressed : styles.btnPressed) : null,
+        isDisabled ? (bare ? styles.iconBtnBareDisabled : styles.btnDisabled) : null,
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={variant === 'danger' ? t.text.danger : t.text.primary} />
+        <ActivityIndicator color={ink} />
+      ) : icon ? (
+        <MaterialIcons name={icon} size={22} color={ink} />
       ) : (
         <Text
           style={[
@@ -1423,6 +1432,8 @@ const styles = StyleSheet.create({
   },
   iconBtnSecondary: { backgroundColor: t.bg.sage },
   iconBtnDanger: { backgroundColor: t.bg.dangerSoft },
+  iconBtnBarePressed: { opacity: 0.6 },
+  iconBtnBareDisabled: { opacity: 0.4 },
   iconGlyph: { fontSize: 20, lineHeight: 24, fontWeight: '700' },
   iconGlyphSecondary: { color: t.text.primary },
   iconGlyphDanger: { color: t.text.danger },

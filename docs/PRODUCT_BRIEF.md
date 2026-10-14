@@ -237,8 +237,8 @@ built: `docs/plans/ASSIGNMENTS.md`.
 
 ### Handing in
 
-- A student writes an answer, formatted like the instructions, and attaches files: documents, pictures (with a camera button on phones) and audio; up to ten files of 25 MB each, and no video. Either may be empty, but not both, so a question put to the class can be answered in the box alone.
-- Files are listed in the order they were chosen. Audio, a student's or a teacher's, plays in place with the same small player on a phone and on the website: its place, its time and the player's speeds. One sound plays at a time, so starting it pauses a class recording, and starting the recording pauses it.
+- A student writes an answer, formatted like the instructions, and attaches files: documents, pictures (on a phone, a photo taken there and then) and audio; up to ten files of 25 MB each, and no video. Either may be empty, but not both, so a question put to the class can be answered in the box alone.
+- Files are listed in the order they were chosen, each one line: what it is, its name and its size. A file is a link (Faisal's choice, 2026-10-13): tapping it opens it in the phone's or the browser's own viewer, a document, a picture and audio alike, from a link minted for the tap. Nothing is shown or played in place. A file the browser cannot show in a tab — a Word file, or a PDF where there is no viewer — is saved to its downloads under its own name instead, so no blank tab is left behind.
 - What they write is saved as they type, on the server, so they can start on a phone and finish on the website, and leaving the screen keeps it. Nobody else sees it until it is handed in.
 - **Hand in** stores the answer first: what is on the screen is what is handed in.
 - Until the due date, and while it has not been returned, a student can **take it back** to change it.

@@ -478,7 +478,7 @@ export const getAttachmentUrl = reportedCall(async (req) => {
   if (!snap.exists && studentUid === null) {
     // Held for a new assignment not saved yet, which its teacher can open to check.
     const up = await heldFile(req, cwId, fileId);
-    const link = await signGet(up.held.storageKey, READ_URL_TTL_MS);
+    const link = await signGet(up.held.storageKey, READ_URL_TTL_MS, up.held.name);
     return { url: link.url, expiresAt: link.expiresAt, name: up.held.name, contentType: up.held.contentType };
   }
   const cw = await readCoursework(cwId);
@@ -496,7 +496,7 @@ export const getAttachmentUrl = reportedCall(async (req) => {
     else file = findWorkFile((await subRef(studentUid, cwId).get()).data() as SubmissionDoc | undefined, undefined, fileId);
   }
   if (!file) throw new HttpsError('not-found', 'That file is not available.');
-  const link = await signGet(file.storageKey, READ_URL_TTL_MS);
+  const link = await signGet(file.storageKey, READ_URL_TTL_MS, file.name);
   return { url: link.url, expiresAt: link.expiresAt, name: file.name, contentType: file.contentType };
 }, MEDIA_READ_SECRETS);
 

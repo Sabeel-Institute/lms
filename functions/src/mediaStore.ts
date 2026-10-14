@@ -114,13 +114,30 @@ export interface SignedUrl {
  * Pre-signed URLs are bearer tokens and cannot be revoked one at a time:
  * rolling the read key is the only way to kill outstanding ones
  * (docs/SECRETS.md). A failure to sign throws; there is no unsigned fallback.
+ *
+ * `name`, for a file a person opens: the store sends it `inline`, so a browser
+ * shows what it can, and under that name, so what is saved or downloaded is
+ * "Week 2 worksheet.pdf" and not the key it is stored at.
  */
-export async function signGet(key: string, ttlMs: number): Promise<SignedUrl> {
+export async function signGet(key: string, ttlMs: number, name?: string): Promise<SignedUrl> {
   const expiresAt = Date.now() + ttlMs;
-  const url = await getSignedUrl(client('read'), new GetObjectCommand({ Bucket: bucket(), Key: key }), {
-    expiresIn: Math.floor(ttlMs / 1000),
-  });
+  const url = await getSignedUrl(
+    client('read'),
+    new GetObjectCommand({ Bucket: bucket(), Key: key, ResponseContentDisposition: name === undefined ? undefined : inlineAs(name) }),
+    { expiresIn: Math.floor(ttlMs / 1000) },
+  );
   return { url, expiresAt };
+}
+
+/**
+ * `Content-Disposition: inline` under a file's own name: `filename` for the
+ * browsers that read only that (printable ASCII, the quote and the backslash
+ * made `_`), and `filename*` (RFC 6266, RFC 5987) for the name exactly.
+ */
+function inlineAs(name: string): string {
+  const plain = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
+  const exact = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `inline; filename="${plain}"; filename*=UTF-8''${exact}`;
 }
 
 export interface SignedPut extends SignedUrl {

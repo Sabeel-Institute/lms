@@ -218,21 +218,21 @@ A few things worth knowing:
 An assignment is work your teacher sets for the whole class: a reflection, a
 recitation, a worksheet. It appears on **To do** with the date to hand it in by,
 and opens to your teacher's **instructions** and any **files** they attached — a
-worksheet to print, a reading, a recording to listen to.
+worksheet to print, a reading, a recording to listen to. Tap a file to open it.
 
 **Your work** is under the instructions:
 
 - **Your answer** — write it right there. Bold, italics, lists and links are on
   the bar above the box, and Arabic runs right to left. Sometimes the answer is
   all there is: a question put to the class, a few sentences.
-- **Files** — tap **Add files** for a document, a picture or an audio
-  recording, or, on a phone, **Take a photo** of a page you wrote out by hand.
-  Up to ten files, 25 MB each; no video.
+- **Files** — tap the paperclip to add a document, a picture or an audio
+  recording. On a phone it asks where from: **Choose files**, or **Take a
+  photo** of a page you wrote out by hand. Up to ten files, 25 MB each; no
+  video. Tap a file to open it, and the bin beside it to take it off.
 
-An audio file plays right on the page: drag the bar to move through it, and tap
-**1×** to step through the speeds. Playing it pauses a class recording you were
-listening to, and going back to the recording pauses it. If it stops loading,
-tap **Try again**.
+A file opens in a tab of its own. One your browser cannot show there — a Word
+file, or a PDF on a phone without a PDF viewer — is saved to your downloads
+instead, under its own name.
 
 Everything is saved as you go, on the server — start on your phone and finish on
 the website, or leave and come back later — and nobody sees it until you hand it
@@ -991,8 +991,8 @@ Tap **New assignment**:
 - **Title** and **Instructions**. Bold, italics, both kinds of list and links are
   on the bar above the box, and Arabic runs right to left. Select some words and
   tap the link button to make them a link.
-- **Files**: worksheets, scans, slides, pictures and audio; up to ten, 25 MB
-  each. Add them as you write — they are kept with the assignment when you save
+- **Files**: the paperclip adds worksheets, scans, slides, pictures and audio;
+  up to ten, 25 MB each. Add them as you write — they are kept with the assignment when you save
   or post it, and thrown away with it if you leave without saving. **Post** and
   **Save** wait until every file is up. Audio you add for the class can be up
   to 15 minutes, and there is no video.
@@ -1042,8 +1042,7 @@ as students see it.
 </div>
 
 Tap **Grade**, or a student, to open their work: their answer, their files —
-pictures large enough to read handwriting, audio that plays in place — and the
-**hand-in history**, each hand-in and take-back with its time. Under it:
+tap one to open it — and the **hand-in history**, each hand-in and take-back with its time. Under it:
 
 - **The grade and feedback** save as you type, as a draft only staff see. A
   student sees nothing until you return it.
@@ -1162,7 +1161,7 @@ confirmation, and is audited. Reach for disable, unpublish, or archive first.
 | **Mark something done** | Press play once, then **Mark complete** at the bottom of the player. |
 | **See my attendance for a class** | **Classes** → tap the class. |
 | **Set my student password** | Open the emailed link, or tap **Email me a password link** on sign-in. |
-| **Hand in an assignment** | **To do** → the assignment → write your answer and/or **Add files** → **Hand in**. |
+| **Hand in an assignment** | **To do** → the assignment → write your answer and/or add files with the paperclip → **Hand in**. |
 | **Change what I handed in** | Open it → **Take back** (until the due date, and before it is returned) → change it → **Hand in**. |
 | **See my grade** | It appears on the assignment once your teacher returns it. |
 | **Add a session** *(staff)* | Course → **Sessions** → **Add a session** → title + date → **Create session**. |

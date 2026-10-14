@@ -1,5 +1,4 @@
 import type { Player, PlayerEvents } from './playerTypes';
-import { releasedSound, startedPlaying, type Sound } from './oneSound';
 
 /**
  * Web side of the player seam (native sibling: player.ts).
@@ -14,10 +13,9 @@ import { releasedSound, startedPlaying, type Sound } from './oneSound';
  * remounts before its cleanup runs, two elements would play at once. A
  * module-level handle enforces it: creating a player stops its predecessor.
  */
-let current: { el: HTMLVideoElement; sound: Sound } | null = null;
+let current: HTMLVideoElement | null = null;
 
-function stop({ el, sound }: { el: HTMLVideoElement; sound: Sound }) {
-  releasedSound(sound);
+function stop(el: HTMLVideoElement) {
   el.pause();
   el.removeAttribute('src');
   el.load();
@@ -26,7 +24,7 @@ function stop({ el, sound }: { el: HTMLVideoElement; sound: Sound }) {
 
 /** The live element, for the surface that shows its picture. */
 export function currentVideoElement(): HTMLVideoElement | null {
-  return current?.el ?? null;
+  return current;
 }
 
 export function createPlayer(events: PlayerEvents): Player {
@@ -37,11 +35,7 @@ export function createPlayer(events: PlayerEvents): Player {
   // Inline on a phone's browser rather than taking over the screen.
   el.playsInline = true;
   el.setAttribute('playsinline', '');
-  // One sound at a time (oneSound.ts): the browser's media keys start this
-  // element too, and an attachment playing stops when they do.
-  const sound: Sound = { pause: () => el.pause() };
-  const mine = { el, sound };
-  current = mine;
+  current = el;
   /*
    * THE RATE IS THE SESSION'S, NOT THE SOURCE'S. A browser resets
    * `playbackRate` to 1 whenever `src` changes, so a version switch at 1.5×
@@ -76,10 +70,7 @@ export function createPlayer(events: PlayerEvents): Player {
   el.addEventListener('canplay', () => report(null));
   // The element pauses itself at the end of the media and when the browser's own
   // media keys are used, neither of which goes through `playback.pause()`.
-  el.addEventListener('play', () => {
-    startedPlaying(sound);
-    events.onPlayingChanged(true);
-  });
+  el.addEventListener('play', () => events.onPlayingChanged(true));
 
   /*
    * THE NOTIFICATION'S AND THE LOCK SCREEN'S ⏪ ⏩, a headset's and a
@@ -156,9 +147,9 @@ export function createPlayer(events: PlayerEvents): Player {
       el.playbackRate = r;
     },
     unload: () => {
-      stop(mine);
+      stop(el);
       // A newer player has answered with its own; this one only clears its own.
-      if (current === mine) {
+      if (current === el) {
         current = null;
         answerRemote(false);
       }

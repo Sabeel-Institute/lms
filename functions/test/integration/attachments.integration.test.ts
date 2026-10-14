@@ -121,6 +121,18 @@ describe('a teacher’s files', () => {
     expect(await open(AMINAH, 'student', pdf.id)).toEqual(PDF);
   });
 
+  it('comes from its link under its own name, shown where a browser can, not as the key it is stored at', async () => {
+    // A name a browser downloads, saves or shows in its title: non-ASCII,
+    // brackets, a quote and an apostrophe, all of which need the exact form.
+    const name = 'Ḥikma "notes" (week 2), Fāṭima\'s.pdf';
+    const pdf = await attach(TEACHER, 'manager', name, PDF);
+    const link = await getAttachmentUrl.run(await as(AMINAH, 'student', { courseworkId: cwId, fileId: pdf.id }));
+    const header = (await fetch(link.url)).headers.get('content-disposition') ?? '';
+    expect(header).toMatch(/^inline;/);
+    expect(decodeURIComponent(header.match(/filename\*=UTF-8''([^;\s]+)/)?.[1] ?? '')).toBe(name);
+    expect(header).toContain('filename="_ikma _notes_ (week 2), F__ima\'s.pdf"');
+  });
+
   it('audio over fifteen minutes is refused, and nothing of it stays', async () => {
     await expect(attach(TEACHER, 'manager', 'Whole class.wav', sample('longAudio'))).rejects.toThrow(/15 minutes/);
     expect((await cw()).files).toEqual({});

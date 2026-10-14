@@ -1,6 +1,5 @@
 import { createVideoPlayer, type VideoPlayer } from 'expo-video';
 import type { NowPlayingMeta, Player, PlayerEvents } from './playerTypes';
-import { releasedSound, startedPlaying, type Sound } from './oneSound';
 
 /**
  * Native side of the player seam (web sibling: player.web.ts), on expo-video,
@@ -74,15 +73,9 @@ export function createPlayer(events: PlayerEvents): Player {
    */
   let loaded = false;
   let sourceError: string | null = null;
-  // One sound at a time (oneSound.ts): a class recording started from the
-  // lock screen pauses an attachment as surely as one started here.
-  const sound: Sound = { pause: () => player.pause() };
   const subs = [
     player.addListener('timeUpdate', ({ currentTime }) => events.onProgress(currentTime * 1000)),
-    player.addListener('playingChange', ({ isPlaying }) => {
-      if (isPlaying) startedPlaying(sound);
-      events.onPlayingChanged(isPlaying);
-    }),
+    player.addListener('playingChange', ({ isPlaying }) => events.onPlayingChanged(isPlaying)),
     player.addListener('playToEnd', () => {
       if (loaded) events.onEnded();
     }),
@@ -96,10 +89,7 @@ export function createPlayer(events: PlayerEvents): Player {
       }
     }),
   ];
-  const detach = () => {
-    releasedSound(sound);
-    subs.forEach((s) => s.remove());
-  };
+  const detach = () => subs.forEach((s) => s.remove());
   current = { player, detach };
 
   return {

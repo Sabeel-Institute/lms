@@ -188,6 +188,13 @@ audit lie, and an audit that reports nothing is worse than no audit.
 - **Waiting for the port is not waiting for readiness.** The functions emulator
   accepts connections before it has registered anything. Poll a known callable
   until it stops 404ing.
+- **A trigger can land after the test's next step.** A test's own seed writes
+  fire the functions emulator's triggers asynchronously, and on a loaded
+  machine one can arrive after the step it was meant to precede.
+  `assignments.integration` fails this way now and then (the unenrolment
+  tests: a grant active that the test had just switched off), and passes on
+  a rerun. A rerun that passes classifies it; a fixed `settle()` only makes
+  it rarer.
 
 ## The local media store (SeaweedFS)
 

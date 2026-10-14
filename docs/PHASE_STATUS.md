@@ -37,6 +37,18 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **A file is a link** (Faisal's choice), modelled on the kanban
+  app's attachments: a paperclip adds files (on a phone it asks: choose
+  files, or take a photo), and each file is one line — what it is, its name,
+  its size — that opens it when tapped, with a bin beside it where it can be
+  taken off. A picture is not drawn and audio does not play in place; every
+  file opens in the phone's or the browser's own viewer, from a link minted
+  for the tap, so a page left open all day still opens what it lists. A
+  file the browser cannot show in a tab — a Word file anywhere, a PDF where
+  there is no viewer, as in Chrome on Android — is saved from the page under
+  its own name instead, so no blank tab is left behind. This retires the
+  attachment player and one-sound-at-a-time below: the class recording is
+  the only sound the app plays itself.
 - 2026-10-13 — **Files first, save later** (Faisal's choice). A new
   assignment took files only once it was saved, so a teacher wrote it, saved
   a draft, then attached. The form now reserves the assignment's id as it
@@ -1689,6 +1701,17 @@ and commit messages, and renaming them would strand every one of those.
   reports nothing is worse than none.
 
 ## Verification log
+
+- 2026-10-13 — **A downloaded file was named after its storage key**
+  ("f1.pdf", in production a random id) and left a blank tab behind, found on
+  the AVD's Chrome while checking that files open as links; the old Open
+  button did the same. A file's link now asks the store for `inline` under
+  the file's own name (`signGet`, both forms of `filename`), which an
+  integration test holds to the exact name with non-ASCII, brackets and
+  quotes, red with the name dropped. A file the browser only downloads is
+  fetched and saved from the page instead of opening a tab, which the
+  browser suite checks with a Word file (a download under its name, no tab)
+  and the AVD's Chrome with a PDF (saved to Downloads under its name).
 
 - 2026-10-13 — **"Post" broke into "Po / st"** on the assignment form, on a
   staff phone with larger text. `Row` gives each control a cell of its own,
