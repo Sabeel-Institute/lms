@@ -26,7 +26,10 @@ import {
   type GradeDoc,
   type SubmissionDoc,
   type SubmissionEventDoc,
+  type SubmissionState,
 } from '@sabeel/shared';
+
+const SUBMISSION_STATES: SubmissionState[] = ['open', 'handedIn', 'returned'];
 import { auditedCall } from './audited';
 import { reportedCall } from './reported';
 import { isAdminCaller, requireCourseScope, requireStudent } from './guards';
@@ -649,6 +652,10 @@ export async function takeBackWork(uid: string, cwId: string) {
     };
     tx.set(draftRef(uid, cwId), draft);
     tx.update(subRef(uid, cwId), { state: 'open', handedInAt: null, note: '', files: {} });
+    // A grade being written was for the work taken back. Kept, the next
+    // hand-in read as graded, and Return sent that grade and its feedback on
+    // work nobody had read.
+    tx.delete(gradeRef(uid, cwId));
     const event: SubmissionEventDoc = {
       studentUid: uid,
       courseworkId: cwId,
@@ -669,6 +676,13 @@ export const takeBack = reportedCall(async (req) => {
 });
 
 // ------------------------------------------------------- grade and return --
+
+/** Why a grade was not saved: the work is no longer as it was when it was graded. */
+const STATE_MOVED: Record<SubmissionState, string> = {
+  open: 'The student took this work back to change it. Grade it when it is handed in again.',
+  handedIn: 'The student has just handed this work in. Read it before grading it.',
+  returned: 'This work has just been returned. Open it again to change the grade.',
+};
 
 function validateGrade(v: unknown, grading: CourseworkGrading): Grade | null {
   if (v === null) return null;
@@ -707,13 +721,20 @@ async function readSubmission(tx: Transaction, uid: string, cwId: string): Promi
  * and a save that changes nothing the student has is no change at all. Work
  * done on paper can be graded with nothing handed in.
  */
-export async function saveGradeRecord(staffUid: string, input: StudentWorkInput & { grade: unknown; feedback: unknown }) {
+export async function saveGradeRecord(
+  staffUid: string,
+  input: StudentWorkInput & { grade: unknown; feedback: unknown; onState?: SubmissionState },
+) {
   const cw = await readCoursework(input.courseworkId);
   const grade = validateGrade(input.grade, cw.grading);
   const feedback = str(input.feedback ?? '', 'Feedback', MAX_FEEDBACK, { required: false });
   return db().runTransaction(async (tx) => {
     const sub = await readSubmission(tx, input.studentUid, input.courseworkId);
     if (sub.notRequired) throw new HttpsError('failed-precondition', 'This work is marked not required.');
+    // GRADED AS IT WAS ON SCREEN. A grade typed on handed-in work and saved a
+    // moment after the student took it back was stored as work done on paper,
+    // and returning it closed the student's open work under that grade.
+    if (input.onState && sub.state !== input.onState) throw new HttpsError('failed-precondition', STATE_MOVED[sub.state]);
     if (sub.state === 'returned' && sub.returned) {
       if (grade === null && sub.returned.grade !== null) {
         throw new HttpsError('failed-precondition', 'A returned grade can be changed, but it cannot be removed.');
@@ -749,7 +770,9 @@ export const saveGrade = auditedCall('saveGrade', async (req, audit) => {
   const uid = await requireCourseScope(req, cw.courseId);
   audit.courseId = cw.courseId;
   audit.targets = { courseworkId: input.courseworkId, studentUid: input.studentUid };
-  const res = await saveGradeRecord(uid, { ...input, grade: d.grade, feedback: d.feedback });
+  const onState = d.onState === undefined ? undefined : SUBMISSION_STATES.find((s) => s === d.onState);
+  if (d.onState !== undefined && !onState) throw new HttpsError('invalid-argument', 'onState is not a state of work.');
+  const res = await saveGradeRecord(uid, { ...input, grade: d.grade, feedback: d.feedback, onState });
   // A changed GRADE on returned work is a new return: the student is told.
   if (res.returnedChanged && JSON.stringify(res.before) !== JSON.stringify(res.after)) {
     await notifyReturned(db(), input.courseworkId, [input.studentUid]);

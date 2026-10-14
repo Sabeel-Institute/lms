@@ -8,6 +8,7 @@ import {
   addDays,
   isLate,
   submissionId,
+  staffWorkState,
   todayInZone,
   workState,
   type CourseworkDoc,
@@ -225,6 +226,27 @@ describe('taking work back', () => {
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, grade: { points: 7 }, feedback: '' });
     await returnWorkRecord(id, [BILAL], null);
     await expect(takeBackWork(BILAL, id)).rejects.toThrow(/not handed in/);
+  });
+
+  /*
+   * A GRADE BEING WRITTEN WAS FOR THE WORK TAKEN BACK. Kept, the new hand-in
+   * read as graded and Return sent that grade and its feedback on work nobody
+   * had read; saved a moment after the take-back, it was stored as paper work.
+   */
+  it('takes the grade being written away with it, and refuses one typed on the work it took back', async () => {
+    const id = await posted();
+    await writeNote(AMINAH, id, 'Version one');
+    await handInWork(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 8 }, feedback: 'On version one', onState: 'handedIn' });
+    await takeBackWork(AMINAH, id);
+    expect((await db().collection(COLLECTIONS.grades).doc(submissionId(AMINAH, id)).get()).exists).toBe(false);
+    await expect(
+      saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 6 }, feedback: '', onState: 'handedIn' }),
+    ).rejects.toThrow(/took this work back/);
+    expect((await db().collection(COLLECTIONS.grades).doc(submissionId(AMINAH, id)).get()).exists).toBe(false);
+    await writeNote(AMINAH, id, 'Version two');
+    await handInWork(AMINAH, id);
+    expect(staffWorkState((await sub(AMINAH, id))!, undefined, today, true)).toBe('toGrade');
   });
 
   /*

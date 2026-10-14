@@ -249,7 +249,14 @@ export const postCoursework = call<{ courseworkId: string }, { id: string; stude
 export const closeCoursework = call<{ courseworkId: string }, unknown>('closeCoursework');
 export const deleteCoursework = call<{ courseworkId: string }, unknown>('deleteCoursework');
 export const saveGrade = call<
-  { courseworkId: string; studentUid: string; grade: Grade | null; feedback: string },
+  {
+    courseworkId: string;
+    studentUid: string;
+    grade: Grade | null;
+    feedback: string;
+    /** The state the work was in on screen when this was graded; refused if it has moved since. */
+    onState: SubmissionDoc['state'];
+  },
   unknown
 >('saveGrade');
 export const returnWork = call<

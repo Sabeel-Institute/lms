@@ -14,6 +14,7 @@ import {
   unbreakableDate,
   type Grade,
   type ScaleMark,
+  type SubmissionState,
 } from '@sabeel/shared';
 import { Button, Card, Chips, Field, InlineNumber, Notice, Row, Screen, SectionTitle } from '../components/ui';
 import { useLeaveGuard } from '../components/LeaveGuard';
@@ -270,6 +271,7 @@ export function GradeScreen({
           cw={cw}
           studentUid={studentUid}
           saved={saved}
+          state={sub.state}
           returned={sub.state === 'returned' ? sub.returned : null}
           onApi={(api) => {
             form.current = api;
@@ -409,6 +411,7 @@ function GradeForm({
   cw,
   studentUid,
   saved,
+  state,
   returned,
   onApi,
   onStatus,
@@ -416,6 +419,8 @@ function GradeForm({
   cw: CourseworkRow;
   studentUid: string;
   saved: { grade: Grade | null; feedback: string } | undefined;
+  /** Where the work stands on screen: each change says so, and is refused if it has moved. */
+  state: SubmissionState;
   returned: { grade: Grade | null; feedback: string } | null;
   onApi: (api: GradeFormApi | null) => void;
   onStatus: (status: GradeFormStatus) => void;
@@ -441,8 +446,10 @@ function GradeForm({
   const stagedNow = useRef(false);
   const { active: sending, run: runSend } = useOneAtATime();
   const [sendError, setSendError] = useState<string | null>(null);
+  const stateNow = useRef(state);
+  stateNow.current = state;
   const [saver] = useState(() =>
-    createAutosave<{ grade: Grade | null; feedback: string }>({
+    createAutosave<{ grade: Grade | null; feedback: string; onState: SubmissionState }>({
       delayMs: 600,
       save: (v) => saveGrade({ courseworkId: cw.id, studentUid, ...v }),
       onState: setSaveState,
@@ -504,7 +511,8 @@ function GradeForm({
     }
     invalidNow.current = null;
     setInvalid(null);
-    saver.queue({ grade, feedback: d.feedback });
+    // The state as the teacher typed, not as it is when the save goes out.
+    saver.queue({ grade, feedback: d.feedback, onState: stateNow.current });
   };
   const send = () =>
     void runSend('send', async () => {
@@ -513,7 +521,7 @@ function GradeForm({
       const grade = gradeOf(d);
       if (grade === 'invalid' || grade === null) return;
       try {
-        await saveGrade({ courseworkId: cw.id, studentUid, grade, feedback: d.feedback });
+        await saveGrade({ courseworkId: cw.id, studentUid, grade, feedback: d.feedback, onState: 'returned' });
         // The stored grade comes back round as `returned`, and replaces the form.
         touched.current = false;
       } catch (e) {
