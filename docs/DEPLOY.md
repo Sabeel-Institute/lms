@@ -477,9 +477,12 @@ enough to hit the old limit. Read it back instead (gcloud has no default project
 here, so name it):
 
 ```bash
-gcloud functions describe importZoomRecording --region=us-central1 --gen2 \
-  --project=oursabeel-lms \
-  --format="value(serviceConfig.timeoutSeconds,serviceConfig.availableMemory)"
+# The two whose limits matter: the Zoom copy (1800 s) and an upload's finish (300 s).
+for f in copyZoomFile finalizeRecordingUpload; do
+  gcloud functions describe "$f" --region=us-central1 --gen2 \
+    --project=oursabeel-lms \
+    --format="value(name,serviceConfig.timeoutSeconds,serviceConfig.availableMemory)"
+done
 ```
 
 That verifies the CONFIG, not the import. No suite moves a genuinely large file —
