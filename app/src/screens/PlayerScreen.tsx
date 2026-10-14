@@ -339,10 +339,17 @@ export function PlayerScreen({
       {studentUid ? (
         <>
           <Text style={styles.sectionHeading}>Your progress</Text>
-          <View style={styles.listenedTrack}>
-            <View style={[styles.listenedFill, { width: `${Math.round(listened * 100)}%` }]} />
-          </View>
-          <Text style={styles.body}>{Math.round(listened * 100)}% played · your place is saved</Text>
+          {/* As a share only of a length the recording has: a phone upload or
+              an old copy can have none, and "0% played" was then the answer
+              however much had been played. */}
+          {recording.durationSec ? (
+            <View style={styles.listenedTrack}>
+              <View style={[styles.listenedFill, { width: `${Math.round(listened * 100)}%` }]} />
+            </View>
+          ) : null}
+          <Text style={styles.body}>
+            {recording.durationSec ? `${Math.round(listened * 100)}% played` : `${formatClock(heardMs)} played`} · your place is saved
+          </Text>
           {/*
             LISTENED TIME ALONE. `positionMs > 0` counted a SEEK as playing — so
             opening a recording and tapping +30s once, with no audio played at
@@ -464,8 +471,8 @@ function ClosedRecord({
       {stored ? (
         <Text style={styles.closedRecordLine}>
           {recording.durationSec
-            ? `${Math.round(listenedFraction(stored.listenedMs, recording.durationSec) * 100)}% listened`
-            : `${formatClock(stored.listenedMs)} listened`}
+            ? `${Math.round(listenedFraction(stored.listenedMs, recording.durationSec) * 100)}% played`
+            : `${formatClock(stored.listenedMs)} played`}
         </Text>
       ) : null}
       <Text style={styles.closedRecordLine}>

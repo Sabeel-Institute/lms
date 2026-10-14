@@ -197,7 +197,7 @@ export function MiniPlayer({
         <Pressable
           testID="mini-player-close"
           accessibilityRole="button"
-          accessibilityLabel="Stop listening"
+          accessibilityLabel="Stop playing"
           onPress={closePlayback}
           style={styles.close}
         >

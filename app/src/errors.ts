@@ -43,7 +43,8 @@ export function errorText(e: unknown): string {
 }
 
 /**
- * What a listener reads when the AUDIO itself fails.
+ * What a listener reads when the MEDIA itself fails: audio or video, so it
+ * names neither.
  *
  * The transport's own words are a code — `media error 2` from the web
  * element, "Source error" or "Response code: 400" from the native player — and they
@@ -53,5 +54,5 @@ export function errorText(e: unknown): string {
  */
 export function audioErrorText(raw: string): string {
   console.warn('audio failed', raw || 'unknown');
-  return 'The audio could not be loaded. Check your connection and try again.';
+  return 'The recording could not be loaded. Check your connection and try again.';
 }

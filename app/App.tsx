@@ -149,7 +149,7 @@ function Loading() {
 function NotFound({ what }: { what: string }) {
   return (
     <Screen>
-      <Empty>That {what} is not available. It may have been removed.</Empty>
+      <Empty>That {what} is not available. It may have been removed, or you may no longer have access to it.</Empty>
     </Screen>
   );
 }
