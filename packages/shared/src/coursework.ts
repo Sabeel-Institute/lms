@@ -337,6 +337,15 @@ export function canTakeBack(
 }
 
 /**
+ * The student's dates are their own: given more time, or asked for another
+ * try with a new date. A change to the class's dates passes them by, and
+ * nobody whose date did not move is told it did.
+ */
+export function hasOwnDates(sub: Pick<SubmissionDoc, 'moreTime' | 'returned'>): boolean {
+  return sub.moreTime !== null || sub.returned?.retry === true;
+}
+
+/**
  * Whether a student joining the course today receives this assignment:
  * everyone enrolled when it is posted, and anyone who joins by its due date.
  * The due date itself counts.

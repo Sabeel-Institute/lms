@@ -8,6 +8,7 @@ import {
   canHandIn,
   canTakeBack,
   gradeFits,
+  hasOwnDates,
   isLate,
   normalizeMarkdown,
   receivesOnJoining,
@@ -360,9 +361,9 @@ export const postCoursework = auditedCall('postCoursework', async (req, audit) =
 
 /**
  * Change an assignment. On a posted one, a new due date or late-work date
- * reaches every student still working on it — except a student given more
- * time, whose own date stands. How it is graded cannot change once any grade
- * has been saved.
+ * reaches every student still working on it, except one whose dates are their
+ * own (`hasOwnDates`: more time, or another try), whose date stands. How it
+ * is graded cannot change once any grade has been saved.
  */
 const FIELD_NAMES: (keyof CourseworkFields)[] = ['title', 'instructions', 'dueDate', 'lateUntil', 'grading'];
 
@@ -426,7 +427,7 @@ export async function updateCourseworkRecord(id: string, d: Record<string, unkno
   if (cw.status === 'posted' && datesMoved) {
     const subs = await db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id).get();
     await inBatches(
-      subs.docs.filter((s) => (s.data() as SubmissionDoc).moreTime === null),
+      subs.docs.filter((s) => !hasOwnDates(s.data() as SubmissionDoc)),
       (batch, s) => batch.update(s.ref, { dueDate: fields.dueDate, lateUntil: fields.lateUntil }),
     );
   }
@@ -806,6 +807,9 @@ export async function returnWorkRecord(
           returned,
           dueDate: retry.dueDate,
           lateUntil: retry.lateUntil,
+          // Another try is open to hand-ins on its own date, as more time is,
+          // even if the class has stopped taking work: else it began Missed.
+          closedEarly: false,
         });
         if (graded) tx.delete(gradeRef(studentUid, cwId));
       } else {

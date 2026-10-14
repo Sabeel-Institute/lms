@@ -3,6 +3,7 @@ import {
   COLLECTIONS,
   dueDateMovedMessage,
   handInLastDayMessage,
+  hasOwnDates,
   newAssignmentMessage,
   submissionId,
   workReturnedMessage,
@@ -89,7 +90,8 @@ export async function notifyPosted(db: Firestore, courseworkId: string): Promise
 
 /**
  * The due date moved: everyone still working on it whose date moved with it.
- * A student given more time keeps their own date, so nothing moved for them.
+ * A student whose dates are their own (more time, another try) keeps them, so
+ * nothing moved for them.
  */
 export async function notifyDueDateMoved(db: Firestore, courseworkId: string): Promise<number> {
   const cw = await readCw(db, courseworkId);
@@ -99,7 +101,7 @@ export async function notifyDueDateMoved(db: Firestore, courseworkId: string): P
   const subs = await db.collection(COLLECTIONS.submissions).where('courseworkId', '==', courseworkId).get();
   return toEach(
     db,
-    subs.docs.map((d) => d.data() as SubmissionDoc).filter((s) => stillWorking(s) && s.moreTime === null && s.dueDate === cw.dueDate),
+    subs.docs.map((d) => d.data() as SubmissionDoc).filter((s) => stillWorking(s) && !hasOwnDates(s) && s.dueDate === cw.dueDate),
     'assignmentPosted',
     (s) => dueDateMovedMessage(course.name, cw.title, s.dueDate, courseworkId),
   );

@@ -318,6 +318,18 @@ describe('grading and returning', () => {
     expect((await sub(AMINAH, id))?.returned?.seq).toBe(1);
   });
 
+  it('another try on an assignment that stopped taking work opens it for that student', async () => {
+    const id = await posted();
+    await handedIn(AMINAH, id);
+    await closeCourseworkRecord(id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 4 }, feedback: 'Again, please.' });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(5), lateUntil: null });
+    expect(await stateOf(AMINAH, id)).toBe('toDo');
+    await writeNote(AMINAH, id, 'Second go');
+    await handInWork(AMINAH, id);
+    expect((await sub(AMINAH, id))?.state).toBe('handedIn');
+  });
+
   it('work done on paper can be graded and returned with nothing handed in', async () => {
     const id = await posted();
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, grade: { points: 10 }, feedback: 'Recited in class.' });
@@ -381,6 +393,20 @@ describe('one student at a time', () => {
     await updateCourseworkRecord(id, fields({ dueDate: inDays(20), lateUntil: null }));
     expect((await sub(BILAL, id))?.dueDate).toBe(inDays(3));
     expect((await sub(AMINAH, id))?.dueDate).toBe(inDays(20));
+  });
+
+  it('another try keeps its own date when the class’s date moves, or late work is switched off', async () => {
+    const id = await posted();
+    await writeNote(AMINAH, id, 'First');
+    await handInWork(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 5 }, feedback: '' });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(20), lateUntil: null });
+    await updateCourseworkRecord(id, fields({ dueDate: inDays(8), lateUntil: inDays(14) }));
+    expect(await sub(AMINAH, id)).toMatchObject({ dueDate: inDays(20), lateUntil: null });
+    await updateCourseworkRecord(id, fields({ dueDate: inDays(8), lateUntil: null }));
+    expect(await sub(AMINAH, id)).toMatchObject({ dueDate: inDays(20), lateUntil: null });
+    expect(await stateOf(AMINAH, id)).toBe('toDo');
+    expect(await sub(BILAL, id)).toMatchObject({ dueDate: inDays(8), lateUntil: null });
   });
 
   it('not required counts nowhere and can be undone', async () => {
