@@ -19,3 +19,6 @@ import { getFirestore, type Firestore } from 'firebase/firestore';
 export function initDb(app: FirebaseApp): Firestore {
   return getFirestore(app);
 }
+
+/** The memory cache goes with the process, and a phone has no address to reset (see the web sibling). */
+export async function afterSignOut(_db: Firestore, _drained: boolean): Promise<void> {}

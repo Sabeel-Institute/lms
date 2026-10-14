@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut as fbSignOut, type User } from 'firebase/auth';
 import { closePlayback, forgetPlaybackUrls } from './playback';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, waitForPendingWrites } from 'firebase/firestore';
 import {
   COLLECTIONS,
   isStaffRole,
@@ -12,6 +12,7 @@ import {
 } from '@sabeel/shared';
 import { googleSignOut } from './auth/google';
 import { auth, db } from './firebase';
+import { afterSignOut } from './firestoreInit';
 import { setLiveDataSession } from './liveQuery';
 import { createPollChain } from './pollChain';
 import { registerThisDevice, unregisterThisDevice } from './notifications';
@@ -29,6 +30,8 @@ export type Session =
 
 /** How long sign-out waits for the final progress write before giving up. */
 const SIGN_OUT_WRITE_GRACE_MS = 1000;
+/** How long it waits for everything else still being sent, before keeping it instead. */
+const SIGN_OUT_DRAIN_MS = 2000;
 
 export async function signOut(): Promise<void> {
   // Stop the audio before anything else. Playback outlives the screen that
@@ -56,6 +59,15 @@ export async function signOut(): Promise<void> {
   // for one account would still be handed to the next person on a shared
   // device, bypassing `getPlaybackUrl`'s entitlement check entirely.
   forgetPlaybackUrls();
+  // Whatever is still being sent goes now, while the credential that sends it
+  // exists; the cache is cleared after only if nothing is left (`afterSignOut`).
+  const drained = await Promise.race([
+    waitForPendingWrites(db).then(
+      () => true,
+      () => false,
+    ),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SIGN_OUT_DRAIN_MS)),
+  ]);
   // Drop this device's push registration FIRST, while the credential still
   // exists to authorize the delete. A shared device that kept its registration
   // would deliver one student's "a recording is ready" to whoever signs in
@@ -67,6 +79,7 @@ export async function signOut(): Promise<void> {
   // the same account with no way to switch users.
   await googleSignOut().catch(() => undefined);
   await fbSignOut(auth);
+  await afterSignOut(db, drained);
 }
 
 /** Which collection holds this user's mirror document. */

@@ -435,7 +435,8 @@ Manager, never in the app bundle.**
   `ScreenBoundary` (the stack's `screenLayout`): one that cannot be drawn says
   so, the bar works, and Try again draws the server's copy. The cache is never
   cleared to avoid this: on the web it is where unsent completions and
-  listening progress wait.
+  listening progress wait. It is cleared at sign-out once nothing is left to
+  send (`afterSignOut`), so a shared browser keeps nothing of the last person.
 - Never `git add` a binary. The APK ships as a GitHub Release asset; committing
   per-release APKs bloated the sibling pages repo's history and had to be
   rewritten out. `*.apk` is gitignored as the backstop.

@@ -1119,14 +1119,49 @@ check(
 // "no bar afterwards" is a sentence about a screen that never had one.
 await tap(student, 'tab-classes');
 await student.getByTestId('mini-player').waitFor({ timeout: 15000 });
+/*
+ * NOTHING OF THEIRS STAYS IN THE BROWSER. The next person at a shared computer
+ * found a student's unsent answer and their grade's feedback in the Firestore
+ * cache, and after an admin the whole student directory. With nothing left to
+ * send, signing out clears the cache and starts the app again at its root.
+ * Counted before as well, so a probe that finds nothing proves nothing.
+ */
+const cachedOfFatima = () =>
+  student.evaluate(async () => {
+    let found = 0;
+    for (const { name } of await indexedDB.databases()) {
+      if (!name?.startsWith('firestore/')) continue;
+      const idb = await new Promise((res, rej) => {
+        const r = indexedDB.open(name);
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+      for (const store of [...idb.objectStoreNames].filter((n) => n.startsWith('remoteDocuments'))) {
+        const all = await new Promise((res) => {
+          const r = idb.transaction(store).objectStore(store).getAll();
+          r.onsuccess = () => res(r.result);
+        });
+        found += all.filter((v) => JSON.stringify(v).includes('fatima@example.com')).length;
+      }
+      idb.close();
+    }
+    return found;
+  });
+const cachedBefore = await cachedOfFatima();
 await more(student, 'more-sign-out');
+await student.waitForURL((u) => new URL(u).pathname === '/', { timeout: 20000 }).catch(() => {});
 await student.getByTestId('signin-email').waitFor({ timeout: 20000 });
+const cachedAfter = await cachedOfFatima();
+check(
+  'signing out leaves none of the student’s documents in the browser, and the address at the root',
+  cachedBefore > 0 && cachedAfter === 0 && new URL(student.url()).pathname === '/',
+  `${cachedBefore} cached before, ${cachedAfter} after, at ${new URL(student.url()).pathname}`,
+);
 await student.getByTestId('signin-email').fill('fatima@example.com');
 await student.getByTestId('signin-password').fill('StudentPass123!');
 await tap(student, 'signin-student');
-// The TAB BAR, not a screen title: the linking config restores the route this
-// student was last on, so signing back in lands them on Classes rather than
-// Listening — which is the shell working, not a failure.
+// The TAB BAR, not a screen title: signing out sent the address back to the
+// root, so signing back in lands on the first tab, not where they left off.
 await student.getByTestId('tab-classes').waitFor({ timeout: 30000 });
 await student.waitForTimeout(1500);
 /*
@@ -1134,9 +1169,12 @@ await student.waitForTimeout(1500);
  *
  * The signed-out branch renders a bare `SignInScreen` with no `Shell` in it, so
  * "no docked bar on the sign-in screen" is true whether or not the session was
- * ended. `playback.ts` holds its session at module scope and nothing reloads the
- * page between the two, so a session left running comes straight back with the
- * bar — under the next person's account.
+ * ended. `playback.ts` holds its session at module scope, so a session left
+ * running comes straight back with the bar, under the next person's account.
+ * ON THE WEB THE PAGE STARTS AGAIN after a sign-out with nothing left to send,
+ * which ends the session whatever `signOut` did; this check can no longer
+ * fail there, and `signOut`'s own stop is what holds on a phone (no reload),
+ * checked on the device.
  */
 check(
   'signing out ends the playback session — nothing is playing for the next sign-in',
