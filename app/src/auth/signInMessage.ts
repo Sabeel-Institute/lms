@@ -8,6 +8,9 @@ import { errorText } from '../errors';
  */
 export const REFUSED_ACCOUNT = "That account can't sign in here. Staff use their Sabeel Google account.";
 
+/** A disabled account, at the door or signed out by it (`ended: 'disabled'` on the session). Staff are disabled the same way, and a manager has no teacher to ask. */
+export const DISABLED_ACCOUNT = 'That account has been disabled. Contact your teacher or an administrator.';
+
 /**
  * The sentence the sign-in screen shows for a failed attempt.
  *
@@ -46,8 +49,7 @@ export function signInMessage(e: unknown): string {
        */
       return REFUSED_ACCOUNT;
     case 'auth/user-disabled':
-      // Staff are disabled the same way, and a manager has no teacher to ask.
-      return 'That account has been disabled. Contact your teacher or an administrator.';
+      return DISABLED_ACCOUNT;
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a few minutes and try again.';
     case 'auth/network-request-failed':

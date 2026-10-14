@@ -2359,6 +2359,17 @@ check(
     /hikam foundations/i.test(await bodyText(admin)),
 );
 
+/*
+ * DISABLED WHILE SIGNED IN IS TOLD SO. The page used to drop to an empty
+ * sign-in form, with nothing said until the next sign-in attempt. Bilal is
+ * signed in on a page of his own as he is disabled.
+ */
+const bilalOpen = await newSession('bilal-disabled-while-in');
+await bilalOpen.getByTestId('signin-email').fill('bilal@example.com');
+await bilalOpen.getByTestId('signin-password').fill('BilalPass123!');
+await tap(bilalOpen, 'signin-student');
+await bilalOpen.getByTestId('tab-classes').waitFor({ timeout: 30000 });
+
 // Disabling moves them into a section that is CLOSED, and closed means
 // unmounted: the row must be unreachable until the section is expanded.
 await goHome(admin);
@@ -2367,6 +2378,13 @@ await tap(admin, 'student-open-bilal@example.com');
 await tap(admin, 'student-actions');
 await tap(admin, 'student-access');
 await admin.waitForTimeout(2500);
+const toldDisabled = await bilalOpen
+  .getByText('That account has been disabled', { exact: false })
+  .first()
+  .waitFor({ timeout: 30000 })
+  .then(() => true, () => false);
+check('a student disabled while signed in is told so on the sign-in screen', toldDisabled);
+await bilalOpen.context().close();
 await goHome(admin);
 await tap(admin, 'tab-people');
 // The Disabled section appears only once somebody is in it — that is the

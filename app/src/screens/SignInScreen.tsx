@@ -4,7 +4,8 @@ import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/aut
 import { APP_NAME, FIRST_ADMIN_LOCAL_PART } from '@sabeel/shared';
 import { auth } from '../firebase';
 import { signInWithGoogle } from '../auth/google';
-import { REFUSED_ACCOUNT, signInMessage } from '../auth/signInMessage';
+import { DISABLED_ACCOUNT, REFUSED_ACCOUNT, signInMessage } from '../auth/signInMessage';
+import type { SessionEnd } from '../session';
 import { devSignIn, devSignInAvailable } from '../auth/devSignIn';
 import { Button, Field, Notice, Screen } from '../components/ui';
 import { BUILD_LABEL } from '../buildInfo';
@@ -20,18 +21,20 @@ const t = getTheme();
  * most common way to blow the palette's proportion budget. Raspberry appears
  * only on the primary button.
  */
-export function SignInScreen({ refused }: { refused: boolean }) {
+export function SignInScreen({ ended }: { ended: SessionEnd | null }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  // THE DOOR'S ANSWER, when it came after the sign-in rather than inside it:
-  // the session learns of the refusal as this screen comes back, or a moment
-  // later. The next attempt clears it like any other error.
+  // WHY THE LAST SESSION ENDED, when it came after the sign-in rather than
+  // inside it: refused at the door, or disabled while signed in. The session
+  // learns of it as this screen comes back, or a moment later. The next
+  // attempt clears it like any other error.
   useEffect(() => {
-    if (refused) setError(REFUSED_ACCOUNT);
-  }, [refused]);
+    if (ended === 'refused') setError(REFUSED_ACCOUNT);
+    else if (ended === 'disabled') setError(DISABLED_ACCOUNT);
+  }, [ended]);
 
   // `fn` is called inside the press, before any await, so the Google popup
   // still opens from the tap that asked for it.

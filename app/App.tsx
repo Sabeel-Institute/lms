@@ -209,7 +209,7 @@ export default function App() {
       </View>
     );
   } else if (session.phase === 'signedOut') {
-    content = <SignInScreen refused={session.refused} />;
+    content = <SignInScreen ended={session.ended} />;
   } else {
     const { user, profile, claims } = session;
     const email = user.email ?? '';

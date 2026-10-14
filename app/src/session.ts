@@ -22,10 +22,12 @@ export type Profile =
   | { kind: 'staff'; doc: StaffUserDoc }
   | { kind: 'student'; doc: StudentDoc };
 
+/** Why the last session ended, when the person has to be told: see `useSession`. */
+export type SessionEnd = 'refused' | 'disabled';
+
 export type Session =
   | { phase: 'loading' }
-  /** `refused`: the account just signed out was refused at the door — see `useSession`. */
-  | { phase: 'signedOut'; refused: boolean }
+  | { phase: 'signedOut'; ended: SessionEnd | null }
   | { phase: 'signedIn'; user: User; profile: Profile | null; claims: TokenClaims };
 
 /** How long sign-out waits for the final progress write before giving up. */
@@ -173,7 +175,7 @@ export function useSession(): Session {
      * before they can do anything, so for them the same error is a revoked
      * session, not a refusal, and the message would be false.
      */
-    let refused = false;
+    let ended: SessionEnd | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       const gen = chain.claim();
@@ -200,11 +202,11 @@ export function useSession(): Session {
         // credential is gone, and stopping is the point.
         void closePlayback();
         forgetPlaybackUrls();
-        setSession({ phase: 'signedOut', refused });
+        setSession({ phase: 'signedOut', ended });
         return;
       }
       // A new sign-in: whatever ended the last one is not news any more.
-      refused = false;
+      ended = null;
       /** Whether this sign-in has ever had a role: an account the door refuses never does. */
       let provisioned = false;
 
@@ -320,9 +322,14 @@ export function useSession(): Session {
           const code = (e as { code?: string }).code;
           // The SDK has signed this account out before rethrowing, so the
           // signed-out branch above may already have run: say it either way.
-          if (code === 'auth/user-token-expired' && !provisioned && auth.currentUser === null) {
-            refused = true;
-            setSession((s) => (s.phase === 'signedOut' ? { phase: 'signedOut', refused: true } : s));
+          // And DISABLED while signed in: the profile shows the change, the
+          // forced refresh is refused, and the SDK signs them out. That ended
+          // on an empty sign-in form, said nothing, until the next attempt.
+          const why: SessionEnd | null =
+            code === 'auth/user-token-expired' && !provisioned ? 'refused' : code === 'auth/user-disabled' ? 'disabled' : null;
+          if (why && auth.currentUser === null) {
+            ended = why;
+            setSession((s) => (s.phase === 'signedOut' ? { phase: 'signedOut', ended: why } : s));
           }
           console.warn('session poll', code ?? (e as Error).message);
           /*
