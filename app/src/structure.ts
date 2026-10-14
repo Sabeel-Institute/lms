@@ -125,6 +125,10 @@ export function useCourse(courseId: string | null): CourseRow | null {
  * As useCourse, plus whether the listener has answered — for a screen resolving
  * a course from a URL, which must be able to say "no such course".
  *
+ * A refusal is an answer: a manager taken off the class, or a student
+ * unenrolled, while on its page is refused it by design, and the page says it
+ * is not available rather than "Live data error" above that.
+ *
  * `scope` for a second reader of the same document; see `useRecordingState`.
  */
 export function useCourseState(courseId: string | null, scope?: string) {
@@ -136,6 +140,7 @@ export function useCourseState(courseId: string | null, scope?: string) {
       context: scope ? { scope } : undefined,
       map: (snap) => ({ id: snap.id, ...read('courses', snap) }),
       empty: null,
+      denialIsAnswer: true,
     },
   );
 }

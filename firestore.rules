@@ -383,7 +383,19 @@ service cloud.firestore {
     // (constrained by studentUid), a manager reads their courses' (one class
     // get() per row, affordable only for a query scoped to a class).
     match /assignments/{assignmentId} {
-      allow get, list: if (isStudent() && resource.data.studentUid == request.auth.uid)
+      // A student's own grant that does not exist reads as absent: a recording
+      // opened with no grant (an old link, a shared device) is not theirs to
+      // play, which is an answer, not a refused listener. Bound to their own
+      // id, as `listeningProgress` is, so it tells nobody whether a classmate
+      // holds one.
+      allow get: if (isStudent()
+          && (resource == null
+                ? assignmentId.split('_')[0] == request.auth.uid
+                : resource.data.studentUid == request.auth.uid))
+        || isAdmin()
+        || (isStaff() && request.auth.uid in
+            get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.managerUids);
+      allow list: if (isStudent() && resource.data.studentUid == request.auth.uid)
         || isAdmin()
         || (isStaff() && request.auth.uid in
             get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.managerUids);
@@ -412,7 +424,15 @@ service cloud.firestore {
     // One student's work: what they handed in, their own dates, and the grade
     // once RETURNED — the only way a grade reaches a student.
     match /submissions/{submissionId} {
-      allow get, list: if (isStudent() && resource.data.studentUid == request.auth.uid)
+      // Own and absent reads as absent, as a grant does: an assignment deleted,
+      // never posted or given in another class is "not available", not a
+      // refused listener.
+      allow get: if (isStudent()
+          && (resource == null
+                ? submissionId.split('_')[0] == request.auth.uid
+                : resource.data.studentUid == request.auth.uid))
+        || staffManagesCourse(resource.data.courseId);
+      allow list: if (isStudent() && resource.data.studentUid == request.auth.uid)
         || staffManagesCourse(resource.data.courseId);
       allow write: if false;
     }

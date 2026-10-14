@@ -1001,7 +1001,7 @@ function MyClassRecord({ uid }: { uid: string }) {
  */
 function Work({ uid }: { uid: string }) {
   const { courseworkId } = useRoute<RouteProp<RootStackParamList, 'Work'>>().params;
-  const coursework = useCourseworkState(courseworkId, true);
+  const coursework = useCourseworkState(courseworkId);
   const submission = useSubmissionState(uid, courseworkId);
   const cls = useCourseState(coursework.value?.courseId ?? null);
   const gate = resolve(coursework, 'assignment') ?? resolve(submission, 'assignment') ?? resolve(cls, 'course');

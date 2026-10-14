@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   initializeTestEnvironment,
@@ -167,6 +167,16 @@ describe('a student’s work', () => {
   it('a student reads their own work and never a classmate’s', async () => {
     await assertSucceeds(getDocs(query(collection(student(), COLLECTIONS.submissions), where('studentUid', '==', STUDENT))));
     await assertFails(getDoc(doc(student(), COLLECTIONS.submissions, submissionId(CLASSMATE, CW))));
+  });
+
+  it('a student opening an assignment that is gone, or never theirs, is told their work does not exist', async () => {
+    // Deleted, never posted, or given in another class: there is no work of theirs on it.
+    const gone = await getDoc(doc(student(), COLLECTIONS.submissions, submissionId(STUDENT, 'cwDeleted')));
+    expect(gone.exists()).toBe(false);
+  });
+
+  it('nor can a student learn whether a classmate has work on an assignment', async () => {
+    await assertFails(getDoc(doc(student(), COLLECTIONS.submissions, submissionId(CLASSMATE, 'cwDeleted'))));
   });
 
   it('a student cannot hand in by writing their work themselves', async () => {

@@ -66,8 +66,12 @@ export function useMyDraftIds(uid: string | null): Set<string> {
   );
 }
 
-/** One assignment, live. A student is refused one they no longer hold, which is an answer. */
-export function useCourseworkState(id: string | null, denialIsAnswer = false) {
+/**
+ * One assignment, live. A refusal is an answer: one deleted, not posted, or in
+ * a class the reader does not have is withheld by the rules, and its page says
+ * it is not available.
+ */
+export function useCourseworkState(id: string | null) {
   return useLiveDocState<CourseworkRow | null>(
     () => (id ? doc(db, COLLECTIONS.coursework, id) : null),
     [id],
@@ -75,7 +79,7 @@ export function useCourseworkState(id: string | null, denialIsAnswer = false) {
       label: 'coursework',
       map: (snap) => ({ id: snap.id, ...read('coursework', snap) }),
       empty: null,
-      denialIsAnswer,
+      denialIsAnswer: true,
     },
   );
 }

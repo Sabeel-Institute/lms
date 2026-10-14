@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   initializeTestEnvironment,
@@ -132,6 +132,17 @@ describe('assignments: reads', () => {
   it("a student cannot read another student's obligation", async () => {
     await assertFails(
       getDoc(doc(outsider().firestore(), COLLECTIONS.assignments, assignmentId(STUDENT, REC))),
+    );
+  });
+
+  it('a student opening a recording they hold no grant for is told there is none', async () => {
+    const none = await getDoc(doc(student().firestore(), COLLECTIONS.assignments, assignmentId(STUDENT, THEIR_REC)));
+    expect(none.exists()).toBe(false);
+  });
+
+  it('nor can a student learn whether a classmate holds a grant', async () => {
+    await assertFails(
+      getDoc(doc(outsider().firestore(), COLLECTIONS.assignments, assignmentId(STUDENT, THEIR_REC))),
     );
   });
 

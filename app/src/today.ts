@@ -79,21 +79,33 @@ function useTodayQueue(
    * "Checking your courses…" with the fault unreported. `retry` flips exactly
    * then — a refusal was swallowed and the scope has since been confirmed —
    * and the second attempt reports if it is refused again.
+   *
+   * A CONFIRMED SCOPE REFUSED IS ASKED AGAIN, ONCE, BEFORE IT IS NEWS. A
+   * manager taken off a course while Today is open is refused every query
+   * that still names it, and the refusals can arrive before the course list
+   * that drops the course. Asked again, the scope is the server's by then
+   * and is served; refused a second time, the same scope reports.
    */
   const [swallowed, setSwallowed] = useState(false);
+  const [askedAgain, setAskedAgain] = useState<string | null>(null);
   const expectDenial = () => {
-    if (confirmed) return false;
-    setSwallowed(true);
+    if (!confirmed) {
+      setSwallowed(true);
+      return true;
+    }
+    if (askedAgain === key) return false;
+    setAskedAgain(key);
     return true;
   };
   const retry = confirmed && swallowed;
-  // `retry` is folded into the scope's identity rather than listed as a
-  // second dependency on the queries: they read the scope and nothing else,
-  // and a fresh array is what makes them subscribe again.
+  // `retry` and `askedAgain` are folded into the scope's identity rather than
+  // listed as dependencies of the queries: they read the scope and nothing
+  // else, and a fresh array is what makes them subscribe again.
   const scope = useMemo(() => {
     void retry;
+    void askedAgain;
     return key ? key.split(',') : [];
-  }, [key, retry]);
+  }, [key, retry, askedAgain]);
 
   /*
    * `null` UNTIL THE FIRST SNAPSHOT, deliberately — not an empty array.
