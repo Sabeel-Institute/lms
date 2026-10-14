@@ -84,12 +84,17 @@ export function RichEditor({
   });
   const closeLink = () => setLink({ open: false, start: 0, end: 0, text: '' });
 
+  /** The link the caret is in, as the editor last reported it. */
+  const linkAt = useRef<{ start: number; end: number } | null>(null);
   const commands: RichCommands = {
     toggleBold: () => ref.current?.toggleBold(),
     toggleItalic: () => ref.current?.toggleItalic(),
     toggleBullets: () => ref.current?.toggleUnorderedList(),
     toggleNumbers: () => ref.current?.toggleOrderedList(),
     promptLink: () => setLink({ open: true, ...sel.current }),
+    removeLink: () => {
+      if (linkAt.current) ref.current?.removeLink(linkAt.current.start, linkAt.current.end);
+    },
   };
 
   return (
@@ -115,6 +120,9 @@ export function RichEditor({
             numbers: !!s.orderedList?.isActive,
             link: !!s.link?.isActive,
           });
+        }}
+        onLinkDetected={(e) => {
+          linkAt.current = { start: e.start, end: e.end };
         }}
         onChangeSelection={(e) => {
           sel.current = { start: e.nativeEvent.start, end: e.nativeEvent.end, text: e.nativeEvent.text ?? '' };

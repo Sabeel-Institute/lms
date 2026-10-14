@@ -1944,6 +1944,38 @@ const draftNote = (await readCollection('drafts')).find((d) => d.fields.coursewo
 check('an answer typed just before leaving is kept', answerKept && draftNote.includes('**God**'), JSON.stringify(draftNote));
 
 /*
+ * A LINK WITH NOTHING SELECTED. Typed and then toggled, the words joined the
+ * run of text the caret was in, and the whole run became the link; and the
+ * link button had no way to take a link off.
+ */
+const storedNote = async (wanted) => {
+  for (let i = 0; i < 20; i++) {
+    const note = (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue ?? '';
+    if (wanted(note)) return note;
+    await student.waitForTimeout(500);
+  }
+  return (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue ?? '';
+};
+await student.getByTestId('work-note').click();
+await student.keyboard.press('ControlOrMeta+End');
+await student.keyboard.type(' My source is ');
+await tap(student, 'rich-link');
+await student.getByTestId('link-address').fill('https://example.com/tafsir');
+await student.getByTestId('link-text').fill('the tafsir');
+await tap(student, 'link-add');
+const linkedNote = await storedNote((n) => n.includes('tafsir'));
+await student.keyboard.press('ArrowLeft');
+await tap(student, 'rich-link');
+const unlinkedNote = await storedNote((n) => n.includes('tafsir') && !n.includes('](https://example.com/tafsir)'));
+check(
+  'a link added with nothing selected links its own words only, and the link button takes it off',
+  linkedNote.includes('My source is [the tafsir](https://example.com/tafsir)') &&
+    unlinkedNote.includes('My source is the tafsir') &&
+    !unlinkedNote.includes('](https://example.com/tafsir)'),
+  JSON.stringify({ linkedNote, unlinkedNote }),
+);
+
+/*
  * ONE STUDENT, TWO DEVICES. A screen left open on one kept the answer it
  * opened with, and its next keystroke stored that over what was written on
  * the other since. The open screen now follows the stored answer while

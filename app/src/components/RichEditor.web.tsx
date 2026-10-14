@@ -17,11 +17,19 @@ import {
   ListNode,
   REMOVE_LIST_COMMAND,
 } from '@lexical/list';
-import { $isLinkNode, LinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link';
+import { $createLinkNode, $isLinkNode, LinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import { BOLD_STAR, ITALIC_STAR, ORDERED_LIST, UNORDERED_LIST } from '@lexical/markdown';
 import { $findMatchingParent } from '@lexical/utils';
-import { $getRoot, $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND, TextNode, type LexicalEditor } from 'lexical';
+import {
+  $createTextNode,
+  $getRoot,
+  $getSelection,
+  $isRangeSelection,
+  FORMAT_TEXT_COMMAND,
+  TextNode,
+  type LexicalEditor,
+} from 'lexical';
 import { htmlToMarkdown, isSafeHref, markdownToHtml } from '@sabeel/shared';
 import { NO_MARKS, RichToolbar, type RichCommands, type RichMarks } from './RichToolbar';
 import { LinkSheet } from './LinkSheet';
@@ -170,12 +178,21 @@ function Bridge({
       },
       applyLink: (href, text) => {
         if (!isSafeHref(href)) return;
+        let inserted = false;
         editor.update(() => {
           const sel = $getSelection();
-          if ($isRangeSelection(sel) && sel.isCollapsed()) sel.insertText(text);
+          if (!$isRangeSelection(sel) || !sel.isCollapsed()) return;
+          // NOTHING SELECTED: the words given become a link of their own, at
+          // the caret. Typed and then toggled, they joined the run of text
+          // the caret was in, and the whole run became the link.
+          const linkNode = $createLinkNode(href);
+          linkNode.append($createTextNode(text));
+          sel.insertNodes([linkNode]);
+          inserted = true;
         });
-        editor.dispatchCommand(TOGGLE_LINK_COMMAND, href);
+        if (!inserted) editor.dispatchCommand(TOGGLE_LINK_COMMAND, href);
       },
+      removeLink: () => editor.dispatchCommand(TOGGLE_LINK_COMMAND, null),
     });
   }, [editor, registerCommands]);
 
@@ -235,6 +252,7 @@ export function RichEditor({
       toggleBullets: () => cmds.current?.toggleBullets(),
       toggleNumbers: () => cmds.current?.toggleNumbers(),
       promptLink: () => setLink({ open: true, text: cmds.current?.selectedText() ?? '' }),
+      removeLink: () => cmds.current?.removeLink(),
     }),
     [],
   );

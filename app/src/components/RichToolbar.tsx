@@ -21,6 +21,8 @@ export interface RichCommands {
   toggleNumbers: () => void;
   /** Opens the link sheet; the caller supplies the address once chosen. */
   promptLink: () => void;
+  /** Takes the link off the words the caret is in. */
+  removeLink: () => void;
 }
 
 /** Which marks are on at the caret, so each button can show it. */
@@ -36,12 +38,14 @@ export const NO_MARKS: RichMarks = { bold: false, italic: false, bullets: false,
 
 type Icon = keyof typeof MaterialIcons.glyphMap;
 
-const TOOLS: { key: keyof RichMarks; icon: Icon; label: string; run: (c: RichCommands) => void }[] = [
+const TOOLS: { key: keyof RichMarks; icon: Icon; label: string; run: (c: RichCommands, on: boolean) => void }[] = [
   { key: 'bold', icon: 'format-bold', label: 'Bold', run: (c) => c.toggleBold() },
   { key: 'italic', icon: 'format-italic', label: 'Italic', run: (c) => c.toggleItalic() },
   { key: 'bullets', icon: 'format-list-bulleted', label: 'Bullet list', run: (c) => c.toggleBullets() },
   { key: 'numbers', icon: 'format-list-numbered', label: 'Numbered list', run: (c) => c.toggleNumbers() },
-  { key: 'link', icon: 'link', label: 'Link', run: (c) => c.promptLink() },
+  // A toggle like the rest: in a link it takes the link off, which nothing
+  // else on the toolbar could.
+  { key: 'link', icon: 'link', label: 'Link', run: (c, on) => (on ? c.removeLink() : c.promptLink()) },
 ];
 
 export function RichToolbar({ commands, marks }: { commands: RichCommands; marks: RichMarks }) {
@@ -52,13 +56,13 @@ export function RichToolbar({ commands, marks }: { commands: RichCommands; marks
           key={tool.key}
           testID={`rich-${tool.key}`}
           accessibilityRole="button"
-          accessibilityLabel={tool.label}
+          accessibilityLabel={tool.key === 'link' && marks.link ? 'Remove link' : tool.label}
           accessibilityState={{ selected: marks[tool.key] }}
           // A toggle, so it says whether it is on. react-native-web maps no
           // ARIA from `accessibilityState.selected` on a button; `aria-pressed`
           // is the toggle's own attribute, and inert on Android.
           aria-pressed={marks[tool.key]}
-          onPress={() => tool.run(commands)}
+          onPress={() => tool.run(commands, marks[tool.key])}
           style={({ pressed }) => [styles.tool, marks[tool.key] ? styles.on : null, pressed ? styles.pressed : null]}
         >
           {/* text.secondary, not muted: an icon that is a button's only label
