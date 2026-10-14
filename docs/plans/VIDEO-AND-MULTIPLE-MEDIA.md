@@ -373,10 +373,11 @@ the view, and for video only the sound continues until they return.
 | Versions of one segment differ by a second | Same timeline; position is clamped when switching |
 | Zoom still processing | Listed, not pickable, "Still processing in Zoom" |
 | Zoom file deleted after listing | Item fails with "no longer in Zoom"; Remove clears it |
-| Zoom link expires mid-copy (60 min) | The task re-resolves the link and retries the remaining parts |
+| Zoom link expires mid-copy (60 min) | The copy is one put, so a retry starts it again; each attempt re-resolves the link first |
 | Same Zoom file wanted in two sessions | Refused; the picker names where it is. Moving it means removing it from the draft that has it |
 | Double tap on Import, or two staff at once | Claimed per file id in a transaction; the second gets "already importing" |
-| Recording deleted while a copy is running | The task finds no recording and deletes what it wrote; the sweep catches anything left |
+| Recording deleted, or the file removed, while a copy is running | The attempt finds no item when its copy lands and deletes what it wrote, last attempt included |
+| A copy delivered twice at once (Cloud Tasks delivers at least once) | A whole object already there is the copy done; a late attempt leaves a ready file as it is |
 | Upload abandoned | Multipart aborted by the bucket's 1-day rule; item removed by the sweep |
 | Unplayable upload (HEVC, ProRes, odd audio) | Probe fails it with a plain message; file deleted |
 | Very long video (> 4.9 GiB) | Multipart for staff uploads. A Zoom import that large is refused with a reason (the Worker copies in one put; spike M1 in MEDIA-ON-CLOUDFLARE.md); the largest Zoom file so far is 1.2 GB |
