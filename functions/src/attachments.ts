@@ -52,6 +52,8 @@ const UPLOAD_URL_TTL_MS = 30 * 60 * 1000;
 /** Read links last an hour: long enough to read a worksheet, short enough not to travel. */
 const READ_URL_TTL_MS = 60 * 60 * 1000;
 const ABANDONED_AFTER_MS = 24 * 60 * 60 * 1000;
+/** How long a file held for an assignment not saved yet waits for its form. */
+const HELD_FOR_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_NAME = 200;
 
 /** Where a file goes: the assignment (a teacher's), or a student's own work on it. */
@@ -70,6 +72,14 @@ export interface AttachmentUploadDoc {
   sizeBytes: number;
   storageKey: string;
   startedAt: number;
+  /**
+   * Started for an assignment not saved yet. A new assignment's form reserves
+   * its id so files can be added while it is written (Faisal, 2026-10-13); such
+   * a file is held rather than refused until the assignment is saved there.
+   */
+  reserved: boolean;
+  /** The file, confirmed and waiting for its assignment (`createCourseworkRecord` adopts it). */
+  held: AttachmentFile | null;
 }
 
 const uploadRef = (fileId: string) => db().collection(COLLECTIONS.attachmentUploads).doc(fileId);
@@ -103,7 +113,7 @@ async function openWork(studentUid: string, cwId: string): Promise<SubmissionDoc
 async function fileCount(target: AttachmentTarget, cwId: string, studentUid: string | null): Promise<number> {
   const stored =
     target === 'coursework'
-      ? Object.keys((await readCoursework(cwId)).files).length
+      ? Object.keys(((await cwRef(cwId).get()).data() as CourseworkDoc | undefined)?.files ?? {}).length
       : Object.keys(((await draftRef(studentUid as string, cwId).get()).data() as DraftDoc | undefined)?.files ?? {}).length;
   const pending = await db()
     .collection(COLLECTIONS.attachmentUploads)
@@ -118,6 +128,8 @@ async function fileCount(target: AttachmentTarget, cwId: string, studentUid: str
 interface StartInput {
   target: AttachmentTarget;
   courseworkId: string;
+  /** The class, which only an assignment not saved yet needs to be told. */
+  courseId: string | null;
   name: string;
   sizeBytes: number;
 }
@@ -134,10 +146,17 @@ function validateStartAttachment(data: unknown): StartInput {
   }
   const problem = attachmentProblem(name, d.sizeBytes);
   if (problem) throw new HttpsError('invalid-argument', problem);
-  return { target: d.target, courseworkId: idOf(d.courseworkId, 'courseworkId'), name, sizeBytes: d.sizeBytes };
+  const courseId = d.courseId === undefined || d.courseId === null ? null : idOf(d.courseId, 'courseId');
+  return { target: d.target, courseworkId: idOf(d.courseworkId, 'courseworkId'), courseId, name, sizeBytes: d.sizeBytes };
 }
 
-async function beginAttachment(input: StartInput, uploaderUid: string, studentUid: string | null, courseId: string) {
+async function beginAttachment(
+  input: StartInput,
+  uploaderUid: string,
+  studentUid: string | null,
+  courseId: string,
+  reserved: boolean,
+) {
   if ((await fileCount(input.target, input.courseworkId, studentUid)) >= MAX_ATTACHMENTS) {
     throw new HttpsError('failed-precondition', `There can be ${MAX_ATTACHMENTS} files at most.`);
   }
@@ -158,6 +177,8 @@ async function beginAttachment(input: StartInput, uploaderUid: string, studentUi
     sizeBytes: input.sizeBytes,
     storageKey,
     startedAt: Date.now(),
+    reserved,
+    held: null,
   };
   await uploadRef(fileId).set(doc);
   const put = await signPut(storageKey, contentType, UPLOAD_URL_TTL_MS);
@@ -170,14 +191,19 @@ async function beginAttachment(input: StartInput, uploaderUid: string, studentUi
  */
 export const startAttachmentUpload = reportedCall(async (req) => {
   const input = validateStartAttachment(req.data);
-  const cw = await readCoursework(input.courseworkId);
   if (input.target === 'coursework') {
-    const uid = await requireCourseScope(req, cw.courseId);
-    return beginAttachment(input, uid, null, cw.courseId);
+    // An assignment not saved yet has no record to name its class, so its
+    // form names it — and the caller must teach that class all the same.
+    const snap = await cwRef(input.courseworkId).get();
+    const courseId = snap.exists ? (snap.data() as CourseworkDoc).courseId : input.courseId;
+    if (!courseId) throw new HttpsError('not-found', 'No such assignment.');
+    const uid = await requireCourseScope(req, courseId);
+    return beginAttachment(input, uid, null, courseId, !snap.exists);
   }
+  const cw = await readCoursework(input.courseworkId);
   const uid = requireStudent(req);
   await openWork(uid, input.courseworkId);
-  return beginAttachment(input, uid, uid, cw.courseId);
+  return beginAttachment(input, uid, uid, cw.courseId, false);
 }, MEDIA_WRITE_SECRETS);
 
 // -------------------------------------------------------------- finalize --
@@ -281,6 +307,17 @@ async function finalizeAttachmentRecord(input: FinalizeInput, callerUid: string)
     await db().runTransaction(async (tx) => {
       if (up.target === 'coursework') {
         const cw = (await tx.get(cwRef(up.courseworkId))).data() as CourseworkDoc | undefined;
+        if (!cw && up.reserved) {
+          // HELD for the assignment its form will save at this id, counted
+          // against the ten with the others held for it.
+          const held = (await tx.get(db().collection(COLLECTIONS.attachmentUploads).where('courseworkId', '==', up.courseworkId)))
+            .docs.filter((d) => (d.data() as AttachmentUploadDoc).held).length;
+          if (held >= MAX_ATTACHMENTS) {
+            throw new HttpsError('failed-precondition', `There can be ${MAX_ATTACHMENTS} files at most.`);
+          }
+          tx.update(uploadRef(input.fileId), { held: file });
+          return;
+        }
         if (!cw) throw new HttpsError('not-found', 'That assignment was deleted.');
         if (Object.keys(cw.files).length >= MAX_ATTACHMENTS) {
           throw new HttpsError('failed-precondition', `There can be ${MAX_ATTACHMENTS} files at most.`);
@@ -328,12 +365,12 @@ export const finalizeAttachment = auditedCall(
   'finalizeAttachment',
   async (req, audit) => {
     const input = validateFinalizeAttachment(req.data);
-    const cw = await readCoursework(input.courseworkId);
+    const courseId = await courseOfAttachment(input.courseworkId, input.fileId);
     const uid = isStudentCaller(req)
       ? requireStudent(req)
-      : await requireCourseScope(req, cw.courseId);
+      : await requireCourseScope(req, courseId);
     const res = await finalizeAttachmentRecord(input, uid);
-    audit.courseId = cw.courseId;
+    audit.courseId = courseId;
     audit.targets = { courseworkId: input.courseworkId };
     audit.noop = res.target === 'work';
     audit.detail = { file: res.file.name };
@@ -341,6 +378,25 @@ export const finalizeAttachment = auditedCall(
   },
   MEDIA_WRITE_SECRETS,
 );
+
+/** The class a file is for: its assignment's, or — for one not saved yet — the class its upload was started for. */
+async function courseOfAttachment(courseworkId: string, fileId: string): Promise<string> {
+  const snap = await cwRef(courseworkId).get();
+  if (snap.exists) return (snap.data() as CourseworkDoc).courseId;
+  const up = (await uploadRef(fileId).get()).data() as AttachmentUploadDoc | undefined;
+  if (!up?.reserved || up.courseworkId !== courseworkId) throw new HttpsError('not-found', 'No such assignment.');
+  return up.courseId;
+}
+
+/** A file held for an assignment not saved yet, for a teacher of its class. */
+async function heldFile(req: CallableRequest, courseworkId: string, fileId: string): Promise<AttachmentUploadDoc & { held: AttachmentFile }> {
+  const up = (await uploadRef(fileId).get()).data() as AttachmentUploadDoc | undefined;
+  if (isStudentCaller(req) || !up?.held || up.courseworkId !== courseworkId) {
+    throw new HttpsError('not-found', 'That file is not available.');
+  }
+  await requireCourseScope(req, up.courseId);
+  return up as AttachmentUploadDoc & { held: AttachmentFile };
+}
 
 function isStudentCaller(req: CallableRequest): boolean {
   return (req.auth?.token as TokenClaims | undefined)?.role === 'student';
@@ -359,7 +415,18 @@ export const removeAttachment = auditedCall(
     const d = (req.data ?? {}) as Record<string, unknown>;
     const cwId = idOf(d.courseworkId, 'courseworkId');
     const fileId = idOf(d.fileId, 'fileId');
-    const cw = await readCoursework(cwId);
+    const snap = await cwRef(cwId).get();
+    if (!snap.exists) {
+      // Held for a new assignment not saved yet: it goes, bytes and all.
+      const up = await heldFile(req, cwId, fileId);
+      audit.courseId = up.courseId;
+      audit.targets = { courseworkId: cwId };
+      audit.detail = { file: up.held.name };
+      await deleteObject(up.storageKey);
+      await uploadRef(fileId).delete();
+      return { removed: fileId };
+    }
+    const cw = snap.data() as CourseworkDoc;
     audit.courseId = cw.courseId;
     audit.targets = { courseworkId: cwId };
     let removed: AttachmentFile | undefined;
@@ -407,6 +474,13 @@ export const getAttachmentUrl = reportedCall(async (req) => {
   const cwId = idOf(d.courseworkId, 'courseworkId');
   const fileId = idOf(d.fileId, 'fileId');
   const studentUid = d.studentUid === undefined || d.studentUid === null ? null : idOf(d.studentUid, 'studentUid');
+  const snap = await cwRef(cwId).get();
+  if (!snap.exists && studentUid === null) {
+    // Held for a new assignment not saved yet, which its teacher can open to check.
+    const up = await heldFile(req, cwId, fileId);
+    const link = await signGet(up.held.storageKey, READ_URL_TTL_MS);
+    return { url: link.url, expiresAt: link.expiresAt, name: up.held.name, contentType: up.held.contentType };
+  }
   const cw = await readCoursework(cwId);
   let file: AttachmentFile | undefined;
   if (isStudentCaller(req)) {
@@ -428,15 +502,24 @@ export const getAttachmentUrl = reportedCall(async (req) => {
 
 // ----------------------------------------------------------------- sweep --
 
-/** Clear attachments started more than a day ago and never confirmed. */
+/**
+ * Clear attachments started more than a day ago and never confirmed. A file
+ * HELD for an assignment not saved yet waits thirty days instead, because its
+ * form may still be open — a teacher writing over a weekend loses nothing —
+ * and goes on the day's clock once that assignment is saved without it.
+ */
 export async function sweepAttachmentUploads(now: number): Promise<number> {
   const stale = await db()
     .collection(COLLECTIONS.attachmentUploads)
     .where('startedAt', '<', now - ABANDONED_AFTER_MS)
     .get();
+  let cleared = 0;
   for (const doc of stale.docs) {
-    await deleteObject((doc.data() as AttachmentUploadDoc).storageKey);
+    const up = doc.data() as AttachmentUploadDoc;
+    if (up.held && up.startedAt >= now - HELD_FOR_MS && !(await cwRef(up.courseworkId).get()).exists) continue;
+    await deleteObject(up.storageKey);
     await doc.ref.delete();
+    cleared += 1;
   }
-  return stale.size;
+  return cleared;
 }

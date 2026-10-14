@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Image, Linking, Platform, StyleSheet, Text, View } from 'react-native';
 import {
   attachmentKind,
@@ -47,6 +47,8 @@ export function Attachments({
   files,
   editable,
   studentUid,
+  courseId,
+  onHeld,
   onBusyChange,
 }: {
   target: 'coursework' | 'work';
@@ -55,6 +57,13 @@ export function Attachments({
   editable: boolean;
   /** Whose work the files are on, for a teacher opening them; omitted for the assignment's own. */
   studentUid?: string;
+  /** The class, for an assignment not saved yet, which has no record to name it. */
+  courseId?: string;
+  /**
+   * For an assignment not saved yet: its files are held under the id its form
+   * reserved, and no live record lists them, so the form keeps the list.
+   */
+  onHeld?: Dispatch<SetStateAction<AttachmentMap>>;
   onBusyChange?: (busy: boolean) => void;
 }) {
   const [pending, setPending] = useState<Pending[]>([]);
@@ -94,9 +103,10 @@ export function Attachments({
     if (abort.current.signal.aborted) return;
     setPending((p) => p.map((x) => (x.key === key ? { ...x, waiting: false } : x)));
     try {
-      const start = await startAttachmentUpload({ target, courseworkId, name: file.name, sizeBytes: file.sizeBytes });
+      const start = await startAttachmentUpload({ target, courseworkId, courseId, name: file.name, sizeBytes: file.sizeBytes });
       await sendPart(start.url, await readPart(file, 0, file.sizeBytes), abort.current.signal, start.headers);
-      await finalizeAttachment({ courseworkId, fileId: start.fileId });
+      const { file: held } = await finalizeAttachment({ courseworkId, fileId: start.fileId });
+      onHeld?.((m) => ({ ...m, [held.id]: held }));
       setPending((p) => p.filter((x) => x.key !== key));
     } catch (e) {
       if (abort.current.signal.aborted) return;
@@ -135,6 +145,7 @@ export function Attachments({
     setError(null);
     try {
       await removeAttachment({ courseworkId, fileId });
+      onHeld?.(({ [fileId]: _gone, ...rest }) => rest);
     } catch (e) {
       setError(errorText(e));
     } finally {

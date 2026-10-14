@@ -176,6 +176,29 @@ async function seed() {
       active: true,
       enrolledAt: Date.now(),
     }),
+    // A file held for a new assignment of the class, not saved yet.
+    d.collection(COLLECTIONS.attachmentUploads).doc('held1').set({
+      target: 'coursework',
+      courseworkId: 'reservedcw0000000000',
+      courseId: THEIRS,
+      studentUid: null,
+      uploadedBy: OWNER,
+      name: 'Sheet.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 100,
+      storageKey: 'coursework/reservedcw0000000000/held1',
+      startedAt: Date.now(),
+      reserved: true,
+      held: {
+        id: 'held1',
+        name: 'Sheet.pdf',
+        contentType: 'application/pdf',
+        sizeBytes: 100,
+        durationSec: null,
+        storageKey: 'coursework/reservedcw0000000000/held1',
+        addedAt: Date.now(),
+      },
+    }),
   ]);
 }
 
@@ -226,6 +249,7 @@ const SCOPED: Array<{
   { name: 'finalizeAttachment', call: (r) => finalizeAttachment.run(r), data: { courseworkId: COURSEWORK, fileId: 'file1' } },
   { name: 'removeAttachment', call: (r) => removeAttachment.run(r), data: { courseworkId: COURSEWORK, fileId: 'file1' } },
   { name: 'getAttachmentUrl', call: (r) => getAttachmentUrl.run(r), data: { courseworkId: COURSEWORK, fileId: 'file1' } },
+  { name: 'removeAttachment, a held file', call: (r) => removeAttachment.run(r), data: { courseworkId: 'reservedcw0000000000', fileId: 'held1' } },
   { name: 'importZoomFiles', call: (r) => importZoomFiles.run(r), data: { sessionId: SESSION, files: [{ meetingUuid: 'uuid', fileId: 'file' }] } },
   { name: 'retryZoomImport', call: (r) => retryZoomImport.run(r), data: { recordingId: RECORDING } },
 ];

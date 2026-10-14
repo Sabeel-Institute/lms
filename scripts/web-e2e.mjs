@@ -1507,12 +1507,25 @@ await admin.getByTestId('leave-confirm').waitFor({ state: 'detached', timeout: 1
 // the list, and the next Back would go one page too far.
 const addressBack = await admin.waitForURL(/\/assignments\/edit/, { timeout: 10000 }).then(() => true, () => false);
 check('Keep editing keeps the form, what was typed, and its address', (await typedStill()) && addressBack, admin.url());
+/*
+ * FILES FIRST, SAVE LATER (Faisal's choice): a file goes onto a new assignment
+ * before it is saved — and discarding the form takes the file with it.
+ */
+const PDF_BYTES = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n');
+const HELD = 'Draft notes.pdf';
+const heldChooser = admin.waitForEvent('filechooser');
+await tap(admin, 'attachments-add-coursework');
+await (await heldChooser).setFiles({ name: HELD, mimeType: 'application/pdf', buffer: PDF_BYTES });
+await admin.getByTestId(`attachment-${HELD}`).filter({ visible: true }).first().waitFor({ timeout: 30000 }).catch(() => {});
+check('a file can be added to a new assignment before it is saved', await shows(admin, `attachment-${HELD}`));
 await admin.goBack();
 await tap(admin, 'leave-confirm');
 await admin.getByTestId('coursework-new').filter({ visible: true }).first().waitFor({ timeout: 15000 });
+const heldGone = async () => (await readCollection('attachmentUploads')).length === 0;
+for (let i = 0; i < 20 && !(await heldGone()); i++) await admin.waitForTimeout(500);
 check(
-  'Discard leaves, and nothing was created',
-  !(await readCollection('coursework')).some((c) => c.fields.title.stringValue === ABANDONED),
+  'Discard leaves, and nothing was created — nor kept of the file it held',
+  !(await readCollection('coursework')).some((c) => c.fields.title.stringValue === ABANDONED) && (await heldGone()),
 );
 await tap(admin, 'coursework-new');
 await admin.getByTestId('coursework-instructions').waitFor({ timeout: 30000 });
@@ -1551,11 +1564,44 @@ check(
   'before posting, the teacher is told who it goes to',
   /Goes to the \d+ students? in Hikam Foundations/.test(await admin.getByTestId('coursework-audience').innerText()),
 );
+/*
+ * A file added before the first save goes with it when it is posted, and
+ * POST WAITS FOR IT. The upload is slowed so there is a moment to tap Post
+ * in: a Post that went then would leave the form, and leaving stops the
+ * upload, so the file would silently not be on the assignment.
+ */
+const NOTES = 'Hikma notes.pdf';
+const mediaStore = new RegExp(`127\\.0\\.0\\.1:${MEDIA_STORE_PORTS.s3}/`);
+const slowPut = async (route) => {
+  if (route.request().method() === 'PUT') await new Promise((r) => setTimeout(r, 4000));
+  return route.continue();
+};
+await admin.route(mediaStore, slowPut);
+const notesChooser = admin.waitForEvent('filechooser');
+await tap(admin, 'attachments-add-coursework');
+await (await notesChooser).setFiles({ name: NOTES, mimeType: 'application/pdf', buffer: PDF_BYTES });
+await admin.getByText('Uploading…').filter({ visible: true }).first().waitFor({ timeout: 10000 });
+// FORCED: past the browser's own wait for an enabled button, as a tap is.
+await admin.getByTestId('coursework-post').filter({ visible: true }).first().click({ force: true });
+const waitingSaid = await showsText(admin, 'Ready once every file is up.');
+await shot(admin, '39b-post-waits-for-upload');
+await admin.getByTestId(`attachment-${NOTES}`).filter({ visible: true }).first().waitFor({ timeout: 30000 }).catch(() => {});
+await admin.unroute(mediaStore);
+check(
+  'Post tapped while a file uploads waits, and says why: nothing posted, the form still open',
+  waitingSaid &&
+    !(await readCollection('coursework')).some((c) => c.fields.title.stringValue === CW) &&
+    (await shows(admin, 'coursework-post')),
+);
 // DOUBLE-CLICKED, as a hurried teacher does: one assignment, not two.
 await admin.getByTestId('coursework-post').filter({ visible: true }).first().dblclick();
 // A new assignment becomes its own page once posted.
 await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
 check('a posted assignment opens on its page, as posted', (await screenTitle(admin)) === CW && (await showsText(admin, 'posted')));
+// The page opens on Students; the files are with the instructions.
+await tap(admin, 'coursework-tab-instructions');
+await admin.getByTestId(`attachment-${NOTES}`).filter({ visible: true }).first().waitFor({ timeout: 20000 }).catch(() => {});
+check('a file added before the first save is on the posted assignment', await shows(admin, `attachment-${NOTES}`));
 await admin.waitForTimeout(1500);
 check(
   'a double-clicked Post posts one assignment',
@@ -1577,7 +1623,8 @@ await (await worksheetChooser).setFiles({
   mimeType: 'application/pdf',
   buffer: Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n'),
 });
-await admin.getByTestId(`attachment-${WORKSHEET}`).waitFor({ timeout: 30000 });
+// The assignment page under this form lists it too, on its Instructions tab.
+await admin.getByTestId(`attachment-${WORKSHEET}`).filter({ visible: true }).first().waitFor({ timeout: 30000 });
 check('a worksheet attaches to a posted assignment', await shows(admin, `attachment-${WORKSHEET}`));
 
 /*
@@ -1604,6 +1651,7 @@ await cwCard.click();
 await student.getByTestId('work-note').waitFor({ timeout: 20000 });
 await student.getByTestId(`attachment-${WORKSHEET}`).waitFor({ timeout: 20000 });
 check('the student sees the teacher’s worksheet', await shows(student, `attachment-${WORKSHEET}`));
+check('…and the file added before the assignment was first saved', await shows(student, `attachment-${NOTES}`));
 // And the instructions as written: bold is bold and not asterisks, the
 // Arabic line runs right to left, the link is a link.
 const shown = await student.evaluate((arabic) => {
@@ -1646,11 +1694,7 @@ check('an answer typed just before leaving is kept', answerKept && draftNote.inc
  * LEAVING MID-UPLOAD ASKS, because leaving stops it. The upload is slowed so
  * there is a moment to leave in; Stay lets it finish.
  */
-const mediaStore = new RegExp(`127\\.0\\.0\\.1:${MEDIA_STORE_PORTS.s3}/`);
-await student.route(mediaStore, async (route) => {
-  if (route.request().method() === 'PUT') await new Promise((r) => setTimeout(r, 4000));
-  return route.continue();
-});
+await student.route(mediaStore, slowPut);
 const pageChooser = student.waitForEvent('filechooser');
 await tap(student, 'attachments-add-work');
 await (await pageChooser).setFiles({ name: PAGE, mimeType: 'image/png', buffer: pagePhoto() });

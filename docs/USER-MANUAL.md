@@ -991,9 +991,11 @@ Tap **New assignment**:
 - **Title** and **Instructions**. Bold, italics, both kinds of list and links are
   on the bar above the box, and Arabic runs right to left. Select some words and
   tap the link button to make them a link.
-- **Files**, once it is saved: worksheets, scans, slides, pictures and audio;
-  up to ten, 25 MB each. Audio you add for the class can be up to 15 minutes,
-  and there is no video.
+- **Files**: worksheets, scans, slides, pictures and audio; up to ten, 25 MB
+  each. Add them as you write — they are kept with the assignment when you save
+  or post it, and thrown away with it if you leave without saving. **Post** and
+  **Save** wait until every file is up. Audio you add for the class can be up
+  to 15 minutes, and there is no video.
 - **Hand in by** — a week from today to begin with. The whole day counts, in
   institute time.
 - **Graded as** — **Points** out of any whole number, or **Satisfactory / needs

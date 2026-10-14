@@ -136,7 +136,7 @@ export const handIn = call<{ courseworkId: string }, { handedInAt: number; late:
 export const takeBack = call<{ courseworkId: string }, { takenBackAt: number }>('takeBack');
 
 export const startAttachmentUpload = call<
-  { target: 'coursework' | 'work'; courseworkId: string; name: string; sizeBytes: number },
+  { target: 'coursework' | 'work'; courseworkId: string; courseId?: string; name: string; sizeBytes: number },
   { fileId: string; url: string; headers: Record<string, string>; expiresAt: number }
 >('startAttachmentUpload');
 export const finalizeAttachment = call<{ courseworkId: string; fileId: string }, { file: AttachmentFile }>(
@@ -229,7 +229,13 @@ export type CourseworkInput = {
   grading: CourseworkGrading;
 };
 
-export const createCoursework = call<CourseworkInput & { courseId: string }, { id: string }>('createCoursework');
+/**
+ * `id` and `held`: for a new assignment's form, the id it reserved and the
+ * files it shows as held under it, which join the assignment.
+ */
+export const createCoursework = call<CourseworkInput & { courseId: string; id?: string; held?: string[] }, { id: string }>(
+  'createCoursework',
+);
 export const updateCoursework = call<
   CourseworkInput & {
     courseworkId: string;

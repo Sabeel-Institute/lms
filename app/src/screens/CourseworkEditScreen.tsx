@@ -1,6 +1,8 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { collection, doc } from 'firebase/firestore';
 import { StyleSheet, Text, View } from 'react-native';
 import {
+  COLLECTIONS,
   DEFAULT_DUE_DAYS,
   INSTITUTE_TIMEZONE,
   addDays,
@@ -8,6 +10,7 @@ import {
   normalizeMarkdown,
   todayInZone,
   unbreakableDate,
+  type AttachmentMap,
   type CourseworkGrading,
 } from '@sabeel/shared';
 import { Button, Card, Chips, ConfirmDanger, Field, Notice, Row, Screen, SectionTitle, SwitchRow } from '../components/ui';
@@ -20,12 +23,14 @@ import {
   createCoursework,
   deleteCoursework,
   postCoursework,
+  removeAttachment,
   updateCoursework,
   type CourseworkInput,
   type CourseworkRow,
 } from '../coursework';
 import { useRosterState, type CourseRow } from '../structure';
 import { errorText } from '../errors';
+import { db } from '../firebase';
 import { useOneAtATime } from '../oneAtATime';
 import { getTheme, spacing } from '../theme';
 
@@ -111,13 +116,35 @@ export function CourseworkEditScreen({
   // The id a new assignment got, so a second Post after a failed one updates
   // it rather than creating a second assignment.
   const createdId = useRef<string | null>(null);
+  /*
+   * FILES FIRST, SAVE LATER (Faisal, 2026-10-13). A new assignment's id is
+   * reserved when the form opens, so files can be added while it is written:
+   * they are held under it, and the ones this form shows join it when it is
+   * saved there. Nothing is written until then. Discarded, the form takes its
+   * files with it; a tab closed instead leaves them held for thirty days, in
+   * case the form is still open somewhere, and then the sweep clears them.
+   */
+  const [reservedId] = useState(() => doc(collection(db, COLLECTIONS.coursework)).id);
+  const [heldFiles, setHeldFiles] = useState<AttachmentMap>({});
+  const held = useRef(heldFiles);
+  held.current = heldFiles;
+  useEffect(
+    () => () => {
+      if (createdId.current !== null) return;
+      for (const fileId of Object.keys(held.current)) {
+        void removeAttachment({ courseworkId: reservedId, fileId }).catch(() => undefined);
+      }
+    },
+    [reservedId],
+  );
   const now = input();
   const dirty =
     now.title !== stored.current.title ||
     normalizeMarkdown(now.instructions) !== normalizeMarkdown(stored.current.instructions) ||
     now.dueDate !== stored.current.dueDate ||
     now.lateUntil !== stored.current.lateUntil ||
-    JSON.stringify(now.grading) !== JSON.stringify(stored.current.grading);
+    JSON.stringify(now.grading) !== JSON.stringify(stored.current.grading) ||
+    (!existing && createdId.current === null && Object.keys(heldFiles).length > 0);
 
   // One action at a time: a double-tapped Post must not create two assignments.
   const { active, run: once } = useOneAtATime();
@@ -180,7 +207,7 @@ export function CourseworkEditScreen({
     if (id) {
       await updateCoursework({ courseworkId: id, ...data, ifUnchanged: stored.current });
     } else {
-      createdId.current = (await createCoursework({ courseId: cls.id, ...data })).id;
+      createdId.current = (await createCoursework({ courseId: cls.id, ...data, id: reservedId, held: Object.keys(held.current) })).id;
     }
     stored.current = data;
     return id ?? (createdId.current as string);
@@ -199,13 +226,16 @@ export function CourseworkEditScreen({
 
       <SectionTitle>Files</SectionTitle>
       <Card>
-        {existing ? (
-          <Attachments target="coursework" courseworkId={existing.id} files={existing.files} editable onBusyChange={onBusyChange} />
-        ) : (
-          <Text style={styles.hint}>
-            Files can be added once it is saved. Worksheets, scans, slides, pictures and audio; up to ten, 25 MB each.
-          </Text>
-        )}
+        <Attachments
+          target="coursework"
+          courseworkId={existing?.id ?? reservedId}
+          courseId={cls.id}
+          files={existing ? existing.files : heldFiles}
+          onHeld={existing ? undefined : setHeldFiles}
+          editable
+          onBusyChange={onBusyChange}
+        />
+        <Text style={styles.hint}>Worksheets, scans, slides, pictures and audio; up to ten, 25 MB each.</Text>
       </Card>
 
       <SectionTitle>Dates and grading</SectionTitle>
@@ -277,7 +307,7 @@ export function CourseworkEditScreen({
               testID="coursework-save"
               label="Save changes"
               busy={active === 'save'}
-              disabled={!ready || others('save')}
+              disabled={!ready || uploading || others('save')}
               onPress={() =>
                 act('save', async () => {
                   const id = await save();
@@ -291,7 +321,7 @@ export function CourseworkEditScreen({
                 testID="coursework-post"
                 label="Post"
                 busy={active === 'post'}
-                disabled={!ready || others('post')}
+                disabled={!ready || uploading || others('post')}
                 onPress={() =>
                   act('post', async () => {
                     const id = await save();
@@ -305,7 +335,7 @@ export function CourseworkEditScreen({
                 label={existing ? 'Save draft' : 'Save as draft'}
                 variant="secondary"
                 busy={active === 'save'}
-                disabled={!ready || others('save')}
+                disabled={!ready || uploading || others('save')}
                 onPress={() =>
                   act('save', async () => {
                     const id = await save();
@@ -317,6 +347,7 @@ export function CourseworkEditScreen({
           )}
           <Button label="Cancel" variant="quiet" onPress={onCancel} />
         </Row>
+        {uploading ? <Text style={styles.waiting}>Ready once every file is up.</Text> : null}
         {posted && existing && existing.closedAt === null ? (
           <View style={styles.close}>
             <Button
@@ -341,6 +372,7 @@ export function CourseworkEditScreen({
 
 const styles = StyleSheet.create({
   hint: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(3) },
+  waiting: { fontSize: 13, color: t.text.secondary, marginTop: spacing(2) },
   label: { fontSize: 13, fontWeight: '600', color: t.text.secondary, marginBottom: spacing(1) },
   close: { marginTop: spacing(4) },
 });

@@ -16,7 +16,13 @@ import {
 import { createCohortRecord } from '../../src/cohorts';
 import { createCourseRecord } from '../../src/courses';
 import { createEnrollmentRecord } from '../../src/enrollments';
-import { createCourseworkRecord, deleteCourseworkRecord, handInWork, postCourseworkRecord } from '../../src/coursework';
+import {
+  createCoursework,
+  createCourseworkRecord,
+  deleteCourseworkRecord,
+  handInWork,
+  postCourseworkRecord,
+} from '../../src/coursework';
 import {
   finalizeAttachment,
   getAttachmentUrl,
@@ -37,6 +43,8 @@ const TEACHER = 'att-teacher';
 const AMINAH = 'att-aminah';
 const BILAL = 'att-bilal';
 const today = todayInZone(INSTITUTE_TIMEZONE);
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 let courseId = '';
 let cwId = '';
 
@@ -87,6 +95,7 @@ async function attach(uid: string, role: 'manager' | 'student', name: string, by
 }
 
 const cw = async () => (await db().collection(COLLECTIONS.coursework).doc(cwId).get()).data() as CourseworkDoc;
+const cw2 = async (id: string) => (await db().collection(COLLECTIONS.coursework).doc(id).get()).data() as CourseworkDoc;
 const draft = async (uid: string) =>
   (await db().collection(COLLECTIONS.drafts).doc(submissionId(uid, cwId)).get()).data() as DraftDoc | undefined;
 
@@ -195,6 +204,117 @@ describe('a student’s files', () => {
     // Sorted as the list on screen sorts them.
     const files = Object.values((await draft(AMINAH))?.files ?? {}).sort((a, b) => a.addedAt - b.addedAt);
     expect(files.map((f) => f.name)).toEqual(['Recitation.m4a', 'Page 1.png']);
+  });
+});
+
+/*
+ * FILES FIRST, SAVE LATER (Faisal, 2026-10-13): a teacher writing a new
+ * assignment adds its files as they go, and nothing exists until they save it
+ * or post it. The form reserves the assignment's id; files sent for it are held
+ * until the assignment is saved at that id, and the ones the form shows join
+ * it. A form left unsaved leaves nothing behind that the sweep does not clear.
+ */
+describe('a teacher’s files on an assignment not yet saved', () => {
+  const reserved = () => db().collection(COLLECTIONS.coursework).doc().id;
+  const fields = () => ({
+    title: 'Letter forms, week 2',
+    instructions: '',
+    dueDate: addDays(today, 7),
+    lateUntil: null,
+    grading: { kind: 'scale' as const },
+  });
+  /** Add a file the way the new form does: for the reserved id, naming the class. */
+  async function hold(uid: string, id: string, name: string, bytes: Uint8Array, forCourse = courseId) {
+    const start = await startAttachmentUpload.run(
+      await as(uid, 'manager', { target: 'coursework', courseworkId: id, courseId: forCourse, name, sizeBytes: bytes.length }),
+    );
+    expect((await fetch(start.url, { method: 'PUT', headers: start.headers, body: bytes })).status).toBe(200);
+    return (await finalizeAttachment.run(await as(uid, 'manager', { courseworkId: id, fileId: start.fileId }))).file;
+  }
+  const exists = async (id: string) => (await db().collection(COLLECTIONS.coursework).doc(id).get()).exists;
+
+  it('are kept while it is written, can be opened, and join it when it is saved', async () => {
+    const id = reserved();
+    const sheet = await hold(TEACHER, id, 'Sheet.pdf', PDF);
+    expect(await exists(id)).toBe(false);
+    const link = await getAttachmentUrl.run(await as(TEACHER, 'manager', { courseworkId: id, fileId: sheet.id }));
+    expect(new Uint8Array(await (await fetch(link.url)).arrayBuffer())).toEqual(PDF);
+
+    await createCourseworkRecord(TEACHER, courseId, fields(), { id, held: [sheet.id] });
+    const files = (await cw2(id)).files;
+    expect(Object.keys(files)).toEqual([sheet.id]);
+    expect(files[sheet.id]).toMatchObject({ name: 'Sheet.pdf', storageKey: sheet.storageKey });
+    expect((await db().collection(COLLECTIONS.attachmentUploads).get()).size).toBe(0);
+  });
+
+  it('removed before it is saved, leave nothing — not on the assignment, not in the bucket', async () => {
+    const id = reserved();
+    const sheet = await hold(TEACHER, id, 'Sheet.pdf', PDF);
+    await removeAttachment.run(await as(TEACHER, 'manager', { courseworkId: id, fileId: sheet.id }));
+    expect(await objectExists(sheet.storageKey)).toBe(false);
+    // Listed all the same, as a form that never heard the removal went through.
+    await createCourseworkRecord(TEACHER, courseId, fields(), { id, held: [sheet.id] });
+    expect((await cw2(id)).files).toEqual({});
+  });
+
+  it('are refused to a teacher who does not teach the class', async () => {
+    await expect(hold('att-outsider', reserved(), 'Sheet.pdf', PDF)).rejects.toThrow(/not assigned to that class/);
+  });
+
+  it('join it as the form showed them: a file the form lost track of stays off it', async () => {
+    // The second was confirmed, but the answer never reached the form, which
+    // showed it as failed and sent it again: it must not be on it twice.
+    const id = reserved();
+    const shown = await hold(TEACHER, id, 'Sheet.pdf', PDF);
+    const lost = await hold(TEACHER, id, 'Sheet.pdf', PDF);
+    await createCourseworkRecord(TEACHER, courseId, fields(), { id, held: [shown.id] });
+    expect(Object.keys((await cw2(id)).files)).toEqual([shown.id]);
+    // Once its assignment is saved without it, it goes on the day's clock.
+    expect(await sweepAttachmentUploads(Date.now() + 25 * HOUR)).toBe(1);
+    expect(await objectExists(lost.storageKey)).toBe(false);
+    expect(await objectExists(shown.storageKey)).toBe(true);
+  });
+
+  it('wait thirty days for a form left open, then the sweep clears them, file and all', async () => {
+    const id = reserved();
+    const sheet = await hold(TEACHER, id, 'Sheet.pdf', PDF);
+    // A form written over a long weekend still has its files when it is saved.
+    expect(await sweepAttachmentUploads(Date.now() + 4 * DAY)).toBe(0);
+    expect(await objectExists(sheet.storageKey)).toBe(true);
+    // One nobody came back to does not keep them for ever.
+    expect(await sweepAttachmentUploads(Date.now() + 31 * DAY)).toBe(1);
+    expect(await objectExists(sheet.storageKey)).toBe(false);
+    expect((await db().collection(COLLECTIONS.attachmentUploads).get()).size).toBe(0);
+  });
+
+  it('are taken only by their own teacher saving the form, for its class', async () => {
+    const id = reserved();
+    const sheet = await hold(TEACHER, id, 'Sheet.pdf', PDF);
+    await db().collection(COLLECTIONS.courses).doc(courseId).update({ managerUids: [TEACHER, 'att-colleague'] });
+    await createCourseworkRecord('att-colleague', courseId, fields(), { id, held: [sheet.id] });
+    expect((await cw2(id)).files).toEqual({});
+  });
+
+  it('cannot be saved over an assignment that already exists: it keeps its words and its files', async () => {
+    const id = reserved();
+    const sheet = await hold(TEACHER, id, 'Sheet.pdf', PDF);
+    await createCourseworkRecord(TEACHER, courseId, fields(), { id, held: [sheet.id] });
+    await expect(createCourseworkRecord(TEACHER, courseId, { ...fields(), title: 'Over it' }, { id, held: [] })).rejects.toThrow(
+      /already/i,
+    );
+    const kept = await cw2(id);
+    expect(kept.title).toBe('Letter forms, week 2');
+    expect(Object.keys(kept.files)).toEqual([sheet.id]);
+  });
+
+  it('are named by id: a form that sends anything else is refused before anything is read', async () => {
+    const save = (data: Record<string, unknown>) =>
+      as(TEACHER, 'manager', { courseId, ...fields(), ...data }).then((req) => createCoursework.run(req));
+    await expect(save({ id: reserved() })).rejects.toThrow(/held must list/);
+    await expect(save({ id: 'courses/x', held: [] })).rejects.toThrow(/not an assignment id/);
+    await expect(save({ id: reserved(), held: ['../uploads'] })).rejects.toThrow(/held must list/);
+    await expect(save({ id: reserved(), held: Array.from({ length: 11 }, reserved) })).rejects.toThrow(/held must list/);
+    expect((await db().collection(COLLECTIONS.coursework).get()).size).toBe(1);
   });
 });
 

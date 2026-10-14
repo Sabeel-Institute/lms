@@ -37,6 +37,18 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-13 — **Files first, save later** (Faisal's choice). A new
+  assignment took files only once it was saved, so a teacher wrote it, saved
+  a draft, then attached. The form now reserves the assignment's id as it
+  opens; files sent for it are held under that id, and the ones the form
+  shows join the assignment in the transaction that saves it — exactly those,
+  so a file the form lost track of (confirmed, but the answer never arrived
+  and it was sent again) is not on it twice. Nothing exists until Save or
+  Post. Discard takes the files with it; a closed tab leaves them held thirty
+  days, so a form written over a weekend loses nothing, and then the sweep
+  clears them. Post and Save wait until every file is up, as Hand in does:
+  leaving stops an upload, so a Post tapped mid-upload put the assignment out
+  without the file and said nothing — on a saved assignment's form too.
 - 2026-10-13 — **One sound at a time, and an attachment player of the app's
   own.** On the device pass a recitation attached to an assignment and the
   class recording in the docked bar played over each other: Android shares

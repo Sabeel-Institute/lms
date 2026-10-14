@@ -3,6 +3,7 @@ import { FieldValue, getFirestore, type Transaction } from 'firebase-admin/fires
 import {
   COLLECTIONS,
   INSTITUTE_TIMEZONE,
+  MAX_ATTACHMENTS,
   MAX_POINTS,
   canHandIn,
   canTakeBack,
@@ -13,6 +14,7 @@ import {
   submissionId,
   todayInZone,
   workState,
+  type AttachmentFile,
   type AttachmentMap,
   type CourseDoc,
   type CourseworkDoc,
@@ -29,6 +31,7 @@ import { isAdminCaller, requireCourseScope, requireStudent } from './guards';
 import { isCalendarDate } from './sessions';
 import { MEDIA_WRITE_SECRETS, deleteObject } from './mediaStore';
 import { notifyDueDateMoved, notifyPosted, notifyReturned } from './notifyCoursework';
+import type { AttachmentUploadDoc } from './attachments';
 
 /**
  * Assignments: a teacher posts work to a whole class, each student hands in a
@@ -236,27 +239,69 @@ export async function deactivateStudentCoursework(courseId: string, studentUid: 
 
 // ---------------------------------------------------------------- create --
 
-export async function createCourseworkRecord(callerUid: string, courseId: string, fields: CourseworkFields) {
+/** The id a new assignment's form reserved, and the files the form shows as held under it. */
+interface ReservedForm {
+  id: string;
+  held: string[];
+}
+
+/**
+ * A new assignment, saved as a draft. For one written on the form, `form` is
+ * the id it reserved and the files it showed: those, held under that id, join
+ * it here in the same transaction, so the assignment carries exactly the files
+ * the teacher saw — not one the form lost track of. Only the caller's own held
+ * files, for this class, are taken, and an id already saved is refused rather
+ * than written over.
+ */
+export async function createCourseworkRecord(callerUid: string, courseId: string, fields: CourseworkFields, form?: ReservedForm) {
   const course = await readCourse(courseId);
   if (!course.effectiveActive) throw new HttpsError('failed-precondition', 'This course is archived.');
-  const ref = db().collection(COLLECTIONS.coursework).doc();
-  const now = Date.now();
-  const doc: CourseworkDoc = {
-    courseId,
-    cohortId: course.cohortId,
-    ...fields,
-    files: {},
-    status: 'draft',
-    closedAt: null,
-    postedAt: null,
-    postedBy: null,
-    createdAt: now,
-    createdBy: callerUid,
-    updatedAt: now,
-    editedAt: null,
-  };
-  await ref.set(doc);
+  const ref = form ? cwRef(form.id) : db().collection(COLLECTIONS.coursework).doc();
+  await db().runTransaction(async (tx) => {
+    if ((await tx.get(ref)).exists) throw new HttpsError('already-exists', 'That assignment is already saved.');
+    const listed = form?.held.length
+      ? await tx.getAll(...form.held.map((fileId) => db().collection(COLLECTIONS.attachmentUploads).doc(fileId)))
+      : [];
+    const held = listed.filter((d) => {
+      const up = d.data() as AttachmentUploadDoc | undefined;
+      return !!up?.held && up.courseworkId === ref.id && up.uploadedBy === callerUid && up.courseId === courseId && up.studentUid === null;
+    });
+    const now = Date.now();
+    const doc: CourseworkDoc = {
+      courseId,
+      cohortId: course.cohortId,
+      ...fields,
+      files: Object.fromEntries(held.map((d) => [d.id, (d.data() as AttachmentUploadDoc).held as AttachmentFile])),
+      status: 'draft',
+      closedAt: null,
+      postedAt: null,
+      postedBy: null,
+      createdAt: now,
+      createdBy: callerUid,
+      updatedAt: now,
+      editedAt: null,
+    };
+    tx.set(ref, doc);
+    for (const d of held) tx.delete(d.ref);
+  });
   return { id: ref.id };
+}
+
+/** Firestore's own ids, which a form's reserved id and its files' ids both are. */
+const AUTO_ID = /^[A-Za-z0-9]{20}$/;
+
+/** A new assignment's form: the id it reserved, and the files it holds. */
+function reservedFormOf(d: Record<string, unknown>): ReservedForm | undefined {
+  if (d.id === undefined && d.held === undefined) return undefined;
+  if (typeof d.id !== 'string' || !AUTO_ID.test(d.id)) throw new HttpsError('invalid-argument', 'id is not an assignment id.');
+  if (
+    !Array.isArray(d.held) ||
+    d.held.length > MAX_ATTACHMENTS ||
+    !d.held.every((f): f is string => typeof f === 'string' && AUTO_ID.test(f))
+  ) {
+    throw new HttpsError('invalid-argument', `held must list at most ${MAX_ATTACHMENTS} file ids.`);
+  }
+  return { id: d.id, held: [...new Set(d.held)] };
 }
 
 export const createCoursework = auditedCall('createCoursework', async (req, audit) => {
@@ -265,7 +310,7 @@ export const createCoursework = auditedCall('createCoursework', async (req, audi
   const uid = await requireCourseScope(req, courseId);
   const fields = validateCourseworkFields(d, today());
   audit.courseId = courseId;
-  const res = await createCourseworkRecord(uid, courseId, fields);
+  const res = await createCourseworkRecord(uid, courseId, fields, reservedFormOf(d));
   audit.targets = { courseworkId: res.id };
   audit.detail = { title: fields.title, dueDate: fields.dueDate };
   return res;
