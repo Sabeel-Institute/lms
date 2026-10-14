@@ -109,6 +109,16 @@ export function setLiveDataSession(canRead: boolean): void {
   sessionCanRead = canRead;
 }
 
+/**
+ * Whether a listener's error is the session's own doing: a refusal once the
+ * account cannot read, or the end of every listener when the app ends
+ * Firestore itself. Asked by `session.ts` too, whose profile listener is the
+ * one not made here.
+ */
+export function sessionEndedIt(code: string): boolean {
+  return !sessionCanRead && (code === 'permission-denied' || code === 'unauthenticated' || code === 'aborted');
+}
+
 function reportListenerError(
   key: string,
   label: string,
@@ -117,7 +127,7 @@ function reportListenerError(
   extra?: Record<string, unknown>,
 ) {
   const code = e.code ?? '';
-  if (!sessionCanRead && (code === 'permission-denied' || code === 'unauthenticated' || code === 'aborted')) {
+  if (sessionEndedIt(code)) {
     // Still logged, and marked — the e2e counts unmarked listener warnings and
     // must not be blinded by this, but neither should it fail on a denial we
     // deliberately expect.

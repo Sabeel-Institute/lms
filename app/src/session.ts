@@ -13,7 +13,7 @@ import {
 import { googleSignOut } from './auth/google';
 import { auth, db } from './firebase';
 import { afterSignOut } from './firestoreInit';
-import { setLiveDataSession } from './liveQuery';
+import { sessionEndedIt, setLiveDataSession } from './liveQuery';
 import { createPollChain } from './pollChain';
 import { registerThisDevice, unregisterThisDevice } from './notifications';
 import { setSentryRole } from './sentry';
@@ -87,6 +87,16 @@ export async function signOut(): Promise<void> {
   setLiveDataSession(false);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await afterSignOut(db, drained);
+}
+
+/**
+ * The profile listener's errors, marked expected when the session ended it as
+ * `liveQuery` marks its own: Try again ends Firestore under it while signed
+ * in (`reloadFromServer`).
+ */
+function profileListenerError(e: { code?: string; message: string }) {
+  if (sessionEndedIt(e.code ?? '')) console.warn('profile listener', e.code, '(session ended — expected)');
+  else console.warn('profile listener', e.code ?? e.message);
 }
 
 /** Which collection holds this user's mirror document. */
@@ -306,11 +316,9 @@ export function useSession(): Session {
               // Document says active but the token still lags: refresh now rather
               // than waiting for the next poll tick.
               if (profile && isStale(fresh, profile)) void poll();
-            })().catch((e: { code?: string; message: string }) =>
-              console.warn('profile listener', e.code ?? e.message),
-            );
+            })().catch(profileListenerError);
           },
-          (e) => console.warn('profile listener', e.code ?? e.message),
+          profileListenerError,
         );
       };
 
