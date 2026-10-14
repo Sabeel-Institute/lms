@@ -109,8 +109,19 @@ export interface CopyTask {
 /** Hand a copy to the task queue. Injected, so tests can see what was queued. */
 export type Enqueue = (task: CopyTask) => Promise<void>;
 
-/** The production queue: one `copyZoomFile` task per file. */
-const enqueueCopy: Enqueue = (task) => getFunctions().taskQueue<CopyTask>('copyZoomFile').enqueue(task);
+/** The longest one copy may run: the copier's limit, with room to settle. 1800 is Cloud Tasks' most. */
+const COPY_DEADLINE_SECONDS = 1800;
+
+/**
+ * The production queue: one `copyZoomFile` task per file, given as long as
+ * the copy may take (`COPY_TIMEOUT_MS`). Cloud Tasks' own deadline is ten
+ * minutes, after which it counts the attempt failed and sends another while
+ * the first is still copying.
+ */
+const enqueueCopy: Enqueue = (task) =>
+  getFunctions()
+    .taskQueue<CopyTask>('copyZoomFile')
+    .enqueue(task, { dispatchDeadlineSeconds: COPY_DEADLINE_SECONDS });
 
 export interface ImportInput {
   sessionId: string;
@@ -409,8 +420,9 @@ export const copyZoomFile = onTaskDispatched<CopyTask>(
     // Zoom's API and the Worker both take a handful at a time comfortably; a
     // day's import of a dozen files then finishes in a few minutes.
     rateLimits: { maxConcurrentDispatches: 4 },
-    // The Worker's copy takes up to 20 minutes for the largest file.
-    timeoutSeconds: 1800,
+    // The Worker's copy takes up to 20 minutes for the largest file
+    // (`COPY_TIMEOUT_MS`).
+    timeoutSeconds: COPY_DEADLINE_SECONDS,
     // PRIVATE, said out loud: only the queue, with the runtime account's token,
     // may call this. The first deploy left it open to anyone (allUsers) though
     // private is the documented default — see docs/DEPLOY.md.

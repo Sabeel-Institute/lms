@@ -1,3 +1,5 @@
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { GoogleAuth } from 'google-auth-library';
 import { defineString } from 'firebase-functions/params';
 import { head } from './mediaStore';
@@ -31,7 +33,7 @@ const MEDIA_COPIER_URL = defineString('MEDIA_COPIER_URL', {
 export const MAX_COPY_BYTES = Math.floor(4.9 * 2 ** 30);
 
 /** A 3.5 GB recording takes about 3 minutes at the measured rate; allow 20. */
-const COPY_TIMEOUT_MS = 20 * 60 * 1000;
+export const COPY_TIMEOUT_MS = 20 * 60 * 1000;
 
 export interface CopyRequest {
   sourceUrl: string;
@@ -49,22 +51,62 @@ export async function copyThroughWorker(req: CopyRequest): Promise<void> {
   }
   const client = await auth.getIdTokenClient(base);
   const headers = await client.getRequestHeaders();
-  headers.set('content-type', 'application/json');
 
-  let res: Response;
+  let res: { status: number; body: string };
   try {
-    res = await fetch(`${base}/copy`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(req),
-      signal: AbortSignal.timeout(COPY_TIMEOUT_MS),
-    });
+    res = await postJson(`${base}/copy`, Object.fromEntries(headers.entries()), JSON.stringify(req), COPY_TIMEOUT_MS);
   } catch (e) {
     if ((await head(req.key))?.sizeBytes === req.size) return;
     throw e;
   }
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (res.status < 200 || res.status > 299) {
+    const body = ((): { error?: string } => {
+      try {
+        return JSON.parse(res.body) as { error?: string };
+      } catch {
+        return {};
+      }
+    })();
     throw new Error(`The copy failed: ${body.error ?? `HTTP ${res.status}`}.`);
   }
+}
+
+/**
+ * POST a JSON body and read the whole answer, giving up after `idleMs` with
+ * nothing from the other end.
+ *
+ * NOT `fetch`. The Worker answers only once its put is complete, and Node's
+ * fetch gives up on response headers after five minutes whatever signal it is
+ * handed: a copy of a large recording failed with "fetch failed" on every
+ * attempt, and so on every Retry. Here the only limit is the one given.
+ */
+export function postJson(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  idleMs: number,
+): Promise<{ status: number; body: string }> {
+  const request = url.startsWith('https:') ? httpsRequest : httpRequest;
+  return new Promise((resolve, reject) => {
+    const req = request(
+      url,
+      {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(body)) },
+        timeout: idleMs,
+      },
+      (res) => {
+        let text = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk: string) => {
+          text += chunk;
+        });
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: text }));
+        res.on('error', reject);
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error(`No answer from the media copier in ${Math.round(idleMs / 60_000)} minutes.`)));
+    req.on('error', reject);
+    req.end(body);
+  });
 }
