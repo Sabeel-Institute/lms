@@ -1041,13 +1041,34 @@ const back = await student.evaluate(
   () => !document.fullscreenElement && !!document.querySelector('[data-testid="player-video"] video'),
 );
 check('the full-screen icon fills the screen with the video, and it comes back', full === 'VIDEO' && back, `fullscreen ${full}, back ${back}`);
+/*
+ * LEAVING THE PLAYER DOES NOT STOP A VIDEO. Taken out of the page, the
+ * element was paused by the browser, while the docked bar went on showing
+ * it; an audio file, never in the page, played on.
+ */
+const videoBeforeLeaving = await elapsedSeconds(student);
+await tap(student, 'tab-classes');
+await student.getByTestId('mini-player').waitFor({ timeout: 15000 });
+await student.waitForTimeout(3000);
+const videoAway = await student.evaluate(() => {
+  const v = document.querySelector('video');
+  return v ? { paused: v.paused, inPage: document.body.contains(v) } : null;
+});
+await tap(student, 'mini-player-open');
+await student.getByTestId('player-video').waitFor({ timeout: 15000 });
+const videoBack = await elapsedSeconds(student);
+check(
+  'leaving the player while a video plays keeps it playing',
+  videoAway?.paused === false && videoBack >= videoBeforeLeaving + 2,
+  `${JSON.stringify(videoAway)}, ${videoBeforeLeaving}s → ${videoBack}s`,
+);
 await tap(student, `player-version-${audioItemId}`);
 await student.waitForTimeout(2500);
 const backOnAudio = await elapsedSeconds(student);
 check(
   'switching back to the audio keeps the place, and the picture goes',
-  Math.abs(backOnAudio - videoPlayed) <= 4 && (await student.getByTestId('player-video').count()) === 0,
-  `${videoPlayed}s → ${backOnAudio}s`,
+  Math.abs(backOnAudio - videoBack) <= 4 && (await student.getByTestId('player-video').count()) === 0,
+  `${videoBack}s → ${backOnAudio}s`,
 );
 await tap(student, 'player-play'); // pause again
 await student.waitForTimeout(1500);

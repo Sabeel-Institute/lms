@@ -8,9 +8,12 @@ import { VideoFrame } from './VideoFrame';
  * VideoSurface.tsx).
  *
  * The `<video>` element belongs to the playback session (player.web.ts); this
- * view borrows it, moving it into the page while the player screen is open.
- * Taking it out again on leaving does not stop it — a playing element outside
- * the document plays on — so the docked bar keeps the sound, as on a phone.
+ * view borrows it, moving it into the player screen while that is open. On
+ * leaving it goes to a holder off screen, IN THE PAGE: taken out of the page,
+ * a media element is paused by the browser (the HTML standard's steps for an
+ * element removed from a document), and leaving the player stopped a video
+ * while the docked bar went on showing it. In the page, the sound plays on,
+ * as on a phone.
  */
 export function VideoSurface() {
   const host = useRef<View>(null);
@@ -23,7 +26,7 @@ export function VideoSurface() {
     el.style.objectFit = 'contain';
     box.appendChild(el);
     return () => {
-      if (el.parentElement === box) box.removeChild(el);
+      if (el.parentElement === box) offscreen().appendChild(el);
     };
   }, [el]);
   if (!el) return null;
@@ -32,4 +35,25 @@ export function VideoSurface() {
       <View ref={host} testID="player-video" style={StyleSheet.absoluteFill} />
     </VideoFrame>
   );
+}
+
+/** Where the session's video waits while no player screen shows it: in the page, out of sight. */
+function offscreen(): HTMLElement {
+  const existing = document.getElementById('session-video-holder');
+  if (existing) return existing;
+  const holder = document.createElement('div');
+  holder.id = 'session-video-holder';
+  holder.setAttribute('aria-hidden', 'true');
+  Object.assign(holder.style, {
+    position: 'fixed',
+    left: '-2px',
+    top: '-2px',
+    width: '1px',
+    height: '1px',
+    overflow: 'hidden',
+    opacity: '0',
+    pointerEvents: 'none',
+  });
+  document.body.appendChild(holder);
+  return holder;
 }
