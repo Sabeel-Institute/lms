@@ -1854,6 +1854,31 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-14 — **Bug hunt, round 1: done and deployed** (`3e51bed`–`237b8a8`;
+  functions and hosting deployed, live at `v0.1.1 · 237b8a8`). All 106
+  findings settled. Faisal's decisions built: stopping work leaves a student
+  with dates of their own open, and **Take work again** undoes a stop; a
+  recording playing at midnight on its last day plays on; an admin can
+  **delete a disabled account** on the website (sign-in, address and
+  notification settings go; the name and record stay); the project is on
+  Identity Platform and a blocking function refuses a bad sign-up before any
+  account exists (probed on live: refused, nothing left behind), with the
+  rejected ones the trigger still sees counted in one history row a day. The
+  "is this address registered" answer to a sign-up stays, by his choice, to
+  keep staff self sign-up. Also: the web bundle is 22% smaller on first load
+  (Sentry loads at the first report), and many player, upload, Zoom-copy,
+  coursework and wording fixes, each with a test seen failing first. Suites:
+  unit 792, `test:emulator` 671 passed and 2 skipped, browser 244 checks, the
+  sweep 2085 (one mis-tap at 320 px, clean on rerun), the popup sign-in, lint,
+  typecheck, knip; on live `smoke:prod` (48 callables), `check:documents`,
+  `check:queries`. Found on the way and fixed on the branch for the next
+  deploy: two grant reconciles at once could switch off a grant the other had
+  just made; the app gave up confirming a large upload before the server did,
+  and cancelled it; the course page's Assignments line moved the rows under a
+  finger; and the course page now reads one stored tally per assignment
+  instead of every piece of work. Push notifications stay off while the hunt
+  runs.
+
 - 2026-10-14 — **Bug hunt, round 1: checkpoint deploy** (`2f9da51`–`3d2f022`;
   rules, functions and hosting deployed, live at `v0.1.1 · 3d2f022`). Eight
   reviewers read everything since the fork and drove it on the live site
