@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { formatClock } from '../playback';
 import { getTheme } from '../theme';
 
 const t = getTheme();
@@ -71,15 +72,50 @@ export function Scrubber({
     });
   }, [onSeek]);
 
+  /*
+   * BY KEYBOARD TOO: a slider a pointer can drag and nothing else can reach
+   * shut out anyone at a keyboard or a screen reader, and announced no
+   * position. Arrows move five seconds, Page Up and Down a minute, Home and
+   * End to either end; a key goes straight to a seek, as a release does.
+   */
+  const host = useRef<View>(null);
+  const keyState = useRef({ positionMs, durationMs, disabled, onSeek });
+  keyState.current = { positionMs, durationMs, disabled, onSeek };
+  useEffect(() => {
+    const el = host.current as unknown as HTMLElement | null;
+    if (!el) return;
+    const onKey = (e: KeyboardEvent) => {
+      const k = keyState.current;
+      if (k.disabled || k.durationMs <= 0) return;
+      const target =
+        e.key === 'Home'
+          ? 0
+          : e.key === 'End'
+            ? k.durationMs
+            : k.positionMs + (KEY_MOVES[e.key] ?? NaN);
+      if (Number.isNaN(target)) return;
+      e.preventDefault();
+      k.onSeek(Math.max(0, Math.min(k.durationMs, target)));
+    };
+    el.addEventListener('keydown', onKey);
+    return () => el.removeEventListener('keydown', onKey);
+  }, []);
+
   const playedFraction = dragFraction ?? (durationMs > 0 ? clamp(positionMs / durationMs) : 0);
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
   return (
     <View
+      ref={host}
       testID={testID}
-      accessibilityRole="adjustable"
-      accessibilityLabel="Playback position"
-      accessibilityValue={{ min: 0, max: Math.round(durationMs / 1000), now: Math.round(positionMs / 1000) }}
+      role="slider"
+      focusable={!disabled}
+      aria-label="Playback position"
+      aria-disabled={disabled}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(durationMs / 1000)}
+      aria-valuenow={Math.round(positionMs / 1000)}
+      aria-valuetext={`${formatClock(positionMs)} of ${formatClock(durationMs)}`}
       onLayout={onLayout}
       style={styles.hit}
       {...responder.panHandlers}
@@ -100,6 +136,16 @@ export function Scrubber({
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(1, Number.isFinite(n) ? n : 0));
+
+/** How far a key moves the place, in milliseconds. */
+const KEY_MOVES: Record<string, number> = {
+  ArrowRight: 5_000,
+  ArrowUp: 5_000,
+  ArrowLeft: -5_000,
+  ArrowDown: -5_000,
+  PageUp: 60_000,
+  PageDown: -60_000,
+};
 
 const THUMB = 16;
 

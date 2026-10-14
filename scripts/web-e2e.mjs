@@ -1108,6 +1108,28 @@ await tap(student, 'player-play'); // pause again
 await student.waitForTimeout(1500);
 
 /*
+ * THE SCRUBBER BY KEYBOARD. It could not be reached by Tab, the arrow keys
+ * did nothing, and it announced no position.
+ */
+const scrubber = student.getByTestId('player-scrubber').filter({ visible: true }).first();
+const keyStart = await elapsedSeconds(student);
+await scrubber.focus();
+await student.keyboard.press('ArrowRight');
+await student.keyboard.press('ArrowRight');
+await student.waitForTimeout(1500);
+const keyEnd = await elapsedSeconds(student);
+const announced = await scrubber.evaluate((el) => ({
+  tab: el.getAttribute('tabindex'),
+  now: el.getAttribute('aria-valuenow'),
+  text: el.getAttribute('aria-valuetext'),
+}));
+check(
+  'the scrubber is reached by Tab, moved by the arrow keys, and says where it is',
+  announced.tab === '0' && keyEnd >= keyStart + 9 && Math.abs(Number(announced.now) - keyEnd) <= 1 && / of /.test(announced.text ?? ''),
+  JSON.stringify({ keyStart, keyEnd, announced }),
+);
+
+/*
  * THE NOTIFICATION'S ⏪ ⏩. A browser draws them in its media notification and
  * on the lock screen whether or not the page answers them, and answered by
  * nobody they spun and did nothing on a phone (v0.1.0) while pause worked. What
