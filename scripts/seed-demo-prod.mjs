@@ -3,8 +3,12 @@
  * with realistic volume. Paired with `wipe-demo-prod.mjs`, which removes exactly
  * what this creates and nothing else.
  *
- *   node scripts/seed-demo-prod.mjs          # seed
+ *   node scripts/seed-demo-prod.mjs          # says what it would do
+ *   node scripts/seed-demo-prod.mjs --yes    # seed
  *   node scripts/wipe-demo-prod.mjs          # remove it all again
+ *
+ * Refused after switchover, when the project holds real students
+ * (`refuseAfterSwitchover`).
  *
  * THIS WRITES TO PRODUCTION. It is additive: everything it creates carries
  * `demoSeed: true` and a `demo-` id prefix, so anything you made yourself is
@@ -31,10 +35,21 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { r2Config, s3For } from './lib/r2.mjs';
+import { refuseAfterSwitchover } from './lib/before-switchover.mjs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 const { CopyObjectCommand, DeleteObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 
+refuseAfterSwitchover('seed-demo-prod');
+const unknownArgs = process.argv.slice(2).filter((a) => a !== '--yes');
+if (unknownArgs.length) {
+  console.error('usage: node scripts/seed-demo-prod.mjs [--yes]');
+  process.exit(2);
+}
+if (!process.argv.includes('--yes')) {
+  console.log('Dry run: this writes 3 cohorts, 8 courses, 50 students and about 80 sessions to the live project. Re-run with --yes to write.');
+  process.exit(0);
+}
 const PROJECT = FIREBASE_PROJECT_ID;
 if (process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error('FIRESTORE_EMULATOR_HOST is set — this script targets production.');

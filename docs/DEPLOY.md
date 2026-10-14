@@ -243,7 +243,7 @@ There is a pair of scripts for filling production with a realistic dataset to lo
 at the reports with, and for taking it out again:
 
 ```bash
-node scripts/seed-demo-prod.mjs              # 3 cohorts, 8 courses, 50 students, ~80 sessions
+node scripts/seed-demo-prod.mjs --yes        # 3 cohorts, 8 courses, 50 students, ~80 sessions
 node scripts/seed-demo-coursework.mjs        # DRY RUN; --yes adds assignments, work and grades to every active course
 node scripts/wipe-demo-prod.mjs              # DRY RUN — prints the plan, deletes nothing
 node scripts/wipe-demo-prod.mjs --yes
