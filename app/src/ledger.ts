@@ -375,6 +375,7 @@ export function useRecordingLedger(
     };
   }, [
     assignments,
+    students,
     failed,
     completions,
     overrides,
