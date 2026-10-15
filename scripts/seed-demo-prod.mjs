@@ -40,7 +40,7 @@ const require = createRequire(new URL('../functions/package.json', import.meta.u
 const admin = require('firebase-admin');
 const { CopyObjectCommand, DeleteObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-refuseAfterSwitchover('seed-demo-prod');
+refuseAfterSwitchover('seed-demo-prod', "demo data would land on real students' records");
 const unknownArgs = process.argv.slice(2).filter((a) => a !== '--yes');
 if (unknownArgs.length) {
   console.error('usage: node scripts/seed-demo-prod.mjs [--yes]');

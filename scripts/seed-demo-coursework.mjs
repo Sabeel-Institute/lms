@@ -37,7 +37,7 @@ import {
   todayInZone,
 } from '@sabeel/shared';
 
-refuseAfterSwitchover('seed-demo-coursework');
+refuseAfterSwitchover('seed-demo-coursework', "demo data would land on real students' records");
 const EXECUTE = process.argv.includes('--yes');
 const unknown = process.argv.slice(2).filter((a) => a !== '--yes');
 if (unknown.length) {

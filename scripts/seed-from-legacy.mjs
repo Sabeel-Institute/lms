@@ -43,9 +43,12 @@ import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 import { r2Config, s3For } from './lib/r2.mjs';
 import { ZOOM_IMPORTS, convertRecording, isLegacyRecording } from './lib/legacy-media.mjs';
 import { RENAMED_AUDIT_ACTIONS, convertAuditEntry } from './lib/legacy-audit.mjs';
+import { refuseAfterSwitchover } from './lib/before-switchover.mjs';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } = require('@aws-sdk/client-s3');
+
+refuseAfterSwitchover('seed-from-legacy', 'a seed would wipe everything made here since the move');
 
 // ------------------------------------------------------------------ args --
 const args = process.argv.slice(2);
