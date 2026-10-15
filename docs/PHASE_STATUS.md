@@ -1890,6 +1890,29 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-15 — **The iPhone app reaches TestFlight, and iPhones get
+  notifications** (`fca6e0f`–`08a51a2`; functions and rules deployed). Build
+  1 (v0.1.2, `6f2fce3`) is on TestFlight, made and uploaded from the Mac
+  session; on the simulator a student signed in, played video and audio
+  through Home and the lock, skipped, changed speed and version, kept a
+  bookmark and the place across a kill, and a double tap on Mark complete
+  wrote one event. The server sends an iPhone's notification straight to
+  Apple: `check:push` has Apple accept the key, team and app with a token
+  that cannot exist; the simulator registered a row with
+  `apnsEnvironment: 'development'` through the rules, and one real push
+  through Apple's sandbox showed and its tap opened the session (a
+  top-level `path` showed and opened nothing, so the path rides under
+  `body`). Expo's patch releases were aligned (57.0.30) with the precompiled
+  iOS modules back on; for that, a release APK on the AVD against
+  production: sign-in, notifications on (an `android` row), a real FCM push
+  in the app's channel whose tap from the shade opened its recording, audio
+  through Home, the lock and the media session's pause and play, video
+  frames advancing, the place kept across a force-stop; the sweep 2087,
+  emulator 240 + 473. Not yet seen: an iPhone's lock-screen controls and a
+  notification tapped with the app closed (the simulator drops those taps),
+  which wait for Faisal's phone and build 2. Found and left as it was before:
+  the system media controls skip 10 s where the app's buttons skip 15 and 30.
+
 - 2026-10-15 — **v0.1.2 released** (`76f06f0`; Android latest release,
   website, download page and manual). The device pass ran on the AVD, every
   step of it but the staff export: the emulator ignores its own network
