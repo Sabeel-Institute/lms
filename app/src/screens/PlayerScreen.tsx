@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
-  INSTITUTE_TIMEZONE,
   canPlayFromCourse,
   canPlayNow,
   VERSION_LABELS,
@@ -10,7 +9,6 @@ import {
   mediaParts,
   playVerb,
   startingItem,
-  todayInZone,
   unbreakableDate,
 } from '@sabeel/shared';
 import { Button, Chips, Notice } from '../components/ui';
@@ -20,6 +18,7 @@ import { VideoSurface } from '../components/VideoSurface';
 import { Scrubber } from '../components/Scrubber';
 import { Transport } from '../components/Transport';
 import { IDLE, PLAYBACK_RATES, closePlayback, formatClock, openPlayback, playback, usePlayback } from '../playback';
+import { playingSinceItsDay, useInstituteDay } from '../instituteDay';
 import { useCompletion, useMyListening, setCompleted } from '../completion';
 import { useListenerError } from '../liveQuery';
 import { useOneAtATime } from '../oneAtATime';
@@ -60,7 +59,7 @@ export function PlayerScreen({
   // listening off, or this student's own deadline has passed. Either way the
   // server refuses to mint a URL, so the transport must not be drawn — a play
   // button that does nothing reads as a broken app rather than a closed door.
-  const today = todayInZone(INSTITUTE_TIMEZONE);
+  const today = useInstituteDay();
   const allowed = canPlayNow(cls, dueDate, studentUid, today);
   // WHICH of the two, derived by ELIMINATION rather than by re-testing the
   // deadline. Spelling `studentUid !== null && isOverdue(dueDate, today)` here
@@ -110,8 +109,10 @@ export function PlayerScreen({
    * away (archived, unpublished, the student no longer excused) still stops
    * it at once.
    */
+  // Playing since before the day ended, without a stop: paused across
+  // midnight and started again, it had begun to play on (`playingSince`).
   const playingThis = session.now?.recordingId === recording.id && session.playing;
-  const finishing = closed && dueDate !== null && playingThis;
+  const finishing = closed && dueDate !== null && playingThis && playingSinceItsDay(session.playingSince, dueDate);
   useEffect(() => {
     if (!allowed && !finishing && session.now?.recordingId === recording.id) void closePlayback();
   }, [allowed, finishing, session.now?.recordingId, recording.id]);
@@ -214,7 +215,7 @@ export function PlayerScreen({
       {listenerError ? <Notice tone="error">{listenerError}</Notice> : null}
       {finishing ? (
         <Notice tone="info">
-          This recording closed at midnight. It plays on to the end, but once it stops it cannot be started again.
+          This recording closed at midnight. This part plays on to its end, but once it stops it cannot be started again.
         </Notice>
       ) : null}
       {state.error ? <Notice tone="error">{state.error}</Notice> : null}
@@ -265,7 +266,9 @@ export function PlayerScreen({
             testIdPrefix="player-version"
             options={versions.map((i) => ({ value: i.id, label: VERSION_LABELS[i.version] }))}
             onChange={(id) => playback.selectItem(id)}
-            disabled={preparing}
+            // Switching ends a recording playing on past its day: offered, it
+            // looked like any other choice and closed it for good.
+            disabled={preparing || finishing}
           />
         </View>
       ) : null}
@@ -313,7 +316,7 @@ export function PlayerScreen({
           round it. */}
       {state.ready && state.playing && state.buffering ? (
         <Text testID="player-loading" style={styles.preparing}>
-          {current?.kind === 'video' && versions.some((i) => i.kind === 'audio')
+          {current?.kind === 'video' && versions.some((i) => i.kind === 'audio') && !finishing
             ? 'Loading… On a slow connection, Audio only needs far less data.'
             : 'Loading…'}
         </Text>
@@ -335,7 +338,7 @@ export function PlayerScreen({
                 accessibilityRole="button"
                 aria-pressed={here}
                 accessibilityLabel={`Part ${index + 1}${here ? ', playing' : ''}`}
-                disabled={here || preparing}
+                disabled={here || preparing || finishing}
                 onPress={() => playback.selectPart(part)}
                 style={[styles.part, here ? styles.partOn : null]}
               >

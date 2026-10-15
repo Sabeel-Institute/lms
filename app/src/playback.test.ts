@@ -1752,6 +1752,45 @@ describe('parts and versions', () => {
   });
 });
 
+/*
+ * WHEN THIS STRETCH OF PLAYING BEGAN. A recording playing as its last day ends
+ * plays on to the end of its part; one paused before midnight and started
+ * after it must not. The screens tell the two apart by this alone, so it must
+ * follow every stop and start, the lock screen's included.
+ */
+describe('when playing began', () => {
+  it('is set on play, kept while playing, and gone on a pause', async () => {
+    const pb = await load();
+    pb.usePlayback();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    expect(shown).toMatchObject({ playingSince: null });
+    pb.playback.play();
+    const began = nowMs;
+    expect(shown).toMatchObject({ playing: true, playingSince: began });
+    wait(60_000);
+    players[0].events.onBuffering(true);
+    pb.playback.seek(30_000);
+    expect(shown).toMatchObject({ playing: true, playingSince: began });
+    pb.playback.pause();
+    expect(shown).toMatchObject({ playing: false, playingSince: null });
+    wait(60_000);
+    pb.playback.play();
+    expect(shown).toMatchObject({ playing: true, playingSince: nowMs });
+  });
+
+  it('is gone when the lock screen pauses it', async () => {
+    const pb = await load();
+    pb.usePlayback();
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.playback.play();
+    players[0].playing = false;
+    players[0].events.onPlayingChanged(false);
+    expect(shown).toMatchObject({ playing: false, playingSince: null });
+  });
+});
+
 describe('a transport change from outside the app', () => {
   it('leaves the next tap RESUMING after the player pauses itself', async () => {
     const pb = await load();

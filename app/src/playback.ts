@@ -132,6 +132,13 @@ export interface PlaybackState {
   /** The last part came to its end: the moment to offer marking it complete. */
   ended: boolean;
   playing: boolean;
+  /**
+   * When this stretch of playing began, or null when not playing. A recording
+   * playing when its last day ends plays on (see the player screen); one
+   * paused across midnight and started again does not, and this is how the
+   * two are told apart.
+   */
+  playingSince: number | null;
   /** Meant to be playing, and waiting for data: on a slow link, for seconds. */
   buffering: boolean;
   positionMs: number;
@@ -153,6 +160,7 @@ export const IDLE: PlaybackState = {
   ready: false,
   ended: false,
   playing: false,
+  playingSince: null,
   buffering: false,
   positionMs: 0,
   listenedMs: 0,
@@ -248,7 +256,10 @@ let owner: { studentUid: string | null; recordingId: string; courseId: string } 
 let generation = 0;
 
 function set(next: Partial<PlaybackState>) {
-  state = { ...state, ...next };
+  // When playing began: kept while it goes on, gone when it stops.
+  const playingSince =
+    next.playing === undefined ? state.playingSince : next.playing ? (state.playing ? state.playingSince : Date.now()) : null;
+  state = { ...state, ...next, playingSince };
   listeners.forEach((l) => l(state));
 }
 

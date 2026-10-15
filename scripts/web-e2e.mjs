@@ -32,7 +32,7 @@
  */
 import { chromium } from 'playwright';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { HELP_VIDEOS, SIGN_UP_REFUSED, helpVideoKey, pushPaths, readXlsx } from '@sabeel/shared';
+import { HELP_VIDEOS, INSTITUTE_TIMEZONE, SIGN_UP_REFUSED, helpVideoKey, pushPaths, readXlsx, todayInZone } from '@sabeel/shared';
 import { EMULATOR_PORTS, MEDIA_STORE_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import {
@@ -2863,39 +2863,84 @@ const playableBefore = await student.getByRole('button', { name: PLAYABLE }).cou
 // onSessionWritten trigger still fires, so the date flows down to the grants
 // exactly as it would on the morning after.
 /*
- * A RECORDING PLAYING WHEN ITS DATE PASSES PLAYS ON. It stopped mid-sentence
- * at midnight; it now plays to the end of the file, says it has closed, and
- * once it stops it cannot be started again.
+ * A RECORDING PLAYING WHEN ITS DAY ENDS PLAYS ON; ONE PAUSED DOES NOT. It
+ * stopped mid-sentence at midnight; it now plays to the end of the part, says
+ * it has closed, and once it stops it cannot be started again. One paused
+ * before midnight was started again after it. A browser clock runs across a
+ * real midnight on the session's due date: moving the date into the past
+ * under a playing recording is not the same thing, and no longer plays on.
  */
-await goHome(student);
-await student.locator('[data-testid="next-up-Session 1"], [data-testid="task-Session 1"]').filter({ visible: true }).first().click();
-await student.getByTestId('player-play').waitFor({ timeout: 25000 });
-await tap(student, 'player-play');
-await student.waitForTimeout(2000);
+const dueToday = todayInZone(INSTITUTE_TIMEZONE);
 const sessDoc = (await readCollection('sessions'))[0];
-await patchField('sessions', sessDoc.name.split('/').pop(), 'dueDate', '2020-01-01');
+const sessId = sessDoc.name.split('/').pop();
+await patchField('sessions', sessId, 'dueDate', dueToday);
 await new Promise((r) => setTimeout(r, 5000));
-const saysPlaysOn = await student
-  .getByText('It plays on to the end', { exact: false })
+/** The instant `HH:MM:SS` falls on the due date in the institute's zone. */
+const atInstitute = (hms) => {
+  const asUtc = new Date(`${dueToday}T${hms}Z`);
+  const zoned = Date.parse(asUtc.toLocaleString('en-US', { timeZone: INSTITUTE_TIMEZONE }));
+  const utc = Date.parse(asUtc.toLocaleString('en-US', { timeZone: 'UTC' }));
+  return new Date(asUtc.getTime() - (zoned - utc));
+};
+async function lateNight() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await ctx.clock.install({ time: atInstitute('23:59:35') });
+  const page = await ctx.newPage();
+  await page.goto(WEB, { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('signin-email').fill('fatima@example.com');
+  await page.getByTestId('signin-password').fill('StudentPass123!');
+  await tap(page, 'signin-student');
+  await page.locator('[data-testid="next-up-Session 1"], [data-testid="task-Session 1"]').filter({ visible: true }).first().click({ timeout: 30000 });
+  await page.getByTestId('player-play').waitFor({ timeout: 25000 });
+  await tap(page, 'player-play');
+  await page.waitForTimeout(3000);
+  return { ctx, page };
+}
+const pastMidnight = (page) =>
+  page.waitForFunction((day) => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) > day, dueToday, { timeout: 60000, polling: 1000 });
+// Playing as midnight passes: plays on, says so, and closes once it stops.
+const playing = await lateNight();
+await pastMidnight(playing.page);
+const saysPlaysOn = await playing.page
+  .getByText('This part plays on to its end', { exact: false })
   .filter({ visible: true })
   .first()
   .waitFor({ timeout: 15000 })
   .then(() => true, () => false);
-const playOnFrom = await elapsedSeconds(student);
-await student.waitForTimeout(3000);
-const playOnTo = await elapsedSeconds(student);
-await tap(student, 'player-play'); // pause: the end of it
-const closesOnStop = await student
-  .getByText('This recording closed on 2020-01-01', { exact: false })
+const playOnFrom = await elapsedSeconds(playing.page);
+await playing.page.waitForTimeout(3000);
+const playOnTo = await elapsedSeconds(playing.page);
+await tap(playing.page, 'player-play'); // pause: the end of it
+const closesOnStop = await playing.page
+  .getByText(`This recording closed on ${dueToday}`, { exact: false })
   .filter({ visible: true })
   .first()
   .waitFor({ timeout: 15000 })
   .then(() => true, () => false);
 check(
-  'a recording playing when its date passes plays on, says so, and closes once it stops',
+  'a recording playing when its day ends plays on, says so, and closes once it stops',
   saysPlaysOn && playOnTo >= playOnFrom + 2 && closesOnStop,
   JSON.stringify({ saysPlaysOn, playOnFrom, playOnTo, closesOnStop }),
 );
+await playing.ctx.close();
+// Paused before midnight: closed after it, with nothing to start it again.
+const paused = await lateNight();
+await tap(paused.page, 'player-play'); // pause before midnight
+await pastMidnight(paused.page);
+const closedWhilePaused = await paused.page
+  .getByText(`This recording closed on ${dueToday}`, { exact: false })
+  .filter({ visible: true })
+  .first()
+  .waitFor({ timeout: 15000 })
+  .then(() => true, () => false);
+check(
+  'a recording paused before its day ends is closed after it, with no Play to start it again',
+  closedWhilePaused && (await paused.page.getByTestId('player-play').filter({ visible: true }).count()) === 0,
+);
+await paused.ctx.close();
+// And now well past, for the checks that follow.
+await patchField('sessions', sessId, 'dueDate', '2020-01-01');
+await new Promise((r) => setTimeout(r, 5000));
 // A FLOOR AS WELL AS A PREDICATE. `[].every()` is true, so if the reconcile
 // deactivated every grant instead of re-dating it — the regression this names —
 // an empty array would have read as a pass.

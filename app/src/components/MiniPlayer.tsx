@@ -8,7 +8,8 @@ import {
   playback,
   usePlayback,
 } from '../playback';
-import { INSTITUTE_TIMEZONE, canPlayFromCourse, canPlayNow, todayInZone } from '@sabeel/shared';
+import { canPlayFromCourse, canPlayNow } from '@sabeel/shared';
+import { playingSinceItsDay, useInstituteDay } from '../instituteDay';
 import { liveDueDate, useMyAssignmentState } from '../completion';
 import { useRecordingState } from '../recordings';
 import { useCourseState } from '../structure';
@@ -93,7 +94,7 @@ export function MiniPlayer({
    * Watching only the first left the other two running off a signed URL good
    * for another twelve hours, with nothing on screen saying anything changed.
    */
-  const today = todayInZone(INSTITUTE_TIMEZONE);
+  const today = useInstituteDay();
   const due = now ? liveDueDate(now.studentUid, grant, now.dueDate) : null;
   const shut = !!course.value && !canPlayNow(course.value, due, now?.studentUid ?? null, today);
   const revoked = !!now && ((loaded.resolved && !loaded.value) || (course.resolved && shut));
@@ -103,7 +104,13 @@ export function MiniPlayer({
    * there). Anything else that shuts it stops it at once.
    */
   const finishing =
-    !!now && loaded.value !== null && !!course.value && canPlayFromCourse(course.value) && due !== null && state.playing;
+    !!now &&
+    loaded.value !== null &&
+    !!course.value &&
+    canPlayFromCourse(course.value) &&
+    due !== null &&
+    state.playing &&
+    playingSinceItsDay(state.playingSince, due);
   useEffect(() => {
     if (revoked && !finishing) void closePlayback();
   }, [revoked, finishing]);
