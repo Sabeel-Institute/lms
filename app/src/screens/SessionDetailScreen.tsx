@@ -42,7 +42,7 @@ import {
   editRecordingMedia,
   removeRecordingMedia,
   setRecordingStatus,
-  useRecording,
+  useRecordingState,
   type RecordingRow,
 } from '../recordings';
 import { UploadPanel, useUploads } from '../components/UploadPanel';
@@ -93,7 +93,8 @@ export function SessionDetailScreen({
 }) {
   const sessionState = useSessionState(sessionId);
   const session = sessionState.value;
-  const recording = useRecording(session?.recordingId ?? null);
+  const recordingState = useRecordingState(session?.recordingId ?? null);
+  const recording = recordingState.value;
   const [editing, setEditing] = useState(false);
 
   // Deleting a session leaves you standing on it, and a URL can point at one
@@ -140,6 +141,7 @@ export function SessionDetailScreen({
       <RecordingSection
         session={session}
         recording={recording}
+        checking={!recording && session.recordingId !== null && !recordingState.resolved}
         isAdmin={isAdmin}
         onOpenLedger={onOpenLedger}
         onPlay={onPlay}
@@ -396,6 +398,7 @@ function AttendanceSection({ session }: { session: SessionRow }) {
 function RecordingSection({
   session,
   recording,
+  checking,
   isAdmin,
   onOpenLedger,
   onPlay,
@@ -403,6 +406,8 @@ function RecordingSection({
 }: {
   session: SessionRow;
   recording: RecordingRow | null;
+  /** The session has a recording, and it has not answered yet. */
+  checking: boolean;
   isAdmin: boolean;
   onOpenLedger: (recording: RecordingRow) => void;
   onPlay: (recording: RecordingRow, session: SessionRow, itemId?: string) => void;
@@ -444,7 +449,19 @@ function RecordingSection({
       <Card>
         {error ? <Notice tone="error">{error}</Notice> : null}
 
-        {!recording ? (
+        {checking ? (
+          /*
+            NOT "NO RECORDING YET" BEFORE THE RECORDING HAS ANSWERED. On a
+            phone that said so, with Upload and Import under it, for nearly two
+            seconds on a session whose recording was waiting to be published.
+            A file going up stays in view: the first one creates the recording,
+            and this is the moment between.
+          */
+          <>
+            <Text style={styles.meta}>Checking the recording…</Text>
+            {choosing ? <UploadPanel uploads={uploads} recording={recording} /> : null}
+          </>
+        ) : !recording ? (
           session.notRecorded ? (
             /*
               ALREADY SETTLED. Saying "no recording yet" under a line that says
@@ -717,12 +734,18 @@ function RecordingCard({
       {needsMedia ? (
         <Notice tone="info">
           {failedZoom
-            ? 'Nothing on this recording can be played yet. Retry the Zoom import, or upload the file.'
+            ? 'Nothing on this recording can be played yet. Retry the Zoom import, or remove the failed file and upload the class instead.'
             : 'Nothing on this recording can be played yet. Upload the file, or import it from Zoom.'}
         </Notice>
       ) : null}
       {r.status === 'needsAttention' && r.attentionReason ? (
         <Notice tone="error">{r.attentionReason}</Notice>
+      ) : null}
+      {/* A PLAYABLE FILE BESIDE A FAILED ONE still needs attention, and there
+          is no Publish here to explain it: an upload made beside a failed
+          import left the card with no word of what was in the way. */}
+      {r.status === 'needsAttention' && playable && blockers.includes('failed') ? (
+        <Notice tone="info">Retry or remove the failed file to publish.</Notice>
       ) : null}
 
       <Sheet visible={menuOpen} title={r.title} onClose={() => setMenuOpen(false)} closeAt="corner">

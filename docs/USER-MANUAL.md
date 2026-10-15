@@ -662,7 +662,9 @@ Each recording moves through a few states:
   nothing still copying or failed, and it is blocked if the session's due date
   has already passed, because nobody would be able to open it.
 - **Needs attention** — flagged for a problem (for example, a Zoom import that
-  needs review). Publish is blocked until it has a file students can play.
+  failed). Publish is blocked until it has a file students can play and no
+  failed file: retry the import, or remove the failed file and upload the
+  class instead.
 - **Unpublished** — pulled back from students after being live. It goes back to
   Draft to be fixed, then out again.
 - **Archived** — closed for good, one recording at a time. Like unpublishing,

@@ -82,13 +82,8 @@ export const createRecording = call<{ sessionId: string }, { id: string }>(
  * whose arm on the recordings rule is a per-document check (published, and they
  * are enrolled in its course). A `__name__` query would be a list instead, and
  * would fail closed on exactly that population.
- */
-export function useRecording(recordingId: string | null): RecordingRow | null {
-  return useRecordingState(recordingId).value;
-}
-
-/**
- * As useRecording, plus whether the listener has answered.
+ *
+ * Its value, and whether the listener has answered.
  *
  * `scope` is for the second reader of the same document. Listener errors are
  * keyed by label, so two subscriptions sharing `recording` share one entry: the
