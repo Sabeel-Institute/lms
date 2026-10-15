@@ -24,7 +24,9 @@ CALLER_PIDS=" $$ $PPID "
 # the lsof branch existed.
 if command -v ss >/dev/null 2>&1; then
   pids_on_port() {
-    ss -lptn "sport = :$1" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u
+    # EVERY pid on the line: a socket shared by a parent and its fork lists
+    # both, and a greedy `sed` capture kept only the last of them.
+    ss -lptn "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u
   }
 elif command -v lsof >/dev/null 2>&1; then
   pids_on_port() {
