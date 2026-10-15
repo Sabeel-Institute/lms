@@ -21,6 +21,9 @@
  * APNS_KEY_FILE, or `~/.config/sabeel-lms/AuthKey_<APNS_KEY_ID>.p8`; its id
  * and the team id from `functions/.env.oursabeel-lms`.
  *
+ * FCM sends authenticate as Application Default Credentials, or as
+ * CHECK_ACCESS_TOKEN when that is set (see `check:push`).
+ *
  * Writes nothing: no Firestore document, no audit row, no notification
  * record. The token is in the `devices` collection of whichever Firestore the
  * device registered with.
@@ -87,7 +90,16 @@ if (!token || token.length < 100) {
 }
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
-admin.initializeApp({ projectId: FIREBASE_PROJECT_ID });
+// CHECK_ACCESS_TOKEN, as `check:push` takes it: a user token for the project's
+// owner (`gcloud auth print-access-token --account=<owner>`), when Application
+// Default Credentials on this machine belong to another Google account.
+const accessToken = process.env.CHECK_ACCESS_TOKEN;
+admin.initializeApp({
+  projectId: FIREBASE_PROJECT_ID,
+  ...(accessToken
+    ? { credential: { getAccessToken: async () => ({ access_token: accessToken, expires_in: 3000 }) } }
+    : {}),
+});
 const id = await admin.messaging().send({ token, ...fcmMessage(message(path)) });
 console.log(`sent ${id}`);
 process.exit(0);
