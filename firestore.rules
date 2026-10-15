@@ -69,6 +69,19 @@ service cloud.firestore {
       return isActive() && role() == 'student';
     }
 
+    /*
+     * A STUDENT WHO WRITES IS ONE WHOSE RECORD STILL SAYS SO, as staff are
+     * (`staffRecordAgrees`). A token keeps its claims for up to an hour, and a
+     * student disabled a minute ago went on marking recordings complete on
+     * their class's ledger for the rest of it. Writes only: reading their own
+     * work for that hour shows them nothing new, and every read a student
+     * makes would otherwise pay for this one.
+     */
+    function isWritingStudent() {
+      return isStudent()
+        && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'active';
+    }
+
     // Staff who may see one class's data: an admin (reads nothing), or a manager
     // assigned to that class. The per-row get() means a query using this must be
     // constrained to a single class — the same affordability rule as /assignments
@@ -310,7 +323,7 @@ service cloud.firestore {
       // `delete: if false` leaving no way back. A row that grants the writer
       // nothing, and permanently silences another student.
       function mine() {
-        return isStudent()
+        return isWritingStudent()
           && request.resource.data.studentUid == request.auth.uid
           && progressId == request.resource.data.studentUid + '_'
               + request.resource.data.recordingId;
@@ -476,7 +489,7 @@ service cloud.firestore {
               ? draftId.split('_')[0] == request.auth.uid
               : resource.data.studentUid == request.auth.uid);
       allow list: if isStudent() && resource.data.studentUid == request.auth.uid;
-      allow create: if isStudent()
+      allow create: if isWritingStudent()
         && request.resource.data.studentUid == request.auth.uid
         && draftId == request.auth.uid + '_' + request.resource.data.courseworkId
         && request.resource.data.keys().hasOnly(
@@ -484,7 +497,7 @@ service cloud.firestore {
         && request.resource.data.files == {}
         && noteShape()
         && workIsOpen(request.resource.data.courseworkId, request.resource.data.courseId);
-      allow update: if isStudent()
+      allow update: if isWritingStudent()
         && resource.data.studentUid == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['note', 'updatedAt'])
         && noteShape()
@@ -526,7 +539,7 @@ service cloud.firestore {
       // otherwise one student can plant a row under another student's id and
       // lock them out of marking that recording complete, permanently.
       function mineC() {
-        return isStudent()
+        return isWritingStudent()
           && request.resource.data.studentUid == request.auth.uid
           && completionId == request.resource.data.studentUid + '_'
               + request.resource.data.recordingId;
@@ -579,7 +592,7 @@ service cloud.firestore {
       // `courseId` to the student's OWN assignment for that recording settles
       // both — the grant must exist, and the class is the grant's, not the
       // caller's to choose. One `get`, on a path the caller already knows.
-      allow create: if isStudent()
+      allow create: if isWritingStudent()
         && request.resource.data.keys().hasOnly(
              ['studentUid', 'recordingId', 'courseId', 'action', 'actor', 'at'])
         && request.resource.data.studentUid == request.auth.uid
@@ -669,6 +682,12 @@ service cloud.firestore {
       function isMine() {
         return isActive() && request.auth.uid == uid;
       }
+      // A write also asks the person's record, as every other write of theirs
+      // does: a token still holding its claims re-registered the device and
+      // rewrote the switches of an account disabled, or deleted, minutes before.
+      function isMineToWrite() {
+        return isMine() && (role() == 'student' ? isWritingStudent() : staffRecordAgrees());
+      }
 
       // Both populations write here — the first client-writable document staff
       // have. `students` and `staffUsers` deliberately refuse self-writes
@@ -680,11 +699,11 @@ service cloud.firestore {
       // create, so diff() against it is an evaluation error rather than a
       // denial. Whitelisting the keys is what stops this document quietly
       // becoming a place to store anything.
-      allow create: if isMine()
+      allow create: if isMineToWrite()
         && request.resource.data.keys().hasOnly(
              ['recordingReady', 'lastDay', 'assignmentPosted', 'handInLastDay', 'workReturned',
               'attendanceMissing', 'updatedAt']);
-      allow update: if isMine()
+      allow update: if isMineToWrite()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
              ['recordingReady', 'lastDay', 'assignmentPosted', 'handInLastDay', 'workReturned',
               'attendanceMissing', 'updatedAt']);
@@ -707,7 +726,8 @@ service cloud.firestore {
          * the send path and ordered by a trigger, so a field nobody expects is a
          * field nobody validates.
          *
-         * NOT BOUNDED AGAINST `request.time`, deliberately. `registeredAt` is
+         * NOT BOUNDED AGAINST `request.time`, deliberately (only absolutely,
+         * by `isTime`, which a fast clock passes). `registeredAt` is
          * the device's own `Date.now()` and nothing on the server reads it —
          * `onDeviceRegistered` orders by Firestore's `updateTime` precisely so a
          * client cannot buy that decision. A bound would therefore protect
@@ -715,7 +735,7 @@ service cloud.firestore {
          * does not wait for this write, so that refusal is silent: the settings
          * screen would report a registered, working device whose push is dead.
          */
-        allow create, update: if isMine()
+        allow create, update: if isMineToWrite()
           && request.resource.data.keys().hasOnly(['token', 'platform', 'registeredAt'])
           && request.resource.data.token == token
           && request.resource.data.platform is string

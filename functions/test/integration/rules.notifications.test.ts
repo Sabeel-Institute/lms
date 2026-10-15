@@ -8,7 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID } from '@sabeel/shared';
-import { seedStaffRecords } from './staffRecords';
+import { seedStaffRecords, seedStudentRecords } from './staffRecords';
 
 /**
  * `notifications/{uid}` — the first document either population may write.
@@ -62,6 +62,7 @@ const MANAGER = 'mgr1';
 beforeEach(async () => {
   await testEnv.clearFirestore();
   await seedStaffRecords(testEnv, { [MANAGER]: 'manager' });
+  await seedStudentRecords(testEnv, [STUDENT, OTHER]);
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await setDoc(doc(db, COLLECTIONS.notifications, STUDENT), { lastDay: false, updatedAt: 1 });
@@ -133,6 +134,31 @@ describe('notification preferences', () => {
 });
 
 describe('device tokens', () => {
+  /*
+   * DISABLED OR DELETED, WITH A TOKEN THAT STILL SAYS ACTIVE. Disabling took
+   * a person's devices away so nothing reached them, and the token they held
+   * put a device straight back, and rewrote their switches, for up to an hour.
+   */
+  it('a student or colleague whose account was switched off registers nothing', async () => {
+    await seedStudentRecords(testEnv, [STUDENT], 'deleted');
+    await assertFails(
+      setDoc(doc(student().firestore(), COLLECTIONS.notifications, STUDENT, 'devices', 'tok-z'), {
+        token: 'tok-z',
+        platform: 'web',
+        registeredAt: 2,
+      }),
+    );
+    await assertFails(setDoc(doc(student().firestore(), COLLECTIONS.notifications, STUDENT), { recordingReady: false, updatedAt: 2 }));
+    await seedStaffRecords(testEnv, { [MANAGER]: 'manager' }, 'disabled');
+    await assertFails(
+      setDoc(doc(manager().firestore(), COLLECTIONS.notifications, MANAGER, 'devices', 'tok-m'), {
+        token: 'tok-m',
+        platform: 'web',
+        registeredAt: 2,
+      }),
+    );
+  });
+
   it('lets a person register and unregister their own devices', async () => {
     const db = student().firestore();
     await assertSucceeds(

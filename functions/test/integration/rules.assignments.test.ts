@@ -8,7 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { addDoc, collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, assignmentId, completionId } from '@sabeel/shared';
-import { seedStaffRecords } from './staffRecords';
+import { seedStaffRecords, seedStudentRecords } from './staffRecords';
 
 let testEnv: RulesTestEnvironment;
 
@@ -61,6 +61,7 @@ const THEIR_REC = 'recTheirs';
 beforeEach(async () => {
   await testEnv.clearFirestore();
   await seedStaffRecords(testEnv, { [ADMIN]: 'admin', [MINE]: 'manager', [THEIRS]: 'manager' });
+  await seedStudentRecords(testEnv, [STUDENT, OUTSIDER]);
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     const cls = (id: string, managerUids: string[]) =>
@@ -304,6 +305,35 @@ describe('completions: self-only client writes', () => {
     await assertFails(setDoc(ref, { ...honest, updatedAt: 8640000000000001 }));
     await assertSucceeds(setDoc(ref, honest));
     await assertFails(setDoc(ref, { ...honest, completedAt: 'x' }));
+  });
+
+  /*
+   * DISABLED, WITH A TOKEN THAT STILL SAYS ACTIVE. A token keeps its claims
+   * for up to an hour; a student disabled a minute ago went on writing to
+   * their class's ledger for the rest of it. The record decides.
+   */
+  it('a student disabled since their token was issued marks nothing complete', async () => {
+    await seedStudentRecords(testEnv, [STUDENT], 'disabled');
+    await assertFails(
+      setDoc(doc(student().firestore(), COLLECTIONS.completions, completionId(STUDENT, REC2)), {
+        studentUid: STUDENT,
+        recordingId: REC2,
+        courseId: CLASS_MINE,
+        completed: true,
+        completedAt: 2,
+        updatedAt: 2,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(student().firestore(), COLLECTIONS.completionEvents, 'e-disabled'), {
+        studentUid: STUDENT,
+        recordingId: REC,
+        courseId: CLASS_MINE,
+        action: 'complete',
+        actor: 'student',
+        at: 5,
+      }),
+    );
   });
 
   it('a student cannot record a completion once their grant has lapsed', async () => {

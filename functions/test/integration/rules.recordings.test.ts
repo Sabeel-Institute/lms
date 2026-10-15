@@ -15,7 +15,7 @@ import {
   assignmentId,
   enrollmentId,
 } from '@sabeel/shared';
-import { seedStaffRecords } from './staffRecords';
+import { seedStaffRecords, seedStudentRecords } from './staffRecords';
 
 let testEnv: RulesTestEnvironment;
 
@@ -100,6 +100,7 @@ beforeEach(async () => {
   CLOSED = `recClosed-run${run}`;
   await testEnv.clearFirestore();
   await seedStaffRecords(testEnv, { [ADMIN]: 'admin', [MINE]: 'manager' });
+  await seedStudentRecords(testEnv, [STUDENT, OUTSIDER]);
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     const cls = (id: string, managerUids: string[]) =>
@@ -475,6 +476,18 @@ describe('listeningProgress', () => {
   it('bounds times at LATEST_CLIENT_TIME, the number @sabeel/shared and check:documents use', () => {
     const rules = readFileSync(new URL('../../../firestore.rules', import.meta.url), 'utf8');
     expect(rules).toContain(`v > 0 && v < ${LATEST_CLIENT_TIME}`);
+  });
+
+  /*
+   * DISABLED, WITH A TOKEN THAT STILL SAYS ACTIVE. A token keeps its claims
+   * for up to an hour; a student disabled a minute ago went on writing to
+   * their class's ledger for the rest of it. The record decides.
+   */
+  it('a student disabled since their token was issued saves no more progress', async () => {
+    const ref = doc(student().firestore(), COLLECTIONS.listeningProgress, mineId());
+    await assertSucceeds(setDoc(ref, row(STUDENT)));
+    await seedStudentRecords(testEnv, [STUDENT], 'disabled');
+    await assertFails(setDoc(ref, { ...row(STUDENT), positionMs: 5000 }));
   });
 
   it('takes the part and version a student is in, and only real ones', async () => {

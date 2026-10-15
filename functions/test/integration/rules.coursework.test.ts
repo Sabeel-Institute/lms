@@ -8,7 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, MAX_ANSWER_CHARS, submissionId } from '@sabeel/shared';
-import { seedStaffRecords } from './staffRecords';
+import { seedStaffRecords, seedStudentRecords } from './staffRecords';
 import { setBackgroundTriggers } from '../backgroundTriggers';
 
 /**
@@ -116,6 +116,7 @@ const draftOf = (studentUid: string, courseworkId: string, note = 'Half written'
 beforeEach(async () => {
   await testEnv.clearFirestore();
   await seedStaffRecords(testEnv, { [ADMIN]: 'admin', [MINE]: 'manager', [THEIRS]: 'manager' });
+  await seedStudentRecords(testEnv, [STUDENT, CLASSMATE]);
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await Promise.all([
@@ -265,6 +266,18 @@ describe('drafts', () => {
     const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
     await assertSucceeds(updateDoc(mine, { note: 'ب'.repeat(MAX_ANSWER_CHARS), updatedAt: 2 }));
     await assertFails(updateDoc(mine, { note: 'ب'.repeat(MAX_ANSWER_CHARS + 1), updatedAt: 3 }));
+  });
+
+  /*
+   * DISABLED, WITH A TOKEN THAT STILL SAYS ACTIVE. A token keeps its claims
+   * for up to an hour; a student disabled a minute ago went on writing to
+   * their class's ledger for the rest of it. The record decides.
+   */
+  it('a student disabled since their token was issued saves no more of their answer', async () => {
+    const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
+    await assertSucceeds(updateDoc(mine, { note: 'Before', updatedAt: 2 }));
+    await seedStudentRecords(testEnv, [STUDENT], 'disabled');
+    await assertFails(updateDoc(mine, { note: 'After', updatedAt: 3 }));
   });
 
   it('a draft is saved at a time a date can hold', async () => {
