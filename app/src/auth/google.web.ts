@@ -5,7 +5,7 @@ import {
   signInWithPopup,
   signInWithRedirect,
 } from 'firebase/auth';
-import { ALLOWED_EMAIL_DOMAIN } from '@sabeel/shared';
+import { ALLOWED_EMAIL_DOMAIN, SIGN_UP_REFUSED } from '@sabeel/shared';
 import { auth } from '../firebase';
 import { captureError } from '../sentry';
 
@@ -24,10 +24,18 @@ import { captureError } from '../sentry';
 
 /**
  * A failed signInWithRedirect surfaces ONLY here, on the page load after the
- * bounce back. Without this call the user lands on the sign-in screen again with
- * no error shown and nothing recorded anywhere.
+ * bounce back: the sign-in screen says why (`SignInScreen`), as it does for a
+ * popup. Reported only when it is not the door refusing an account, which is
+ * an answer, not a fault: a colleague in WhatsApp's browser who picked their
+ * personal Gmail was told nothing, tried again, and each try was an error.
  */
-getRedirectResult(auth, browserPopupRedirectResolver).catch((e) => captureError(e, { source: 'redirectSignIn' }));
+export const redirectFailure: Promise<unknown> = getRedirectResult(auth, browserPopupRedirectResolver).then(
+  () => null,
+  (e: unknown) => {
+    if (!String((e as { message?: unknown }).message ?? '').includes(SIGN_UP_REFUSED)) captureError(e, { source: 'redirectSignIn' });
+    return e;
+  },
+);
 
 export async function signInWithGoogle(): Promise<void> {
   const provider = new GoogleAuthProvider();

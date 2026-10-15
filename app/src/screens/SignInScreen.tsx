@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { APP_NAME, FIRST_ADMIN_LOCAL_PART } from '@sabeel/shared';
 import { auth } from '../firebase';
-import { signInWithGoogle } from '../auth/google';
+import { redirectFailure, signInWithGoogle } from '../auth/google';
 import { DISABLED_ACCOUNT, REFUSED_ACCOUNT, signInMessage } from '../auth/signInMessage';
 import type { SessionEnd } from '../session';
 import { devSignIn, devSignInAvailable } from '../auth/devSignIn';
@@ -35,6 +35,17 @@ export function SignInScreen({ ended }: { ended: SessionEnd | null }) {
     if (ended === 'refused') setError(REFUSED_ACCOUNT);
     else if (ended === 'disabled') setError(DISABLED_ACCOUNT);
   }, [ended]);
+  // A Google sign-in that went by redirect comes back to this screen with a
+  // new page: its refusal is said here, as a popup's is.
+  useEffect(() => {
+    let live = true;
+    void redirectFailure.then((e) => {
+      if (live && e) setError(signInMessage(e));
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // `fn` is called inside the press, before any await, so the Google popup
   // still opens from the tap that asked for it.

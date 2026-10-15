@@ -37,6 +37,9 @@ function ensureConfigured() {
  * way to switch users — on a shared or handed-over device that is the difference
  * between signing out and only appearing to.
  */
+/** The web's redirect sign-in failure (google.web.ts); a phone signs in without a redirect. */
+export const redirectFailure: Promise<unknown> = Promise.resolve(null);
+
 export async function googleSignOut(): Promise<void> {
   ensureConfigured();
   await GoogleSignin.signOut().catch(() => undefined);
