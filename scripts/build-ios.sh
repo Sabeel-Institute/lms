@@ -95,8 +95,10 @@ UNLOCK_HELP="Unlock it, then re-run:
 
   security unlock-keychain ${KEYCHAIN}
 
-Type the password at the prompt (not -p, which puts it in shell history). The
-unlock is runtime state shared by this user's processes; a reboot locks it again."
+Type the password at the prompt (not -p, which puts it in shell history), IN
+THE SAME LOGIN SESSION that runs this script: macOS keeps the unlock per login,
+so an unlock typed in another ssh session does not reach this one. A reboot
+locks it again."
 
 security show-keychain-info "$KEYCHAIN" >/dev/null 2>&1 || die "The signing keychain is locked:
   ${KEYCHAIN}

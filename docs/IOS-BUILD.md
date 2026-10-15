@@ -272,6 +272,10 @@ with no alpha channel, the native DSN present, and the privacy manifest.
 - **Over ssh the login keychain is locked**, and the archive would die at its
   first framework with `errSecInternalComponent`. Unlock it, typing the password
   at the prompt: `security unlock-keychain ~/Library/Keychains/login.keychain-db`.
+  **The unlock belongs to one login session.** Two ssh logins as the same user
+  are two sessions: an unlock typed in one leaves the keychain locked in the
+  other (seen: `errSecInternalComponent` in a session on ttys002 while another
+  on ttys001 had just unlocked it). Unlock in the session that builds.
 - **The build label** is `EXPO_PUBLIC_COMMIT`, inlined when the archive's bundle
   phase runs; a dirty tree stamps it with `+`. Commit first, then build.
 - **`ios.buildNumber` must increase on every upload**, even of the same
