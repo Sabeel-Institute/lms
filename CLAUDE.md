@@ -318,6 +318,19 @@ Not for routine layout work. Use it for:
 Plus **before a release**, and whenever Faisal asks. That pre-release pass is
 mandatory, not optional.
 
+**Run the device pass yourself; never hand Faisal a checklist the AVD can
+run.** Nearly every "test it on a phone" step has a stand-in here, at
+conditions a phone at home cannot give: a slow connection (a throttling proxy —
+the emulator ignores its own speed setting), the lock screen and its
+controls, an app killed mid-play, offline, a second device beside a browser,
+another time of day. On 2026-10-15 a device checklist went to Faisal, who had
+no slow connection to test with; the same list on the AVD ran every step but
+one and found a bug before release. Ask him only for what has no stand-in (a
+real network's behaviour, physical sensors, a staff Google sign-in on the
+device), and tell him which steps already ran. Techniques: the skill's
+"Device tests without a device"; this project's specifics: `docs/DEV-TOOLING.md`,
+"The device pass on the AVD".
+
 **Check who owns the AVD before booting it.** There is one `tb_emu` on this
 machine and all three repos default to it, so a boot can walk into another
 session's run:

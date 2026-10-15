@@ -558,6 +558,32 @@ promote (409 = already an admin, fine).
   `adb logcat -d | grep -i deprecated` for the actual warning rather than trusting
   the toast — and it never appears in a release build.
 
+### The device pass on the AVD
+
+Run it here before asking anyone to hold a phone; the stack skill's "Device
+tests without a device" has the techniques and both tools, installed under
+`~/.claude/skills/expo-firebase-stack/tools/`. This project's specifics:
+
+- **A slow phone connection**: the emulator's own speed setting does nothing,
+  so a proxy on **61312** (this checkout's range, used by nothing else):
+
+  ```bash
+  node ~/.claude/skills/expo-firebase-stack/tools/slow-proxy.mjs 61312 1600 800
+  adb shell settings put global http_proxy 10.0.2.2:61312   # :0 to undo
+  ```
+
+  1.6 Mbit/s is a slow 4G phone. "Video from Zoom" (3 h 7 min) on the live
+  test course is the long recording to start: its index is 3.5 MB, 2.0 MB
+  for Audio only. On a release build that points at production, sign in as
+  one of Faisal's test students (he has their addresses).
+- **The screen**: `avd-ui.py tap <testID>` and `type`; the player never goes
+  idle while it plays or its ring turns, so read it from `screencap` then.
+  With a 1080×2400 screenshot, the Play button's centre is a good pixel to
+  sample for its pressed tint (85% of the accent).
+- **What cannot run here**: a staff Google sign-in (Faisal's account) — do the
+  staff steps in the browser suite — and anything about a real network's
+  behaviour rather than its speed.
+
 ## Verifying the dev sign-in row is not shippable
 
 `app/src/auth/devSignIn.ts` is gated on `IS_DEV && USE_EMULATORS` — two
