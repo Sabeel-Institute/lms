@@ -68,6 +68,7 @@ describe('the Android identity', () => {
   const expo = JSON.parse(read('app/app.json')).expo as {
     name: string;
     android: { package: string };
+    ios: { bundleIdentifier: string };
   };
   const pkg = expo.android.package;
   const gradle = read('app/android/app/build.gradle');
@@ -80,6 +81,12 @@ describe('the Android identity', () => {
     for (const file of ['MainActivity.kt', 'MainApplication.kt']) {
       expect(read(`${dir}/${file}`)).toMatch(new RegExp(`^package ${pkg.replace(/\./g, '\\.')}$`, 'm'));
     }
+  });
+
+  /** The iOS app is registered (Apple, Firebase) on the same id; prebuild
+   *  writes it from app.json, and app/ios is never committed. */
+  it('is the iOS bundle id too', () => {
+    expect(expo.ios.bundleIdentifier).toBe(pkg);
   });
 
   it('carries the app’s names', () => {
