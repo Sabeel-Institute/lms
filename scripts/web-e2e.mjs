@@ -2285,6 +2285,22 @@ const carried = await admin
   .filter({ visible: true })
   .evaluateAll((els) => els.map((e) => e.value ?? e.textContent));
 check('a reason typed for one student is not on the next student’s page', carried.length === 0, JSON.stringify(carried));
+
+/*
+ * A CLEARED DATE IS A FIELD BEING RETYPED. One Backspace emptied "New date",
+ * the late date was worked out from '' and the whole grade page went, with
+ * the reason typed above it.
+ */
+await tap(admin, 'grade-options');
+await admin.getByTestId('grade-reason').filter({ visible: true }).first().fill('HUNT: date cleared');
+await admin.getByLabel('New date').fill('');
+await admin.waitForTimeout(300);
+check(
+  'clearing the new date keeps the form, and Give more time waits for a date',
+  (await admin.getByTestId('grade-reason').filter({ visible: true }).first().inputValue()) === 'HUNT: date cleared' &&
+    (await admin.getByTestId('grade-more-time').filter({ visible: true }).first().getAttribute('aria-disabled')) === 'true',
+);
+await tap(admin, 'grade-options');
 await admin.evaluate(() => document.activeElement?.blur());
 await admin.keyboard.press('j');
 await titleIs('Fatima Ahmed');

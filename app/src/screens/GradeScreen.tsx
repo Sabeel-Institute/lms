@@ -628,7 +628,8 @@ function RetryOption({
 }) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(() => offeredAnotherTry(cw, sub, todayInZone(INSTITUTE_TIMEZONE)).dueDate);
-  const lateUntil = cw.lateUntil === null ? null : addDays(date, daysUntilDue(cw.lateUntil, cw.dueDate));
+  // A cleared field is '' until a day is picked again: no late date from it.
+  const lateUntil = cw.lateUntil === null || !date ? null : addDays(date, daysUntilDue(cw.lateUntil, cw.dueDate));
   return (
     <View style={styles.returnNow}>
       <Button testID="grade-retry" label="Ask for another try…" variant="secondary" hug onPress={() => setOpen((o) => !o)} />
@@ -649,6 +650,7 @@ function RetryOption({
             testID="grade-retry-confirm"
             label="Return and ask for another try"
             busy={active === 'retry'}
+            disabled={!date}
             onPress={() => onRetry({ dueDate: date, lateUntil })}
           />
         </Card>
@@ -683,7 +685,8 @@ function StudentOptions({
   // more time is more, and the server refuses a date that ends sooner than
   // either (`offeredMoreTime`). Late work keeps the gap the class has.
   const [date, setDate] = useState(() => offeredMoreTime(cw, sub, todayInZone(INSTITUTE_TIMEZONE)).dueDate);
-  const lateUntil = cw.lateUntil === null ? null : addDays(date, daysUntilDue(cw.lateUntil, cw.dueDate));
+  // A cleared field is '' until a day is picked again: no late date from it.
+  const lateUntil = cw.lateUntil === null || !date ? null : addDays(date, daysUntilDue(cw.lateUntil, cw.dueDate));
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const act = (key: string, fn: () => Promise<unknown>) =>
@@ -731,7 +734,7 @@ function StudentOptions({
               testID="grade-more-time"
               label="Give more time"
               busy={active === 'time'}
-              disabled={!reason.trim()}
+              disabled={!reason.trim() || !date}
               onPress={() => act('time', () => giveMoreTime({ courseworkId: cw.id, studentUid, dueDate: date, lateUntil, reason: reason.trim() }))}
             />
             <Button
