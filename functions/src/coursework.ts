@@ -215,24 +215,28 @@ async function inBatches<T>(items: T[], write: (batch: FirebaseFirestore.WriteBa
  */
 export async function reconcileStudentCoursework(courseId: string, studentUid: string): Promise<void> {
   const todayIs = today();
-  const posted = await db()
-    .collection(COLLECTIONS.coursework)
-    .where('courseId', '==', courseId)
-    .where('status', '==', 'posted')
-    .get();
-  for (const doc of posted.docs) {
-    const cw = doc.data() as CourseworkDoc;
-    const ref = subRef(studentUid, doc.id);
-    await db().runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const sub = snap.data() as SubmissionDoc | undefined;
+  // ONE TRANSACTION, two reads: the class's posted work and the student's in
+  // it. One transaction per assignment, in turn, kept Add a student waiting
+  // three seconds in a class a term old.
+  await db().runTransaction(async (tx) => {
+    const posted = await tx.get(
+      db().collection(COLLECTIONS.coursework).where('courseId', '==', courseId).where('status', '==', 'posted'),
+    );
+    const theirs = await tx.get(
+      db().collection(COLLECTIONS.submissions).where('courseId', '==', courseId).where('studentUid', '==', studentUid),
+    );
+    const subOf = new Map(theirs.docs.map((d) => [(d.data() as SubmissionDoc).courseworkId, d.data() as SubmissionDoc]));
+    for (const doc of posted.docs) {
+      const cw = doc.data() as CourseworkDoc;
+      const sub = subOf.get(doc.id);
+      const ref = subRef(studentUid, doc.id);
       if (!sub) {
         if (receivesOnJoining(cw, todayIs)) tx.set(ref, freshSubmission(doc.id, cw, studentUid));
       } else if (!sub.active && returnsOnComingBack(sub, todayIs)) {
         tx.update(ref, { active: true });
       }
-    });
-  }
+    }
+  });
 }
 
 /** A student left the course: their assignments leave To do; their work stays as record. */
