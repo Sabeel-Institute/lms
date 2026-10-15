@@ -31,10 +31,20 @@ export function VideoSurface() {
   }, [el]);
   if (!el) return null;
   return (
-    <VideoFrame onFullscreen={() => void el.requestFullscreen?.()}>
+    <VideoFrame onFullscreen={() => enlarge(el)}>
       <View ref={host} testID="player-video" style={StyleSheet.absoluteFill} />
     </VideoFrame>
   );
+}
+
+/**
+ * Full screen where the browser has it, and the video's own full screen on
+ * an iPhone, whose Safari has no `requestFullscreen` on any element: there
+ * the button did nothing, and a slide's text stayed phone-width.
+ */
+function enlarge(el: HTMLVideoElement): void {
+  if (el.requestFullscreen) void el.requestFullscreen();
+  else (el as HTMLVideoElement & { webkitEnterFullscreen?: () => void }).webkitEnterFullscreen?.();
 }
 
 /** Where the session's video waits while no player screen shows it: in the page, out of sight. */
