@@ -51,7 +51,7 @@ import { useOneAtATime } from '../oneAtATime';
 import { MediaList } from '../components/MediaList';
 import { retryZoomImport } from '../zoom';
 import { sortByName, useRosterState, type EnrollmentRow } from '../structure';
-import { useStudents } from '../students';
+import { useStudentsState } from '../students';
 import { useWide } from '../useWidth';
 import { getTheme, spacing } from '../theme';
 import { errorText } from '../errors';
@@ -236,10 +236,13 @@ function AttendanceSection({ session }: { session: SessionRow }) {
   // claim about the class, and the register said it on every cold load.
   const rosterState = useRosterState(session.courseId);
   const roster = rosterState ?? NO_ROSTER;
-  const students = useStudents(true);
+  // NAMES BEFORE ROWS: drawn first, the register was account ids in id order,
+  // re-sorted by name a moment later under the finger marking it.
+  const students = useStudentsState(true);
+  const listed = rosterState !== null && students !== null;
   const nameByUid = useMemo(() => {
     const m = new Map<string, string>();
-    for (const s of students) m.set(s.uid, s.displayName);
+    for (const s of students ?? []) m.set(s.uid, s.displayName);
     return m;
   }, [students]);
   // Sorted by name: this is a register, marked by hand, once per student.
@@ -313,7 +316,7 @@ function AttendanceSection({ session }: { session: SessionRow }) {
         {/* With nobody on the roster there is nothing to mark, so telling someone
             to mark it is just noise — say the one thing they can act on. */}
         <Text style={styles.meta}>
-          {rosterState === null
+          {!listed
             ? 'Checking the roster…'
             : activeUids.length === 0
               ? 'Enrol students in this course first — attendance is taken from its roster.'
@@ -321,7 +324,7 @@ function AttendanceSection({ session }: { session: SessionRow }) {
               ? 'Submitted. Only excused students get the recording.'
               : 'Everyone starts as Present — mark who was away, and excuse whoever should listen to the recording. Only excusing grants access, and nothing is granted until you submit.'}
         </Text>
-        {rosterState === null ? null : activeUids.length === 0 ? (
+        {!listed ? null : activeUids.length === 0 ? (
           <Empty>No students enrolled in this course yet.</Empty>
         ) : (
           <>

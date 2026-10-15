@@ -21,7 +21,7 @@ import {
 } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useListenerFailed, useLiveQuery } from './liveQuery';
-import { useStudents } from './students';
+import { useStudentsState } from './students';
 import { useCourseSessionsState } from './sessions';
 import { useRosterState, type EnrollmentRow } from './structure';
 import type { RecordingRow } from './recordings';
@@ -254,8 +254,10 @@ export function useRecordingLedger(
     (d) => ({ listenedMs: d.listenedMs, updatedAt: d.updatedAt }),
     (d) => d.studentUid,
   );
-  const students = useStudents(true);
-  const nameByUid = useMemo(() => new Map(students.map((s) => [s.uid, s.displayName])), [students]);
+  // NAMES BEFORE ROWS: drawn first, the rows were 28-character account ids
+  // in id order, re-sorted by name a moment later under a teacher's finger.
+  const students = useStudentsState(true);
+  const nameByUid = useMemo(() => new Map((students ?? []).map((s) => [s.uid, s.displayName])), [students]);
   // The four listeners this join reads. Matched on the LABEL, so a refusal on
   // any of them ends the loading state rather than leaving it for ever.
   const failed = useListenerFailed([
@@ -263,6 +265,7 @@ export function useRecordingLedger(
     'ledgerCompletions',
     'ledgerOverrides',
     'ledgerProgress',
+    'students',
   ]);
 
   return useMemo(() => {
@@ -306,7 +309,7 @@ export function useRecordingLedger(
      * Both have shipped here. The groups derived by ABSENCE stay empty for
      * either, and the screen says which one it is.
      */
-    const unknown = assignments === null;
+    const unknown = assignments === null || students === null;
     const loading = unknown && !failed;
     /*
      * WHICH GRANTS COUNT. Published: the active ones — a grant switched off
