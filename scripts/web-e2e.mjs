@@ -2188,6 +2188,51 @@ check(
   JSON.stringify({ notSentYet, handInSaysWhy, sentWhenBack }),
 );
 
+/*
+ * TYPED OFFLINE OVER AN OLDER ANSWER. A phone with no signal queued its
+ * save; the essay was written on the laptop meanwhile; the phone's save
+ * arrived later and replaced the essay, and the laptop then followed it.
+ * Now the phone's save is refused, the essay stays, and the phone keeps what
+ * it typed aside, on screen, to copy from.
+ */
+const ESSAY = 'HUNT: the essay, written on the laptop.';
+await student.context().setOffline(true);
+await student.getByTestId('work-note').click();
+await student.keyboard.press('ControlOrMeta+End');
+await student.keyboard.type(' Bus notes.');
+await student.getByText('Not sent yet', { exact: false }).filter({ visible: true }).first().waitFor({ timeout: 15000 }).catch(() => {});
+{
+  const draftDoc = (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId);
+  const r = await fetch(`${FS_READ}/drafts/${draftDoc.name.split('/').pop()}?updateMask.fieldPaths=note&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=basedOn`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields: {
+        note: { stringValue: ESSAY },
+        updatedAt: { integerValue: String(Date.now()) },
+        basedOn: { integerValue: draftDoc.fields.updatedAt.integerValue },
+      },
+    }),
+  });
+  if (!r.ok) throw new Error(`the laptop's save failed: ${r.status}`);
+}
+await student.context().setOffline(false);
+const keptAside = await student
+  .getByTestId('work-set-aside')
+  .filter({ hasText: 'Bus notes.' })
+  .waitFor({ timeout: 30000 })
+  .then(() => true, () => false);
+await student.waitForTimeout(1500);
+const storedNow = (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue;
+const editorFollows = await student
+  .waitForFunction((t) => document.querySelector('[data-testid="work-note"]')?.textContent.includes(t), ESSAY, { timeout: 15000 })
+  .then(() => true, () => false);
+check(
+  'an answer typed offline over an older one does not replace the newer, and is kept aside on screen',
+  keptAside && storedNow === ESSAY && editorFollows,
+  JSON.stringify({ keptAside, storedNow, editorFollows }),
+);
+
 // DOUBLE-CLICKED: handed in once, and no refusal shown over work that went in.
 await student.getByTestId('work-hand-in').filter({ visible: true }).first().dblclick();
 await student.getByTestId('work-handed-in').waitFor({ timeout: 20000 });

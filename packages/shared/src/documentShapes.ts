@@ -250,6 +250,7 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     courseworkId: 'required',
     courseId: 'required',
     updatedAt: 'required',
+    basedOn: 'optional',
   },
   grades: {
     studentUid: 'required',

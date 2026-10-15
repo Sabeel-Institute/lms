@@ -497,9 +497,13 @@ service cloud.firestore {
         && request.resource.data.files == {}
         && noteShape()
         && workIsOpen(request.resource.data.courseworkId, request.resource.data.courseId);
+      // Typed over the answer as it is stored now: a save made offline over
+      // an older answer arrives after the newer one and is refused, rather
+      // than replacing what was written since on another device.
       allow update: if isWritingStudent()
         && resource.data.studentUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['note', 'updatedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['note', 'updatedAt', 'basedOn'])
+        && request.resource.data.basedOn == resource.data.updatedAt
         && noteShape()
         && workIsOpen(resource.data.courseworkId, resource.data.courseId);
       allow delete: if false;

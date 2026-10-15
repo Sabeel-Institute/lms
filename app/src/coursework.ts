@@ -1,4 +1,4 @@
-import { collection, doc, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, getDocFromServer, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import {
   COLLECTIONS,
@@ -15,7 +15,7 @@ import {
 } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useLiveDocState, useLiveQuery } from './liveQuery';
-import { read } from './documents';
+import { read, readIfExists } from './documents';
 
 /**
  * Assignments, from the app's side (docs/plans/ASSIGNMENTS.md). The records
@@ -121,21 +121,31 @@ export function useMyDraftState(uid: string | null, courseworkId: string) {
  * write is queued by the SDK and goes when the connection does. If the live
  * draft is a moment behind, the write is refused and the autosave keeps the
  * answer to try again.
+ *
+ * An update names the stored answer it was typed over (`basedOn`), and the
+ * rules refuse one typed over an answer that has changed since.
  */
 export async function saveDraftNote(
   uid: string,
   courseworkId: string,
   courseId: string,
   note: string,
-  draftExists: boolean,
+  /** The stored draft's `updatedAt` this was typed over; null when there is no draft yet. */
+  typedOver: number | null,
+  at: number,
 ): Promise<void> {
   const ref = doc(db, COLLECTIONS.drafts, submissionId(uid, courseworkId));
-  if (draftExists) {
-    await updateDoc(ref, { note, updatedAt: Date.now() });
+  if (typedOver !== null) {
+    await updateDoc(ref, { note, updatedAt: at, basedOn: typedOver });
     return;
   }
-  const draft: DraftDoc = { studentUid: uid, courseworkId, courseId, note, files: {}, updatedAt: Date.now() };
+  const draft: DraftDoc = { studentUid: uid, courseworkId, courseId, note, files: {}, updatedAt: at };
   await setDoc(ref, draft);
+}
+
+/** The stored draft as the server has it now, or null: to tell a changed answer from a refused save. */
+export async function storedDraft(uid: string, courseworkId: string): Promise<DraftDoc | null> {
+  return readIfExists('drafts', await getDocFromServer(doc(db, COLLECTIONS.drafts, submissionId(uid, courseworkId)))) ?? null;
 }
 
 export const handIn = call<{ courseworkId: string }, { handedInAt: number; late: boolean }>('handIn');

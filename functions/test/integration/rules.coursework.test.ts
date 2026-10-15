@@ -257,15 +257,15 @@ describe('drafts', () => {
 
   it('a student writes the note on their own open work, and reads it back', async () => {
     const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
-    await assertSucceeds(updateDoc(mine, { note: 'Now finished', updatedAt: 2 }));
+    await assertSucceeds(updateDoc(mine, { note: 'Now finished', updatedAt: 2, basedOn: 1 }));
     await assertSucceeds(getDoc(mine));
     await assertFails(getDoc(doc(classmate(), COLLECTIONS.drafts, submissionId(STUDENT, CW))));
   });
 
   it('an answer is stored up to MAX_ANSWER_CHARS, and refused past it', async () => {
     const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
-    await assertSucceeds(updateDoc(mine, { note: 'ب'.repeat(MAX_ANSWER_CHARS), updatedAt: 2 }));
-    await assertFails(updateDoc(mine, { note: 'ب'.repeat(MAX_ANSWER_CHARS + 1), updatedAt: 3 }));
+    await assertSucceeds(updateDoc(mine, { note: 'ب'.repeat(MAX_ANSWER_CHARS), updatedAt: 2, basedOn: 1 }));
+    await assertFails(updateDoc(mine, { note: 'ب'.repeat(MAX_ANSWER_CHARS + 1), updatedAt: 3, basedOn: 2 }));
   });
 
   /*
@@ -275,20 +275,38 @@ describe('drafts', () => {
    */
   it('a student disabled since their token was issued saves no more of their answer', async () => {
     const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
-    await assertSucceeds(updateDoc(mine, { note: 'Before', updatedAt: 2 }));
+    await assertSucceeds(updateDoc(mine, { note: 'Before', updatedAt: 2, basedOn: 1 }));
     await seedStudentRecords(testEnv, [STUDENT], 'disabled');
-    await assertFails(updateDoc(mine, { note: 'After', updatedAt: 3 }));
+    await assertFails(updateDoc(mine, { note: 'After', updatedAt: 3, basedOn: 2 }));
   });
 
   it('a draft is saved at a time a date can hold', async () => {
     const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
-    await assertFails(updateDoc(mine, { note: 'Later', updatedAt: 8640000000000001 }));
-    await assertSucceeds(updateDoc(mine, { note: 'Later', updatedAt: Date.now() }));
+    await assertFails(updateDoc(mine, { note: 'Later', updatedAt: 8640000000000001, basedOn: 1 }));
+    await assertSucceeds(updateDoc(mine, { note: 'Later', updatedAt: Date.now(), basedOn: 1 }));
+  });
+
+  /*
+   * TYPED OFFLINE OVER AN OLDER ANSWER. A phone with no signal queued its
+   * save; the essay was written on the laptop meanwhile; the phone's save
+   * arrived later and replaced the essay. A save names the answer it was
+   * typed over, and one over an answer that has changed since is refused.
+   */
+  it('a save typed over an answer that has changed since is refused, and the newer answer stays', async () => {
+    const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
+    await assertSucceeds(updateDoc(mine, { note: 'The essay, from the laptop', updatedAt: 5, basedOn: 1 }));
+    await assertFails(updateDoc(mine, { note: 'Notes on the bus', updatedAt: 3, basedOn: 1 }));
+    await assertFails(updateDoc(mine, { note: 'Notes on the bus', updatedAt: 6 }));
+    await testEnv.withSecurityRulesDisabled(async (c) => {
+      const stored = (await getDoc(doc(c.firestore(), COLLECTIONS.drafts, submissionId(STUDENT, CW)))).data();
+      expect(stored?.note).toBe('The essay, from the laptop');
+    });
+    await assertSucceeds(updateDoc(mine, { note: 'The essay, finished', updatedAt: 7, basedOn: 5 }));
   });
 
   it('a student cannot put files on a draft themselves', async () => {
     const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
-    await assertFails(updateDoc(mine, { files: { f: { storageKey: 'work/x' } }, updatedAt: 2 }));
+    await assertFails(updateDoc(mine, { files: { f: { storageKey: 'work/x' } }, updatedAt: 2, basedOn: 1 }));
   });
 
   it('a student starts a draft only on their own open work', async () => {

@@ -234,6 +234,13 @@ export interface DraftDoc extends WorkContent {
   courseworkId: string;
   courseId: string;
   updatedAt: number;
+  /**
+   * The stored answer's `updatedAt` that the student's last save was typed
+   * over: the rules refuse a save over an answer that has changed since, so
+   * one typed offline on a phone cannot replace the essay written meanwhile
+   * on a laptop. Absent on a draft the server wrote and nobody has saved.
+   */
+  basedOn?: number;
 }
 
 /** `grades/{uid}_{courseworkId}` — the grade as staff are writing it. Never student-readable. */

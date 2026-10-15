@@ -166,7 +166,7 @@ const SAMPLES: { [C in StoredCollection]: Required<StoredDocs[C]> } = {
     moreTime: null,
     assignedAt: 1,
   },
-  drafts: { note: 'Draft', files: { f4: file('f4') }, studentUid: 'u1', courseworkId: 'cw1', courseId: 'k1', updatedAt: 1 },
+  drafts: { note: 'Draft', files: { f4: file('f4') }, studentUid: 'u1', courseworkId: 'cw1', courseId: 'k1', updatedAt: 2, basedOn: 1 },
   grades: {
     studentUid: 'u1',
     courseworkId: 'cw1',

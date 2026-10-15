@@ -23,7 +23,7 @@ import { Attachments } from '../components/Attachments';
 import { PlainLines } from '../components/PlainLines';
 import { forgetAnswer, journalAnswer, journaledAnswer, restorable } from '../answerJournal';
 import { RichText } from '../components/RichText';
-import { handIn, saveDraftNote, takeBack, useMyDraftState, type CourseworkRow, type SubmissionRow } from '../coursework';
+import { handIn, saveDraftNote, storedDraft, takeBack, useMyDraftState, type CourseworkRow, type SubmissionRow } from '../coursework';
 import type { CourseRow } from '../structure';
 import { errorText } from '../errors';
 import { createAutosave, type AutosaveState } from '../autosave';
@@ -365,16 +365,53 @@ function YourWork({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the stored answer changing
   }, [draft?.updatedAt]);
   const [uploading, setUploading] = useState(false);
-  const draftExists = useRef(false);
-  draftExists.current = draft !== null;
+  /*
+   * THE STORED ANSWER THIS SCREEN'S TYPING IS OVER, which each save names
+   * (`basedOn`). Taken from the draft when the editor seeds from it, moved on
+   * by this screen's own saves, and by a change to the draft that left the
+   * answer alone (a file added). A change to the answer made elsewhere does
+   * not move it: a save typed over the old answer is then refused, and is not
+   * stored over the new one.
+   */
+  const typedOver = useRef<{ note: string; updatedAt: number } | null>(null);
+  if (note === null) typedOver.current = draft ? { note: draft.note, updatedAt: draft.updatedAt } : null;
+  else if (draft && typedOver.current && draft.note === typedOver.current.note) {
+    typedOver.current = { note: draft.note, updatedAt: draft.updatedAt };
+  }
+  /** What this device typed over an answer changed elsewhere: kept, shown, never stored over it. */
+  const [setAside, setSetAside] = useState<string | null>(null);
   const [saver] = useState(() =>
     createAutosave<string>({
       delayMs: 700,
       // Steady typing is still sent every couple of seconds (see autosave.ts).
       maxWaitMs: 2500,
       save: async (v) => {
-        await saveDraftNote(uid, cw.id, courseId, v, draftExists.current);
-        void forgetAnswer(uid, cw.id, v);
+        for (let attempt = 0; ; attempt++) {
+          const over = typedOver.current;
+          const at = Date.now();
+          try {
+            await saveDraftNote(uid, cw.id, courseId, v, over?.updatedAt ?? null, at);
+            typedOver.current = { note: v, updatedAt: at };
+            void forgetAnswer(uid, cw.id, v);
+            return;
+          } catch (e) {
+            if ((e as { code?: string }).code !== 'permission-denied' || attempt > 0) throw e;
+            const stored = await storedDraft(uid, cw.id);
+            // The answer stored is the one this was typed over: the draft
+            // changed some other way (a file added), so it goes again on it.
+            if (stored === null || stored.note === (over?.note ?? '')) {
+              typedOver.current = stored ? { note: stored.note, updatedAt: stored.updatedAt } : null;
+              continue;
+            }
+            // CHANGED ON ANOTHER DEVICE since this was typed: this device's
+            // text is kept aside, and the editor follows the stored answer.
+            typedOver.current = { note: stored.note, updatedAt: stored.updatedAt };
+            setSetAside(v);
+            setNote(null);
+            setFollowed(true);
+            return;
+          }
+        }
       },
       onState: setSaveState,
     }),
@@ -507,6 +544,16 @@ function YourWork({
                         : ''
                     }`}
         </Text>
+        {setAside !== null ? (
+          <View testID="work-set-aside" style={styles.setAside}>
+            <Notice tone="info">
+              This answer was changed on another device, so what you typed here was not saved over it. It is below:
+              copy anything you need into the answer above.
+            </Notice>
+            <PlainLines text={setAside} textStyle={styles.feedback} style={styles.feedbackBlock} />
+            <Button label="Done with it" variant="quiet" hug onPress={() => setSetAside(null)} />
+          </View>
+        ) : null}
         {refused ? <Notice tone="error">{refused}</Notice> : null}
         <Button
           testID="work-hand-in"
@@ -522,6 +569,7 @@ function YourWork({
 }
 
 const styles = StyleSheet.create({
+  setAside: { gap: spacing(2) },
   quiet: { fontSize: 13, color: t.text.secondary, marginBottom: spacing(2) },
   failed: { color: t.feedback.danger },
   files: { marginTop: spacing(3) },
