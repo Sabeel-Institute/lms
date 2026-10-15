@@ -37,6 +37,25 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-15 — **The place is each device's own; a bookmark carries it
+  between them** (Faisal: syncing the place across devices has too many
+  edge cases; resume locally, and let a student bookmark a place
+  deliberately). A device keeps its place in each recording, every second
+  while it plays, and reopens there; a device that never played it starts at
+  the beginning. One bookmark per recording, on the server, is offered as
+  "Go to bookmark" and never followed by itself. Signing out clears a
+  device's places. Listening, which staff read, is still sent, now as each
+  sitting's count added up, so a tab left open and taken up again adds what
+  it plays instead of losing it to a larger total. The server no longer
+  renumbers places when staff move a part: a place is kept by file, which
+  keeps its id.
+- 2026-10-15 — **Play waits for nothing** (Faisal: feedback while a long
+  recording's index downloads). Neither the browser nor Android's player
+  says how much of the index has arrived, so a ring that fills would be a
+  guess: a ring turns around Play instead, Play takes a tap and starts the
+  file once it can, and after three seconds the line under the controls
+  says that a slow connection can take half a minute.
+
 - 2026-10-14 — **Video and audio playback for testers** (Faisal: the test
   students should be able to play a Zoom video and audio). The one Zoom
   video here is on an unpublished draft in Tajweed QI 2026, its date gone,

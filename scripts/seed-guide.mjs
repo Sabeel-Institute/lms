@@ -150,10 +150,12 @@ await mkSession(courses.arabic.id,'g-a2','g-a2r','Lesson 2 — Short Vowels', {d
 // ---- completions / progress: a realistic mix over the accountable (absent) set ----
 async function complete(uid, rid, listenedFrac=1){
   await db.collection('completions').doc(`${uid}_${rid}`).set({ studentUid:uid, recordingId:rid, courseId:H, completed:true, completedAt:now-2*day, updatedAt:now-2*day });
-  await db.collection('listeningProgress').doc(`${uid}_${rid}`).set({ studentUid:uid, recordingId:rid, courseId:H, positionMs:720000*listenedFrac, listenedMs:720000*listenedFrac, updatedAt:now-2*day });
+  const ms = Math.round(720000*listenedFrac);
+  await db.collection('listeningProgress').doc(`${uid}_${rid}`).set({ studentUid:uid, recordingId:rid, courseId:H, listenedMs:ms, sittings:{ seed:ms }, sitting:'seed', updatedAt:now-2*day });
 }
 async function progressOnly(uid, rid, frac){
-  await db.collection('listeningProgress').doc(`${uid}_${rid}`).set({ studentUid:uid, recordingId:rid, courseId:H, positionMs:720000*frac, listenedMs:720000*frac, updatedAt:now-3*day });
+  const ms = Math.round(720000*frac);
+  await db.collection('listeningProgress').doc(`${uid}_${rid}`).set({ studentUid:uid, recordingId:rid, courseId:H, listenedMs:ms, sittings:{ seed:ms }, sitting:'seed', updatedAt:now-3*day });
 }
 // s1 (g-s1r): 7 is excused, 6 was absent and gets nothing. The excused one caught up.
 await complete(uids[7],'g-s1r');

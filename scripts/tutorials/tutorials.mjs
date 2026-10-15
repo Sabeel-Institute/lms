@@ -78,7 +78,10 @@ export const TUTORIALS = [
       { say: 'The round button plays and pauses.', do: (t) => t.tap('player-play') },
       { say: 'The side buttons skip back fifteen seconds, and ahead thirty.', do: async (t) => { await t.tap('player-back'); await t.wait(700); await t.tap('player-forward'); } },
       { say: 'Choose the speed beside the times.', do: (t) => t.select('player-rate', '1.5') },
-      { say: 'Your place is saved as you go, on any device.', do: (t) => t.wait(400) },
+      {
+        say: 'Each phone or computer keeps your place. To carry on somewhere else, tap Bookmark this place. On the other one, tap Go to bookmark.',
+        do: async (t) => { await t.highlight('player-bookmark'); await t.tap('player-bookmark'); },
+      },
       { say: 'You can leave this screen and it keeps playing. The bar at the bottom brings you back.', do: async (t) => { await t.tap('tab-classes'); await t.wait(1500); await t.tap('mini-player-open'); } },
     ],
   },

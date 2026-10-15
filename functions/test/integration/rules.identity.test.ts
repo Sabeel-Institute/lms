@@ -218,6 +218,7 @@ describe('collections not yet opened', () => {
       COLLECTIONS.completions,
       COLLECTIONS.completionEvents,
       COLLECTIONS.listeningProgress,
+      COLLECTIONS.bookmarks,
       COLLECTIONS.completionOverrides,
     ]) {
       await assertFails(setDoc(doc(admin(), name, 'x'), { any: 'thing' }));

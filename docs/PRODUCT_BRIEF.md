@@ -286,11 +286,13 @@ Required first-release playback features:
 
 - Streaming, audio or video.
 - Versions of a part (slides and speaker, slides only, audio only) to switch between, keeping the place; parts to move between, the next starting by itself.
-- Resume progress, in the part and version the student was in.
+- Resume where this device left off, in the file it was playing. The place is each device's own (Faisal's choice, 2026-10-15): a place shared through the server was moved back by any device left open on an older one.
+- One bookmark per recording, kept with the account: the way a student carries their place to another device, on purpose. Setting it again moves it.
+- Play takes a tap while the file is still on its way, and starts by itself once it can.
 - Playback speed.
 - Background audio.
 - Mark complete.
-- Cross-device progress sync when online.
+- Listening is sent when online, each sitting's added up, so two devices both count.
 
 **Offline downloads are DEFERRED and are not in the first release** (`docs/PHASE_STATUS.md`, 2026-07-22, reconfirmed 2026-09-06). Recordings stream; nothing is stored on the device, which is what `docs/USER-MANUAL.md` tells students. When it is picked up, the shape below is the intent: audio saved inside the app only — never an external file export — with students managing what they have kept, and no auto-delete policy required initially.
 
@@ -515,7 +517,7 @@ cost, so the reasoning is not lost.
 - Stream audio.
 - Download audio inside the app for offline listening.
 - Manage downloaded recordings and see storage usage.
-- Resume progress.
+- Resume where they left off on the same device, and go to their bookmark on another.
 - Change playback speed.
 - Listen in background.
 - Mark complete after playing at least once.
@@ -602,7 +604,8 @@ This is not the final schema. It captures the product objects that need first-cl
 | `enrollments` | Student membership in courses over time. |
 | `recordings` | Recording asset for a session (`sessionId`), status, source (`manual`/`zoom`), audio path/duration/size, and the denormalised student-facing title/notes/date. |
 | `assignments` | The grant: one per **excused** student × recording, reconciled from the session's attendance. Both the permission to play and the obligation to listen. `active:false` retains history; the due date closes it without deleting it. |
-| `listeningProgress` | Playback progress, listened percent, last listened, and device/sync metadata. |
+| `listeningProgress` | How much of a recording a student has listened to, and when last: each sitting's listening (one opening in a player, on any device), added up into the total staff read. No place: that is each device's own. Client-written. |
+| `bookmarks` | A student's one bookmark in a recording: a file and a position in it. Client-written, read by the student alone. |
 | `completions` / `completionEvents` | Student completion state doc and the append-only event log; `completionOverrides` holds staff overrides (server-only). |
 | `coursework` | An assignment: title, formatted instructions (markdown), files, due date, late-work date, grading, draft/posted, closed. Staff write it through callables. |
 | `submissions` | One student's work on one assignment, keyed `{studentUid}_{courseworkId}`: state, their dates, what was handed in, earlier attempts, more time / not required, and the grade once returned. |

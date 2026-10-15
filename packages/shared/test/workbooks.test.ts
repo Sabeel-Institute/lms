@@ -203,8 +203,8 @@ const world: CourseData = {
     { studentUid: S.bilal, recordingId: 'r1', courseId: COURSE, completed: true, reason: 'Caught up in person', overriddenBy: 'mgr', at: T('2026-09-14') },
   ],
   progress: [
-    { studentUid: S.fatima, recordingId: 'r1', courseId: COURSE, positionMs: 1, listenedMs: 2_232_000, updatedAt: T('2026-09-10') },
-    { studentUid: S.aminah, recordingId: 'r2', courseId: COURSE, positionMs: 1, listenedMs: 540_000, updatedAt: T('2026-10-09') },
+    { studentUid: S.fatima, recordingId: 'r1', courseId: COURSE, listenedMs: 2_232_000, sittings: { s1: 2_232_000 }, sitting: 's1', updatedAt: T('2026-09-10') },
+    { studentUid: S.aminah, recordingId: 'r2', courseId: COURSE, listenedMs: 540_000, sittings: { s1: 540_000 }, sitting: 's1', updatedAt: T('2026-10-09') },
   ],
   // Every state a piece of work can be in, on four posted assignments and a draft.
   coursework: [

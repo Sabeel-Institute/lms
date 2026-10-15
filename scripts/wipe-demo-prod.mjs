@@ -19,8 +19,9 @@
  * so they never carry it —
  *
  *   - assignments / attendanceRecords — created by the publish/attendance fan-out
- *   - listeningProgress / completions / completionEvents — written by anyone who
- *     opens a demo recording and presses play, including while demoing it
+ *   - listeningProgress / bookmarks / completions / completionEvents — written
+ *     by anyone who opens a demo recording and presses play, including while
+ *     demoing it
  *   - auditLog           — `getPlaybackUrl` and every staff callable audits itself
  *   - enrollments        — a demo student enrolled by hand, in a demo course or
  *     a real one, is an app-written row with no flag
@@ -100,7 +101,7 @@ const FLAGGED = ['cohorts','courses','sessions','recordings','students','enrollm
   'completions','listeningProgress','completionOverrides','completionEvents','auditLog','staffUsers',
   'coursework','submissions','grades','submissionEvents'];
 const BY_REFERENCE = ['sessions','recordings','enrollments','attendanceRecords','assignments',
-  'completions','completionEvents','listeningProgress','completionOverrides','auditLog',
+  'completions','completionEvents','listeningProgress','bookmarks','completionOverrides','auditLog',
   'submissions','grades','submissionEvents','drafts','attachmentUploads'];
 
 /** The fields the app joins on. A document pointing at demo data through any of

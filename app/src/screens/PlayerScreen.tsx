@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
   canPlayFromCourse,
   canPlayNow,
@@ -10,6 +11,7 @@ import {
   playVerb,
   startingItem,
   unbreakableDate,
+  type MediaPart,
 } from '@sabeel/shared';
 import { Button, Chips, Notice } from '../components/ui';
 import { ScrollingTitle } from '../components/ScrollingTitle';
@@ -17,7 +19,17 @@ import { Select } from '../components/Select';
 import { VideoSurface } from '../components/VideoSurface';
 import { Scrubber } from '../components/Scrubber';
 import { Transport } from '../components/Transport';
-import { IDLE, PLAYBACK_RATES, closePlayback, formatClock, openPlayback, playback, usePlayback } from '../playback';
+import {
+  IDLE,
+  PLAYBACK_RATES,
+  closePlayback,
+  formatClock,
+  openPlayback,
+  playback,
+  usePlayback,
+  type PlaybackState,
+} from '../playback';
+import { setBookmark, useMyBookmark } from '../bookmarks';
 import { playingSinceItsDay, useInstituteDay } from '../instituteDay';
 import { useCompletion, useMyListening, setCompleted } from '../completion';
 import { useListenerError } from '../liveQuery';
@@ -152,6 +164,10 @@ export function PlayerScreen({
   // While the scrubber is being dragged it reports the previewed position; the
   // time readouts follow the thumb rather than the still-advancing playhead.
   const [scrubMs, setScrubMs] = useState<number | null>(null);
+  // A file still on its way after a few seconds is a long one, or a slow
+  // connection: said, so a wait is not taken for a fault.
+  const preparingNow = !state.ready && !state.error && playable && (allowed || finishing);
+  const slow = useAfter(preparingNow, SLOW_MS);
   // Staff can reach this across cohorts, where a course name alone is ambiguous;
   // students can't read cohorts and arrive from their own single context, so the
   // lookup is disabled for them (returns '').
@@ -303,14 +319,26 @@ export function PlayerScreen({
       </View>
 
       <Transport
-        playing={state.playing}
+        playing={state.playing || state.startWhenReady}
         disabled={!state.ready}
-        onPlayPause={state.playing ? pause : play}
+        waiting={preparing && playable}
+        onPlayPause={state.playing || state.startWhenReady ? pause : play}
         onBack={playback.skipBack}
         onForward={playback.skipForward}
       />
 
-      {preparing && playable ? <Text style={styles.preparing}>Preparing…</Text> : null}
+      {/* THE WAIT, SAID. A long recording's index is megabytes, and on a slow
+          phone connection nothing can play for half a minute: after a few
+          seconds the line says so, and that a Play already tapped holds. */}
+      {preparing && playable ? (
+        <Text testID="player-preparing" style={styles.preparing}>
+          {!slow
+            ? 'Preparing…'
+            : `Getting the recording ready. On a slow connection this can take half a minute.${
+                state.startWhenReady ? ' It will start by itself.' : ''
+              }`}
+        </Text>
+      ) : null}
       {/* WAITING FOR DATA mid-play, said rather than shown as Pause over
           silence. A video is where that happens, and its audio is the way
           round it. */}
@@ -320,6 +348,16 @@ export function PlayerScreen({
             ? 'Loading… On a slow connection, Audio only needs far less data.'
             : 'Loading…'}
         </Text>
+      ) : null}
+
+      {studentUid && current ? (
+        <BookmarkRow
+          studentUid={studentUid}
+          recording={recording}
+          state={state}
+          parts={parts}
+          finishing={finishing}
+        />
       ) : null}
 
       {/* THE PARTS, when the class was recorded in more than one stretch. At
@@ -377,7 +415,8 @@ export function PlayerScreen({
             </View>
           ) : null}
           <Text style={styles.body}>
-            {recording.durationSec ? `${Math.round(listened * 100)}% played` : `${formatClock(heardMs)} played`} · your place is saved
+            {recording.durationSec ? `${Math.round(listened * 100)}% played` : `${formatClock(heardMs)} played`} · your
+            place is kept on this device
           </Text>
           {/*
             LISTENED TIME ALONE. `positionMs > 0` counted a SEEK as playing — so
@@ -414,6 +453,122 @@ export function PlayerScreen({
       ) : null}
 
     </ScrollView>
+  );
+}
+
+/** How long a file may take to arrive before the wait is explained. */
+const SLOW_MS = 3_000;
+
+/** True once `on` has held for `ms`, and false again the moment it stops. */
+function useAfter(on: boolean, ms: number): boolean {
+  const [after, setAfter] = useState(false);
+  useEffect(() => {
+    setAfter(false);
+    if (!on) return;
+    const timer = setTimeout(() => setAfter(true), ms);
+    return () => clearTimeout(timer);
+  }, [on, ms]);
+  return after;
+}
+
+/** How near a bookmark the session must be to be "at" it. */
+const AT_BOOKMARK_MS = 3_000;
+
+/**
+ * THE BOOKMARK: the one place in a recording a student chose to come back
+ * to, on any device. Where a recording reopens is each device's own; this is
+ * how a student takes their place from the phone to the laptop, on purpose.
+ * One per recording, and setting it again moves it.
+ */
+function BookmarkRow({
+  studentUid,
+  recording,
+  state,
+  parts,
+  finishing,
+}: {
+  studentUid: string;
+  recording: RecordingRow;
+  state: PlaybackState;
+  parts: MediaPart[];
+  finishing: boolean;
+}) {
+  const bookmark = useMyBookmark(studentUid, recording.id);
+  const { run } = useOneAtATime();
+  const now = state.now;
+  const current = now ? now.media[now.itemId] : undefined;
+  if (!now || !current) return null;
+  // The stretch of class it was set in, found by its file: a part staff have
+  // moved since is still that stretch.
+  const marked = bookmark ? recording.media[bookmark.itemId] : undefined;
+  const here =
+    !!bookmark && !!marked && marked.part === current.part && Math.abs(state.positionMs - bookmark.positionMs) < AT_BOOKMARK_MS;
+  const index = marked ? parts.findIndex((p) => p.part === marked.part) : -1;
+  const where = bookmark
+    ? `${parts.length > 1 && index >= 0 ? `Part ${index + 1}, ` : ''}${formatClock(bookmark.positionMs)}`
+    : '';
+  return (
+    <View style={styles.marks}>
+      <PlayerLink
+        testID="player-bookmark"
+        icon={here ? 'bookmark-added' : 'bookmark-add'}
+        label={here ? 'Bookmarked here' : 'Bookmark this place'}
+        disabled={!state.ready || here}
+        onPress={() =>
+          void run('bookmark', async () =>
+            setBookmark({
+              studentUid,
+              recordingId: recording.id,
+              courseId: recording.courseId,
+              itemId: now.itemId,
+              positionMs: Math.round(state.positionMs),
+              setAt: Date.now(),
+            }),
+          )
+        }
+      />
+      {bookmark && marked && !here ? (
+        <PlayerLink
+          testID="player-go-bookmark"
+          icon="bookmark"
+          label={`Go to bookmark (${where})`}
+          // Another part is another file, and a recording playing on past
+          // its last day closes when it stops.
+          disabled={!state.ready || (finishing && marked.part !== current.part)}
+          onPress={() => playback.goTo(bookmark.itemId, bookmark.positionMs)}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/** A small action of the player's, an icon and a few words. */
+function PlayerLink({
+  testID,
+  icon,
+  label,
+  disabled,
+  onPress,
+}: {
+  testID: string;
+  icon: ComponentProps<typeof MaterialIcons>['name'];
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      aria-disabled={disabled}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.link, pressed && !disabled ? styles.completePressed : null]}
+    >
+      <MaterialIcons name={icon} size={20} color={disabled ? t.text.muted : t.accent.base} />
+      <Text style={[styles.linkText, disabled ? styles.linkTextOff : null]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -651,6 +806,10 @@ const styles = StyleSheet.create({
   preparing: { fontSize: 13, color: t.text.secondary, textAlign: 'center', marginTop: spacing(3) },
   versions: { marginTop: spacing(2), marginBottom: spacing(2) },
   parts: { marginTop: spacing(4), gap: spacing(2) },
+  marks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: spacing(4), marginTop: spacing(3) },
+  link: { flexDirection: 'row', alignItems: 'center', gap: spacing(1), minHeight: 44, paddingHorizontal: spacing(1) },
+  linkText: { fontSize: 14, fontWeight: '600', color: t.accent.base },
+  linkTextOff: { color: t.text.muted },
   part: {
     minHeight: 44,
     justifyContent: 'center',

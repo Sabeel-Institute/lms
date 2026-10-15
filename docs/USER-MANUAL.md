@@ -30,7 +30,7 @@ app draws the same screens, minus the one thing Section 2.11 calls out.
    **To do** list with a date to finish it by, and closes again after it. If you were
    **present**, you don't need it. If you were **absent** without being excused,
    it isn't opened to you. Being excused is the whole of it.
-3. **You mark a recording complete yourself.** The app saves your place and shows
+3. **You mark a recording complete yourself.** The app keeps your place and shows
    how much you've played, but *you* decide when you're done — it is on your
    honor. (The one rule: you have to have pressed play at least once.)
 4. **Staff can see who has caught up.** For every recording there is a ledger:
@@ -182,7 +182,10 @@ part to go to it.
 
 The controls are the ones you'd expect from a podcast app:
 
-- **The big round button** plays and pauses.
+- **The big round button** plays and pauses. A long recording can take a
+  while to get ready on a slow connection, and a ring turns around the
+  button while it does. Tap it anyway: the recording starts by itself as
+  soon as it can, and tapping again takes that back.
 - The two side buttons **skip back 15 seconds** and **skip ahead 30 seconds** —
   handy for re-hearing a point or moving past a pause.
 - Drag the **progress bar** to jump anywhere. The times below it show how far in
@@ -190,9 +193,16 @@ The controls are the ones you'd expect from a podcast app:
 - **The speed**, beside the times — 1× up to 2× — changes how fast it plays
   without changing the pitch.
 
-A line under the controls says how much of the recording you've played. **Your
-place is saved automatically**, so you can stop on your phone on the bus and
-pick up on your laptop at home — it remembers where you were.
+A line under the controls says how much of the recording you've played. **Each
+phone or computer keeps your place**: open the recording again on the same one
+and it carries on where you stopped.
+
+**Bookmarks.** To carry on somewhere else — stop on your phone on the bus and
+pick up on your laptop at home — tap **Bookmark this place** before you stop.
+On the other device, open the recording and tap **Go to bookmark**. A
+recording has one bookmark, and bookmarking again moves it. Signing out
+clears the places a device kept, so the next person at a shared computer
+sees nothing of yours; your bookmarks stay with your account.
 
 If the teacher left a note, it appears under **About this recording** — often
 "focus on this part" or "we'll discuss this next week."
@@ -1258,7 +1268,7 @@ where their record can still be opened and exported. It cannot be undone.
 |---|---|
 | **Catch up on a class I missed** | **To do** → tap the card → big round button. |
 | **Switch between video and audio** | Tap the version under the player — you carry on from the same moment. |
-| **Pick up where I left off** | Just reopen it — your place is saved automatically, on any device. |
+| **Pick up where I left off** | Reopen it on the same phone or computer. On another one, tap **Bookmark this place** first, then **Go to bookmark** there. |
 | **Slow down or speed up** | Choose the speed beside the times on the player. |
 | **Mark something done** | Press play once, then **Mark complete** at the bottom of the player. |
 | **See my attendance for a class** | **Classes** → tap the class. |

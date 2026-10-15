@@ -14,6 +14,7 @@ import { googleSignOut } from './auth/google';
 import { auth, db } from './firebase';
 import { afterSignOut } from './firestoreInit';
 import { forgetEveryAnswer } from './answerJournal';
+import { forgetEveryPlace } from './placeStore';
 import { flushEveryAutosave } from './autosave';
 import { sessionEndedIt, setLiveDataSession } from './liveQuery';
 import { createPollChain } from './pollChain';
@@ -86,6 +87,10 @@ export async function signOut(): Promise<void> {
   // the same account with no way to switch users.
   await googleSignOut().catch(() => undefined);
   await fbSignOut(auth);
+  // Where this device was in each recording goes whatever else is left: it
+  // is nothing waiting to be sent, and the next person at a shared computer
+  // is not shown it. Bookmarks are the account's, and come back with it.
+  await forgetEveryPlace();
   // The web app may end Firestore next (`afterSignOut`), under any listener
   // still attached. Reads are marked as ended, so those endings are expected,
   // and the auth observer gets a turn to detach the profile listener first.
@@ -103,6 +108,7 @@ export async function signOut(): Promise<void> {
  * sent. A write still waiting stays with the cache, as at Sign out.
  */
 async function endedElsewhere(why: SessionEnd | null): Promise<void> {
+  await forgetEveryPlace();
   const drained = await Promise.race([
     waitForPendingWrites(db).then(
       () => true,

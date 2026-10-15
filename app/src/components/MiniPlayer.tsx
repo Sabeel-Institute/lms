@@ -13,7 +13,7 @@ import { playingSinceItsDay, useInstituteDay } from '../instituteDay';
 import { liveDueDate, useMyAssignmentState } from '../completion';
 import { useRecordingState } from '../recordings';
 import { useCourseState } from '../structure';
-import { PlayPauseGlyph, Skip } from './Transport';
+import { PlayPauseGlyph, Skip, WaitingRing } from './Transport';
 import { LAYOUT_WIDTHS, getTheme, spacing } from '../theme';
 import { useRoomy, useWide } from '../useWidth';
 
@@ -120,6 +120,10 @@ export function MiniPlayer({
   const pct = now.durationMs > 0 ? Math.min(1, state.positionMs / now.durationMs) : 0;
   const remaining = Math.max(0, now.durationMs - state.positionMs);
   const times = `${formatClock(state.positionMs)} / −${formatClock(remaining)}`;
+  const waiting = !state.ready && !state.error;
+  const playOff = !state.ready && !waiting;
+  // Playing, or about to: Pause takes a Play tapped early back.
+  const wants = state.playing || state.startWhenReady;
 
   return (
     <View testID="mini-player" style={[styles.bar, wide ? styles.barWide : null]}>
@@ -175,19 +179,25 @@ export function MiniPlayer({
           testID="mini-player-back"
         />
 
-        <Pressable
-          testID="mini-player-toggle"
-          accessibilityRole="button"
-          accessibilityLabel={state.playing ? 'Pause' : 'Play'}
-          disabled={!state.ready}
-          onPress={playback.toggle}
-          style={[styles.play, !state.ready ? styles.playDisabled : null]}
-        >
-          {/* 0.62: this button is 44px against the player's 72px, and the glyph
-              is built from borders rather than type. The skips beside it are 44
-              too — see `Skip`'s `size`. */}
-          <PlayPauseGlyph playing={state.playing} disabled={!state.ready} scale={0.62} />
-        </Pressable>
+        {/* PLAY WAITS FOR NOTHING, as on the player: tapped while the file
+            is on its way, it starts the moment it can, with a ring turning
+            round it until then. */}
+        <View style={styles.playSlot}>
+          {waiting ? <WaitingRing size={52} /> : null}
+          <Pressable
+            testID="mini-player-toggle"
+            accessibilityRole="button"
+            accessibilityLabel={wants ? 'Pause' : 'Play'}
+            disabled={playOff}
+            onPress={playback.toggle}
+            style={[styles.play, playOff ? styles.playDisabled : null]}
+          >
+            {/* 0.62: this button is 44px against the player's 72px, and the glyph
+                is built from borders rather than type. The skips beside it are 44
+                too — see `Skip`'s `size`. */}
+            <PlayPauseGlyph playing={wants} disabled={playOff} scale={0.62} />
+          </Pressable>
+        </View>
 
         {/* ON ROOM, NOT ON THE NAV BREAKPOINT. Gated at 900 this was missing
             from a 720px window with 294px of empty bar beside the transport — an
@@ -272,6 +282,8 @@ const styles = StyleSheet.create({
     backgroundColor: t.accent.base,
   },
   playDisabled: { backgroundColor: t.bg.inset },
+  // The ring sits round the button and takes no taps.
+  playSlot: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   // Secondary, not muted: taupe on the bar is ~2.7:1, and this is the only way
   // to stop a lecture from a screen that is not the player.

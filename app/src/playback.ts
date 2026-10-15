@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, runTransaction } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import {
   COLLECTIONS,
   PROGRESS_WRITE_INTERVAL_MS,
   SIGNED_URL_REFRESH_MS,
   mediaParts,
-  mergeProgress,
   progressId,
   startingItem,
   isPlayable,
+  withSitting,
   type MediaItem,
   type MediaMap,
   type MediaVersion,
@@ -17,7 +17,8 @@ import {
 import { audioErrorText, errorText } from './errors';
 import { db, functions } from './firebase';
 import { createPlayer } from './player';
-import { forgetProgress, journaledFor, journaledProgress, journalProgress } from './progressJournal';
+import { forgetProgress, journaledFor, journaledProgress, journalProgress, type JournalEntry } from './progressJournal';
+import { keepPlace, keptPlace } from './placeStore';
 import type { Player } from './playerTypes';
 import { readIfExists } from './documents';
 
@@ -122,8 +123,8 @@ export interface NowPlaying {
 
 /**
  * What `openPlayback` is asked for. `itemId` names a file — staff previewing it
- * — or is null for wherever this listener left off: the part and version
- * their progress says, else the recording's starting file.
+ * — or is null for wherever this listener left off ON THIS DEVICE, else the
+ * recording's starting file.
  */
 export type OpenRequest = Omit<NowPlaying, 'itemId' | 'durationMs'> & { itemId: string | null };
 
@@ -141,7 +142,15 @@ export interface PlaybackState {
   playingSince: number | null;
   /** Meant to be playing, and waiting for data: on a slow link, for seconds. */
   buffering: boolean;
+  /**
+   * PLAY WAS TAPPED BEFORE THE FILE COULD PLAY, and it starts the moment it
+   * can. A long recording's index is megabytes, half a minute on a slow
+   * phone connection, and a Play button greyed out for all of it had to be
+   * watched and tapped again. Tapping Pause takes the tap back.
+   */
+  startWhenReady: boolean;
   positionMs: number;
+  /** Listened, every sitting's added up: this one's and what was stored before. */
   listenedMs: number;
   rate: number;
   error: string | null;
@@ -162,6 +171,7 @@ export const IDLE: PlaybackState = {
   playing: false,
   playingSince: null,
   buffering: false,
+  startWhenReady: false,
   positionMs: 0,
   listenedMs: 0,
   rate: 1,
@@ -200,10 +210,23 @@ const listeners = new Set<(s: PlaybackState) => void>();
 // Progress bookkeeping. Module-level rather than refs for the same reason the
 // refs existed: the throttled writer reads them from inside a closure that must
 // not be rebuilt on every tick.
+/**
+ * THIS SITTING: one opening of the recording in this player. Its listening is
+ * counted on its own and added to every other sitting's, on this device or
+ * another (`withSitting`), so a tab left open and taken up again counts what
+ * it plays rather than losing it to a larger total.
+ */
+let sitting = '';
+/** What this sitting has played. */
 let listened = 0;
+/** What every other sitting had played, as last read. */
+let others = 0;
 let position = 0;
 let lastTick: number | null = null;
 let lastWrite = 0;
+/** When the place and this sitting's listening were last kept on the device. */
+let lastKept = 0;
+/** This sitting has listening the server has not had. */
 let dirty = false;
 // After a seek the player keeps emitting the OLD position for a beat. Hold the
 // displayed position at the target and ignore those stale ticks, so the thumb
@@ -223,9 +246,10 @@ let seekTarget: number | null = null;
  */
 let loadedOk = false;
 /**
- * Whether the open has read where this listener was. Until it has, a version
- * or part tapped would start from nowhere, and the save it makes on the way
- * would write that over the student's place: so a switch waits for it.
+ * Whether the open has read where this device was. Until it has, a version
+ * or part tapped would start from nowhere, and the place kept on the way
+ * would write that over the student's: so a switch waits for it, and nothing
+ * is kept.
  */
 let placeKnown = false;
 /**
@@ -270,45 +294,40 @@ interface Subject {
   courseId: string;
 }
 
-/** Where a listener is: a position in a part, in a version. */
-interface Place {
-  positionMs: number;
-  part: number;
-  version: MediaVersion;
-}
-
-/** One save, captured when it was asked for. */
+/** One sitting's save, captured when it was asked for. */
 interface Save {
   gen: number;
   who: Subject;
-  place: Place;
+  sitting: string;
   listenedMs: number;
   updatedAt: number;
 }
 
+/** A new sitting's id: Firestore's own random id, made on the device. */
+const newSitting = (): string => doc(collection(db, COLLECTIONS.listeningProgress)).id;
+
 /**
- * The write queue: ONE WRITE IN FLIGHT, AND AT MOST ONE WAITING PER DOCUMENT.
+ * The write queue: ONE WRITE IN FLIGHT, AND AT MOST ONE WAITING PER SITTING.
  *
- * One in flight because `writeProgress` is read-modify-write, and two against
- * the same document race: the throttled tick and the write on the way out both
- * read the same stale value, and whichever `setDoc` lands second wins — usually
- * the throttled one, so the LAST seconds of a session are the ones lost.
+ * One in flight because each write is a transaction on one document, and
+ * the saves of one session follow each other: a second in flight would only
+ * contend with the first.
  *
- * One waiting per document because a newer save of the same document makes the
+ * One waiting per sitting because a newer save of the same sitting makes the
  * older one worthless, and a write can stall for as long as the app is in the
  * background (progressJournal.ts). Chained instead, a two-hour lecture on the
- * lock screen queued a read and a write per throttle interval — 480 of each,
- * sent back to back the moment the app came forward. A waiting save is only
- * replaced by a NEWER one, so a replayed journal record cannot displace the
- * open session's own.
+ * lock screen queued a write per throttle interval — 480 of them, sent back to
+ * back the moment the app came forward. A waiting save is only replaced by a
+ * NEWER one, so a replayed journal record cannot displace the open session's
+ * own.
  */
 const waiting = new Map<string, Save>();
 let draining: Promise<void> | null = null;
 
 function enqueue(save: Save): Promise<void> {
-  const id = progressId(save.who.studentUid, save.who.recordingId);
-  const queued = waiting.get(id);
-  if (!queued || queued.updatedAt <= save.updatedAt) waiting.set(id, save);
+  const key = `${progressId(save.who.studentUid, save.who.recordingId)}:${save.sitting}`;
+  const queued = waiting.get(key);
+  if (!queued || queued.updatedAt <= save.updatedAt) waiting.set(key, save);
   // On a microtask, as the chain it replaced did: never a network call from
   // inside the tick, seek or pause that asked for the save.
   draining ??= Promise.resolve().then(drain);
@@ -336,46 +355,38 @@ const settled = (): Promise<void> => draining ?? Promise.resolve();
  * Every number was captured when the save was asked for, and the generation is
  * checked before anything module-level is touched again. That is what makes a
  * write belonging to the recording you just left unable to land on the one you
- * just opened: the round trip is two network calls long, and in that window
- * `owner`, `position` and `listened` can all belong to something else. Writing
- * the wrong `listenedMs` here is not a cosmetic bug — that number is the audit
- * evidence staff read on the ledger.
+ * just opened. Writing the wrong `listenedMs` here is not a cosmetic bug —
+ * that number is the audit evidence staff read on the ledger.
+ *
+ * A TRANSACTION, because the total is the sum of every sitting's: read
+ * outside one, a save from another device landing in between was undone by
+ * this one's copy of the row it had read.
  */
 async function writeProgress(save: Save): Promise<void> {
   const { gen, who } = save;
   const id = progressId(who.studentUid, who.recordingId);
   const ref = doc(db, COLLECTIONS.listeningProgress, id);
-  const mine = {
-    positionMs: Math.round(save.place.positionMs),
-    part: save.place.part,
-    version: save.place.version,
-    listenedMs: Math.round(save.listenedMs),
-    updatedAt: save.updatedAt,
-  };
   try {
-    // Merge against whatever is already there rather than overwriting: another
-    // device may have listened further, and total listening must never go
-    // backwards.
-    const existing = readIfExists('listeningProgress', await getDoc(ref));
-    const merged = existing ? mergeProgress(mine, existing, Date.now()) : mine;
-    await setDoc(ref, { ...who, ...merged });
-    void forgetProgress(id, mine.updatedAt);
-    // TAKE THE LARGER, never add the difference. `mine` was captured before two
-    // round trips and the ticks that arrived during them are already in
-    // `listened`, so assigning the merged total would throw them away — but
-    // ADDING the catch-up is worse, because `pause` and `seek` persist with no
-    // throttle and two writes queue routinely: the second re-reads the document
-    // the first just wrote and applies the same catch-up again. Measured, that
-    // turned a laptop's 15 minutes into 44, in the number the ledger presents as
-    // evidence. `max` keeps the in-flight ticks and cannot double-count.
-    if (generation === gen) listened = Math.max(listened, merged.listenedMs);
+    const row = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      const next = { ...who, ...withSitting(readIfExists('listeningProgress', snap) ?? null, save, Date.now()) };
+      tx.set(ref, next);
+      return next;
+    });
+    void forgetProgress(id, save.sitting, save.updatedAt);
+    // What the other sittings have played, as the server now has it: another
+    // device's listening shows here as soon as this one next saves.
+    if (generation === gen && save.sitting === sitting) {
+      others = row.listenedMs - (row.sittings[sitting] ?? 0);
+      set({ listenedMs: others + listened });
+    }
   } catch (e) {
     // A REFUSAL IS FINAL. The grant the rules check on every write has gone —
     // the student un-excused, the recording unpublished or deleted — and a
     // journal record kept for it would be refused on every launch for the life
     // of the install.
     if ((e as { code?: string } | null)?.code === 'permission-denied') {
-      void forgetProgress(id, mine.updatedAt);
+      void forgetProgress(id, save.sitting, save.updatedAt);
       return;
     }
     // A failed write must not break playback. The next tick retries — but only
@@ -385,55 +396,73 @@ async function writeProgress(save: Save): Promise<void> {
   }
 }
 
-/** Record a save on the device, then queue it for the server. */
-function save(gen: number, who: Subject, place: Place, listenedMs: number): Promise<void> {
-  const updatedAt = Date.now();
-  journalProgress(progressId(who.studentUid, who.recordingId), {
-    ...who,
-    positionMs: Math.round(place.positionMs),
-    part: place.part,
-    version: place.version,
-    listenedMs: Math.round(listenedMs),
-    updatedAt,
-  });
-  return enqueue({ gen, who, place, listenedMs, updatedAt });
+/** The subject of the open session, if it is a student's. */
+function subject(): Subject | null {
+  return owner?.studentUid
+    ? { studentUid: owner.studentUid, recordingId: owner.recordingId, courseId: owner.courseId }
+    : null;
 }
 
-/** Where the open session is, from the file it is playing. */
-function currentPlace(): Place | null {
-  const item = state.now ? state.now.media[state.now.itemId] : undefined;
-  return item ? { positionMs: position, part: item.part, version: item.version } : null;
-}
-
-/** Persist the CURRENT session, if it has anything to write. */
+/** Send THIS sitting's listening to the server, if it has any the server has not had. */
 function persist(): void {
-  const place = currentPlace();
-  if (!owner?.studentUid || !dirty || !place) return;
+  const who = subject();
+  if (!who || !dirty) return;
   dirty = false;
   lastWrite = Date.now();
-  void save(
-    generation,
-    { studentUid: owner.studentUid, recordingId: owner.recordingId, courseId: owner.courseId },
-    place,
-    listened,
-  );
+  void enqueue({ gen: generation, who, sitting, listenedMs: listened, updatedAt: lastWrite });
+}
+
+/** How often the place and this sitting's listening are kept on the device while it plays. */
+const KEEP_INTERVAL_MS = 1_000;
+
+/**
+ * KEEP THE PLACE, AND THE LISTENING, ON THE DEVICE: every second while it
+ * plays, and at every stop, seek and switch. A tab closed, or an app swiped
+ * away, loses a second at most: the place reopens here, and the listening
+ * the server never had is sent from the journal at the next launch.
+ */
+function keepHere(): void {
+  lastKept = Date.now();
+  const who = subject();
+  const now = state.now;
+  if (!who || !now || !placeKnown) return;
+  keepPlace(who.studentUid, who.recordingId, { itemId: now.itemId, positionMs: Math.round(position), at: lastKept });
+  if (listened > 0) {
+    journalProgress(progressId(who.studentUid, who.recordingId), {
+      ...who,
+      sitting,
+      listenedMs: Math.round(listened),
+      updatedAt: lastKept,
+    });
+  }
 }
 
 /**
- * Send whatever this device saved for a student and never confirmed — the
- * listening done in the background before the app was closed. Called on launch
- * once the student is signed in, so the writes carry their auth. A no-op on web.
+ * Send whatever this device kept for a student and never confirmed — the
+ * listening done in the background before the app was closed, or in a tab
+ * closed before its next save. Called on launch once the student is signed
+ * in, so the writes carry their auth.
  *
  * Generation -1 matches no session, so a replay never touches the open one's
- * running total; reopening the recording merges the record in instead.
+ * running total; reopening the recording counts the record in instead.
  */
 export async function drainProgressJournal(studentUid: string): Promise<void> {
-  for (const [, entry] of await journaledFor(studentUid)) {
-    const { positionMs, part, version, listenedMs, updatedAt, ...who } = entry;
-    // A record from before parts existed is a place in Part 1's audio.
-    void enqueue({ gen: -1, who, place: { positionMs, part: part ?? 1, version: version ?? 'audio' }, listenedMs, updatedAt });
+  for (const entry of await journaledFor(studentUid)) {
+    const { sitting: from, listenedMs, updatedAt, ...who } = entry;
+    void enqueue({ gen: -1, who, sitting: from, listenedMs, updatedAt });
   }
   return settled();
+}
+
+/**
+ * Every other sitting's listening: the stored row's, with any this device
+ * holds that the server has not had yet. A sitting in both counts once, at
+ * the larger.
+ */
+function otherSittings(stored: Record<string, number>, journaled: JournalEntry[]): number {
+  const all = { ...stored };
+  for (const entry of journaled) all[entry.sitting] = Math.max(all[entry.sitting] ?? 0, entry.listenedMs);
+  return Object.values(all).reduce((sum, ms) => sum + ms, 0);
 }
 
 /**
@@ -475,8 +504,8 @@ export function openPlayback(req: OpenRequest): void {
   closePlayback();
 
   // A FILE TO SHOW AT ONCE: the one asked for, else the starting file. Where
-  // this listener left off can move it to another part or version once their
-  // progress has been read, before anything is loaded.
+  // this device left off can move it to another part or version once its
+  // place has been read, before anything is loaded.
   const provisional = req.itemId ? req.media[req.itemId] : startingItem(req.media, req.defaultVersion);
   if (!provisional) {
     state = { ...IDLE, error: 'Nothing in this recording can be played yet.' };
@@ -487,10 +516,13 @@ export function openPlayback(req: OpenRequest): void {
 
   const gen = ++generation;
   owner = { studentUid: now.studentUid, recordingId: now.recordingId, courseId: now.courseId };
+  sitting = newSitting();
   listened = 0;
+  others = 0;
   position = 0;
   lastTick = null;
   lastWrite = 0;
+  lastKept = 0;
   dirty = false;
   seekTarget = null;
   seekAt = 0;
@@ -505,10 +537,9 @@ export function openPlayback(req: OpenRequest): void {
       if (generation !== gen) return;
       // Before the audio is loaded a tick reports nothing about this recording,
       // and acting on one is not harmless: `position` is still the zero set at
-      // open, `lastWrite` is 0 so the very first tick persists immediately, and
-      // `mergeProgress` takes the NEWER positionMs — so a tick that arrives
-      // between `replace()` and `seekTo()` writes a zero over the student's
-      // saved place in a two-hour lecture.
+      // open and `lastKept` is 0, so a tick that arrives between `replace()`
+      // and `seekTo()` kept a zero over the student's place in a two-hour
+      // lecture.
       if (!state.ready) return;
       if (seekTarget !== null) {
         if (Math.abs(ms - seekTarget) <= 1500) {
@@ -527,10 +558,9 @@ export function openPlayback(req: OpenRequest): void {
       const at = Date.now();
       // A PAUSED ANDROID PLAYER STILL TICKS: expo-video's clock reports the
       // same place every half second until the player is released. Taken as
-      // news, each tick re-rendered the screen and, every write interval,
-      // saved the stale place as the newest, over the place the student had
-      // since reached on another device. Nothing moved, so there is nothing
-      // to show or save; the tick still marks the time, as every tick does.
+      // news, each tick re-rendered the screen and was saved. Nothing moved,
+      // so there is nothing to show or save; the tick still marks the time,
+      // as every tick does.
       if (ms === position) {
         lastTick = at;
         return;
@@ -540,12 +570,15 @@ export function openPlayback(req: OpenRequest): void {
       if (lastTick !== null) {
         const advanced = ms - position;
         const elapsed = at - lastTick;
-        if (advanced > 0 && advanced <= elapsed * 3) listened += advanced;
+        if (advanced > 0 && advanced <= elapsed * 3) {
+          listened += advanced;
+          dirty = true;
+        }
       }
       lastTick = at;
       position = ms;
-      dirty = true;
-      set({ positionMs: ms, listenedMs: listened });
+      set({ positionMs: ms, listenedMs: others + listened });
+      if (at - lastKept >= KEEP_INTERVAL_MS) keepHere();
       if (at - lastWrite >= PROGRESS_WRITE_INTERVAL_MS) persist();
     },
     onEnded: () => {
@@ -557,6 +590,7 @@ export function openPlayback(req: OpenRequest): void {
       // rest of the session, and the frozen number is what the ledger shows.
       seekTarget = null;
       set({ playing: false });
+      keepHere();
       persist();
       // ON TO THE NEXT PART, in the same version if it has one: one class
       // recorded in two stretches plays as one class. At the last part, the
@@ -594,7 +628,13 @@ export function openPlayback(req: OpenRequest): void {
        * left in the failed state stays retryable: leaving the screen and coming
        * back builds a new player rather than taking the early return.
        */
-      set({ error: message === null ? null : audioErrorText(message), ready: message === null && loadedOk });
+      // A Play tapped early is not carried over a fault: the error says what
+      // happened, and Play is how to try again.
+      set({
+        error: message === null ? null : audioErrorText(message),
+        ready: message === null && loadedOk,
+        ...(message === null ? {} : { startWhenReady: false }),
+      });
     },
     onPlayingChanged: (playing) => {
       // The lock screen, the notification controls, a phone call taking audio
@@ -605,7 +645,10 @@ export function openPlayback(req: OpenRequest): void {
         set({ playing });
         // Saved like an in-app pause. The lock-screen Pause is the one a
         // background listener actually presses.
-        if (!playing) persist();
+        if (!playing) {
+          keepHere();
+          persist();
+        }
         // And the lock-screen Play, after a night away, on a link that has
         // run out: the buffer would play and then nothing would.
         else if (state.ready && !urlLasts(position)) renew(position, true);
@@ -626,29 +669,19 @@ export function openPlayback(req: OpenRequest): void {
   void (async () => {
     try {
       const id = now.studentUid ? progressId(now.studentUid, now.recordingId) : null;
-      // THIS DEVICE'S OWN UNSENT SAVE COUNTS. Listening done on the lock screen
-      // and then closed is in the journal, not on the server, until something
-      // sends it — and resuming from the server alone put the student back
-      // where the screen went off. Read first, from the device, and shown at
-      // once: until the server answers, and when it cannot, it is what the
-      // student sees of their listening rather than 0%.
-      const journaled = id ? await journaledProgress(id) : null;
+      // WHERE THIS DEVICE WAS, and the listening it holds that the server has
+      // not had: both on the device, so both are known at once, offline too.
+      const kept = now.studentUid ? await keptPlace(now.studentUid, now.recordingId) : null;
+      const journaled = id ? await journaledProgress(id) : [];
       if (generation !== gen) return;
-      if (journaled) set({ listenedMs: journaled.listenedMs });
-      const saved = id ? await getDoc(doc(db, COLLECTIONS.listeningProgress, id)) : null;
-      if (generation !== gen) return;
-      const stored = saved ? readIfExists('listeningProgress', saved) : undefined;
-      const prior = stored && journaled ? mergeProgress(stored, journaled, Date.now()) : (stored ?? journaled);
-      // RESUME WHERE THEY WERE: their part, in their version if that part
-      // still has it — unless a particular file was asked for. A row from
-      // before parts existed is a place in Part 1.
-      let item = provisional;
-      if (!req.itemId && prior?.part !== undefined) {
-        item = fileInPart(now.media, prior.part, prior.version ?? now.defaultVersion, now.defaultVersion) ?? provisional;
-      }
+      // RESUME WHERE THIS DEVICE WAS: its file, or that file's part in the
+      // same version when staff have hidden it — unless a particular file was
+      // asked for.
+      const resumed = !req.itemId && kept ? fileFor(now.media, kept.itemId, now.defaultVersion) : null;
+      const item = resumed ?? provisional;
       if (item.id !== now.itemId) set({ now: { ...now, itemId: item.id, durationMs: itemMs(item) } });
-      listened = prior?.listenedMs ?? 0;
-      position = prior && (prior.part ?? 1) === item.part ? prior.positionMs : 0;
+      position = resumed && kept ? within(item, kept.positionMs) : 0;
+      others = otherSittings({}, journaled);
       // THE PLACE IS KNOWN, and a version or part tapped from here on starts
       // from it. The open then gives way to that switch: both loading, the
       // open's file won, and one file played under the other's label.
@@ -656,7 +689,10 @@ export function openPlayback(req: OpenRequest): void {
       const sw = switches;
       // Shown now, not once the file has loaded: the bar and Mark complete
       // read it, and a file can take seconds to arrive.
-      set({ positionMs: position, listenedMs: listened });
+      set({ positionMs: position, listenedMs: others + listened });
+      // What every other sitting played, from the server, beside the load
+      // rather than before it: the file need not wait for a figure.
+      if (id) void countOthers(gen, id, journaled);
       const minted = await playbackUrl(now.recordingId, item.id, itemMs(item));
       if (generation !== gen || switches !== sw) return;
       urlExpiresAt = minted.expiresAt;
@@ -670,14 +706,45 @@ export function openPlayback(req: OpenRequest): void {
       // here by a ready transport.
       loadedOk = true;
       if (state.error) return;
-      set({ ready: true, positionMs: position, listenedMs: listened });
+      set({ ready: true, positionMs: position });
+      if (state.startWhenReady) start();
     } catch (e) {
       // `errorText`, like every other failure a person reads: an offline tap on
       // a lecture, or any unhandled throw in `getPlaybackUrl`, otherwise put the
       // bare word "internal" in a full-width red band on the student's player.
-      if (generation === gen) set({ error: errorText(e) });
+      if (generation === gen) set({ error: errorText(e), startWhenReady: false });
     }
   })();
+}
+
+/** The stored listening of every other sitting, counted into the open session. */
+async function countOthers(gen: number, id: string, journaled: JournalEntry[]): Promise<void> {
+  try {
+    const stored = readIfExists('listeningProgress', await getDoc(doc(db, COLLECTIONS.listeningProgress, id)));
+    if (generation !== gen) return;
+    others = otherSittings(stored?.sittings ?? {}, journaled);
+    set({ listenedMs: others + listened });
+  } catch {
+    // Offline with nothing cached: the device's own figure stands until the
+    // first save, which reads the row again.
+  }
+}
+
+/**
+ * The file a kept place or a bookmark is in, as it can be played now: the
+ * file itself, or, when staff have hidden it, its part in the same version.
+ * Null when the file is gone.
+ */
+function fileFor(media: MediaMap, itemId: string, defaultVersion: MediaVersion): MediaItem | null {
+  const item = media[itemId];
+  if (!item) return null;
+  return isPlayable(item) ? item : fileInPart(media, item.part, item.version, defaultVersion);
+}
+
+/** A position held within a file's length, when it has one. */
+function within(item: MediaItem, ms: number): number {
+  const length = itemMs(item);
+  return length > 0 ? Math.min(ms, length) : ms;
 }
 
 /** A file's length, as the transport counts it. */
@@ -730,8 +797,9 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
   const now = state.now;
   const p = player;
   if (!now || !p) return;
-  // Save the place being left: it is the last word on the part it was in.
-  dirty = true;
+  // Keep the place being left: until the new file has loaded, it is where
+  // this device is.
+  keepHere();
   persist();
   const gen = generation;
   const mine = ++switches;
@@ -744,6 +812,8 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
   lastTick = null;
   seekTarget = null;
   // Any error is cleared here, so one standing after the load is the load's.
+  // Playing on is the same wish as a Play tapped while a file is on its
+  // way, and Pause takes it back the same way.
   set({
     now: { ...now, itemId: item.id, durationMs: itemMs(item) },
     positionMs: startMs,
@@ -751,6 +821,7 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
     ended: false,
     playing: false,
     buffering: false,
+    startWhenReady: play,
     error: null,
   });
   void (async () => {
@@ -768,6 +839,7 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
         now: { ...now, itemId: left.itemId, durationMs: left.durationMs },
         positionMs: left.positionMs,
         ready: loadedOk,
+        startWhenReady: false,
         error: errorText(e),
       });
       return;
@@ -775,18 +847,18 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
     if (generation !== gen || switches !== mine) return;
     urlExpiresAt = minted.expiresAt;
     try {
-      await p.load(minted.url, startMs, { title: now.title, courseName: now.courseName }, play);
+      await p.load(minted.url, startMs, { title: now.title, courseName: now.courseName });
     } catch (e) {
-      if (generation === gen && switches === mine) set({ error: errorText(e) });
+      if (generation === gen && switches === mine) set({ error: errorText(e), startWhenReady: false });
       return;
     }
     if (generation !== gen || switches !== mine) return;
     loadedOk = true;
     if (state.error) return;
-    set({ ready: true, playing: play });
+    set({ ready: true });
     // The new file is where the listener now is.
-    dirty = true;
-    persist();
+    keepHere();
+    if (state.startWhenReady) start();
   })();
 }
 
@@ -824,22 +896,16 @@ function renew(fromMs: number, play: boolean): void {
  */
 export function closePlayback(): Promise<void> {
   const p = player;
-  const dying = owner;
-  const finalPlace = currentPlace();
+  const who = subject();
+  // The place this device is at, kept before anything is torn down. Not
+  // before the open has read the kept one (`keepHere` checks): a session
+  // closed that soon is still at the zero set at open, and keeping that threw
+  // away the student's place in a two-hour recording.
+  keepHere();
+  const finalSitting = sitting;
   const finalListened = listened;
-  /*
-   * NOTHING HEARD, NOTHING WRITTEN — and this is the guard, not an optimisation.
-   *
-   * `openPlayback` zeroes the position synchronously and restores the stored one
-   * two round trips later, so a session closed before it loads still has
-   * `position === 0`. Writing that zero is not harmless: `mergeProgress` takes
-   * `listenedMs` as a max but `positionMs` from whichever record is NEWER, and
-   * the zero is newer — so tapping a lecture and immediately closing the bar,
-   * or opening one while offline so the mint fails, threw away the student's
-   * place in a two-hour recording. `dirty` is only ever set by a tick or a seek,
-   * which is exactly "this session went somewhere".
-   */
-  const moved = dirty;
+  // NOTHING NEW HEARD, NOTHING SENT: only listening goes to the server.
+  const unsent = dirty;
   /*
    * A GENERATION THAT CAN NEVER MATCH AGAIN: take the current one for the dying
    * session, then move past it. The final write's `generation === gen` guard is
@@ -860,21 +926,17 @@ export function closePlayback(): Promise<void> {
     listeners.forEach((l) => l(state));
   }
 
+  placeKnown = false;
   if (p) p.unload();
-  // Whatever happened since the last tick would otherwise be lost exactly at the
-  // moment someone stops listening. It cannot write the wrong session's numbers:
-  // `gen` is stale by construction, so nothing module-level is touched when it
-  // lands.
-  if (!dying?.studentUid || !finalPlace) return Promise.resolve();
+  // Whatever happened since the last save would otherwise be lost exactly at
+  // the moment someone stops listening. It cannot write the wrong session's
+  // numbers: `gen` is stale by construction, so nothing module-level is
+  // touched when it lands.
+  if (!who) return Promise.resolve();
   // Nothing new since the last throttled save — but one may still be in flight,
   // and the caller that awaits this is about to drop the credential.
-  if (!moved) return settled();
-  return save(
-    gen,
-    { studentUid: dying.studentUid, recordingId: dying.recordingId, courseId: dying.courseId },
-    finalPlace,
-    finalListened,
-  );
+  if (!unsent) return settled();
+  return enqueue({ gen, who, sitting: finalSitting, listenedMs: finalListened, updatedAt: Date.now() });
 }
 
 /**
@@ -904,22 +966,33 @@ export function formatClock(ms: number): string {
   return `${h > 0 ? `${h}:` : ''}${mm}:${String(s).padStart(2, '0')}`;
 }
 
+/** Play the loaded file: Play itself, and a Play tapped before the file could. */
+function start(): void {
+  if (state.ready && !urlLasts(position)) {
+    renew(position, true);
+    return;
+  }
+  lastTick = Date.now();
+  player?.play();
+  // An error beside a ready transport is a switch that could not be made,
+  // over the file still playing: carrying on with it is the answer to it.
+  set({ playing: true, ended: false, startWhenReady: false, ...(state.ready ? { error: null } : {}) });
+}
+
 export const playback = {
   play: () => {
-    if (state.ready && !urlLasts(position)) {
-      renew(position, true);
-      return;
-    }
-    lastTick = Date.now();
-    player?.play();
-    // An error beside a ready transport is a switch that could not be made,
-    // over the file still playing: carrying on with it is the answer to it.
-    set({ playing: true, ended: false, ...(state.ready ? { error: null } : {}) });
+    // A fault over a file that loaded is the player's to clear, and playing
+    // is how a person tries again.
+    if (state.ready || (loadedOk && state.error)) start();
+    // Still on its way: it plays the moment it can.
+    else if (state.now && !state.error) set({ startWhenReady: true });
   },
   pause: () => {
+    if (state.startWhenReady) set({ startWhenReady: false });
     player?.pause();
     lastTick = null;
     set({ playing: false });
+    keepHere();
     persist();
   },
   seek: (ms: number) => {
@@ -932,9 +1005,27 @@ export const playback = {
     seekTarget = ms;
     seekAt = Date.now();
     lastTick = Date.now();
-    dirty = true;
     set({ positionMs: ms, ended: false });
-    persist();
+    keepHere();
+  },
+  /**
+   * Go to a place a student chose to come back to: their bookmark. In the
+   * part playing it is a seek, in the version they are watching; in another
+   * part, that part in the same version. The file is found by its id, so a
+   * part staff have since moved is still the one it was set in.
+   */
+  goTo: (itemId: string, positionMs: number) => {
+    const now = state.now;
+    if (!now || !placeKnown) return;
+    const marked = now.media[itemId];
+    const current = now.media[now.itemId];
+    if (!marked) return;
+    if (current && marked.part === current.part) {
+      playback.seek(within(current, positionMs));
+      return;
+    }
+    const target = fileInPart(now.media, marked.part, current?.version ?? now.defaultVersion, now.defaultVersion);
+    if (target) switchTo(target, within(target, positionMs), state.playing);
   },
   /**
    * Play another file of the open recording. Another version of the same part
@@ -966,7 +1057,7 @@ export const playback = {
     player?.setRate(rate);
     set({ rate });
   },
-  toggle: () => (state.playing ? playback.pause() : playback.play()),
+  toggle: () => (state.playing || state.startWhenReady ? playback.pause() : playback.play()),
   // Clamped here rather than at each call site, so neither view has to know the
   // duration or the amounts.
   skipBack: () => playback.seek(Math.max(0, state.positionMs - SKIP_BACK_MS)),

@@ -892,12 +892,33 @@ await shot(admin, '11-session-published');
 // one is incomplete and in date it exists under that handle and no other.
 await goHome(student);
 await student.getByTestId('next-up-Session 1').waitFor({ timeout: 10000 });
+/*
+ * ON A SLOW LINK: the file is held back six seconds, as a long recording's
+ * index is on a phone's connection. Play is greyed out no longer: a tap is
+ * taken, a ring turns round the button, the wait is said after a few
+ * seconds, and the recording starts by itself once it can.
+ */
+const slowMedia = new RegExp(`:${MEDIA_STORE_PORTS.s3}/`);
+await student.route(slowMedia, async (route) => {
+  await new Promise((resolve) => setTimeout(resolve, 6000));
+  await route.continue().catch(() => undefined);
+});
 await tap(student, 'next-up-Session 1');
 await student.getByTestId('player-play').waitFor({ timeout: 25000 });
-await student.waitForTimeout(1500);
 check(
   'a student reaches the player for their required recording',
   await shows(student, 'player-play'),
+);
+await tap(student, 'player-play');
+const ringTurning = await shows(student, 'player-waiting');
+await student.waitForTimeout(3500);
+const waitSaid = await student.getByTestId('player-preparing').innerText().catch(() => '');
+await shot(student, '12-player-preparing');
+await student.unroute(slowMedia);
+check(
+  'Play is taken while the file is on its way, with a ring round it, and a long wait is said',
+  ringTurning && /slow connection/.test(waitSaid) && /start by itself/.test(waitSaid),
+  `ring ${ringTurning}, "${waitSaid}"`,
 );
 await shot(student, '12-player');
 
@@ -908,13 +929,13 @@ const elapsedSeconds = async (page) => {
   return (m || 0) * 60 + (s || 0);
 };
 
-await tap(student, 'player-play');
-await student.waitForTimeout(6000);
+// No second tap: it starts by itself.
+await student.waitForTimeout(8000);
 const advanced = await elapsedSeconds(student);
 check(
-  'audio actually advances (a signed URL streamed)',
+  'the recording starts by itself once it can, and plays (a signed URL streamed)',
   advanced >= 3,
-  `elapsed ${advanced}s after 6s of playback`,
+  `elapsed ${advanced}s`,
 );
 
 // Skip forward, then confirm progress is persisted.
@@ -944,6 +965,26 @@ check(
   `landed at ${seekedTo}s (~75% of 720s)`,
 );
 await tap(student, 'player-play'); // pause, so the saved position settles
+await student.waitForTimeout(1000);
+
+/*
+ * THE BOOKMARK: the place a student chooses to come back to, on any device.
+ * The place itself is each device's own; this is the one kept with the
+ * account, and set here it is offered after signing out below.
+ */
+const bookmarkedAt = await elapsedSeconds(student);
+await tap(student, 'player-bookmark');
+await student.waitForTimeout(1500);
+const marks = await readCollection('bookmarks');
+const bookmarkSec = Math.floor(Number(marks[0]?.fields.positionMs?.integerValue) / 1000);
+check(
+  'a student bookmarks their place, and the player says it is bookmarked here',
+  marks.length === 1 &&
+    Math.abs(bookmarkSec - bookmarkedAt) <= 1 &&
+    /Bookmarked here/.test(await student.getByTestId('player-bookmark').innerText()) &&
+    (await student.getByTestId('player-go-bookmark').count()) === 0,
+  `${marks.length} bookmark(s) at ${bookmarkSec}s, player at ${bookmarkedAt}s`,
+);
 
 /*
  * A VIDEO OF THE SAME STRETCH OF CLASS, uploaded by staff onto the PUBLISHED
@@ -1250,22 +1291,41 @@ check(
   (await student.getByTestId('mini-player').count()) === 0,
 );
 
-// READ AFTER EVERYTHING HAS STOPPED PLAYING. The resume check below compares a
-// reopened position against this one, so anything that plays between the two
-// reads shows up as a resume that missed by exactly that much.
-const savedMs = Number(
-  (await readCollection('listeningProgress'))[0].fields.positionMs.integerValue,
+/*
+ * SIGNING OUT CLEARS THE PLACES THIS DEVICE KEPT, so the next person at a
+ * shared computer is shown nothing of where the last one was: the recording
+ * opens at the start. The bookmark is the account's, and is offered.
+ */
+await goHome(student);
+await tap(student, 'next-up-Session 1');
+await student.getByTestId('player-play').waitFor({ timeout: 25000 });
+await student.waitForTimeout(2500);
+const reopenedAt = await elapsedSeconds(student);
+const offered = await student.getByTestId('player-go-bookmark').innerText().catch(() => '');
+check(
+  'after signing out the recording opens at the start, with the bookmark offered',
+  reopenedAt <= 1 && offered.includes(`Go to bookmark (`),
+  `opened at ${reopenedAt}s, "${offered}"`,
 );
+await tap(student, 'player-go-bookmark');
+await student.waitForTimeout(2000);
+const atBookmark = await elapsedSeconds(student);
+check('Go to bookmark goes to the place bookmarked', Math.abs(atBookmark - bookmarkSec) <= 1, `${atBookmark}s, bookmarked ${bookmarkSec}s`);
+await shot(student, '13-at-bookmark');
 
+/*
+ * AND A RELOAD RESUMES WHERE THIS DEVICE WAS: kept on the device every
+ * second, it needs nothing from the server.
+ */
 await goHome(student);
 await tap(student, 'next-up-Session 1');
 await student.getByTestId('player-play').waitFor({ timeout: 25000 });
 await student.waitForTimeout(2500);
 const resumedAt = await elapsedSeconds(student);
 check(
-  'playback RESUMES where it left off after a reload',
-  resumedAt > 0 && Math.abs(resumedAt - savedMs / 1000) <= 5,
-  `resumed at ${resumedAt}s, saved ${Math.round(savedMs / 1000)}s`,
+  'playback RESUMES where this device left off after a reload',
+  Math.abs(resumedAt - atBookmark) <= 2,
+  `resumed at ${resumedAt}s, left at ${atBookmark}s`,
 );
 await shot(student, '13-resumed');
 

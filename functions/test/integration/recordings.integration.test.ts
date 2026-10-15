@@ -332,28 +332,6 @@ describe('editing a recording’s media', () => {
     await expect(applyMediaEdit(id, { op: 'moveUp', part: 1 })).rejects.toThrow(/cannot move/);
   });
 
-  /*
-   * A PLACE IS KEPT BY PART NUMBER, so moving a part moved every student's
-   * place into the other stretch of class: paused eleven seconds into the
-   * second stretch, a student reopened eleven seconds into the first.
-   */
-  it('moving a part moves the places saved in it, so each stays in its stretch of class', async () => {
-    const id = await twoParts();
-    const progress = (uid: string) => getFirestore().collection(COLLECTIONS.listeningProgress).doc(`${uid}_${id}`);
-    const row = (part: number | undefined) => ({
-      studentUid: 'x', recordingId: id, courseId, positionMs: 11_000, listenedMs: 11_000, updatedAt: 1,
-      ...(part === undefined ? {} : { part, version: 'audio' }),
-    });
-    await progress('in-second').set({ ...row(2), studentUid: 'in-second' });
-    // Saved before parts existed: a place in Part 1.
-    await progress('before-parts').set({ ...row(undefined), studentUid: 'before-parts' });
-    await applyMediaEdit(id, { op: 'moveUp', part: 2 });
-    // p2a, the second stretch, is Part 1 now; the first stretch is Part 2.
-    expect((await rec(id)).media.p2a.part).toBe(1);
-    expect((await progress('in-second').get()).data()).toMatchObject({ part: 1, positionMs: 11_000 });
-    expect((await progress('before-parts').get()).data()).toMatchObject({ part: 2, positionMs: 11_000 });
-  });
-
   it('sets the version students start on', async () => {
     const id = await twoParts();
     await applyMediaEdit(id, { op: 'defaultVersion', version: 'speaker' });

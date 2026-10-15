@@ -8,9 +8,9 @@ import {
   isVisibleToStudents,
   listenedFraction,
   listenedShare,
-  mergeProgress,
   progressId,
   publishBlockers,
+  withSitting,
   type MediaItem,
   type MediaMap,
   type RecordingStatus,
@@ -225,66 +225,48 @@ describe('isVisibleToStudents', () => {
   });
 });
 
-describe('mergeProgress', () => {
-  /** The reading device's clock: these readings are all from the last few minutes. */
+describe('withSitting', () => {
+  /** The reading device's clock: these saves are all from the last few minutes. */
   const NOW = 1_000;
-  const at = (updatedAt: number, positionMs: number, listenedMs: number) => ({
-    updatedAt,
-    positionMs,
-    listenedMs,
+  const save = (sitting: string, listenedMs: number, updatedAt = NOW) => ({ sitting, listenedMs, updatedAt });
+
+  it('adds up what each sitting played: two devices both count', () => {
+    // The laptop listened 10 minutes, the phone 20 more, then the laptop,
+    // left open, 5 more: 35, where taking the larger said 30.
+    let row = withSitting(null, save('laptop', 600_000), NOW);
+    row = withSitting(row, save('phone', 1_200_000), NOW);
+    row = withSitting(row, save('laptop', 900_000), NOW);
+    expect(row.listenedMs).toBe(2_100_000);
+    expect(row.sittings).toEqual({ laptop: 900_000, phone: 1_200_000 });
+    expect(row.sitting).toBe('laptop');
   });
 
-  it('takes the position from whichever side reported most recently', () => {
-    expect(mergeProgress(at(200, 5000, 10), at(100, 999, 10), NOW).positionMs).toBe(5000);
-    expect(mergeProgress(at(100, 999, 10), at(200, 5000, 10), NOW).positionMs).toBe(5000);
+  it('counts a save sent twice, or replayed late, once', () => {
+    const once = withSitting(null, save('s1', 60_000), NOW);
+    expect(withSitting(once, save('s1', 60_000), NOW)).toEqual(once);
+    // An older save of the same sitting, arriving after a newer one.
+    const later = withSitting(once, save('s1', 90_000), NOW);
+    expect(withSitting(later, save('s1', 60_000, NOW - 500), NOW).listenedMs).toBe(90_000);
   });
 
-  it('never lets total listened time go backwards', () => {
-    // The newer device may have listened LESS overall — a fresh install, say.
-    // Taking its number wholesale would erase evidence of real listening.
-    const merged = mergeProgress(at(200, 5000, 1_000), at(100, 999, 60_000), NOW);
-    expect(merged.listenedMs).toBe(60_000);
-    expect(merged.positionMs).toBe(5000);
-  });
-
-  it('is symmetric', () => {
-    const a = at(200, 5000, 1_000);
-    const b = at(100, 999, 60_000);
-    expect(mergeProgress(a, b, NOW)).toEqual(mergeProgress(b, a, NOW));
-  });
-
-  it('is stable on a tie, rather than flapping between devices', () => {
-    expect(mergeProgress(at(100, 1, 5), at(100, 2, 5), NOW).positionMs).toBe(1);
-  });
-
-  it('takes the place whole: a position belongs to its part and version', () => {
-    // A phone at 13:05 into Part 2's video and a laptop at 40:00 into Part 1's
-    // audio: mixing them would resume at 40:00 into Part 2.
-    const phone = { ...at(200, 785_000, 10), part: 2, version: 'speaker' as const };
-    const laptop = { ...at(100, 2_400_000, 99), part: 1, version: 'audio' as const };
-    expect(mergeProgress(phone, laptop, NOW)).toEqual({ updatedAt: 200, positionMs: 785_000, listenedMs: 99, part: 2, version: 'speaker' });
-    expect(mergeProgress(laptop, phone, NOW)).toEqual(mergeProgress(phone, laptop, NOW));
+  it('keeps when it was last listened to, whichever save arrives last', () => {
+    const newer = withSitting(null, save('s1', 1, 900), NOW);
+    expect(withSitting(newer, save('s2', 1, 400), NOW).updatedAt).toBe(900);
+    expect(withSitting(newer, save('s2', 1, 950), NOW).updatedAt).toBe(950);
   });
 
   /*
-   * A CLOCK RUNNING AHEAD. A device a day fast stamped its place a day in the
-   * future, and it won every comparison: the student's place froze on every
-   * other device until real time caught up, which for a clock set years ahead
-   * is never. A place stamped past the reader's clock by more than an hour
-   * cannot be a later save; it keeps its listening and gives up the place.
+   * A CLOCK RUNNING AHEAD. A device a day fast stamped its save a day in the
+   * future, and "last listened" stayed in the future until real time caught
+   * up, which for a clock set years ahead is never. Stamped past the reader's
+   * clock by more than an hour, it gives way; its listening still counts.
    */
-  it('a place stamped well past the reader’s clock gives way, and keeps its listening', () => {
+  it('a time stamped well past the reader’s clock gives way, and keeps its listening', () => {
     const DAY = 24 * 60 * 60 * 1000;
-    const fast = at(NOW + DAY, 3_840, 9_613);
-    const here = at(NOW, 36_000, 6_000);
-    expect(mergeProgress(here, fast, NOW)).toEqual({ updatedAt: NOW, positionMs: 36_000, listenedMs: 9_613 });
-    expect(mergeProgress(fast, here, NOW)).toEqual(mergeProgress(here, fast, NOW));
-    // The fast device itself, by its own clock, sees nothing amiss.
-    expect(mergeProgress(fast, here, NOW + DAY).positionMs).toBe(3_840);
-  });
-
-  it('keeps a row from before parts existed meaning Part 1', () => {
-    expect(mergeProgress(at(200, 5000, 10), at(100, 1, 1), NOW)).not.toHaveProperty('part');
+    const fast = withSitting(null, save('fast', 9_613, NOW + DAY), NOW + DAY);
+    const row = withSitting(fast, save('here', 6_000, NOW), NOW);
+    expect(row.updatedAt).toBe(NOW);
+    expect(row.listenedMs).toBe(15_613);
   });
 });
 

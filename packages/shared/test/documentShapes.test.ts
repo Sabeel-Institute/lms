@@ -207,12 +207,12 @@ const SAMPLES: { [C in StoredCollection]: Required<StoredDocs[C]> } = {
     studentUid: 'u1',
     recordingId: 'r1',
     courseId: 'k1',
-    positionMs: 60_000,
-    part: 1,
-    version: 'audio',
     listenedMs: 90_000,
+    sittings: { s1: 60_000, s2: 30_000 },
+    sitting: 's2',
     updatedAt: 2,
   },
+  bookmarks: { studentUid: 'u1', recordingId: 'r1', courseId: 'k1', itemId: 'a1', positionMs: 60_000, setAt: 2 },
   completions: { studentUid: 'u1', recordingId: 'r1', courseId: 'k1', completed: true, completedAt: 2, updatedAt: 2 },
   completionOverrides: {
     studentUid: 'u1',
@@ -281,8 +281,13 @@ describe('a document that lacks a field its type requires', () => {
   });
 
   it('an optional field left out is not reported', () => {
-    const { part: _p, version: _v, ...stored } = SAMPLES.listeningProgress;
-    expect(checkStored('listeningProgress', stored)).toEqual([]);
+    const { basedOn: _b, ...stored } = SAMPLES.drafts;
+    expect(checkStored('drafts', stored)).toEqual([]);
+  });
+
+  it('a progress row from before sittings, with a place and no sittings, is reported', () => {
+    const { sittings: _s, sitting: _t, ...rest } = SAMPLES.listeningProgress;
+    expect(checkStored('listeningProgress', { ...rest, positionMs: 1, part: 1 }).sort()).toEqual(['sitting', 'sittings']);
   });
 });
 
@@ -314,8 +319,17 @@ describe('an audit entry whose detail the screen cannot print', () => {
 describe('client-written times', () => {
   it('are reported when they are not times the rules accept', () => {
     const progress = SCREEN_CHECKS.listeningProgress!;
-    const row = { studentUid: 'u1', recordingId: 'r1', courseId: 'k1', positionMs: 1, listenedMs: 1, updatedAt: 8640000000000001 };
+    const row = { studentUid: 'u1', recordingId: 'r1', courseId: 'k1', listenedMs: 1, sittings: { s1: 1 }, sitting: 's1', updatedAt: 8640000000000001 };
     expect(() => progress.forEach((check) => check(row as never, '2026-10-14'))).toThrow(/not a time the rules accept/);
     expect(() => progress.forEach((check) => check({ ...row, updatedAt: Date.UTC(2026, 9, 14) } as never, '2026-10-14'))).not.toThrow();
+  });
+});
+
+describe('a progress row whose total is not its sittings', () => {
+  it('fails its check: the ledger reads the total, the next save the sittings', () => {
+    const progress = SCREEN_CHECKS.listeningProgress!;
+    const row = { ...SAMPLES.listeningProgress, updatedAt: Date.UTC(2026, 9, 14) };
+    expect(() => progress.forEach((check) => check(row, '2026-10-14'))).not.toThrow();
+    expect(() => progress.forEach((check) => check({ ...row, listenedMs: 60_000 }, '2026-10-14'))).toThrow(/sittings/);
   });
 });

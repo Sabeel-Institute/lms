@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SKIP_BACK_MS, SKIP_FORWARD_MS } from '../playback';
 import { getTheme, spacing } from '../theme';
 
@@ -45,16 +45,24 @@ export function PlayPauseGlyph({
 export function Transport({
   playing,
   disabled,
+  waiting,
   onPlayPause,
   onBack,
   onForward,
 }: {
   playing: boolean;
   disabled?: boolean;
+  /**
+   * The file is on its way: the skips wait for it, but Play does not. A tap
+   * now starts it the moment it can (`startWhenReady`), and a ring turns
+   * around the button until then.
+   */
+  waiting?: boolean;
   onPlayPause: () => void;
   onBack: () => void;
   onForward: () => void;
 }) {
+  const playOff = disabled && !waiting;
   return (
     <View style={styles.row}>
       <Skip
@@ -65,23 +73,27 @@ export function Transport({
         testID="player-back"
       />
 
-      <Pressable
-        testID="player-play"
-        accessibilityRole="button"
-        accessibilityLabel={playing ? 'Pause' : 'Play'}
-        aria-disabled={!!disabled}
-        disabled={disabled}
-        onPress={onPlayPause}
-        style={({ pressed }) => [
-          styles.playButton,
-          pressed && !disabled ? styles.pressed : null,
-          disabled ? styles.playDisabled : null,
-        ]}
-      >
-        {/* Nudged right inside `playGlyph`: a triangle's visual centre sits
-            left of its bounding box, so centring the box looks off-centre. */}
-        <PlayPauseGlyph playing={playing} disabled={disabled} />
-      </Pressable>
+      <View style={styles.playSlot}>
+        {waiting ? <WaitingRing size={PLAY + 14} /> : null}
+        <Pressable
+          testID="player-play"
+          accessibilityRole="button"
+          accessibilityLabel={playing ? 'Pause' : 'Play'}
+          aria-disabled={!!playOff}
+          aria-busy={!!waiting}
+          disabled={playOff}
+          onPress={onPlayPause}
+          style={({ pressed }) => [
+            styles.playButton,
+            pressed && !playOff ? styles.pressed : null,
+            playOff ? styles.playDisabled : null,
+          ]}
+        >
+          {/* Nudged right inside `playGlyph`: a triangle's visual centre sits
+              left of its bounding box, so centring the box looks off-centre. */}
+          <PlayPauseGlyph playing={playing} disabled={playOff} />
+        </Pressable>
+      </View>
 
       <Skip
         label={String(SKIP_FORWARD_MS / 1000)}
@@ -90,6 +102,19 @@ export function Transport({
         onPress={onForward}
         testID="player-forward"
       />
+    </View>
+  );
+}
+
+/**
+ * A ring turning around a play button while its file is on its way: the
+ * platform's own spinner, drawn by the browser or by Android rather than
+ * moved frame by frame from JavaScript.
+ */
+export function WaitingRing({ size }: { size: number }) {
+  return (
+    <View pointerEvents="none" style={[styles.ring, { width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2 }]}>
+      <ActivityIndicator testID="player-waiting" size={size} color={t.accent.base} />
     </View>
   );
 }
@@ -159,6 +184,9 @@ const styles = StyleSheet.create({
     gap: spacing(7),
     marginTop: spacing(4),
   },
+  // The ring sits round the button, centred on it, and takes no taps.
+  playSlot: { width: PLAY, height: PLAY, alignItems: 'center', justifyContent: 'center' },
+  ring: { position: 'absolute', left: '50%', top: '50%', alignItems: 'center', justifyContent: 'center' },
   playButton: {
     width: PLAY,
     height: PLAY,

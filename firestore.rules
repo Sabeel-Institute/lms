@@ -302,10 +302,11 @@ service cloud.firestore {
     // ---- Listening progress ----
     // Document id is `${studentUid}_${recordingId}`.
     match /listeningProgress/{progressId} {
-      // ONE OF FOUR CLIENT-WRITTEN COLLECTIONS, and the first — the others are
-      // `completions` and `completionEvents` below, and a student's own device
-      // registrations. All four belong to a STUDENT and grant nothing; every
-      // structural write is still a callable. The exception needs its reason
+      // ONE OF THE FEW CLIENT-WRITTEN COLLECTIONS, and the first — the others
+      // are `bookmarks`, `completions` and `completionEvents` below, a
+      // student's drafts, and their own device registrations. All of them
+      // belong to a STUDENT and grant nothing; every structural write is
+      // still a callable. The exception needs its reason
       // recorded: a callable every 15 seconds per listening student is pure
       // overhead, and the stakes are low. Listened time is audit
       // EVIDENCE, not the gate — completion is student-attested and blocked
@@ -337,17 +338,21 @@ service cloud.firestore {
        * manager and admin who opened it. Integers only, and only these keys.
        */
       function progressShape() {
-        return request.resource.data.keys().hasOnly(
-              ['studentUid', 'recordingId', 'courseId', 'positionMs', 'listenedMs', 'updatedAt',
-               'part', 'version'])
-          && request.resource.data.positionMs is int
-          && request.resource.data.listenedMs is int
-          && isTime(request.resource.data.updatedAt)
-          // Where in the recording: which part, in which version. Optional,
-          // because rows from before parts existed have neither.
-          && (!('part' in request.resource.data) || request.resource.data.part is int)
-          && (!('version' in request.resource.data)
-              || request.resource.data.version in ['speaker', 'slides', 'audio', 'video']);
+        let d = request.resource.data;
+        return d.keys().hasOnly(
+              ['studentUid', 'recordingId', 'courseId', 'listenedMs', 'sittings', 'sitting', 'updatedAt'])
+          && d.listenedMs is int && d.listenedMs >= 0
+          && isTime(d.updatedAt)
+          // EACH SITTING'S LISTENING, added up for `listenedMs` (`withSitting`
+          // in @sabeel/shared). A save names its sitting and changes that
+          // entry and no other, so every entry was checked as a number when
+          // it was written. At most MAX_SITTINGS (500) of them.
+          && d.sitting is string && d.sitting.size() > 0 && d.sitting.size() <= 40
+          && d.sittings is map && d.sittings.size() <= 500
+          && d.sittings[d.sitting] is int && d.sittings[d.sitting] >= 0
+          && (resource == null
+              ? d.sittings.keys().hasOnly([d.sitting])
+              : d.sittings.diff(resource.data.sittings).affectedKeys().hasOnly([d.sitting]));
       }
 
       // `resource` is NULL when the document does not exist, and dereferencing
@@ -397,6 +402,44 @@ service cloud.firestore {
         && request.resource.data.courseId == resource.data.courseId
         && holdsGrant(request.resource.data.recordingId);
       allow delete: if false;
+    }
+
+    // ---- Bookmarks ----
+    // Document id is `${studentUid}_${recordingId}`. A student's one place to
+    // come back to in a recording, on any device: where a recording reopens
+    // is each device's own, and this is how a student takes their place to
+    // another one. The student's alone: nobody else reads it, staff included.
+    match /bookmarks/{bookmarkId} {
+      // Bound to the id, as progress is: a bookmark planted under another
+      // student's id would lock them out of their own.
+      function mine() {
+        return isWritingStudent()
+          && request.resource.data.studentUid == request.auth.uid
+          && bookmarkId == request.resource.data.studentUid + '_'
+              + request.resource.data.recordingId;
+      }
+      function bookmarkShape() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['studentUid', 'recordingId', 'courseId', 'itemId', 'positionMs', 'setAt'])
+          && d.itemId is string && d.itemId.size() > 0 && d.itemId.size() <= 64
+          && d.positionMs is int && d.positionMs >= 0
+          && isTime(d.setAt);
+      }
+      // A recording with no bookmark is read too, as its player opens:
+      // bound to the caller's own id, as progress's `get` is.
+      allow get: if isStudent()
+        && (resource == null
+              ? bookmarkId.split('_')[0] == request.auth.uid
+              : resource.data.studentUid == request.auth.uid);
+      // Set only in a recording the student holds, and filed under its class.
+      allow create: if mine() && bookmarkShape()
+        && holdsGrant(request.resource.data.recordingId)
+        && request.resource.data.courseId == grantedCourse(request.resource.data.recordingId);
+      allow update: if mine() && bookmarkShape()
+        && resource.data.studentUid == request.auth.uid
+        && request.resource.data.courseId == resource.data.courseId
+        && holdsGrant(request.resource.data.recordingId);
+      allow list, delete: if false;
     }
 
     // ---- Assignments ----

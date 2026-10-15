@@ -21,9 +21,10 @@ describe('errorText', () => {
   /*
    * A callable that throws without a message surfaces its CODE in the message's
    * place — which is how `INTERNAL` came to be the entire text of a full-width
-   * error band in the staff app.
+   * error band in the staff app. (Lower-case `internal` is the SDK's own,
+   * for a call that never got an answer: below.)
    */
-  it.each(['internal', 'unauthenticated', 'permission-denied', 'INTERNAL'])(
+  it.each(['unauthenticated', 'permission-denied', 'INTERNAL'])(
     'turns the bare code %s into a sentence',
     (code) => {
       const e = Object.assign(new Error(code), { code: `functions/${code}` });
@@ -42,6 +43,19 @@ describe('errorText', () => {
     expect(errorText(Object.assign(new Error('unavailable'), { code: 'functions/unavailable' }))).toBe(
       'Cannot reach the server. Check your connection and try again.',
     );
+  });
+
+  /*
+   * A CALLABLE OFFLINE, in the shape the Functions SDK builds for it: fetch
+   * failed, so there was no status and no body, and the SDK makes the code
+   * and the message both `internal`. A function that ran and failed sends
+   * its own status, upper case, and is not the connection.
+   */
+  it('says the same for a callable that never got an answer', () => {
+    const dropped = Object.assign(new Error('internal'), { code: 'functions/internal' });
+    expect(errorText(dropped)).toBe('Cannot reach the server. Check your connection and try again.');
+    const failed = Object.assign(new Error('INTERNAL'), { code: 'functions/internal' });
+    expect(errorText(failed)).toBe(GENERIC);
   });
 
   it('turns away the SDK talking to a developer', () => {

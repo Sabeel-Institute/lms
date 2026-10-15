@@ -11,42 +11,42 @@
 //   the screen locked does not reach the server until the app is brought
 //   back. A lecture heard on the lock screen and then swiped away was lost
 //   whole. Measured on the API 35 AVD against production, 2026-10-12.
-// - Web. The SDK's persistent cache keeps a pending write across a page close,
-//   but only the write handed to it: the playback write queue holds every
-//   later save in memory behind the first one still waiting for the server.
-//   Offline with minutes of lecture buffered, closing the tab lost all but the
-//   first save. Measured against production, 2026-10-14.
+// - Web. A save is a transaction, and a transaction needs the server: one
+//   made offline, or cut off by the tab closing, leaves nothing in the SDK's
+//   cache to send later. And the server hears at most every 15 seconds, so
+//   a tab closed mid-lecture lost the seconds since.
 //
-// So every progress save is also recorded here, one key per progress
-// document. A storage call needs no timer, and one key per document means a
-// record is a single `setItem` — no read-modify-write that could itself stall
-// half done. The record is forgotten once the server holds a save at least as
-// new, replayed on the next launch, and merged into the session when the same
-// recording is reopened on this device.
+// So every sitting's listening is also recorded here, every second it plays,
+// one key per sitting. A storage call needs no timer, and one key per sitting
+// means a record is a single `setItem` — no read-modify-write that could
+// itself stall half done. On the web it is synchronous, so a tab closed
+// mid-lecture keeps everything up to its last second. The record is forgotten
+// once the server holds a save at least as new, replayed on the next launch,
+// and counted when the same recording is reopened on this device.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ListeningProgressDoc } from '@sabeel/shared';
-import { captureError } from './sentry';
+import { storageRefused } from './deviceStorage';
 
-/**
- * Reported once: storage refused is the device's condition (a private window,
- * blocked site data), and saves come every few seconds.
+
+const PREFIX = 'sabeel.progressJournal.v2:';
+/*
+ * RECORDS OF THE FIRST KIND are dropped, not sent: each held a total already
+ * merged with the server's and a place, and a total cannot be added to the
+ * other sittings without counting the same listening twice.
  */
-let reported = false;
+const FIRST_KIND = 'sabeel.progressJournal.v1:';
 
-const PREFIX = 'sabeel.progressJournal.v1:';
-
+/** One sitting's listening, as the device last recorded it. */
 export type JournalEntry = Pick<
   ListeningProgressDoc,
-  'studentUid' | 'recordingId' | 'courseId' | 'positionMs' | 'part' | 'version' | 'listenedMs' | 'updatedAt'
+  'studentUid' | 'recordingId' | 'courseId' | 'sitting' | 'listenedMs' | 'updatedAt'
 >;
 
-/** Record a save before it is sent. `id` is the progress document's id. */
+const keyOf = (id: string, sitting: string) => `${PREFIX}${id}:${sitting}`;
+
+/** Record a sitting's listening before it is sent. `id` is the progress document's id. */
 export function journalProgress(id: string, entry: JournalEntry): void {
-  AsyncStorage.setItem(PREFIX + id, JSON.stringify(entry)).catch((e: unknown) => {
-    if (reported) return;
-    reported = true;
-    captureError(e, { source: 'progressJournal' });
-  });
+  AsyncStorage.setItem(keyOf(id, entry.sitting), JSON.stringify(entry)).catch((e: unknown) => storageRefused(e, 'progressJournal'));
 }
 
 async function read(key: string): Promise<JournalEntry | null> {
@@ -58,30 +58,37 @@ async function read(key: string): Promise<JournalEntry | null> {
   }
 }
 
-/** The record for one progress document, if this device holds one. */
-export function journaledProgress(id: string): Promise<JournalEntry | null> {
-  return read(PREFIX + id);
+async function entries(prefix: string): Promise<JournalEntry[]> {
+  const keys = await AsyncStorage.getAllKeys();
+  const stale = keys.filter((k) => k.startsWith(FIRST_KIND));
+  if (stale.length) await AsyncStorage.multiRemove(stale);
+  const out: JournalEntry[] = [];
+  for (const key of keys.filter((k) => k.startsWith(prefix))) {
+    const entry = await read(key);
+    if (entry) out.push(entry);
+  }
+  return out;
+}
+
+/** Every sitting this device holds unsent for one progress document. */
+export function journaledProgress(id: string): Promise<JournalEntry[]> {
+  return entries(`${PREFIX}${id}:`);
 }
 
 /**
- * Forget a record once the server holds a save at least as new as it. A newer
- * record — written while this save was in flight — stays for its own write.
+ * Forget a sitting's record once the server holds a save at least as new as
+ * it. A newer record — written while this save was in flight — stays for its
+ * own write.
  */
-export async function forgetProgress(id: string, savedAt: number): Promise<void> {
-  const entry = await read(PREFIX + id);
-  if (entry && entry.updatedAt <= savedAt) await AsyncStorage.removeItem(PREFIX + id);
+export async function forgetProgress(id: string, sitting: string, savedAt: number): Promise<void> {
+  const entry = await read(keyOf(id, sitting));
+  if (entry && entry.updatedAt <= savedAt) await AsyncStorage.removeItem(keyOf(id, sitting));
 }
 
 /**
  * Every record this device holds for one student. Scoped to the uid so a shared
  * device never tries to write one student's progress under another's auth.
  */
-export async function journaledFor(studentUid: string): Promise<Array<[string, JournalEntry]>> {
-  const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(PREFIX));
-  const out: Array<[string, JournalEntry]> = [];
-  for (const key of keys) {
-    const entry = await read(key);
-    if (entry?.studentUid === studentUid) out.push([key.slice(PREFIX.length), entry]);
-  }
-  return out;
+export async function journaledFor(studentUid: string): Promise<JournalEntry[]> {
+  return (await entries(PREFIX)).filter((entry) => entry.studentUid === studentUid);
 }

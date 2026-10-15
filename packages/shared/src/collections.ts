@@ -56,8 +56,12 @@ export const COLLECTIONS = {
   /** Required-listening obligations, and the ONLY thing granting a student
    *  access to a recording (the excused of a session, until the due date). */
   assignments: 'assignments',
-  /** Playback progress, listened percent, last listened, sync metadata. */
+  /** How much of a recording a student has listened to, and when last:
+   *  each sitting's listening, added up. Client-written. */
   listeningProgress: 'listeningProgress',
+  /** A student's one bookmark in a recording: the place they chose to come
+   *  back to on any device. Client-written; the student's alone. */
+  bookmarks: 'bookmarks',
   /** Current completion STATE per student+recording, client-written. Keyed by
    *  student+recording because completion can exist for an accessible recording
    *  that was never assigned, so it cannot live on the assignment. */

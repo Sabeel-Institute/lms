@@ -29,7 +29,16 @@ export function errorText(e: unknown): string {
   // Offline, or the service down. Firestore says it in a sentence of its own
   // ("Failed to get document because the client is offline."), which would
   // otherwise pass the test below as one of ours.
-  if (err?.code === 'unavailable' || err?.code === 'functions/unavailable') {
+  //
+  // A callable that never got an answer is said the same way. The Functions
+  // SDK reports a dropped connection as `internal`, in lower case, because
+  // fetch failed before any response: a function that ran and failed sends
+  // its own status, `INTERNAL`, in the body.
+  if (
+    err?.code === 'unavailable' ||
+    err?.code === 'functions/unavailable' ||
+    (err?.code === 'functions/internal' && raw === 'internal')
+  ) {
     console.warn('request failed', err.code);
     return 'Cannot reach the server. Check your connection and try again.';
   }

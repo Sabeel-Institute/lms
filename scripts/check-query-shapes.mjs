@@ -287,7 +287,8 @@ const shapes = [
   ['drafts — an assignment’s (delete)', () => db.collection('drafts').where('courseworkId', '==', ID)],
   ['submissionEvents — an assignment’s (delete)', () => db.collection('submissionEvents').where('courseworkId', '==', ID)],
   ['completionEvents — a recording’s (delete)', () => db.collection('completionEvents').where('recordingId', '==', ID)],
-  ['listeningProgress — a recording’s (delete, moving a part)', () => db.collection('listeningProgress').where('recordingId', '==', ID)],
+  ['listeningProgress — a recording’s (delete)', () => db.collection('listeningProgress').where('recordingId', '==', ID)],
+  ['bookmarks — a recording’s (delete)', () => db.collection('bookmarks').where('recordingId', '==', ID)],
   ['attachmentUploads — abandoned (daily sweep)', () => db.collection('attachmentUploads').where('startedAt', '<', 1)],
   [
     'attachmentUploads — one person’s pending on an assignment',

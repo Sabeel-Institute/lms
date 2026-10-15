@@ -10,6 +10,7 @@ import {
 import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import {
   LATEST_CLIENT_TIME,
+  MAX_SITTINGS,
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
   assignmentId,
@@ -400,10 +401,13 @@ describe('listeningProgress', () => {
     studentUid: uid,
     recordingId: PUBLISHED,
     courseId: CLASS_MINE,
-    positionMs: 1000,
     listenedMs: 1000,
+    sittings: { s1: 1000 },
+    sitting: 's1',
     updatedAt: 1,
   });
+  /** The same row after its sitting heard more: an honest update. */
+  const further = (uid: string, ms = 5000) => ({ ...row(uid), listenedMs: ms, sittings: { s1: ms } });
 
   it('lets a student read their own row EVEN WHEN IT DOES NOT EXIST', async () => {
     // The first-time resume path. Without a null guard this is not a denial but
@@ -413,15 +417,52 @@ describe('listeningProgress', () => {
     );
   });
 
-  it('lets a student create and update their own row', async () => {
+  it('lets a student create and update their own row, a sitting at a time', async () => {
+    const ref = doc(student().firestore(), COLLECTIONS.listeningProgress, mineId());
+    await assertSucceeds(setDoc(ref, row(STUDENT)));
+    await assertSucceeds(setDoc(ref, further(STUDENT)));
+    // Another sitting, on another device, added beside the first.
     await assertSucceeds(
-      setDoc(doc(student().firestore(), COLLECTIONS.listeningProgress, mineId()), row(STUDENT)),
+      setDoc(ref, { ...row(STUDENT), listenedMs: 9000, sittings: { s1: 5000, s2: 4000 }, sitting: 's2' }),
     );
-    await assertSucceeds(
-      setDoc(doc(student().firestore(), COLLECTIONS.listeningProgress, mineId()), {
+  });
+
+  /*
+   * A SAVE CHANGES ITS OWN SITTING AND NO OTHER, so every entry was checked
+   * as a number when it was written: the rules cannot read every value of a
+   * map, and the total staff read is their sum.
+   */
+  it("refuses a save that changes another sitting's entry, or a bad one of its own", async () => {
+    const ref = doc(student().firestore(), COLLECTIONS.listeningProgress, mineId());
+    await assertFails(setDoc(ref, { ...row(STUDENT), sittings: { s1: 1000, s2: 5 } }));
+    await assertFails(setDoc(ref, { ...row(STUDENT), sittings: { s2: 1000 } }));
+    await assertFails(setDoc(ref, { ...row(STUDENT), sittings: { s1: 'lots' } }));
+    await assertFails(setDoc(ref, { ...row(STUDENT), sittings: { s1: -1 } }));
+    const long = 's'.repeat(41);
+    await assertFails(setDoc(ref, { ...row(STUDENT), sitting: long, sittings: { [long]: 1000 } }));
+    await assertSucceeds(setDoc(ref, row(STUDENT)));
+    // s2 names itself, and moves s1.
+    await assertFails(setDoc(ref, { ...row(STUDENT), sittings: { s1: 9000, s2: 4000 }, sitting: 's2' }));
+    // s2 names itself, and takes s1 away.
+    await assertFails(setDoc(ref, { ...row(STUDENT), sittings: { s2: 4000 }, sitting: 's2' }));
+    // A row of the first kind, with a place in it.
+    await assertFails(setDoc(ref, { ...row(STUDENT), positionMs: 1000 }));
+  });
+
+  it('holds at most MAX_SITTINGS sittings', async () => {
+    const full = Object.fromEntries(Array.from({ length: MAX_SITTINGS - 1 }, (_, i) => [`s${i}`, 1]));
+    await testEnv.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), COLLECTIONS.listeningProgress, mineId()), {
         ...row(STUDENT),
-        positionMs: 5000,
-      }),
+        sittings: full,
+        sitting: 's0',
+        listenedMs: MAX_SITTINGS - 1,
+      });
+    });
+    const ref = doc(student().firestore(), COLLECTIONS.listeningProgress, mineId());
+    await assertSucceeds(setDoc(ref, { ...row(STUDENT), sittings: { ...full, last: 1 }, sitting: 'last' }));
+    await assertFails(
+      setDoc(ref, { ...row(STUDENT), sittings: { ...full, last: 1, over: 1 }, sitting: 'over' }),
     );
   });
 
@@ -437,7 +478,7 @@ describe('listeningProgress', () => {
     await testEnv.withSecurityRulesDisabled(async (c) => {
       await updateDoc(doc(c.firestore(), COLLECTIONS.assignments, assignmentId(STUDENT, PUBLISHED)), { active: false });
     });
-    await assertFails(setDoc(ref, { ...row(STUDENT), positionMs: 9000 }));
+    await assertFails(setDoc(ref, further(STUDENT, 9000)));
     await assertFails(
       setDoc(doc(student().firestore(), COLLECTIONS.listeningProgress, `${STUDENT}_${PUBLISHED}`), row(STUDENT)),
     );
@@ -451,7 +492,7 @@ describe('listeningProgress', () => {
     const ref = doc(student().firestore(), COLLECTIONS.listeningProgress, mineId());
     await assertFails(setDoc(ref, { ...row(STUDENT), updatedAt: 'x' }));
     await assertFails(setDoc(ref, { ...row(STUDENT), listenedMs: 'lots' }));
-    await assertFails(setDoc(ref, { ...row(STUDENT), positionMs: 1.5 }));
+    await assertFails(setDoc(ref, { ...row(STUDENT), sittings: { s1: 1.5 } }));
     await assertFails(setDoc(ref, { ...row(STUDENT), priority: 1 }));
     // And on update, once the honest row exists.
     await assertSucceeds(setDoc(ref, row(STUDENT)));
@@ -487,15 +528,9 @@ describe('listeningProgress', () => {
     const ref = doc(student().firestore(), COLLECTIONS.listeningProgress, mineId());
     await assertSucceeds(setDoc(ref, row(STUDENT)));
     await seedStudentRecords(testEnv, [STUDENT], 'disabled');
-    await assertFails(setDoc(ref, { ...row(STUDENT), positionMs: 5000 }));
+    await assertFails(setDoc(ref, further(STUDENT)));
   });
 
-  it('takes the part and version a student is in, and only real ones', async () => {
-    const ref = doc(student().firestore(), COLLECTIONS.listeningProgress, mineId());
-    await assertSucceeds(setDoc(ref, { ...row(STUDENT), part: 2, version: 'speaker' }));
-    await assertFails(setDoc(ref, { ...row(STUDENT), part: '2', version: 'speaker' }));
-    await assertFails(setDoc(ref, { ...row(STUDENT), part: 2, version: 'hd' }));
-  });
 
   /*
    * THE ID IS PART OF THE ROW, and the lockout is why.
@@ -553,9 +588,8 @@ describe('listeningProgress', () => {
     );
     await assertFails(
       setDoc(doc(student().firestore(), COLLECTIONS.listeningProgress, mineId()), {
-        ...row(STUDENT),
+        ...further(STUDENT, 9000),
         courseId: CLASS_THEIRS,
-        positionMs: 9000,
       }),
     );
   });
@@ -623,5 +657,85 @@ describe('listeningProgress', () => {
     await assertFails(
       deleteDoc(doc(student().firestore(), COLLECTIONS.listeningProgress, mineId())),
     );
+  });
+});
+
+/*
+ * A STUDENT'S BOOKMARK: the one place in a recording they chose to come back
+ * to, on any device. Theirs alone — nobody else reads it, staff included —
+ * set only in a recording they hold, and filed under its class.
+ */
+describe('bookmarks', () => {
+  const mineId = () => `${STUDENT}_${PUBLISHED}`;
+  const theirsId = () => `${OUTSIDER}_${PUBLISHED}`;
+  const mark = (uid: string) => ({
+    studentUid: uid,
+    recordingId: PUBLISHED,
+    courseId: CLASS_MINE,
+    itemId: 'audio-1',
+    positionMs: 754_000,
+    setAt: 1,
+  });
+
+  it('lets a student set, move and read their own, and read one not yet set', async () => {
+    const ref = doc(student().firestore(), COLLECTIONS.bookmarks, mineId());
+    await assertSucceeds(getDoc(ref));
+    await assertSucceeds(setDoc(ref, mark(STUDENT)));
+    await assertSucceeds(setDoc(ref, { ...mark(STUDENT), itemId: 'video-2', positionMs: 30_000, setAt: 2 }));
+    await assertSucceeds(getDoc(ref));
+  });
+
+  it('refuses one that is not a place: a fraction, a blank file, an extra key, a bad time', async () => {
+    const ref = doc(student().firestore(), COLLECTIONS.bookmarks, mineId());
+    await assertFails(setDoc(ref, { ...mark(STUDENT), positionMs: 1.5 }));
+    await assertFails(setDoc(ref, { ...mark(STUDENT), positionMs: -1 }));
+    await assertFails(setDoc(ref, { ...mark(STUDENT), itemId: '' }));
+    await assertFails(setDoc(ref, { ...mark(STUDENT), note: 'here' }));
+    await assertFails(setDoc(ref, { ...mark(STUDENT), setAt: LATEST_CLIENT_TIME }));
+  });
+
+  it("refuses one under another student's id, or carrying their uid", async () => {
+    await assertFails(setDoc(doc(student().firestore(), COLLECTIONS.bookmarks, theirsId()), mark(STUDENT)));
+    await assertFails(setDoc(doc(student().firestore(), COLLECTIONS.bookmarks, theirsId()), mark(OUTSIDER)));
+  });
+
+  it('refuses one in a recording the student does not hold, or under another class', async () => {
+    await assertFails(
+      setDoc(doc(student().firestore(), COLLECTIONS.bookmarks, `${STUDENT}_${UNGRANTED}`), {
+        ...mark(STUDENT),
+        recordingId: UNGRANTED,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(student().firestore(), COLLECTIONS.bookmarks, mineId()), { ...mark(STUDENT), courseId: CLASS_THEIRS }),
+    );
+    const ref = doc(student().firestore(), COLLECTIONS.bookmarks, mineId());
+    await assertSucceeds(setDoc(ref, mark(STUDENT)));
+    await assertFails(setDoc(ref, { ...mark(STUDENT), courseId: CLASS_THEIRS }));
+  });
+
+  it('a student disabled since their token was issued sets no more', async () => {
+    await seedStudentRecords(testEnv, [STUDENT], 'disabled');
+    await assertFails(setDoc(doc(student().firestore(), COLLECTIONS.bookmarks, mineId()), mark(STUDENT)));
+  });
+
+  it("is read by nobody else: another student, the class's manager, an admin", async () => {
+    await testEnv.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), COLLECTIONS.bookmarks, mineId()), mark(STUDENT));
+    });
+    await assertFails(getDoc(doc(outsider().firestore(), COLLECTIONS.bookmarks, mineId())));
+    await assertFails(getDoc(doc(mine().firestore(), COLLECTIONS.bookmarks, mineId())));
+    await assertFails(getDoc(doc(admin().firestore(), COLLECTIONS.bookmarks, mineId())));
+    await assertFails(
+      getDocs(query(collection(student().firestore(), COLLECTIONS.bookmarks), where('studentUid', '==', STUDENT))),
+    );
+  });
+
+  it('is never deleted, and written by no one but its student', async () => {
+    await testEnv.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), COLLECTIONS.bookmarks, mineId()), mark(STUDENT));
+    });
+    await assertFails(deleteDoc(doc(student().firestore(), COLLECTIONS.bookmarks, mineId())));
+    await assertFails(setDoc(doc(admin().firestore(), COLLECTIONS.bookmarks, mineId()), mark(STUDENT)));
   });
 });

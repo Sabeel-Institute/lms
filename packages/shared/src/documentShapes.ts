@@ -8,7 +8,7 @@ import type {
   StaffUserDoc,
   StudentDoc,
 } from './types';
-import type { ListeningProgressDoc, RecordingDoc } from './recordings';
+import type { BookmarkDoc, ListeningProgressDoc, RecordingDoc } from './recordings';
 import { canPublish, hasLedger, isEmptyDraft, listenedShare, publishBlockers } from './recordings';
 import { deriveDurationSec, mediaParts, mediaSummary, playVerb, startingItem } from './media';
 import type { AssignmentDoc, CompletionDoc } from './assignments';
@@ -74,6 +74,7 @@ export interface StoredDocs {
   courseworkTallies: CourseworkTallyDoc;
   assignments: AssignmentDoc;
   listeningProgress: ListeningProgressDoc;
+  bookmarks: BookmarkDoc;
   completions: CompletionDoc;
   completionOverrides: CompletionOverrideDoc;
   notifications: NotificationPrefsDoc;
@@ -300,11 +301,18 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     studentUid: 'required',
     recordingId: 'required',
     courseId: 'required',
-    positionMs: 'required',
-    part: 'optional',
-    version: 'optional',
     listenedMs: 'required',
+    sittings: 'required',
+    sitting: 'required',
     updatedAt: 'required',
+  },
+  bookmarks: {
+    studentUid: 'required',
+    recordingId: 'required',
+    courseId: 'required',
+    itemId: 'required',
+    positionMs: 'required',
+    setAt: 'required',
   },
   completions: {
     studentUid: 'required',
@@ -404,7 +412,15 @@ export const SCREEN_CHECKS: { [C in StoredCollection]?: ((doc: StoredDocs[C], to
   ],
   courses: [(c) => canPlayFromCourse(c)],
   assignments: [(a, today) => hasRecordingAccess(a, today)],
-  listeningProgress: [(p) => listenedShare(p.listenedMs, null), (p) => clientTime(p.updatedAt)],
+  listeningProgress: [
+    (p) => listenedShare(p.listenedMs, null),
+    (p) => clientTime(p.updatedAt),
+    (p) => {
+      const sum = Object.values(p.sittings).reduce((total, ms) => total + ms, 0);
+      if (sum !== p.listenedMs) throw new Error(`listened ${p.listenedMs} is not its sittings' ${sum}`);
+    },
+  ],
+  bookmarks: [(b) => clientTime(b.setAt)],
   completions: [
     (c) => effectiveCompletion(c, null),
     (c) => {

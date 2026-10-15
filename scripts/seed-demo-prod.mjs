@@ -379,15 +379,15 @@ for (const a of assignments) {
       completed: true, completedAt: at, updatedAt: at, ...DEMO }));
     done.push((b) => b.set(db.collection('listeningProgress').doc(`${a.studentUid}_${a.recordingId}`), {
       studentUid: a.studentUid, recordingId: a.recordingId, courseId: a.courseId,
-      positionMs: DURATION_SEC * 1000, listenedMs: DURATION_SEC * 1000,
+      listenedMs: DURATION_SEC * 1000, sittings: { seed: DURATION_SEC * 1000 }, sitting: 'seed',
       updatedAt: at, ...DEMO }));
   } else if (chance(0.45)) {
     // Started, not finished — the rows staff actually chase.
     const frac = 0.1 + rnd() * 0.7;
     done.push((b) => b.set(db.collection('listeningProgress').doc(`${a.studentUid}_${a.recordingId}`), {
       studentUid: a.studentUid, recordingId: a.recordingId, courseId: a.courseId,
-      positionMs: Math.round(DURATION_SEC * 1000 * frac),
       listenedMs: Math.round(DURATION_SEC * 1000 * frac),
+      sittings: { seed: Math.round(DURATION_SEC * 1000 * frac) }, sitting: 'seed',
       updatedAt: now - Math.floor(rnd() * 20) * day, ...DEMO }));
   }
 }

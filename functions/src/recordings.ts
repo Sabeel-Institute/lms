@@ -11,7 +11,6 @@ import {
   isPlayable,
   publishBlockers,
   todayInZone,
-  type ListeningProgressDoc,
   type MediaEdit,
   type MediaMap,
   type MediaVersion,
@@ -355,18 +354,6 @@ export async function applyMediaEdit(recordingId: string, edit: MediaEdit) {
       if (at < 0 || other === undefined) throw new HttpsError('failed-precondition', 'That part cannot move that way.');
       const swap = (part: number) => (part === edit.part ? other : part === other ? edit.part : part);
       for (const [id, item] of Object.entries(media)) media[id] = { ...item, part: swap(item.part) };
-      /*
-       * THE PLACES SAVED IN IT MOVE WITH IT. A place is kept by part number,
-       * and left as it was every student resumed in the other stretch of
-       * class. A place saved before parts existed is a place in Part 1.
-       */
-      const saved = await tx.get(
-        db.collection(COLLECTIONS.listeningProgress).where('recordingId', '==', recordingId),
-      );
-      for (const doc of saved.docs) {
-        const part = (doc.data() as ListeningProgressDoc).part ?? 1;
-        if (swap(part) !== part) tx.update(doc.ref, { part: swap(part) });
-      }
     } else if (edit.op === 'defaultVersion') {
       tx.update(ref, { defaultVersion: edit.version, updatedAt: Date.now() });
       return;
@@ -395,6 +382,7 @@ export const RECORDING_DEPENDENTS = [
   COLLECTIONS.completions,
   COLLECTIONS.completionEvents,
   COLLECTIONS.listeningProgress,
+  COLLECTIONS.bookmarks,
   COLLECTIONS.completionOverrides,
 ] as const;
 

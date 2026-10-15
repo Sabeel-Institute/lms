@@ -189,9 +189,10 @@ export function hasLedger(recording: { status: RecordingStatus; publishedAt?: nu
 }
 
 /**
- * A student's position in one recording.
+ * How much of one recording a student has listened to: the evidence staff
+ * read on the ledger.
  *
- * Document id is `${studentUid}_${recordingId}`, so resume is a single get and
+ * Document id is `${studentUid}_${recordingId}`, so it is a single get and
  * the rules can check ownership without reading anything else.
  *
  * Written by the CLIENT rather than a callable, which is a deliberate departure
@@ -200,22 +201,33 @@ export function hasLedger(recording: { status: RecordingStatus; publishedAt?: nu
  * low: listened time is audit evidence, not the gate. Completion is
  * student-attested and blocked only if they never played, so inflating this
  * gains nothing that letting the audio run would not.
+ *
+ * NOT WHERE THEY ARE. The place is kept on each device (`placeStore` in the
+ * app) and a student moves it between devices on purpose, with a bookmark
+ * (`BookmarkDoc`): a place shared through the server was moved back by any
+ * device left open on an older one (decision 2026-10-15, PRODUCT_BRIEF).
  */
 export interface ListeningProgressDoc {
   studentUid: string;
   recordingId: string;
   courseId: string;
-  /** Where to resume from: a position in `part`, in `version`. */
-  positionMs: number;
   /**
-   * The part and version the student was in. Absent on rows written before a
-   * recording could have parts, which resume in Part 1 as they always did.
+   * Total time actually listened, which is NOT the same as position: seeking
+   * forward must not manufacture listening that did not happen. The sum of
+   * `sittings`, kept beside them because it is what every staff screen reads.
    */
-  part?: number;
-  version?: MediaVersion;
-  /** Total time actually listened, which is NOT the same as position — seeking
-   *  forward must not manufacture listening that did not happen. */
   listenedMs: number;
+  /**
+   * EACH SITTING'S LISTENING, by the sitting's id: a sitting is one opening of
+   * the recording in a player, on any device. Added up, never merged by the
+   * larger: two devices, or a tab left open and taken up again later, each
+   * count what they played, and a save replayed or sent twice cannot count
+   * twice because each sitting only ever raises its own entry.
+   */
+  sittings: Record<string, number>;
+  /** The sitting this save came from: the one entry of `sittings` it may change. */
+  sitting: string;
+  /** When it was last listened to. */
   updatedAt: number;
 }
 
@@ -223,40 +235,73 @@ export function progressId(studentUid: string, recordingId: string): string {
   return `${studentUid}_${recordingId}`;
 }
 
-/** How often progress is persisted while audio is playing. */
+/**
+ * The most sittings one progress document holds. Firestore's rules restate
+ * it, and refuse a save that would hold more. A student opens a recording
+ * once a sitting; a few hundred is far past any class's use of one.
+ */
+export const MAX_SITTINGS = 500;
+
+/** How often progress is sent to the server while audio is playing. */
 export const PROGRESS_WRITE_INTERVAL_MS = 15_000;
 
-/** The fields of a progress row that two readings of it are merged on. */
-export type ProgressReading = Pick<ListeningProgressDoc, 'positionMs' | 'listenedMs' | 'updatedAt' | 'part' | 'version'>;
+/** One sitting's save: its listening so far, and when. */
+export interface SittingSave {
+  sitting: string;
+  listenedMs: number;
+  updatedAt: number;
+}
 
-/** How far past the reader's clock a place may be stamped and still be taken for a later save. */
+/** How far past the reader's clock a save may be stamped and still be taken for a later one. */
 const CLOCK_AHEAD_MS = 60 * 60 * 1000;
 
 /**
- * Merge a local progress reading with whatever the server already has.
+ * The stored listening with one sitting's save added in.
  *
- * Two devices, or one device after a reinstall, will disagree. The rule is
- * **max listened, latest place wins**: total listening only ever grows, while
- * the place — position, part and version together, since a position means
- * nothing without its part — follows whichever device reported most recently:
- * that is the one the person is actually using.
+ * The sitting's entry only ever grows: a save older than one already there
+ * (a replay, a retry) changes nothing. The total is the sum of every
+ * sitting's.
  *
- * `now` is the reader's clock. A place stamped more than an hour past it was
- * stamped by a clock running ahead, not later: taken as the latest, a device
- * a day fast froze the student's place on every other device until real time
- * caught up, which for a clock set years ahead is never. Such a place gives
- * way to the other; its listening still counts.
+ * `updatedAt` is when it was last listened to: the later of the two, unless
+ * the stored one is stamped more than an hour past `now`, the reader's clock.
+ * That was stamped by a clock running ahead, not later, and kept it would
+ * hold "last listened" in the future until real time caught up, which for a
+ * clock set years ahead is never.
  */
-export function mergeProgress(a: ProgressReading, b: ProgressReading, now: number): ProgressReading {
-  const ahead = (r: ProgressReading) => r.updatedAt > now + CLOCK_AHEAD_MS;
-  const newer = ahead(a) !== ahead(b) ? (ahead(a) ? b : a) : a.updatedAt >= b.updatedAt ? a : b;
+export function withSitting(
+  stored: Pick<ListeningProgressDoc, 'sittings' | 'updatedAt'> | null,
+  save: SittingSave,
+  now: number,
+): Pick<ListeningProgressDoc, 'sittings' | 'sitting' | 'listenedMs' | 'updatedAt'> {
+  const sittings = { ...(stored?.sittings ?? {}) };
+  sittings[save.sitting] = Math.max(sittings[save.sitting] ?? 0, Math.round(save.listenedMs));
+  const keptAt = stored && stored.updatedAt <= now + CLOCK_AHEAD_MS ? stored.updatedAt : 0;
   return {
-    positionMs: newer.positionMs,
-    listenedMs: Math.max(a.listenedMs, b.listenedMs),
-    updatedAt: newer.updatedAt,
-    ...(newer.part !== undefined ? { part: newer.part } : {}),
-    ...(newer.version !== undefined ? { version: newer.version } : {}),
+    sittings,
+    sitting: save.sitting,
+    listenedMs: Object.values(sittings).reduce((sum, ms) => sum + ms, 0),
+    updatedAt: Math.max(keptAt, save.updatedAt),
   };
+}
+
+/**
+ * A student's bookmark in one recording: the place they chose to come back
+ * to, on any device. One per recording; setting it again moves it.
+ *
+ * Document id is `${studentUid}_${recordingId}` (`progressId`). Written by the
+ * student's own client, like their listening, and read by nobody else.
+ */
+export interface BookmarkDoc {
+  studentUid: string;
+  recordingId: string;
+  courseId: string;
+  /**
+   * The file it is in, by its id: a part keeps its files' ids when staff move
+   * it, so the bookmark stays on the stretch of class it was set in.
+   */
+  itemId: string;
+  positionMs: number;
+  setAt: number;
 }
 
 /** Fraction listened, for a progress bar. Guards a missing or zero duration so

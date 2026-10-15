@@ -717,9 +717,10 @@ export async function seedWorld({ db, auth, browser, base }) {
     completed: true, completedAt: now - 3 * DAY, updatedAt: now - 3 * DAY,
   });
   for (const [rid, frac] of [[done.recId, 1], [dueSoon.recId, 0.6], [missed.recId, 0.2]]) {
+    const ms = Math.round(AUDIO_SECONDS * 1000 * frac);
     await db.collection('listeningProgress').doc(`${STUDENT.uid}_${rid}`).set({
       studentUid: STUDENT.uid, recordingId: rid, courseId: COURSE,
-      positionMs: AUDIO_SECONDS * 1000 * frac, listenedMs: AUDIO_SECONDS * 1000 * frac,
+      listenedMs: ms, sittings: { seed: ms }, sitting: 'seed',
       updatedAt: now - 2 * DAY,
     });
   }

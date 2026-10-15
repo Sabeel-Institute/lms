@@ -26,7 +26,8 @@ const decodeFields = (fields) => Object.fromEntries(Object.entries(fields).map((
 
 /**
  * Every top-level document of a collection, over REST as `token`'s user, a
- * page at a time: `{ id, data }`.
+ * page at a time: `{ id, data, updateTime }`, the last for a write that must
+ * not land over a newer one (`currentDocument.updateTime`).
  */
 export async function* listDocuments(projectId, collection, token) {
   const base = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collection}`;
@@ -37,7 +38,9 @@ export async function* listDocuments(projectId, collection, token) {
     });
     const out = await r.json();
     if (!r.ok) throw new Error(`${out.error?.status ?? r.status}: ${out.error?.message ?? r.statusText}`);
-    for (const d of out.documents ?? []) yield { id: d.name.split('/').pop(), data: decodeFields(d.fields ?? {}) };
+    for (const d of out.documents ?? []) {
+      yield { id: d.name.split('/').pop(), data: decodeFields(d.fields ?? {}), updateTime: d.updateTime };
+    }
     if (!out.nextPageToken) return;
     pageToken = out.nextPageToken;
   }
