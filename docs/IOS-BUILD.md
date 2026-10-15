@@ -46,7 +46,6 @@ Xcode, write it down here so the next prebuild can redo it.
 | `ios.privacyManifests` | what the app collects, none of it for tracking | Expo writes `PrivacyInfo.xcprivacy` from it; Apple refuses an upload without one |
 | `expo-video` plugin | `supportsBackgroundPlayback: true` | prebuild writes `UIBackgroundModes: [audio]`; without it a lecture stops when the phone locks |
 | `expo-image-picker` plugin | `cameraPermission` | the camera's purpose string (photographing work for an assignment) |
-| `expo-build-properties` | `ios.usePrecompiledModules: false` | see below |
 | `expo-build-properties` | `ios.extraPods`: GoogleUtilities, RecaptchaInterop with modular headers | without them `pod install` refuses: "Swift pod AppCheckCore depends upon GoogleUtilities and RecaptchaInterop, which do not define modules" |
 | `@react-native-google-signin/google-signin` | registered BARE | the plugin then reads `REVERSED_CLIENT_ID` out of the plist, so the URL scheme has one home; given options it wants the value copied by hand, and validates it on every platform, web export included |
 | `@sentry/react-native` | registered BARE | org, project and token come from the build environment; given options it writes them into `ios/sentry.properties` |
@@ -54,12 +53,12 @@ Xcode, write it down here so the next prebuild can redo it.
 There is deliberately **no `ios.version`**: `expo.version` is the one version on
 every surface, and Apple's `X.Y.Z` shape is checked by `npm run check:ios`.
 
-### Expo modules are compiled from source
+### Precompiled Expo modules need SDK-aligned versions
 
-SDK 57 links Expo modules as precompiled xcframeworks by default. Those binaries
-were built against a newer `ExpoModulesCore` than the one the lockfile installs,
-so an app linked against them dies in dyld at launch, before any JavaScript
-runs:
+SDK 57 links Expo modules as precompiled xcframeworks, each built against the
+`ExpoModulesCore` of its own release. When the lockfile's Expo packages fall
+behind what the SDK expects, a module's binary can call into a newer core than
+the one installed, and the app dies in dyld at launch, before any JavaScript:
 
 ```
 dyld: Symbol not found: _$s15ExpoModulesCore10BaseModuleC11willDestroyyyFTj
@@ -67,9 +66,11 @@ dyld: Symbol not found: _$s15ExpoModulesCore10BaseModuleC11willDestroyyyFTj
 ```
 
 SpringBoard logs it only as an exit in domain dyld, code 4; `xcrun simctl launch
---console-pty booted com.sabeelinstitute.lms` prints the symbol. With
-`usePrecompiledModules: false` every module compiles against the installed core,
-which is what Android does anyway. The first build is slower; nothing can skew.
+--console-pty booted com.sabeelinstitute.lms` prints the symbol. Keep
+`npx expo install --check` (in `app/`) clean: aligned, the default precompiled
+build links and launches. If it ever cannot be aligned, `expo-build-properties`
+`ios.usePrecompiledModules: false` compiles every module from source against the
+installed core, as Android does.
 
 ### Reading back what prebuild wrote
 
@@ -102,6 +103,7 @@ All gitignored. Without each, something builds and quietly does not work.
 | `app/.env.local` | `EXPO_PUBLIC_SENTRY_DSN_ANDROID`, which `app/src/sentry.ts` reads on every native platform (iOS reports to the same React Native Sentry project) | the app ships with crash reporting off |
 | `app/.env.sentry-build-plugin` | `SENTRY_ORG`, `SENTRY_PROJECT` (`sabeel-recording-android`), `SENTRY_AUTH_TOKEN`, `IOS_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, optional `ASC_KEY_PATH` | no dSYMs uploaded; no signing or upload |
 | `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` | the App Store Connect API key (NOT the APNs key) | `-allowProvisioningUpdates` cannot sign; no upload |
+| `~/.apns/AuthKey_<key id>.p8` | the APNs key, for `send-test-push.mjs --apple` (the deployed functions read theirs from Secret Manager) | no real send from the Mac |
 | `functions/.secret.local` | placeholders for the secrets the functions bind (see `docs/DEV-TOOLING.md`) | the functions emulator asks Secret Manager and logs 403s |
 
 `scripts/load-build-env.sh` reads `app/.env.sentry-build-plugin` (parsed, not
@@ -237,13 +239,53 @@ again.
 
 ### What the simulator cannot show
 
-- **Push.** A simulator has no APNs token. Only a phone, through TestFlight.
+- **A tap on a notification from outside the app.** On a headless simulator
+  SpringBoard drops synthetic taps on a home-screen banner or a Notification
+  Center entry (idb, with or without a press duration, and Maestro alike): the
+  banner goes, the app never opens. Background and cold-start taps need a phone.
 - **The lock-screen media buttons.** A headless simulator draws no Now Playing
   platter and an empty Control Center, and nothing on the command line sends a
   remote play, pause or skip. The log line above proves the app publishes its
   Now Playing item; the buttons themselves need a phone.
 - **A staff Google sign-in.** It needs a real staff account; the emulator rows
   stand in for it.
+
+## Push on the simulator
+
+An Apple-silicon simulator registers with Apple's SANDBOX push service, so the
+whole path runs here: the app's registration, the row, a real send, the banner
+and a tap inside the app.
+
+- **The row.** An iPhone registers `{ token, platform: 'ios', apnsEnvironment,
+  registeredAt }` (`deviceRow` in `app/src/push.ts`); the token is Apple's, 160
+  hex characters on the simulator. `apnsEnvironment` comes from the build's
+  provisioning profile; a build with none is either the simulator (sandbox:
+  `development`) or a TestFlight / App Store install (`production`). The
+  exported `.ipa` carries the App Store profile, `aps-environment production`.
+- **Where the path lives.** expo-notifications gives JavaScript a remote
+  notification's `userInfo["body"]` as `content.data`, and nothing else of
+  `userInfo`, so the server sends `{"aps": {...}, "body": {"path": "…"}}` and
+  `pushTaps.ts` reads `content.data.path`. A top-level `path` is invisible.
+- **A fake push**, no server, any payload (the app must have permission):
+
+  ```bash
+  cat > /tmp/push.json <<'JSON'
+  {"aps":{"alert":{"title":"T","body":"B"},"sound":"default"},"body":{"path":"courses/<courseId>/sessions/<sessionId>"}}
+  JSON
+  xcrun simctl push booted com.sabeelinstitute.lms /tmp/push.json
+  ```
+
+- **A real one**, through Apple with the project's key, to the token the app
+  registered (read it from `notifications/<uid>/devices` in the emulator):
+
+  ```bash
+  npm run build -w @sabeel/shared
+  APNS_KEY_FILE=~/.apns/AuthKey_<key id>.p8 \
+    node scripts/send-test-push.mjs --apple development <token> <path>
+  ```
+
+With the app open the banner shows (the handler in `push.ts`) and a tap on it
+opens the path. A tap from outside the app cannot be driven here (above).
 
 ## Releasing to TestFlight
 
@@ -285,11 +327,6 @@ with no alpha channel, the native DSN present, and the privacy manifest.
 
 ## Open on iOS
 
-- **Push: the server half is done, the app half is not.** The server sends an
-  iPhone's notification straight to Apple (`functions/src/apns.ts`), to the
-  service its device row names (`apnsEnvironment`). The app does not register
-  an iPhone yet: `pushPlatform` is `'android'` on every phone, and the row it
-  writes has no `apnsEnvironment`, which the rules refuse.
 - **The update gate** compares `expo.android.versionCode` and sends an outdated
   build to `DOWNLOAD_PAGE_URL`, the Android download page.
 - **The rich-text answer keeps the keyboard up.** Tapping outside the field
@@ -297,5 +334,3 @@ with no alpha channel, the native DSN present, and the privacy manifest.
   scrolls and Hand in stays reachable above it.
 - **The date field** opens iOS's compact picker: the field, then a date pill,
   then the calendar, drawn in the system blue.
-- **The lockfile's Expo patch versions** are behind SDK 57's expectations
-  (`npx expo install --check`); aligning them changes the Android build too.

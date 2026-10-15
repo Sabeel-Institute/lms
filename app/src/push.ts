@@ -1,4 +1,9 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
+import {
+  ApplicationReleaseType,
+  getIosApplicationReleaseTypeAsync,
+  getIosPushNotificationServiceEnvironmentAsync,
+} from 'expo-application';
 import {
   AndroidImportance,
   deleteNotificationChannelAsync,
@@ -8,24 +13,56 @@ import {
   setNotificationChannelAsync,
   setNotificationHandler,
 } from 'expo-notifications';
-import { PUSH_CHANNEL_ID, PUSH_CHANNEL_NAME } from '@sabeel/shared';
+import {
+  PUSH_CHANNEL_ID,
+  PUSH_CHANNEL_NAME,
+  type ApnsEnvironment,
+  type DeviceTokenDoc,
+} from '@sabeel/shared';
 
 /**
  * Native side of the push seam (web sibling: push.web.ts).
  *
- * `getDevicePushTokenAsync` returns the **FCM device token**, which is what
- * `admin.messaging()` sends to. Its neighbour `getExpoPushTokenAsync` returns an
- * ExponentPushToken, which only Expo's own push service understands — sending
- * one of those to FCM fails with an invalid-token error that reads like a
- * configuration problem and is not one. This project sends from the Admin SDK,
- * so it is the device token or nothing.
+ * `getDevicePushTokenAsync` returns the platform's own DEVICE token: FCM's on
+ * Android, which `admin.messaging()` sends to, and Apple's (hex) on an iPhone,
+ * which the server sends straight to Apple's push service. Its neighbour
+ * `getExpoPushTokenAsync` returns an ExponentPushToken, which only Expo's own
+ * push service understands — sending one of those to FCM fails with an
+ * invalid-token error that reads like a configuration problem and is not one.
+ * This project sends from its own functions, so it is the device token or
+ * nothing.
  *
  * Every failure returns null: no permission, no Play Services, a build with no
  * messaging config. The settings screen then says this device cannot receive
  * push rather than showing switches that could never fire.
  */
 
-export const pushPlatform = 'android' as const;
+/**
+ * The row this device registers under its token (`DeviceTokenDoc`).
+ *
+ * An iPhone's row also says WHICH of Apple's two push services issued the
+ * token, because each refuses the other's tokens and the server must ask the
+ * right one (`functions/src/apns.ts`).
+ */
+export async function deviceRow(token: string, registeredAt: number): Promise<DeviceTokenDoc> {
+  if (Platform.OS !== 'ios') return { token, platform: 'android', registeredAt };
+  return { token, platform: 'ios', apnsEnvironment: await apnsEnvironment(), registeredAt };
+}
+
+/**
+ * The service is fixed by the build that minted the token, and the build's
+ * provisioning profile says which: development (an Xcode build on a phone)
+ * or production. Only two installs carry no profile, and they are the two
+ * ends: the SIMULATOR, whose tokens come from Apple's sandbox, and an install
+ * from TestFlight or the App Store, which Apple delivers without one and which
+ * always uses production.
+ */
+async function apnsEnvironment(): Promise<ApnsEnvironment> {
+  const fromProfile = await getIosPushNotificationServiceEnvironmentAsync();
+  if (fromProfile === 'development' || fromProfile === 'production') return fromProfile;
+  const release = await getIosApplicationReleaseTypeAsync();
+  return release === ApplicationReleaseType.SIMULATOR ? 'development' : 'production';
+}
 
 /**
  * A push that arrives while the app is OPEN is shown, as a banner.
@@ -114,24 +151,29 @@ async function resolveToken(prompt: boolean): Promise<string | null> {
       existing.granted || (prompt ? (await requestPermissionsAsync()).granted : false);
     if (!granted) return null;
 
-    // Created before the first message arrives, not after: a notification
-    // delivered to a channel that does not exist yet is dropped silently, and
-    // the only symptom is the first one never appearing. The id is shared with
-    // the server, which addresses it — see PUSH_CHANNEL_ID.
-    await setNotificationChannelAsync(PUSH_CHANNEL_ID, {
-      name: PUSH_CHANNEL_NAME,
-      importance: AndroidImportance.HIGH,
-    });
-    // The old channel, which nothing ever posted to because the server named no
-    // channel at all. Left alone it sits in Android's notification settings as a
-    // second, permanently silent "Class recordings" that someone would
-    // reasonably try to configure. Failure is ignored: on a fresh install there
-    // is nothing to delete, which is not a problem.
-    await deleteNotificationChannelAsync('default').catch(() => undefined);
+    if (Platform.OS === 'android') await androidChannels();
 
     const token = await getDevicePushTokenAsync();
     return typeof token.data === 'string' ? token.data : null;
   } catch {
     return null;
   }
+}
+
+/** Android's notification channels; iOS has none. */
+async function androidChannels(): Promise<void> {
+  // Created before the first message arrives, not after: a notification
+  // delivered to a channel that does not exist yet is dropped silently, and
+  // the only symptom is the first one never appearing. The id is shared with
+  // the server, which addresses it — see PUSH_CHANNEL_ID.
+  await setNotificationChannelAsync(PUSH_CHANNEL_ID, {
+    name: PUSH_CHANNEL_NAME,
+    importance: AndroidImportance.HIGH,
+  });
+  // The old channel, which nothing ever posted to because the server named no
+  // channel at all. Left alone it sits in Android's notification settings as a
+  // second, permanently silent "Class recordings" that someone would
+  // reasonably try to configure. Failure is ignored: on a fresh install there
+  // is nothing to delete, which is not a problem.
+  await deleteNotificationChannelAsync('default').catch(() => undefined);
 }

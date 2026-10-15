@@ -1,5 +1,5 @@
 import { getMessaging, getToken, isSupported, onMessage, type MessagePayload } from 'firebase/messaging';
-import { WEB_APP_URL } from '@sabeel/shared';
+import { WEB_APP_URL, type DeviceTokenDoc } from '@sabeel/shared';
 import { app } from './firebase';
 import { VAPID_PUBLIC_KEY } from './firebase-config';
 
@@ -27,7 +27,10 @@ import { VAPID_PUBLIC_KEY } from './firebase-config';
  * rather than showing switches that could never fire.
  */
 
-export const pushPlatform = 'web' as const;
+/** The row this browser registers under its token (`DeviceTokenDoc`). */
+export async function deviceRow(token: string, registeredAt: number): Promise<DeviceTokenDoc> {
+  return { token, platform: 'web', registeredAt };
+}
 
 /**
  * Only a SUCCESSFUL token is remembered. Caching the null too made every failure

@@ -16,7 +16,17 @@ vi.mock('expo-notifications', () => ({
   setNotificationHandler: vi.fn(),
   AndroidImportance: { DEFAULT: 3, HIGH: 4 },
 }));
-vi.mock('react-native', () => ({ Linking: { openSettings: vi.fn(() => Promise.resolve()) } }));
+/** The platform the module is loaded on; set before `loadPush()`. */
+const platform = vi.hoisted(() => ({ OS: 'android' as 'android' | 'ios' }));
+vi.mock('react-native', () => ({
+  Linking: { openSettings: vi.fn(() => Promise.resolve()) },
+  Platform: platform,
+}));
+vi.mock('expo-application', () => ({
+  ApplicationReleaseType: { UNKNOWN: 0, SIMULATOR: 1, ENTERPRISE: 2, DEVELOPMENT: 3, AD_HOC: 4, APP_STORE: 5 },
+  getIosPushNotificationServiceEnvironmentAsync: vi.fn(),
+  getIosApplicationReleaseTypeAsync: vi.fn(),
+}));
 
 import {
   deleteNotificationChannelAsync,
@@ -26,6 +36,11 @@ import {
   setNotificationChannelAsync,
   setNotificationHandler,
 } from 'expo-notifications';
+import {
+  ApplicationReleaseType,
+  getIosApplicationReleaseTypeAsync,
+  getIosPushNotificationServiceEnvironmentAsync,
+} from 'expo-application';
 import { PUSH_CHANNEL_ID, PUSH_CHANNEL_NAME } from '@sabeel/shared';
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -45,7 +60,10 @@ async function loadPush() {
   return import('./push');
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  platform.OS = 'android';
+});
 
 describe('devicePushToken(false) — the silent path', () => {
   it('never raises the system dialog, however askable the device is', async () => {
@@ -157,5 +175,55 @@ describe('a push while the app is open', () => {
       shouldShowList: true,
       shouldPlaySound: false,
     });
+  });
+});
+
+/**
+ * The row a device registers is what the server reads to choose a sender: an
+ * FCM send for Android, or Apple's push service for an iPhone — and, there,
+ * WHICH of Apple's two services, since each refuses the other's tokens. The
+ * promise is "a push sent to this row reaches this phone", so these assert the
+ * row itself, not the calls that build it.
+ */
+describe('the row this device registers', () => {
+  it('on Android, is an FCM row and asks nothing of Apple', async () => {
+    const { deviceRow } = await loadPush();
+    await expect(deviceRow('fcm-native-token', 5)).resolves.toEqual({
+      token: 'fcm-native-token',
+      platform: 'android',
+      registeredAt: 5,
+    });
+    expect(getIosPushNotificationServiceEnvironmentAsync).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an Xcode build on a phone', 'development', 'development', ApplicationReleaseType.DEVELOPMENT],
+    ['a build whose profile says production', 'production', 'production', ApplicationReleaseType.AD_HOC],
+    // No profile at all: the simulator's tokens are the sandbox's…
+    ['the simulator', 'development', null, ApplicationReleaseType.SIMULATOR],
+    // …and TestFlight and the App Store deliver the app without one, on production.
+    ['a TestFlight or App Store install', 'production', null, ApplicationReleaseType.APP_STORE],
+  ])('on an iPhone, from %s, names the %s service', async (_what, expected, profile, release) => {
+    platform.OS = 'ios';
+    asMock(getIosPushNotificationServiceEnvironmentAsync).mockResolvedValue(profile);
+    asMock(getIosApplicationReleaseTypeAsync).mockResolvedValue(release);
+    const { deviceRow } = await loadPush();
+    await expect(deviceRow('a1b2c3', 7)).resolves.toEqual({
+      token: 'a1b2c3',
+      platform: 'ios',
+      apnsEnvironment: expected,
+      registeredAt: 7,
+    });
+  });
+});
+
+describe('an iPhone', () => {
+  it('yields its token without touching Android channels', async () => {
+    platform.OS = 'ios';
+    device({ granted: true, token: 'a1b2c3' });
+    const { devicePushToken } = await loadPush();
+    await expect(devicePushToken(false)).resolves.toBe('a1b2c3');
+    expect(setNotificationChannelAsync).not.toHaveBeenCalled();
+    expect(deleteNotificationChannelAsync).not.toHaveBeenCalled();
   });
 });

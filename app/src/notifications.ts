@@ -1,13 +1,12 @@
 import { deleteDoc, doc, setDoc } from 'firebase/firestore';
 import {
   COLLECTIONS,
-  type DeviceTokenDoc,
   type NotificationKind,
   type NotificationPrefsDoc,
 } from '@sabeel/shared';
 import { db } from './firebase';
 import { useLiveDocState } from './liveQuery';
-import { devicePushToken, pushPlatform } from './push';
+import { devicePushToken, deviceRow } from './push';
 import { read } from './documents';
 
 /**
@@ -99,11 +98,7 @@ const bounded = (write: Promise<unknown>): Promise<unknown> =>
 export async function registerThisDevice(uid: string, prompt: boolean): Promise<string | null> {
   const token = await devicePushToken(prompt);
   if (!token) return null;
-  const row: DeviceTokenDoc = {
-    token,
-    platform: pushPlatform,
-    registeredAt: Date.now(),
-  };
+  const row = await deviceRow(token, Date.now());
   await bounded(setDoc(doc(db, COLLECTIONS.notifications, uid, 'devices', token), row));
   return token;
 }
