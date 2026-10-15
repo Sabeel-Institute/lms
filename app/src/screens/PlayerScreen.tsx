@@ -164,10 +164,13 @@ export function PlayerScreen({
   // While the scrubber is being dragged it reports the previewed position; the
   // time readouts follow the thumb rather than the still-advancing playhead.
   const [scrubMs, setScrubMs] = useState<number | null>(null);
-  // A file still on its way after a few seconds is a long one, or a slow
-  // connection: said, so a wait is not taken for a fault.
-  const preparingNow = !state.ready && !state.error && playable && (allowed || finishing);
-  const slow = useAfter(preparingNow, SLOW_MS);
+  // WAITING: for the file, or for data while meant to be playing. On Android
+  // the file counts as loaded at once and most of a long recording's wait is
+  // the second kind. Still waiting after a few seconds is a long recording or
+  // a slow connection: said, so a wait is not taken for a fault.
+  const waitingNow =
+    playable && (allowed || finishing) && !state.error && (!state.ready || (state.playing && state.buffering));
+  const slow = useAfter(waitingNow, SLOW_MS);
   // Staff can reach this across cohorts, where a course name alone is ambiguous;
   // students can't read cohorts and arrive from their own single context, so the
   // lookup is disabled for them (returns '').
@@ -321,7 +324,7 @@ export function PlayerScreen({
       <Transport
         playing={state.playing || state.startWhenReady}
         disabled={!state.ready}
-        waiting={preparing && playable}
+        waiting={(preparing && playable) || (state.ready && state.playing && state.buffering)}
         onPlayPause={state.playing || state.startWhenReady ? pause : play}
         onBack={playback.skipBack}
         onForward={playback.skipForward}
@@ -339,14 +342,20 @@ export function PlayerScreen({
               }`}
         </Text>
       ) : null}
-      {/* WAITING FOR DATA mid-play, said rather than shown as Pause over
-          silence. A video is where that happens, and its audio is the way
-          round it. */}
+      {/* WAITING FOR DATA while meant to be playing, said rather than shown
+          as Pause over silence. A video is where that happens most, and its
+          audio is the way round it. */}
       {state.ready && state.playing && state.buffering ? (
         <Text testID="player-loading" style={styles.preparing}>
-          {current?.kind === 'video' && versions.some((i) => i.kind === 'audio') && !finishing
-            ? 'Loading… On a slow connection, Audio only needs far less data.'
-            : 'Loading…'}
+          {[
+            'Loading…',
+            slow ? 'On a slow connection this can take half a minute.' : null,
+            current?.kind === 'video' && versions.some((i) => i.kind === 'audio') && !finishing
+              ? 'Audio only needs far less data.'
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' ')}
         </Text>
       ) : null}
 

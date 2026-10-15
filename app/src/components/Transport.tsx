@@ -1,5 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { WaitingRing } from './WaitingRing';
 import { SKIP_BACK_MS, SKIP_FORWARD_MS } from '../playback';
 import { getTheme, spacing } from '../theme';
 
@@ -74,7 +75,7 @@ export function Transport({
       />
 
       <View style={styles.playSlot}>
-        {waiting ? <WaitingRing size={PLAY + 14} /> : null}
+        {waiting ? <WaitingRing size={PLAY + 14} testID="player-waiting" /> : null}
         <Pressable
           testID="player-play"
           accessibilityRole="button"
@@ -102,19 +103,6 @@ export function Transport({
         onPress={onForward}
         testID="player-forward"
       />
-    </View>
-  );
-}
-
-/**
- * A ring turning around a play button while its file is on its way: the
- * platform's own spinner, drawn by the browser or by Android rather than
- * moved frame by frame from JavaScript.
- */
-export function WaitingRing({ size }: { size: number }) {
-  return (
-    <View pointerEvents="none" style={[styles.ring, { width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2 }]}>
-      <ActivityIndicator testID="player-waiting" size={size} color={t.accent.base} />
     </View>
   );
 }
@@ -186,7 +174,6 @@ const styles = StyleSheet.create({
   },
   // The ring sits round the button, centred on it, and takes no taps.
   playSlot: { width: PLAY, height: PLAY, alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', left: '50%', top: '50%', alignItems: 'center', justifyContent: 'center' },
   playButton: {
     width: PLAY,
     height: PLAY,

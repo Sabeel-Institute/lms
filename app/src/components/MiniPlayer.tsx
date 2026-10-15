@@ -13,7 +13,8 @@ import { playingSinceItsDay, useInstituteDay } from '../instituteDay';
 import { liveDueDate, useMyAssignmentState } from '../completion';
 import { useRecordingState } from '../recordings';
 import { useCourseState } from '../structure';
-import { PlayPauseGlyph, Skip, WaitingRing } from './Transport';
+import { PlayPauseGlyph, Skip } from './Transport';
+import { WaitingRing } from './WaitingRing';
 import { LAYOUT_WIDTHS, getTheme, spacing } from '../theme';
 import { useRoomy, useWide } from '../useWidth';
 
@@ -120,8 +121,10 @@ export function MiniPlayer({
   const pct = now.durationMs > 0 ? Math.min(1, state.positionMs / now.durationMs) : 0;
   const remaining = Math.max(0, now.durationMs - state.positionMs);
   const times = `${formatClock(state.positionMs)} / −${formatClock(remaining)}`;
-  const waiting = !state.ready && !state.error;
-  const playOff = !state.ready && !waiting;
+  // Waiting for the file, or for data while meant to be playing: on Android
+  // most of a long recording's wait comes after the file counts as loaded.
+  const waiting = !state.error && (!state.ready || (state.playing && state.buffering));
+  const playOff = !state.ready && !!state.error;
   // Playing, or about to: Pause takes a Play tapped early back.
   const wants = state.playing || state.startWhenReady;
 
@@ -183,7 +186,7 @@ export function MiniPlayer({
             is on its way, it starts the moment it can, with a ring turning
             round it until then. */}
         <View style={styles.playSlot}>
-          {waiting ? <WaitingRing size={52} /> : null}
+          {waiting ? <WaitingRing size={52} testID="mini-player-waiting" /> : null}
           <Pressable
             testID="mini-player-toggle"
             accessibilityRole="button"
