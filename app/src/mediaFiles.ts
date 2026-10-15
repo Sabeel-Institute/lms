@@ -46,6 +46,8 @@ export async function sendPart(
   body: Blob | Uint8Array,
   signal: AbortSignal,
   headers: Record<string, string> = {},
+  // fetch on a phone reports nothing until the part has gone.
+  _onSent?: (bytes: number) => void,
 ): Promise<string> {
   return partSent(signal, () => fetch(url, { method: 'PUT', body: body as Uint8Array<ArrayBuffer>, signal, headers }));
 }

@@ -628,8 +628,9 @@ it another version of a part already there — for example a phone video of the
 whiteboard beside the Zoom audio. A part takes one uploaded video and one
 audio file. Then tap **Upload N files**.
 
-Each file shows how far it has got. Big files go up in pieces, so a dropped
-connection costs a few seconds, not the whole upload. When a file has arrived
+Each file shows how far it has got. Big files go up in pieces, and a dropped
+connection is waited out for up to three minutes, so it costs that time, not
+the whole upload. Keep the page open meanwhile. When a file has arrived
 the app checks that phones can play it. A video in another format — an
 iPhone's HEVC video is the usual one, and a camera's 10-bit video another — is
 refused with what to do instead: export it as MP4 (standard 8-bit H.264) and

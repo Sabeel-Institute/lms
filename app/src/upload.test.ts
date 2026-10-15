@@ -29,7 +29,7 @@ function world(sizeBytes: number, partBytes: number, { failSends = new Map<numbe
   };
   const io = {
     read: async (start: number, end: number) => [start, end] as [number, number],
-    send: async (url: string, body: [number, number]) => {
+    send: async (url: string, body: [number, number], _signal?: AbortSignal, _onSent?: (bytes: number) => void) => {
       const n = Number(url.split(':')[1]);
       const left = failSends.get(n) ?? 0;
       if (left > 0) {
@@ -43,7 +43,7 @@ function world(sizeBytes: number, partBytes: number, { failSends = new Map<numbe
   return { api, io, stored, calls, signedFor };
 }
 
-const run = (w: ReturnType<typeof world>, sizeBytes: number, signal = new AbortController().signal) => {
+const run = (w: ReturnType<typeof world>, sizeBytes: number, signal = new AbortController().signal, outageMs = 0) => {
   const progress: number[] = [];
   const stages: string[] = [];
   const done = uploadMedia({
@@ -57,6 +57,7 @@ const run = (w: ReturnType<typeof world>, sizeBytes: number, signal = new AbortC
     onProgress: (f) => progress.push(f),
     onStage: (s) => stages.push(s),
     retryDelayMs: 0,
+    outageMs,
   });
   return { done, progress, stages };
 };
@@ -75,6 +76,23 @@ describe('uploadMedia', () => {
     expect(progress.at(-1)).toBe(1);
     expect(stages).toEqual(['sending', 'checking']);
     expect(w.calls.cancelled).toBe(0);
+  });
+
+  /*
+   * THE FIGURE MOVES WITHIN A PART. It moved only as whole parts finished,
+   * three at a time, so a long file read 0% for minutes on a phone's uplink.
+   */
+  it('reports bytes on their way, before any part has finished', async () => {
+    const w = world(1000, 500);
+    const send = w.io.send;
+    w.io.send = async (url, body, signal, onSent) => {
+      onSent?.(125);
+      return send(url, body, signal, onSent);
+    };
+    const { done, progress } = run(w, 1000);
+    await done;
+    expect(progress[0]).toBe(0.125);
+    expect(progress.at(-1)).toBe(1);
   });
 
   it('sends a small file as one part', async () => {
@@ -97,6 +115,47 @@ describe('uploadMedia', () => {
     await expect(run(w, 1000).done).rejects.toThrow('network');
     expect(w.calls.finalized).toBeNull();
     expect(w.calls.cancelled).toBe(1);
+  });
+
+  /*
+   * A DROPPED CONNECTION IS WAITED OUT. Four tries a few seconds apart gave
+   * up seven seconds into an outage, and the whole file, every part already
+   * sent, was thrown away. A part now keeps trying while the link has been
+   * down for less than the outage allowance.
+   */
+  it('keeps trying a part through an outage longer than its tries, and the file goes up whole', async () => {
+    const w = world(1000, 128, { failSends: new Map([[2, 12]]) });
+    await run(w, 1000, undefined, 60_000).done;
+    expect(w.stored.size).toBe(8);
+    expect(w.calls.cancelled).toBe(0);
+    expect(w.calls.finalized?.map((p) => p.partNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  /*
+   * A CONFIRMATION THAT FAILED ON ITS WAY MAY HAVE WORKED. The app removed
+   * the file on any failure, a timeout included, and a file that had landed
+   * went with it. It now asks again, and removes nothing unless the server
+   * refused the file.
+   */
+  it('asks again after a confirmation lost on its way, and removes nothing', async () => {
+    const w = world(10, 128);
+    let asked = 0;
+    w.api.finalize = async () => {
+      asked++;
+      if (asked === 1) throw Object.assign(new Error('deadline-exceeded'), { code: 'functions/deadline-exceeded' });
+    };
+    await run(w, 10).done;
+    expect(asked).toBe(2);
+    expect(w.calls.cancelled).toBe(0);
+  });
+
+  it('keeps the file when the confirmation never comes back', async () => {
+    const w = world(10, 128);
+    w.api.finalize = async () => {
+      throw Object.assign(new Error('internal'), { code: 'functions/internal' });
+    };
+    await expect(run(w, 10).done).rejects.toThrow('internal');
+    expect(w.calls.cancelled).toBe(0);
   });
 
   it('stops when cancelled, confirms nothing, and removes the file', async () => {

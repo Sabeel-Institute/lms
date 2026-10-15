@@ -38,6 +38,36 @@ export async function sendPart(
   body: Blob | Uint8Array,
   signal: AbortSignal,
   headers: Record<string, string> = {},
+  onSent?: (bytes: number) => void,
 ): Promise<string> {
-  return partSent(signal, () => fetch(url, { method: 'PUT', body: body as BodyInit, signal, headers }));
+  if (!onSent) return partSent(signal, () => fetch(url, { method: 'PUT', body: body as BodyInit, signal, headers }));
+  return partSent(signal, () => put(url, body, signal, headers, onSent));
+}
+
+/*
+ * A PUT THAT SAYS HOW FAR IT HAS GOT. fetch reports nothing until a part has
+ * gone, so a long file's row sat at 0% for minutes on a phone's uplink, with
+ * Stop as the only thing to press. XMLHttpRequest reports the bytes as they
+ * leave.
+ */
+function put(
+  url: string,
+  body: Blob | Uint8Array,
+  signal: AbortSignal,
+  headers: Record<string, string>,
+  onSent: (bytes: number) => void,
+): Promise<{ ok: boolean; status: number; headers: { get(name: string): string | null } }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    xhr.upload.onprogress = (e) => onSent(e.loaded);
+    xhr.onload = () =>
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, headers: { get: (n) => xhr.getResponseHeader(n) } });
+    xhr.onerror = () => reject(new Error('network'));
+    xhr.onabort = () => reject(new DOMException('aborted', 'AbortError'));
+    if (signal.aborted) return xhr.abort();
+    signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    xhr.send(body as XMLHttpRequestBodyInit);
+  });
 }

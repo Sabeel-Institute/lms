@@ -126,7 +126,7 @@ export function useUploads(sessionId: string, recording: RecordingRow | null) {
             api: uploadApi,
             io: {
               read: (start, end) => readPart(row.file, start, end),
-              send: sendPart,
+              send: (url, body, signal, onSent) => sendPart(url, body, signal, {}, onSent),
             },
             signal: ctrl.signal,
             onProgress: (progress) => patch(row.key, { progress }),
