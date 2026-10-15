@@ -299,6 +299,9 @@ describe('completions: self-only client writes', () => {
     await assertFails(setDoc(ref, { ...honest, completedAt: 'x' }));
     await assertFails(setDoc(ref, { ...honest, updatedAt: 'now' }));
     await assertFails(setDoc(ref, { ...honest, note: 'extra' }));
+    // A time no date can hold: formatted on the ledger and in the workbooks.
+    await assertFails(setDoc(ref, { ...honest, completedAt: 8640000000000001 }));
+    await assertFails(setDoc(ref, { ...honest, updatedAt: 8640000000000001 }));
     await assertSucceeds(setDoc(ref, honest));
     await assertFails(setDoc(ref, { ...honest, completedAt: 'x' }));
   });
@@ -460,7 +463,10 @@ describe('completionEvents: append-only', () => {
     at: 5,
   });
 
-  it('a student appends their own event', async () => {
+  it('a student appends their own event, at a time a date can hold', async () => {
+    await assertFails(
+      setDoc(doc(student().firestore(), COLLECTIONS.completionEvents, 'e0'), { ...event('student', STUDENT), at: 8640000000000001 }),
+    );
     await assertSucceeds(
       setDoc(doc(student().firestore(), COLLECTIONS.completionEvents, 'e1'), event('student', STUDENT)),
     );

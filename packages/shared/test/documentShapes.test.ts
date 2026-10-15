@@ -304,3 +304,17 @@ describe('an audit entry whose detail the screen cannot print', () => {
     expect(() => flat({ ...SAMPLES.auditLog, detail: { dueDate: '2026-10-21 → 2026-10-23', returned: ['u1'], retry: false, n: 2 } }, TODAY)).not.toThrow();
   });
 });
+
+/*
+ * A TIME NO DATE CAN HOLD, already stored. The rules now refuse one, but a
+ * row written before they did is what check:documents exists to find, so the
+ * migration can put it right rather than a screen reading around it.
+ */
+describe('client-written times', () => {
+  it('are reported when they are not times the rules accept', () => {
+    const progress = SCREEN_CHECKS.listeningProgress!;
+    const row = { studentUid: 'u1', recordingId: 'r1', courseId: 'k1', positionMs: 1, listenedMs: 1, updatedAt: 8640000000000001 };
+    expect(() => progress.forEach((check) => check(row as never, '2026-10-14'))).toThrow(/not a time the rules accept/);
+    expect(() => progress.forEach((check) => check({ ...row, updatedAt: Date.UTC(2026, 9, 14) } as never, '2026-10-14'))).not.toThrow();
+  });
+});

@@ -1,4 +1,4 @@
-import type { AppConfigDoc } from './constants';
+import { LATEST_CLIENT_TIME, type AppConfigDoc } from './constants';
 import type {
   AttendanceRecordDoc,
   CohortDoc,
@@ -375,6 +375,11 @@ export function storedDoc<C extends StoredCollection>(_collection: C, stored: Re
   return stored as unknown as StoredDocs[C];
 }
 
+/** A time a client wrote, within what the rules accept; anything else is data to migrate. */
+function clientTime(v: number): void {
+  if (!(Number.isInteger(v) && v > 0 && v < LATEST_CLIENT_TIME)) throw new Error(`not a time the rules accept: ${v}`);
+}
+
 /**
  * What the screens do with a document of each kind, run over every document
  * in the shape tests and by `npm run check:documents`: a document the code
@@ -397,15 +402,21 @@ export const SCREEN_CHECKS: { [C in StoredCollection]?: ((doc: StoredDocs[C], to
   ],
   courses: [(c) => canPlayFromCourse(c)],
   assignments: [(a, today) => hasRecordingAccess(a, today)],
-  listeningProgress: [(p) => listenedShare(p.listenedMs, null)],
-  completions: [(c) => effectiveCompletion(c, null)],
+  listeningProgress: [(p) => listenedShare(p.listenedMs, null), (p) => clientTime(p.updatedAt)],
+  completions: [
+    (c) => effectiveCompletion(c, null),
+    (c) => {
+      if (c.completedAt !== null) clientTime(c.completedAt);
+      clientTime(c.updatedAt);
+    },
+  ],
   completionOverrides: [(o) => effectiveCompletion(null, o)],
   coursework: [(c) => closesOn(c), (c) => Object.values(c.files).map((f) => f.name)],
   submissions: [
     (s, today) => nextDeadline(workState(s, today, true), s),
     (s) => s.attempts.flatMap((a) => Object.values(a.files).map((f) => f.name)),
   ],
-  drafts: [(d) => Object.values(d.files).map((f) => f.name)],
+  drafts: [(d) => Object.values(d.files).map((f) => f.name), (d) => clientTime(d.updatedAt)],
   auditLog: [
     (e) => {
       if (!Object.hasOwn(AUDIT_ACTION_LABELS, e.action)) throw new Error(`no words for the action ${e.action}`);

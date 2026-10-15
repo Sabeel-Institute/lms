@@ -51,6 +51,20 @@ service cloud.firestore {
       return isActive() && role() == 'admin' && staffRecordAgrees();
     }
 
+    /*
+     * A TIME A CLIENT WRITES, in milliseconds: a real moment, bounded
+     * absolutely rather than against request.time, so a phone whose clock
+     * runs fast still saves. A JavaScript Date holds far more, but a staff
+     * screen or export formats these, and a time past year 9999 formats as
+     * text no date parser reads back, or throws: one student's row blanked
+     * their class's progress page and its workbook. The bound is
+     * LATEST_CLIENT_TIME in @sabeel/shared; rules.recordings.test.ts holds
+     * the two together.
+     */
+    function isTime(v) {
+      return v is int && v > 0 && v < 4102444800000;
+    }
+
     function isStudent() {
       return isActive() && role() == 'student';
     }
@@ -315,7 +329,7 @@ service cloud.firestore {
                'part', 'version'])
           && request.resource.data.positionMs is int
           && request.resource.data.listenedMs is int
-          && request.resource.data.updatedAt is int
+          && isTime(request.resource.data.updatedAt)
           // Where in the recording: which part, in which version. Optional,
           // because rows from before parts existed have neither.
           && (!('part' in request.resource.data) || request.resource.data.part is int)
@@ -455,7 +469,7 @@ service cloud.firestore {
       function noteShape() {
         return request.resource.data.note is string
           && request.resource.data.note.size() <= 20000
-          && request.resource.data.updatedAt is int;
+          && isTime(request.resource.data.updatedAt);
       }
       allow get: if isStudent()
         && (resource == null
@@ -523,8 +537,8 @@ service cloud.firestore {
         return request.resource.data.keys().hasOnly(
               ['studentUid', 'recordingId', 'courseId', 'completed', 'completedAt', 'updatedAt'])
           && request.resource.data.completed is bool
-          && (request.resource.data.completedAt == null || request.resource.data.completedAt is int)
-          && request.resource.data.updatedAt is int;
+          && (request.resource.data.completedAt == null || isTime(request.resource.data.completedAt))
+          && isTime(request.resource.data.updatedAt);
       }
       // Bound to the caller's own id, like `listeningProgress` above: an
       // unbound null arm would answer about any `${uid}_${recordingId}`.
@@ -571,7 +585,7 @@ service cloud.firestore {
         && request.resource.data.studentUid == request.auth.uid
         && request.resource.data.actor == 'student'
         && request.resource.data.action in ['complete', 'uncomplete']
-        && request.resource.data.at is int
+        && isTime(request.resource.data.at)
         && holdsGrant(request.resource.data.recordingId)
         && request.resource.data.courseId == grantedCourse(request.resource.data.recordingId);
       /*
@@ -705,7 +719,7 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['token', 'platform', 'registeredAt'])
           && request.resource.data.token == token
           && request.resource.data.platform is string
-          && request.resource.data.registeredAt is int;
+          && isTime(request.resource.data.registeredAt);
       }
 
       // Server-only, both ways. This is the idempotency marker the send path

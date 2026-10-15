@@ -77,6 +77,16 @@ export const EMULATOR_PROJECT_ID = 'demo-sabeel-recordings';
 export const SIGNED_URL_TTL_MS = 12 * 60 * 60 * 1000;
 
 /**
+ * The latest time a client may write, in milliseconds: the start of 2100. The
+ * rules hold every client-written time under it (`isTime` in firestore.rules;
+ * rules.recordings.test.ts keeps the two together) and `npm run
+ * check:documents` reports any stored one that is not. A JavaScript Date holds
+ * far more, but a staff screen or an export formats these, and a time past
+ * year 9999 formats as text no date parser reads back, or throws.
+ */
+export const LATEST_CLIENT_TIME = Date.UTC(2100, 0, 1);
+
+/**
  * Re-mint a signed URL before starting playback when less than this remains.
  *
  * Refreshing only after a 403 means a seek near the expiry boundary fails

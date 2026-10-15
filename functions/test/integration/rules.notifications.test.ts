@@ -146,6 +146,14 @@ describe('device tokens', () => {
     await assertSucceeds(
       deleteDoc(doc(db, COLLECTIONS.notifications, STUDENT, 'devices', 'tok-a')),
     );
+    // Registered at a time a date can hold.
+    await assertFails(
+      setDoc(doc(db, COLLECTIONS.notifications, STUDENT, 'devices', 'tok-c'), {
+        token: 'tok-c',
+        platform: 'android',
+        registeredAt: 8640000000000001,
+      }),
+    );
   });
 
   it('lets a device RE-register — the second visit to the settings screen', async () => {

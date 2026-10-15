@@ -267,6 +267,12 @@ describe('drafts', () => {
     await assertFails(updateDoc(mine, { note: 'ب'.repeat(MAX_ANSWER_CHARS + 1), updatedAt: 3 }));
   });
 
+  it('a draft is saved at a time a date can hold', async () => {
+    const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
+    await assertFails(updateDoc(mine, { note: 'Later', updatedAt: 8640000000000001 }));
+    await assertSucceeds(updateDoc(mine, { note: 'Later', updatedAt: Date.now() }));
+  });
+
   it('a student cannot put files on a draft themselves', async () => {
     const mine = doc(student(), COLLECTIONS.drafts, submissionId(STUDENT, CW));
     await assertFails(updateDoc(mine, { files: { f: { storageKey: 'work/x' } }, updatedAt: 2 }));

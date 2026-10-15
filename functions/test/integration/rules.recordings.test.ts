@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest';
 import { withAudio } from '../mediaFixtures';
 import { readFileSync } from 'node:fs';
 import {
@@ -9,6 +9,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import {
+  LATEST_CLIENT_TIME,
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
   assignmentId,
@@ -454,6 +455,26 @@ describe('listeningProgress', () => {
     // And on update, once the honest row exists.
     await assertSucceeds(setDoc(ref, row(STUDENT)));
     await assertFails(setDoc(ref, { ...row(STUDENT), updatedAt: 'x' }));
+  });
+
+  /*
+   * A TIME NO DATE CAN HOLD. An integer past what a JavaScript Date holds
+   * passed `is int`, and from then on the class's progress page and its
+   * workbook exports failed for every manager and admin. The bound is absolute
+   * (the start of 2100), so a phone whose clock runs fast still saves.
+   */
+  it('refuses a time no date can hold, and takes any real one', async () => {
+    const ref = doc(student().firestore(), COLLECTIONS.listeningProgress, mineId());
+    for (const bad of [8640000000000001, 8640000000000000, LATEST_CLIENT_TIME, 0, -5]) {
+      await assertFails(setDoc(ref, { ...row(STUDENT), updatedAt: bad }));
+    }
+    await assertSucceeds(setDoc(ref, { ...row(STUDENT), updatedAt: Date.now() + 365 * 24 * 3600 * 1000 }));
+    await assertSucceeds(setDoc(ref, { ...row(STUDENT), updatedAt: LATEST_CLIENT_TIME - 1 }));
+  });
+
+  it('bounds times at LATEST_CLIENT_TIME, the number @sabeel/shared and check:documents use', () => {
+    const rules = readFileSync(new URL('../../../firestore.rules', import.meta.url), 'utf8');
+    expect(rules).toContain(`v > 0 && v < ${LATEST_CLIENT_TIME}`);
   });
 
   it('takes the part and version a student is in, and only real ones', async () => {
