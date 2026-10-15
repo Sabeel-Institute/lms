@@ -15,6 +15,7 @@ import {
   AUDIT_PAGE,
   COLLECTIONS,
   INSTITUTE_TIMEZONE,
+  QUEUE_SCOPE,
   buildXlsx,
   courseWorkbook,
   studentWorkbook,
@@ -29,7 +30,7 @@ import {
 } from '@sabeel/shared';
 import { db } from './firebase';
 import { saveWorkbook } from './exportWorkbook';
-import { workbookHistory } from './studentHistory';
+import { mergeNewestFirst, workbookHistory } from './studentHistory';
 import { read, readIfExists } from './documents';
 
 /**
@@ -182,31 +183,34 @@ export async function exportStudentWorkbook(
     d.enrollments.some((e) => e.studentUid === student.uid),
   );
   const scope = data.map((d) => d.course.id);
-  const audit =
+  const newest = (...pin: ReturnType<typeof where>[]) =>
+    rows(
+      COLLECTIONS.auditLog,
+      query(collection(db, COLLECTIONS.auditLog), ...pin, where('targets.studentUid', '==', student.uid), orderBy('at', 'desc'), limit(AUDIT_PAGE)),
+    );
+  /*
+   * A MANAGER'S READ IS PINNED TO THEIR COURSES, A FEW AT A TIME. Production
+   * serves a manager's `courseId in` list only up to a ceiling (QUEUE_SCOPE),
+   * and a long-serving teacher's student is in more of their courses than
+   * that, archived ones included: one query naming them all was refused, and
+   * the export with it. Each part names at most QUEUE_SCOPE.manager courses.
+   */
+  const parts =
     scope.length === 0
       ? []
-      : await rows(
-          COLLECTIONS.auditLog,
-          isAdmin
-            ? query(
-                collection(db, COLLECTIONS.auditLog),
-                where('targets.studentUid', '==', student.uid),
-                orderBy('at', 'desc'),
-                limit(AUDIT_PAGE),
-              )
-            : query(
-                collection(db, COLLECTIONS.auditLog),
-                where('courseId', 'in', scope.slice(0, 30)),
-                where('targets.studentUid', '==', student.uid),
-                orderBy('at', 'desc'),
-                limit(AUDIT_PAGE),
-              ),
-        );
+      : isAdmin
+        ? [await newest()]
+        : await Promise.all(
+            Array.from({ length: Math.ceil(scope.length / QUEUE_SCOPE.manager) }, (_, i) =>
+              newest(where('courseId', 'in', scope.slice(i * QUEUE_SCOPE.manager, (i + 1) * QUEUE_SCOPE.manager))),
+            ),
+          );
+  const audit = mergeNewestFirst(parts, AUDIT_PAGE);
   const courseLabel = (id: string) => {
     const d = data.find((x) => x.course.id === id);
     return d ? `${d.course.name} (${d.cohortName})` : id;
   };
-  const history = workbookHistory(audit, courseLabel, { at: student.createdAt, by: student.createdBy });
+  const history = workbookHistory(audit.rows, courseLabel, { at: student.createdAt, by: student.createdBy });
   const ctx = context(dir, byUid, isAdmin ? undefined : 'the courses you manage');
   await saveWorkbook(
     workbookFilename(`${student.displayName} — ${ctx.today}`),
@@ -224,7 +228,7 @@ export async function exportStudentWorkbook(
           history,
           // The read stops at AUDIT_PAGE rows, newest first: at the cap, the
           // earliest of the student's history is not in the file, and it says so.
-          historyComplete: audit.length < AUDIT_PAGE,
+          historyComplete: audit.complete,
         },
         ctx,
       ),

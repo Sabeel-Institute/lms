@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AuditEntryDoc } from '@sabeel/shared';
-import { describeStudentEvent, studentHistory, workbookHistory } from './studentHistory';
+import { describeStudentEvent, mergeNewestFirst, studentHistory, workbookHistory } from './studentHistory';
 
 /**
  * What a person reads on a student's page, from what the server wrote.
@@ -147,5 +147,23 @@ describe('workbookHistory', () => {
   it('keeps the creation row the log has, once', () => {
     const rows = workbookHistory([row({ at: 7, action: 'createStudent', courseId: null })], label, created);
     expect(rows.map((r) => [r.at, r.what])).toEqual([[7, 'Account created']]);
+  });
+});
+
+describe('mergeNewestFirst', () => {
+  const at = (...ts: number[]) => ts.map((t) => ({ at: t }));
+
+  it('puts parts back together newest first, and whole when no part stopped at its cap', () => {
+    expect(mergeNewestFirst([at(9, 4), at(7, 2)], 5)).toEqual({ rows: at(9, 7, 4, 2), complete: true });
+  });
+
+  /*
+   * A part cut short at its cap is missing whatever is older than its last
+   * row. Keeping the other parts' older rows would print a history with a
+   * hole in it, under a note saying only that the earliest is missing.
+   */
+  it('keeps nothing older than where a cut-short part stops, and says it is not whole', () => {
+    expect(mergeNewestFirst([at(10, 9, 8), at(7, 5, 1)], 3)).toEqual({ rows: at(10, 9, 8), complete: false });
+    expect(mergeNewestFirst([at(10, 6), at(9, 8)], 3)).toEqual({ rows: at(10, 9, 8), complete: false });
   });
 });

@@ -111,6 +111,25 @@ function oneRowPerTap<R extends { at: number; actorUid: string; what: string }>(
 }
 
 /**
+ * One newest-first read of the log, sent in parts, put back together.
+ *
+ * Each part stops at `cap` rows, and a part that did is missing whatever is
+ * older than its last row; so nothing older than that is kept from the other
+ * parts either. What comes back is the most recent history without a gap in
+ * it, at most `cap` rows, and `complete` only when no part was cut short and
+ * nothing had to be left out.
+ */
+export function mergeNewestFirst<R extends { at: number }>(parts: readonly (readonly R[])[], cap: number): { rows: R[]; complete: boolean } {
+  const cut = parts.filter((p) => p.length >= cap).map((p) => p[p.length - 1].at);
+  const from = cut.length ? Math.max(...cut) : -Infinity;
+  const rows = parts
+    .flat()
+    .filter((r) => r.at >= from)
+    .sort((a, b) => b.at - a.at);
+  return { rows: rows.slice(0, cap), complete: cut.length === 0 && rows.length <= cap };
+}
+
+/**
  * The student workbook's History tab: the page's history, rows for the
  * overrides beside it, and the account's creation first, as the page shows it
  * whether or not its audit row is among those read. Built row by row, a
