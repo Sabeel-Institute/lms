@@ -1854,6 +1854,32 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-14 — **Bug hunt, round 2: done and deployed — the hunt ends here**
+  (`01da30f`–`4d1a94c`; rules, functions and hosting deployed, live at
+  `v0.1.1 · 4d1a94c`). Faisal set two rounds as the limit. Eight reviewers
+  attacked round 1's fixes and the features added since: 95 findings. All 4
+  highs fixed (an answer typed offline on one device replaced the essay
+  written since on another; grading prefills that cut a student's time; a
+  sign-out in one tab broke every other tab; the grading form carried one
+  student's reason onto the next). 40 of 44 mediums fixed, among them: a
+  confirmation sent twice removed the file it confirmed; no call to R2 had a
+  time limit; a dropped connection over seven seconds lost a whole upload;
+  GoPro files refused; a disabled student kept writing for up to an hour;
+  crash reports carried account ids; Today missed grades given on paper and
+  held every grade of the term open; a session ended by the server left the
+  cache; a stale tab after a deploy reported nothing; the app could be
+  framed. Left: a paused player does not follow the place reached on another
+  device; the workbooks know only a student's last leave date (needs a close
+  date on each grant); the Zoom import scope of a manager is Faisal's call;
+  past midnight only the current part plays on (the server mints no URL
+  after the deadline). 5 of 47 lows fixed, the rest recorded. Suites: unit
+  828, `test:emulator` 696 passed and 2 skipped, browser 251 checks, the
+  sweep 2087, lint, typecheck, knip; on live `smoke:prod` (new: a missing
+  build file is a 404, the app refuses framing, Google's sign-in frame does
+  not), `check:documents`, `check:queries`, the Google popup. Tallies
+  backfilled for all 114 assignments; a second run wrote none. Push
+  notifications stay off until Faisal says otherwise.
+
 - 2026-10-14 — **Bug hunt, round 1: done and deployed** (`3e51bed`–`237b8a8`;
   functions and hosting deployed, live at `v0.1.1 · 237b8a8`). All 106
   findings settled. Faisal's decisions built: stopping work leaves a student
