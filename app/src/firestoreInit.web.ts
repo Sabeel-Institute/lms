@@ -19,10 +19,36 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 
+/*
+ * EVERY TAB OF THE APP SHARES ONE CACHE, and one never clears it under the
+ * others. Cleared at a sign-out or a Try again in one tab, it ended every
+ * listener in the rest ("aborted"), told a student their open assignment was
+ * gone, and left a sign-in there that never arrived. So the tab that clears
+ * says so first: the others stop reading and let the cache go, and once it is
+ * cleared they start again, at the root after a sign-out, where they were
+ * after a Try again.
+ */
+type CacheStep = { step: 'ending' | 'ended'; to: string | null };
+const otherTabs = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('sabeel-lms-cache');
+const beforeEnding: (() => void)[] = [];
+
+/** Run before this tab lets the cache go for another's clearing: its reads are no longer live. */
+export function onCacheEnding(fn: () => void): void {
+  beforeEnding.push(fn);
+}
+
 export function initDb(app: FirebaseApp): Firestore {
-  return initializeFirestore(app, {
+  const db = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
   });
+  otherTabs?.addEventListener('message', (ev: MessageEvent<CacheStep>) => {
+    if (ev.data.step === 'ending') {
+      for (const fn of beforeEnding) fn();
+      void terminate(db).catch(() => undefined);
+    } else if (ev.data.to) window.location.replace(ev.data.to);
+    else window.location.reload();
+  });
+  return db;
 }
 
 /**
@@ -43,7 +69,7 @@ export async function afterSignOut(db: Firestore, drained: boolean): Promise<voi
     window.history.replaceState(null, '', '/');
     return;
   }
-  await dropCache(db);
+  await dropCache(db, '/');
   window.location.replace('/');
 }
 
@@ -57,7 +83,7 @@ export async function afterSignOut(db: Firestore, drained: boolean): Promise<voi
  * the server. When something is (offline, listening not yet sent), it stays,
  * and the screen is only redrawn: false.
  */
-export async function reloadFromServer(db: Firestore, beforeEnding: () => void): Promise<boolean> {
+export async function reloadFromServer(db: Firestore, ending: () => void): Promise<boolean> {
   const drained = await Promise.race([
     waitForPendingWrites(db).then(
       () => true,
@@ -66,18 +92,23 @@ export async function reloadFromServer(db: Firestore, beforeEnding: () => void):
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000)),
   ]);
   if (!drained) return false;
-  beforeEnding();
-  await dropCache(db);
+  ending();
+  await dropCache(db, null);
   window.location.reload();
   return true;
 }
 
-async function dropCache(db: Firestore): Promise<void> {
+/** Clear the shared cache, with every other tab of the app let go of it first and started again after. */
+async function dropCache(db: Firestore, to: string | null): Promise<void> {
   try {
+    otherTabs?.postMessage({ step: 'ending', to } satisfies CacheStep);
     await terminate(db);
-    // Refused while another tab of the app still has it open: best effort.
+    // Long enough for the other tabs to let go. One asleep in the background
+    // lets go when it wakes, and starts again straight after.
+    await new Promise((resolve) => setTimeout(resolve, 300));
     await clearIndexedDbPersistence(db);
   } catch (e) {
     console.warn('clearing the cache', e);
   }
+  otherTabs?.postMessage({ step: 'ended', to } satisfies CacheStep);
 }

@@ -20,6 +20,9 @@ export function initDb(app: FirebaseApp): Firestore {
   return getFirestore(app);
 }
 
+/** A phone runs one copy of the app, so no other copy ends its cache (see the web sibling). */
+export function onCacheEnding(_fn: () => void): void {}
+
 /** The memory cache goes with the process, and a phone has no address to reset (see the web sibling). */
 export async function afterSignOut(_db: Firestore, _drained: boolean): Promise<void> {}
 

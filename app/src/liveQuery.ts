@@ -18,6 +18,7 @@ import {
   type QuerySnapshot,
 } from 'firebase/firestore';
 import { captureError } from './sentry';
+import { onCacheEnding } from './firestoreInit';
 
 // ---- Listener-error visibility -------------------------------------------
 // A server-rejected listen (a missing index, a rules denial) otherwise dies as
@@ -108,6 +109,10 @@ let sessionCanRead = false;
 export function setLiveDataSession(canRead: boolean): void {
   sessionCanRead = canRead;
 }
+
+// Another tab of the app clearing the shared cache ends every listener here
+// too: that is the session ending, not a fault to show.
+onCacheEnding(() => setLiveDataSession(false));
 
 /**
  * Whether a listener's error is the session's own doing: a refusal once the

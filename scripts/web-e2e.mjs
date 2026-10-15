@@ -3572,6 +3572,39 @@ check(
   JSON.stringify(Object.keys(targetsOf(sessionEntry))),
 );
 
+// ---------------------------------------------------------------- two tabs --
+/*
+ * TWO TABS, ONE CACHE. Signing out in one tab cleared the cache the other was
+ * reading: every listener there ended "aborted" on screen, and a sign-in in
+ * that tab never arrived. The other tab now lets go first and starts again at
+ * sign-in, where the next person signs in.
+ */
+console.log('\nTwo tabs');
+const twoTabs = await browser.newContext({ viewport: { width: 390, height: 844 } });
+const tabA = await twoTabs.newPage();
+await tabA.goto(WEB, { waitUntil: 'domcontentloaded' });
+await tabA.getByTestId('signin-email').fill('fatima@example.com');
+await tabA.getByTestId('signin-password').fill('StudentPass123!');
+await tap(tabA, 'signin-student');
+await tabA.getByTestId('tab-classes').waitFor({ timeout: 30000 });
+const tabB = await twoTabs.newPage();
+await tabB.goto(WEB, { waitUntil: 'domcontentloaded' });
+await tabB.getByTestId('tab-classes').waitFor({ timeout: 30000 });
+await more(tabA, 'more-sign-out');
+await tabB.getByTestId('signin-email').waitFor({ timeout: 30000 }).catch(() => {});
+await tabB.waitForTimeout(1500);
+const tabBShows = await bodyText(tabB);
+await tabB.getByTestId('signin-email').fill('bilal@example.com');
+await tabB.getByTestId('signin-password').fill('BilalPass123!');
+await tap(tabB, 'signin-student');
+const tabBSignedIn = await tabB.getByTestId('tab-classes').waitFor({ timeout: 30000 }).then(() => true, () => false);
+check(
+  'signing out in one tab leaves the other at a sign-in that works, with no fault shown',
+  !/Live data error|aborted/.test(tabBShows) && tabBSignedIn,
+  tabBShows.replace(/\s+/g, ' ').slice(0, 160),
+);
+await twoTabs.close();
+
 console.log('\nLive data');
 check(
   'not one live subscription was refused in the entire walkthrough',
