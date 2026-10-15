@@ -8,7 +8,7 @@
  * with no automated coverage at all, and the signature failure of push is that
  * every visible part works while nothing is delivered.
  *
- * It proves the two things provable without a device:
+ * It proves the three things provable without a device:
  *
  *   1. **The client half is configured.** `VAPID_PUBLIC_KEY` is present and is a
  *      real uncompressed P-256 point — which is what a browser refuses if it was
@@ -32,11 +32,16 @@
  * Android delivery was confirmed on a device on 2026-08-15 (see the
  * verification log in docs/PHASE_STATUS.md).
  *
+ * 3. **Apple's half, for iPhones:** the same probe against Apple's production
+ *    service, with the key Secret Manager holds as APNS_KEY.
+ *
  * Reads and writes nothing: no Firestore, no documents, no real recipient.
  */
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { FIREBASE_PROJECT_ID as projectId } from '@sabeel/shared';
+import { sendToApns } from '../functions/src/apns.ts';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
@@ -117,6 +122,53 @@ if (deadCodes.includes(code)) {
   console.log(`        isDeadToken() prunes on: ${deadCodes.join(', ') || '(nothing)'}`);
   console.log('\n        An auth or permission code here means Cloud Messaging is off,');
   console.log('        or these credentials are not this project.');
+}
+
+/*
+ * APPLE, FOR IPHONES. The same probe: a token that cannot exist, sent with the
+ * key the deployed functions read (Secret Manager's APNS_KEY, never printed),
+ * the ids beside it in functions/.env.<project>, and the functions' own
+ * sender. Apple checks the provider token before the device token, so a
+ * refusal of the TOKEN means it accepted the key, the team and the app id;
+ * and it arriving as `dead` means the sender prunes on what Apple really
+ * answers.
+ */
+const params = Object.fromEntries(
+  readFileSync(new URL(`functions/.env.${projectId}`, ROOT), 'utf8')
+    .split('\n')
+    .map((line) => /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line.trim()))
+    .filter(Boolean)
+    .map((m) => [m[1], m[2]]),
+);
+let appleKey = '';
+try {
+  appleKey = execFileSync(
+    'gcloud',
+    ['secrets', 'versions', 'access', 'latest', '--secret=APNS_KEY', `--project=${projectId}`],
+    { stdio: ['ignore', 'pipe', 'ignore'] },
+  ).toString();
+} catch {
+  appleKey = '';
+}
+if (!appleKey) {
+  failed = true;
+  console.log('  FAIL  APNS_KEY is not readable from Secret Manager — iPhones would hear nothing');
+} else {
+  const probe = 'ab'.repeat(32);
+  const apple = await sendToApns([{ token: probe, apnsEnvironment: 'production' }], {
+    title: 'reachability probe',
+    body: 'never delivered to anyone',
+    path: '',
+  }, { key: appleKey, keyId: params.APNS_KEY_ID, teamId: params.APPLE_TEAM_ID });
+  if (apple.dead.includes(probe)) {
+    console.log(`  ok    Apple accepted key ${params.APNS_KEY_ID} for team ${params.APPLE_TEAM_ID} and this app,`);
+    console.log('        and refused the bogus token as one the sender prunes on');
+  } else {
+    failed = true;
+    console.log(`  FAIL  unexpected answer from Apple: ${apple.failed[0]?.reason ?? 'the bogus token was ACCEPTED'}`);
+    console.log('        InvalidProviderToken: the key, its id or the team id is wrong;');
+    console.log('        TopicDisallowed or BadTopic: the key is not for this app');
+  }
 }
 
 console.log(
