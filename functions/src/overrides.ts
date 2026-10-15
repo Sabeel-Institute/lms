@@ -31,10 +31,25 @@ export function validateOverride(data: unknown): OverrideInput {
   }
   // The reason is the whole point of an override — the brief permits one ONLY
   // with a recorded reason. An empty/whitespace reason is rejected.
-  const reason = typeof d.reason === 'string' ? d.reason.trim() : '';
-  if (!reason) throw new HttpsError('invalid-argument', 'A reason is required to override.');
-  if (reason.length > 500) throw new HttpsError('invalid-argument', 'That reason is too long.');
-  return { studentUid: d.studentUid, recordingId: d.recordingId, completed: d.completed, reason };
+  return {
+    studentUid: d.studentUid,
+    recordingId: d.recordingId,
+    completed: d.completed,
+    reason: overrideReason(d.reason, 'A reason is required to override.'),
+  };
+}
+
+/**
+ * An override's reason, setting one or removing one: required, and short
+ * enough for the audit row that carries it. Uncapped, a removal's reason
+ * could be too large to write, and the override went with nothing in the
+ * history to say so.
+ */
+function overrideReason(value: unknown, missing: string): string {
+  const reason = typeof value === 'string' ? value.trim() : '';
+  if (!reason) throw new HttpsError('invalid-argument', missing);
+  if (reason.length > 500) throw new HttpsError('invalid-argument', 'That reason is too long (500 characters at most).');
+  return reason;
 }
 
 async function recordingCourseId(recordingId: string): Promise<string> {
@@ -123,21 +138,24 @@ export const overrideCompletion = auditedCall('overrideCompletion', async (req, 
   return result;
 });
 
-export const clearCompletionOverride = auditedCall('clearCompletionOverride', async (req, audit) => {
-  const d = req.data as { studentUid?: unknown; recordingId?: unknown; reason?: unknown };
+export function validateClearOverride(data: unknown): { studentUid: string; recordingId: string; reason: string } {
+  const d = data as { studentUid?: unknown; recordingId?: unknown; reason?: unknown } | null;
   if (typeof d?.studentUid !== 'string' || !d.studentUid) {
     throw new HttpsError('invalid-argument', 'studentUid is required.');
   }
   if (typeof d.recordingId !== 'string' || !d.recordingId) {
     throw new HttpsError('invalid-argument', 'recordingId is required.');
   }
-  const reason = typeof d.reason === 'string' ? d.reason.trim() : '';
-  if (!reason) throw new HttpsError('invalid-argument', 'A reason is required.');
-  const courseId = await recordingCourseId(d.recordingId);
+  return { studentUid: d.studentUid, recordingId: d.recordingId, reason: overrideReason(d.reason, 'A reason is required.') };
+}
+
+export const clearCompletionOverride = auditedCall('clearCompletionOverride', async (req, audit) => {
+  const { studentUid, recordingId, reason } = validateClearOverride(req.data);
+  const courseId = await recordingCourseId(recordingId);
   await requireCourseScope(req, courseId);
   audit.courseId = courseId;
   audit.detail = { reason };
-  const result = await clearOverride(d.studentUid, d.recordingId);
+  const result = await clearOverride(studentUid, recordingId);
   audit.noop = !result.changed;
   return result;
 });

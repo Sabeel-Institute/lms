@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateOverride } from '../../src/overrides';
+import { validateClearOverride, validateOverride } from '../../src/overrides';
 
 const base = { studentUid: 'stu', recordingId: 'rec', completed: true, reason: 'attended live' };
 
@@ -33,5 +33,26 @@ describe('validateOverride', () => {
 
   it('rejects an over-long reason', () => {
     expect(() => validateOverride({ ...base, reason: 'x'.repeat(501) })).toThrow();
+  });
+});
+
+/*
+ * REMOVING AN OVERRIDE LEAVES A ROW SAYING SO. The removal's reason goes into
+ * its audit row; uncapped, a reason too large for that row let the override
+ * go with the history still saying "Marked complete by staff". Refused here,
+ * the removal never starts.
+ */
+describe('validateClearOverride', () => {
+  const clear = { studentUid: 'stu', recordingId: 'rec', reason: 'set by mistake' };
+
+  it('takes a removal with a reason, trimmed', () => {
+    expect(validateClearOverride({ ...clear, reason: '  set by mistake ' })).toEqual(clear);
+  });
+
+  it('refuses a removal with no reason, or one longer than an override may have', () => {
+    for (const reason of ['', '  ', undefined, 'x'.repeat(501), 'x'.repeat(1_100_000)]) {
+      expect(() => validateClearOverride({ ...clear, reason })).toThrow();
+    }
+    expect(validateClearOverride({ ...clear, reason: 'x'.repeat(500) }).reason).toHaveLength(500);
   });
 });
