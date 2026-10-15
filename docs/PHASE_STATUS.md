@@ -37,6 +37,12 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-15 — **A manager may import any meeting on the institute's Zoom
+  account, for now** (Faisal). The picker lists every meeting the account
+  holds, staff meetings and one-to-ones included, to anyone who may add a
+  recording to a class; scoping it to a manager's own classes is set aside
+  until it is needed.
+
 - 2026-10-15 — **The place is each device's own; a bookmark carries it
   between them** (Faisal: syncing the place across devices has too many
   edge cases; resume locally, and let a student bookmark a place
