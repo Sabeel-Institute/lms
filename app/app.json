@@ -143,7 +143,6 @@
         "expo-build-properties",
         {
           "ios": {
-            "usePrecompiledModules": false,
             "extraPods": [
               {
                 "name": "GoogleUtilities",
