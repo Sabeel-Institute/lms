@@ -240,7 +240,14 @@ export default function App() {
             linking={isStudent ? STUDENT_LINKING : STAFF_LINKING}
           >
             <Stack.Navigator
-              screenOptions={{ headerTintColor: t.text.primary }}
+              screenOptions={{
+                headerTintColor: t.text.primary,
+                // iOS labels Back with the previous screen's title, which on
+                // a tab root is the app's full name, in a pill wider than the
+                // screen's own title. A chevron alone, as Android and the web
+                // already draw it.
+                headerBackButtonDisplayMode: Platform.OS === 'ios' ? 'minimal' : undefined,
+              }}
               screenLayout={({ children }) => <ScreenBoundary where="screen">{children}</ScreenBoundary>}
             >
               {/* A PUSHED screen keeps its header, which is the only thing

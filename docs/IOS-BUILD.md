@@ -163,8 +163,14 @@ xcrun simctl launch booted com.sabeelinstitute.lms
 - **`EXPO_PUBLIC_*` in a debug build come from the environment that started
   Metro.** If the emulator sign-in rows are missing, Metro was started without
   the flag: restart it with `--clear`.
-- **A JS-only change needs a relaunch, not a rebuild**:
+- **On this Mac, Metro does not see an edit while it runs.** It answers a
+  relaunch with "Bundled … (1 module)" and serves the file as it was when Metro
+  started — measured with a probe constant appended to a source file, with and
+  without watchman running. After any JS edit, restart Metro (as above), then
+  relaunch the app:
   `xcrun simctl terminate booted com.sabeelinstitute.lms && xcrun simctl launch booted com.sabeelinstitute.lms`.
+  To prove what is served, fetch the bundle the app loads and grep it:
+  `curl -s 'http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&minify=false' | grep -c '<new code>'`.
 - The student is `abd.al.rahman.ibn.muhammad.al.shinqiti@example.com` /
   `HikamStudent1`; staff sign in through the "Emulator sign-in (dev only)" rows.
   The seeded world has no student-visible recording with more than one version;
