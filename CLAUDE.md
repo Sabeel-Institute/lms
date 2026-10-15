@@ -394,8 +394,12 @@ shape.
 ## Secrets (zero tolerance)
 
 NEVER ask for, accept, or echo real API keys/DSNs/tokens in chat; never hardcode
-them. Server secrets: output the exact `firebase functions:secrets:set NAME`
-command for Faisal to run. Client-side non-secrets (Firebase web config) are
+them. Server secrets: when the value is in a file on this machine, set it
+yourself with `firebase functions:secrets:set NAME --data-file <file>`, never
+printing it (Faisal's decision, 2026-10-15); a value only Faisal has, output the
+exact command for him to run. Every secret file on this machine and the Mac is
+copied into `~/.config/sabeel-secrets/` (`docs/SECRETS.md`): add a new one
+there, with `vault.sh collect`. Client-side non-secrets (Firebase web config) are
 committed by design — rules are enforced server-side. Client DSNs go in gitignored
 `.env.local` (key names only in docs). **Zoom credentials live only in Secret
 Manager, never in the app bundle.**

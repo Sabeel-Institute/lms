@@ -13,12 +13,12 @@ cannot be minted against the emulator at all.
 
 ## The iPhone app (open)
 
-- [ ] **Set Apple's push key as a server secret.** Here, in the repo:
-      `firebase functions:secrets:set APNS_KEY --data-file ~/.config/sabeel-lms/AuthKey_X5R8FL94BC.p8 --project oursabeel-lms`.
-      The functions that send a notification cannot be deployed until it is
-      set.
-- [ ] **Back up the push key.** `~/.config/sabeel-lms/AuthKey_X5R8FL94BC.p8`,
-      into your password manager. Apple never lets it be downloaded again.
+- [ ] **Back up `~/.config/sabeel-secrets/`** into your password manager
+      or other secure storage: every secret file of every Sabeel app, from
+      this machine and the Mac. Its README marks the irreplaceable ones (the
+      LMS and time-tracker release keys, both Apple keys). Run
+      `bash ~/.config/sabeel-secrets/vault.sh verify` first; store it again
+      whenever a secret changes.
 - [ ] **Approve the TestFlight upload** in the Mac session (mac-lms), and
       install the build from TestFlight on your iPhone when it arrives.
 

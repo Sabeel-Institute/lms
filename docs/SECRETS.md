@@ -32,7 +32,9 @@ would lock the phone app out. Mark such alerts as false positives.
 
 ## Setting a server secret
 
-The agent never handles values. It outputs the command; Faisal runs it:
+Never through chat. When the value is in a file on this machine, the agent
+sets it with `--data-file` and never prints it (as `APNS_KEY` was); a value
+only Faisal has, he sets himself:
 
 ```bash
 firebase functions:secrets:set SENTRY_DSN        # paste the FUNCTIONS DSN when prompted
@@ -106,6 +108,19 @@ update signed with a different key, so every phone would have to uninstall and
 reinstall. Keep two copies off this machine: the password in a password
 manager, and the keystore file in that password manager as an attachment or on
 other storage.
+
+## The collected copy: `~/.config/sabeel-secrets/`
+
+Every secret file of every Sabeel app, from this machine and the Mac, copied
+into one folder (mode 700) for Faisal to keep in a password manager:
+`apple/`, `google-play/`, and one folder per app (`lms/`, `kanban/`,
+`time-tracker/`, `recording-app/`), each with `android/` (signing keys) and
+`env/` (build and runtime settings). Its `README.md` says what each file is,
+which are irreplaceable, and how to replace the rest. The tools keep reading
+their own live copies; `sources.tsv` names each one, and
+`bash ~/.config/sabeel-secrets/vault.sh verify` proves the folder still matches
+them (`collect` refreshes it). A new secret file is added to `sources.tsv`
+the day it is made.
 
 ## What on this machine has no other copy
 
