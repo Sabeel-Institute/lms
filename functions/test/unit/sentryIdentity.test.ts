@@ -33,6 +33,26 @@ describe('Sentry never learns who', () => {
     expect(offenders).toEqual([]);
   });
 
+  /*
+   * THE PAGE ADDRESS, AND WHAT A REPORT IS TAGGED WITH. The test above
+   * looked only for the calls that name a user, and passed while every web
+   * report from a staff page sent a student's account id in its address,
+   * and the completion outbox tagged its report with an id built from one.
+   */
+  it('no report carries a page address with ids in it, or a tag built from a person', () => {
+    const web = readFileSync(join(APP_SRC, 'sentry.web.ts'), 'utf8');
+    expect(web).toMatch(/beforeSend:[\s\S]*withoutIds\(/);
+    expect(web).toMatch(/beforeBreadcrumb:[\s\S]*withoutIds\(/);
+    const offenders: string[] = [];
+    for (const file of files(APP_SRC)) {
+      const src = readFileSync(file, 'utf8');
+      for (const m of src.matchAll(/captureError\(([\s\S]{0,400}?)\);/g)) {
+        if (/\b(uid|studentUid|outboxId|completionId|email|displayName)\b/.test(m[1])) offenders.push(`${file}: ${m[1].slice(0, 80)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('the seams are the ones reporting, and carry the release and the role', () => {
     // A guard on the guard: grepping nothing would pass the test above.
     for (const seam of ['sentry.ts', 'sentry.web.ts']) {

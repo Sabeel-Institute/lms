@@ -8,6 +8,7 @@
 import type * as SentryBrowser from '@sentry/browser';
 import { IS_DEV } from './env';
 import { BUILD_LABEL } from './buildInfo';
+import { withoutIds } from './withoutIds';
 
 const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN_WEB;
 const ENABLED = !!DSN && !IS_DEV;
@@ -37,6 +38,22 @@ function loaded(): Promise<typeof SentryBrowser> {
       environment: 'production',
       release: BUILD_LABEL,
       integrations: (defaults) => defaults.filter((i) => i.name !== 'GlobalHandlers'),
+      // NOBODY NAMED, as the privacy policy says: a staff page's address holds
+      // a student's account id, and the SDK sends the address, and the page
+      // it came from, with every event.
+      beforeSend: (event) => {
+        if (event.request) event.request = event.request.url ? { url: withoutIds(event.request.url) } : {};
+        return event;
+      },
+      beforeBreadcrumb: (crumb) => {
+        const data = crumb.data;
+        if (data) {
+          for (const key of ['url', 'from', 'to']) {
+            if (typeof data[key] === 'string') data[key] = withoutIds(data[key]);
+          }
+        }
+        return crumb;
+      },
     });
     S.setTag('role', role);
     return S;

@@ -123,7 +123,9 @@ function fireAndForget(id: string, state: CompletionDoc, write: () => Promise<vo
        * there is no local copy either, and the recording simply reads as
        * incomplete again with nothing anywhere saying why.
        */
-      captureError(e, { source: 'completionOutbox', outboxId: id });
+      // The recording, not the entry's id: that one is the student's account id
+      // and the recording's, and a report names nobody.
+      captureError(e, { source: 'completionOutbox', recordingId: state.recordingId });
       void forget(id, state.updatedAt);
     });
 }
