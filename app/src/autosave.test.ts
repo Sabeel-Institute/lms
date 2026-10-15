@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAutosave, type AutosaveState } from './autosave';
+import { createAutosave, flushEveryAutosave, type AutosaveState } from './autosave';
 
 /**
  * The promises a teacher grading and a student writing are given: what they
@@ -214,5 +214,33 @@ describe('autosave', () => {
     expect(saved).toEqual([]);
     await expect(a.flush()).resolves.toBe(true);
     expect(saved).toEqual([]);
+  });
+});
+
+/*
+ * SIGN OUT SENDS WHAT IS WAITING. The last words of an answer waited out
+ * their delay after the account had signed out, and were refused: they
+ * existed only in that browser. Sign out now sends every autosave first.
+ */
+describe('every autosave at sign-out', () => {
+  it('sends what each is holding at once, and forgets one with nothing left', async () => {
+    const answer = slowServer();
+    const grade = slowServer();
+    const never = () => undefined;
+    const a = createAutosave({ delayMs: 60_000, save: answer.save, onState: () => undefined, setTimer: () => 1, clearTimer: never });
+    const g = createAutosave({ delayMs: 60_000, save: grade.save, onState: () => undefined, setTimer: () => 2, clearTimer: never });
+    a.queue('the last sentence');
+    g.queue('8/10');
+    const sent = flushEveryAutosave();
+    await tick();
+    expect(answer.calls.map((c) => c.value)).toEqual(['the last sentence']);
+    expect(grade.calls.map((c) => c.value)).toEqual(['8/10']);
+    answer.calls[0].answer.resolve();
+    grade.calls[0].answer.resolve();
+    await sent;
+    // Stored: a second sign-out sends nothing more.
+    await flushEveryAutosave();
+    expect(answer.calls).toHaveLength(1);
+    expect(grade.calls).toHaveLength(1);
   });
 });

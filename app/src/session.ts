@@ -13,6 +13,8 @@ import {
 import { googleSignOut } from './auth/google';
 import { auth, db } from './firebase';
 import { afterSignOut } from './firestoreInit';
+import { forgetEveryAnswer } from './answerJournal';
+import { flushEveryAutosave } from './autosave';
 import { sessionEndedIt, setLiveDataSession } from './liveQuery';
 import { createPollChain } from './pollChain';
 import { registerThisDevice, unregisterThisDevice } from './notifications';
@@ -61,6 +63,9 @@ export async function signOut(): Promise<void> {
   // for one account would still be handed to the next person on a shared
   // device, bypassing `getPlaybackUrl`'s entitlement check entirely.
   forgetPlaybackUrls();
+  // An answer or a grade still waiting out its autosave delay is sent first,
+  // or it would be sent after the credential had gone, and refused.
+  await Promise.race([flushEveryAutosave(), new Promise((resolve) => setTimeout(resolve, SIGN_OUT_WRITE_GRACE_MS))]);
   // Whatever is still being sent goes now, while the credential that sends it
   // exists; the cache is cleared after only if nothing is left (`afterSignOut`).
   const drained = await Promise.race([
@@ -87,6 +92,9 @@ export async function signOut(): Promise<void> {
   setLiveDataSession(false);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await afterSignOut(db, drained);
+  // The answers kept on this device go with the cache, and only when it does:
+  // anything not sent stays where it can still be sent from.
+  if (drained) await forgetEveryAnswer();
 }
 
 /**

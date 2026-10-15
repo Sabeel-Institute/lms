@@ -62,3 +62,17 @@ export function restorable(entry: JournaledAnswer | null, stored: { note: string
   if (!stored) return entry.note.trim() !== '';
   return entry.note !== stored.note && entry.at > stored.updatedAt;
 }
+
+/**
+ * Forget every answer kept on this device: at sign-out, once everything has
+ * been sent. On a shared computer the journal is the browser's storage, and
+ * the next person to sign in could read a private answer from it.
+ */
+export async function forgetEveryAnswer(): Promise<void> {
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(PREFIX));
+    if (keys.length) await AsyncStorage.multiRemove(keys);
+  } catch {
+    // Storage refused: nothing more this device can do about it.
+  }
+}

@@ -45,6 +45,18 @@ export interface Autosave<T> {
   unsaved(): boolean;
 }
 
+/**
+ * Every autosave holding something not yet sent, so Sign out can send it
+ * first: an answer's last words waited out their delay after the account had
+ * signed out, were refused, and existed only in that browser.
+ */
+const unsent = new Set<{ flush(): Promise<boolean> }>();
+
+/** Send whatever every autosave is holding. Sign out waits for the writes it starts. */
+export function flushEveryAutosave(): Promise<unknown> {
+  return Promise.all([...unsent].map((a) => a.flush()));
+}
+
 export function createAutosave<T>(opts: {
   delayMs: number;
   /** The longest a value may wait while typing goes on without a pause. */
@@ -105,14 +117,16 @@ export function createAutosave<T>(opts: {
         if (!pending) pending = { value };
       } finally {
         inFlight -= 1;
+        if (!pending && timer === null && inFlight === 0) unsent.delete(self);
         emit();
       }
     });
     return chain;
   };
 
-  return {
+  const self: Autosave<T> = {
     queue(value) {
+      unsent.add(self);
       stopTimer();
       pending = { value };
       const at = now();
@@ -140,6 +154,7 @@ export function createAutosave<T>(opts: {
       });
     },
     discard() {
+      unsent.delete(self);
       stopTimer();
       waitingSince = null;
       pending = null;
@@ -151,4 +166,5 @@ export function createAutosave<T>(opts: {
       return pending !== null || timer !== null || inFlight > 0;
     },
   };
+  return self;
 }
