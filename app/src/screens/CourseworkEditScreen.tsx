@@ -142,6 +142,10 @@ export function CourseworkEditScreen({
     },
     [reservedId],
   );
+  // FILES ON A POSTED ASSIGNMENT GO TO STUDENTS AT ONCE: each is its own
+  // write, not part of the form's Save, so the form says so and asks before
+  // a removal rather than letting Discard seem to undo either.
+  const live = existing?.status === 'posted';
   const now = input();
   const dirty =
     now.title !== stored.current.title ||
@@ -240,8 +244,13 @@ export function CourseworkEditScreen({
           onHeld={existing ? undefined : setHeldFiles}
           editable
           onBusyChange={onBusyChange}
+          removalWarning={live ? 'Students lose it at once. Discard does not bring it back.' : undefined}
         />
-        <Text style={styles.hint}>Worksheets, scans, slides, pictures and audio; up to ten, 25 MB each.</Text>
+        <Text style={styles.hint}>
+          {live
+            ? 'Files are added and removed at once: students see the change straight away, before Save changes.'
+            : 'Worksheets, scans, slides, pictures and audio; up to ten, 25 MB each.'}
+        </Text>
       </Card>
 
       <SectionTitle>Dates and grading</SectionTitle>

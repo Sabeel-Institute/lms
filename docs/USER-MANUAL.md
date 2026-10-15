@@ -1082,7 +1082,9 @@ still working on it, and tells them — except a student you gave more time, who
 keeps their own date. If someone else changed the assignment while you had it
 open, your save is refused and says so, so their change is not lost; open it
 again to see it. If you leave the form with changes you haven't saved, the app
-asks before discarding them.
+asks before discarding them. Files are the exception: on a posted assignment,
+a file you add or remove reaches students at once, without **Save changes**,
+so the app asks before removing one, and **Discard** does not bring it back.
 
 **Stop taking work**, on the same form, closes it now: everyone with nothing
 handed in shows as missed, and work already in can still be graded. A student

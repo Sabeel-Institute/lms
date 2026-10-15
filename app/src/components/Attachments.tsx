@@ -7,7 +7,7 @@ import {
   type AttachmentFile,
   type AttachmentMap,
 } from '@sabeel/shared';
-import { IconButton, inputLook } from './ui';
+import { Button, IconButton, inputLook } from './ui';
 import { Sheet, SheetOption } from './Sheet';
 import { canTakePhoto, pickAttachmentFiles, takePhoto } from '../attachmentFiles';
 import { readPart, sendPart } from '../mediaFiles';
@@ -72,6 +72,7 @@ export function Attachments({
   courseId,
   onHeld,
   onBusyChange,
+  removalWarning,
 }: {
   target: 'coursework' | 'work';
   courseworkId: string;
@@ -87,13 +88,16 @@ export function Attachments({
    */
   onHeld?: Dispatch<SetStateAction<AttachmentMap>>;
   onBusyChange?: (busy: boolean) => void;
+  /**
+   * Files that students already have: a removal is final the moment it is
+   * made, so it is asked first, with this said.
+   */
+  removalWarning?: string;
 }) {
   const [pending, setPending] = useState<Pending[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abort = useRef(new AbortController());
   useEffect(() => () => abort.current.abort(), []);
-  const inFlight = pending.some((p) => p.error === null);
-  useEffect(() => onBusyChange?.(inFlight), [inFlight, onBusyChange]);
 
   /*
    * ONE UPLOAD AT A TIME, in the order the files were chosen, across picks
@@ -145,6 +149,14 @@ export function Attachments({
   const picking = useRef(false);
   const removing = useRef(new Set<string>());
   const [removingIds, setRemovingIds] = useState<string[]>([]);
+  /*
+   * BUSY UNTIL A REMOVAL HAS FINISHED TOO. Hand in (or Post) pressed straight
+   * after a bin copied the file into the work while its bytes were being
+   * deleted, and the work listed a file nobody could open.
+   */
+  const inFlight = pending.some((p) => p.error === null) || removingIds.length > 0;
+  useEffect(() => onBusyChange?.(inFlight), [inFlight, onBusyChange]);
+  const [asking, setAsking] = useState<AttachmentFile | null>(null);
   const [choosing, setChoosing] = useState(false);
   const add = async (pick: () => Promise<PickedFile[] | PickedFile | null>) => {
     if (picking.current) return;
@@ -249,7 +261,7 @@ export function Attachments({
                 variant="danger"
                 bare
                 busy={removingIds.includes(f.id)}
-                onPress={() => void remove(f.id)}
+                onPress={() => (removalWarning ? setAsking(f) : void remove(f.id))}
               />
             ) : null}
           </View>
@@ -285,6 +297,20 @@ export function Attachments({
         </View>
       ))}
       {error ? <Text style={[styles.meta, styles.failed]}>{error}</Text> : null}
+      <Sheet visible={asking !== null} title={`Remove ${asking?.name ?? ''}?`} onClose={() => setAsking(null)} closeLabel="Keep it">
+        <Text style={styles.warning}>{removalWarning}</Text>
+        <Button
+          testID="attachment-remove-confirm"
+          label="Remove it"
+          variant="danger"
+          block
+          onPress={() => {
+            const file = asking;
+            setAsking(null);
+            if (file) void remove(file.id);
+          }}
+        />
+      </Sheet>
       <Sheet visible={choosing} title="Where from?" onClose={() => setChoosing(false)} closeLabel="Cancel" closeAt="corner">
         <SheetOption
           testID={`attachments-files-${target}`}
@@ -317,4 +343,5 @@ const styles = StyleSheet.create({
   pendingName: { fontSize: 15, color: t.text.primary },
   meta: { fontSize: 13, color: t.text.secondary },
   failed: { color: t.feedback.danger },
+  warning: { fontSize: 15, lineHeight: 22, color: t.text.secondary },
 });
