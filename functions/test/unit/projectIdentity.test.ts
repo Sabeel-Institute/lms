@@ -68,7 +68,7 @@ describe('the Android identity', () => {
   const expo = JSON.parse(read('app/app.json')).expo as {
     name: string;
     android: { package: string };
-    ios: { bundleIdentifier: string };
+    ios: { bundleIdentifier: string; infoPlist: { CFBundleDisplayName: string } };
   };
   const pkg = expo.android.package;
   const gradle = read('app/android/app/build.gradle');
@@ -95,5 +95,8 @@ describe('the Android identity', () => {
       read('app/android/app/src/main/res/values/strings.xml'),
     )?.[1];
     expect(label).toBe(APP_SHORT_NAME);
+    // The iPhone home screen truncates past about twelve characters, so it
+    // carries the launcher's short name too (expo.name is the long one).
+    expect(expo.ios.infoPlist.CFBundleDisplayName).toBe(APP_SHORT_NAME);
   });
 });

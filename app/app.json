@@ -17,6 +17,9 @@
       "buildNumber": "1",
       "supportsTablet": false,
       "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "CFBundleDisplayName": "Sabeel LMS"
+      },
       "config": {
         "usesNonExemptEncryption": false
       },
