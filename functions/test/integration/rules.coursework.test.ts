@@ -9,7 +9,6 @@ import {
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { COLLECTIONS, EMULATOR_PROJECT_ID, MAX_ANSWER_CHARS, submissionId } from '@sabeel/shared';
 import { seedStaffRecords, seedStudentRecords } from './staffRecords';
-import { setBackgroundTriggers } from '../backgroundTriggers';
 
 /**
  * Who reads and writes assignments (docs/plans/ASSIGNMENTS.md). The promises:
@@ -31,13 +30,7 @@ function hostPort(envName: string) {
   return { host: host || '127.0.0.1', port: Number(port) };
 }
 
-/*
- * THE EMULATOR'S OWN TRIGGERS ARE OFF HERE: these tests are about the rules,
- * and a tally recompute fired by one test's seed held its locks while the
- * next test cleared the database, which then timed out.
- */
 beforeAll(async () => {
-  await setBackgroundTriggers(false);
   testEnv = await initializeTestEnvironment({
     projectId: EMULATOR_PROJECT_ID,
     firestore: {
@@ -49,7 +42,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await testEnv?.cleanup();
-  await setBackgroundTriggers(true);
 });
 
 const ADMIN = 'admin1';

@@ -14,7 +14,7 @@ emulator — not your diff.
 | `npm run lint` | ESLint + `check:text` |
 | `npm run typecheck` | Builds `@sabeel/shared` first, then typechecks every workspace — **including the functions tests** (`functions/tsconfig.test.json`) |
 | `npm test` | Vitest unit tests (shared, functions and app), no emulators needed |
-| `npm run test:emulator` | Firestore + Auth + Functions emulators and the local media store (SeaweedFS), then the rules and integration suites |
+| `npm run test:emulator` | Two passes: the rules suites (`test:rules`) against Firestore + Auth alone, then the integration suites against Firestore + Auth + Functions and the local media store (SeaweedFS) |
 | `npm run emulators` | The same emulators and media store, long-running, for `test:e2e`, `seed:emulators` and a device pass |
 | `node scripts/with-media-store.mjs <cmd…>` | Runs a command with SeaweedFS up on 127.0.0.1:61307 and stops it after; what the runners above wrap themselves in |
 | `npm run knip` | Dead-code audit — fails on unused files, exports and dependencies |
@@ -194,12 +194,27 @@ audit lie, and an audit that reports nothing is worse than no audit.
 - **Waiting for the port is not waiting for readiness.** The functions emulator
   accepts connections before it has registered anything. Poll a known callable
   until it stops 404ing.
+- **The rules run without the Functions emulator.** One Functions emulator
+  runs every trigger of a run, one at a time, about 4,000 of them, and the
+  rules files fired about 40% of those for nothing they read. Behind that queue a
+  trigger was still holding its documents when the next test wiped the
+  database, and the wipe failed with `Transaction lock timeout` (409,
+  ABORTED); and a test waiting for its own trigger waited behind the queue
+  and gave up. So `test:emulator` runs the `rules.*` files first against
+  Firestore and Auth alone, where a write fires nothing, then the rest with
+  the functions. Measured over ten full runs each: three failed before, none
+  after. A rules test cannot depend on a trigger: the world it judges is
+  exactly what it seeded.
 - **A trigger can land after the test's next step.** A test's own seed writes
   fire the functions emulator's triggers asynchronously, and on a loaded
   machine one can arrive after the step it was meant to precede. A fixed wait
-  only makes that rarer. Where a test reconciles every step itself, switch the
-  triggers off around it (`setBackgroundTriggers` in `functions/test`, through
-  the emulator hub), as `assignments.integration`'s unenrolment tests do.
+  only makes that rarer. Wait for what the trigger does instead, with
+  `eventually` (`functions/test/integration/eventually.ts`): it reads every
+  quarter second and returns as soon as the change lands, for up to 30 s, so
+  a quiet run is no slower and a backed-up one gets the time. Where a test
+  reconciles every step itself, switch the triggers off around it
+  (`setBackgroundTriggers` in `functions/test`, through the emulator hub), as
+  `assignments.integration`'s unenrolment tests do.
 
 ## The local media store (SeaweedFS)
 

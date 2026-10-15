@@ -19,6 +19,7 @@ import { setSender, resetSender, type SendOutcome } from '../../src/messaging';
 import { notifyAttendanceMissing, notifyLastDay, notifyRecordingReady } from '../../src/notifyJobs';
 import { applyStudentAccess } from '../../src/students';
 import { applyStaffAccess } from '../../src/staff';
+import { eventually } from './eventually';
 
 /**
  * Everything about notifications EXCEPT delivery.
@@ -861,11 +862,8 @@ describe('a token registered to a new account leaves the old one', () => {
 
   /** The trigger runs out of band; wait for it rather than guessing a delay. */
   async function settled(uid: string, present: boolean) {
-    for (let i = 0; i < 60; i += 1) {
-      if ((await devices(uid).doc(TOKEN).get()).exists === present) return;
-      await new Promise((r) => setTimeout(r, 250));
-    }
-    throw new Error(`devices/${TOKEN} under ${uid} never became ${present ? 'present' : 'absent'}`);
+    const exists = await eventually(async () => (await devices(uid).doc(TOKEN).get()).exists, (e) => e === present);
+    if (exists !== present) throw new Error(`devices/${TOKEN} under ${uid} never became ${present ? 'present' : 'absent'}`);
   }
 
   it('removes the same token from every other account', async () => {
@@ -897,9 +895,7 @@ describe('a token registered to a new account leaves the old one', () => {
         )
       ).filter((d) => d.exists).length;
 
-    for (let i = 0; i < 60 && (await survivors()) > 1; i += 1) {
-      await new Promise((r) => setTimeout(r, 250));
-    }
+    await eventually(survivors, (n) => n <= 1);
     // Settle, then confirm it stayed at one rather than passing through it.
     await new Promise((r) => setTimeout(r, 1500));
     expect(await survivors()).toBe(1);

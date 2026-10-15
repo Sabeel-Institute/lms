@@ -62,17 +62,8 @@ const OUTSIDER = 'stu2';
 const CLASS_MINE = 'classMine';
 const CLASS_THEIRS = 'classTheirs';
 /*
- * A FRESH SET OF RECORDING IDS PER TEST.
- *
- * `clearFirestore()` deletes this file's recordings, and each deletion fires
- * `onRecordingWritten` → `applyRecordingFanout`, which re-reads the recording,
- * finds it gone and deactivates every assignment pointing at that id. The
- * Functions emulator delivers that on its own schedule, so it could land AFTER
- * the next test had re-seeded `assignments/stu1_recPublished` with
- * `active: true` — and the student arm of `/recordings` needs an active grant,
- * so a test failed having done nothing wrong. Same shape as the flakes already
- * fixed in `rules.attendance.test.ts` and `assignments.integration.test.ts`, and
- * production never reuses an id either: recordings get auto-ids.
+ * A FRESH SET OF RECORDING IDS PER TEST, as production never reuses one:
+ * recordings get auto-ids.
  *
  * `let`, not `const`, so the ids can be reassigned before each test — which is
  * why nothing at describe level may derive from them (see `listeningProgress`).
@@ -118,25 +109,16 @@ beforeEach(async () => {
     /*
      * EVERY RECORDING POINTS AT A SESSION, AND NO SESSION POINTS BACK.
      *
-     * The Functions emulator runs against this same project, so every write here
-     * fires `onRecordingWritten` → `applyRecordingFanout`. Its first branch is
-     * `if (!rec?.sessionId) deactivateAssignmentsForRecording(...)` — so a
-     * recording with no session, which is what this fixture used to write, told
-     * the trigger to switch off every grant on it, INCLUDING the active one the
-     * student-read cases depend on. It failed about one run in a hundred.
-     *
-     * A `sessionId` takes it past that branch and into
-     * `reconcileSessionAssignments`, which returns immediately unless the SESSION
-     * names a recording (`session.recordingId`). Leaving that null is what keeps
-     * the reconcile off these grants entirely, and it is deliberate: this file
-     * seeds an ACTIVE grant on a DRAFT recording, which is a defence-in-depth
-     * case production cannot produce — the fan-out only ever grants a published
-     * one — so a fully wired session would deactivate it and the test asserting
-     * "not even with a grant" would start passing because there was no grant.
+     * The rules pass runs with no Functions emulator (scripts/test-emulator.sh),
+     * so nothing written here fires a trigger: these documents are the world
+     * the rules judge, exactly as seeded. A recording points at its session, as
+     * production's do. No session names a recording, because this file seeds an
+     * ACTIVE grant on a DRAFT recording — a defence-in-depth case production
+     * cannot produce, since the fan-out only ever grants a published one — and
+     * a fully wired session would say a world that cannot exist.
      *
      * The attendance below is therefore a description of the world, not a
-     * mechanism: nothing reads it. It is written so the fixture says what it
-     * means, not to make the trigger do anything.
+     * mechanism: nothing reads it.
      */
     const sess = (id: string, courseId: string, attendance: Record<string, string>) =>
       setDoc(doc(db, COLLECTIONS.sessions, id), {

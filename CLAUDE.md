@@ -201,10 +201,11 @@ Do not silently change any of these.
   the ports and `functions/test/unit/emulatorPorts.test.ts` asserts they agree and
   that the kill list reaches no further. Never widen `free-emulator-ports.sh` past
   this block. Details in `docs/DEV-TOOLING.md`.
-- Rules/integration: `npm run test:emulator` — Firestore and Auth emulators plus
-  the local media store (SeaweedFS standing in for R2, started by
-  `scripts/with-media-store.mjs`). Needs JDK 21 and SeaweedFS
-  (`docs/DEV-TOOLING.md`). The functions sign real URLs against SeaweedFS, which
+- Rules/integration: `npm run test:emulator` — two passes: the rules tests
+  against Firestore and Auth alone, where a write fires no trigger, then the
+  integration tests with the Functions emulator and the local media store
+  (SeaweedFS standing in for R2, started by `scripts/with-media-store.mjs`).
+  Needs JDK 21 and SeaweedFS (`docs/DEV-TOOLING.md`). The functions sign real URLs against SeaweedFS, which
   checks signatures and expiry like R2, so the production signing path runs
   locally.
 - Browser e2e: `npm run test:e2e`. Needs a live Metro dev server **and** the

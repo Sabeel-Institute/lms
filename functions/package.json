@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.json --noEmit && node esbuild.config.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run --dir test/unit",
-    "test:integration": "vitest run --dir test/integration --no-file-parallelism",
+    "test:rules": "vitest run --dir test/integration --no-file-parallelism rules.",
+    "test:integration": "vitest run --dir test/integration --no-file-parallelism --exclude '**/rules.*.test.ts'",
     "serve": "npm run build && firebase emulators:start --only functions"
   },
   "dependencies": {

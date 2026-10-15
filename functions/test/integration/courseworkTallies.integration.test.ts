@@ -32,6 +32,7 @@ import {
   setNotRequiredRecord,
 } from '../../src/coursework';
 import { recomputeCourseworkTally } from '../../src/courseworkTallies';
+import { eventually } from './eventually';
 
 /*
  * A COURSE'S PAGES SAY WHAT THE WORK SAYS. They read one stored tally per
@@ -164,12 +165,7 @@ describe('a stored tally', () => {
   it('follows a hand-in by itself', async () => {
     const id = await posted();
     await handedIn(A, id);
-    let tally: CourseworkTallyDoc | undefined;
-    for (let i = 0; i < 40; i++) {
-      tally = await stored(id);
-      if (tally?.toGrade === 1) break;
-      await new Promise((r) => setTimeout(r, 250));
-    }
+    const tally = await eventually(() => stored(id), (t) => t?.toGrade === 1);
     expect(tally).toMatchObject({ toGrade: 1, handedIn: 1 });
   });
 });
