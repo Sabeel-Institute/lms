@@ -79,8 +79,20 @@ for (const [path, marker] of [
   check(
     ok,
     `${path} answers anonymously with the static page` +
-      (sawShell ? ' — got the app shell, so the rewrite is behind `**`' : ''),
+      (sawShell ? ' — got the app shell, so the rewrite is behind the catch-all' : ''),
   );
+}
+
+/*
+ * A BUILD'S FILE THAT IS GONE IS A 404, and every other address is the app.
+ * A tab opened before a deploy asks for the old build's files; answered with
+ * the shell, it ran HTML as JavaScript and its error reports stopped.
+ */
+{
+  const gone = await fetch(`${BASE}/_expo/static/js/web/gone-0000000000000000.js`, { cache: 'no-store' });
+  check(gone.status === 404, `a build file that is not there answers 404 (got ${gone.status})`);
+  const deep = await fetch(`${BASE}/courses/not-a-course`, { cache: 'no-store' });
+  check(deep.ok && (await deep.text()).includes('/_expo/static/js/web/'), 'a deep link still answers with the app');
 }
 
 const browser = await chromium.launch();

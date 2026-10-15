@@ -9,6 +9,7 @@ import type * as SentryBrowser from '@sentry/browser';
 import { IS_DEV } from './env';
 import { BUILD_LABEL } from './buildInfo';
 import { withoutIds } from './withoutIds';
+import { minimalEnvelope } from './sentryEnvelope';
 
 const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN_WEB;
 const ENABLED = !!DSN && !IS_DEV;
@@ -110,8 +111,29 @@ export function captureError(
     })
     // NEVER A REJECTION OF ITS OWN: the listener above reports unhandled
     // rejections, so a file that failed to load (offline) would report its
-    // own failure, which would load it again. The next report tries afresh.
+    // own failure, which would load it again. The next report tries afresh,
+    // and this one goes the short way.
     .catch(() => {
       sentry = null;
+      console.error('captureError: Sentry could not be loaded', e);
+      fallback(e, context);
     });
+}
+
+/**
+ * The report without the library: a tab opened before a deploy asks for the
+ * old build's Sentry file, which has gone, and every error it met after that
+ * was dropped. Offline, this fails too, quietly; nothing else would get out.
+ */
+function fallback(e: unknown, context?: Record<string, string>): void {
+  const envelope = minimalEnvelope(DSN as string, {
+    error: e,
+    release: BUILD_LABEL,
+    role,
+    page: window.location.href,
+    tags: context,
+    eventId: crypto.randomUUID().replace(/-/g, ''),
+    now: Date.now(),
+  });
+  if (envelope) void fetch(envelope.url, { method: 'POST', body: envelope.body, keepalive: true }).catch(() => undefined);
 }

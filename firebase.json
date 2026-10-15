@@ -43,7 +43,7 @@
         "destination": "/get-app.html"
       },
       {
-        "source": "**",
+        "source": "!/_expo/**",
         "destination": "/index.html"
       }
     ],

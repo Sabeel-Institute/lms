@@ -71,14 +71,25 @@ const STORE_PAGES = ['/privacy', '/support', '/get-app'];
 
 describe('the static pages the stores need', () => {
   it('rewrites each one ahead of the SPA catch-all', () => {
-    const catchAll = hosting.rewrites.findIndex((r) => r.source === '**');
-    expect(catchAll, 'no `**` rewrite at all').toBeGreaterThan(-1);
+    const catchAll = hosting.rewrites.findIndex((r) => r.destination === '/index.html');
+    expect(catchAll, 'no rewrite to the app shell at all').toBeGreaterThan(-1);
 
     for (const page of STORE_PAGES) {
       const at = hosting.rewrites.findIndex((r) => r.source === page);
       expect(at, `${page} has no rewrite`).toBeGreaterThan(-1);
-      expect(at, `${page} is behind \`**\`, so it serves the app shell`).toBeLessThan(catchAll);
+      expect(at, `${page} is behind the catch-all, so it serves the app shell`).toBeLessThan(catchAll);
     }
+  });
+
+  /*
+   * A BUILD'S FILE THAT IS GONE IS A 404, not the app shell. A tab opened
+   * before a deploy asks for the old build's files by name; answered with
+   * index.html, the browser ran HTML as JavaScript and the tab's error
+   * reporting broke for good, silently. The live answer is checked by
+   * scripts/prod-smoke.mjs.
+   */
+  it('sends every address to the app shell except the build’s own files', () => {
+    expect(hosting.rewrites.at(-1)).toEqual({ source: '!/_expo/**', destination: '/index.html' });
   });
 
   it('points each one at a file that exists', () => {
