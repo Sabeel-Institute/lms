@@ -1230,19 +1230,47 @@ await shot(student, '13-resumed');
 
 // ------------------------------------------------- completion on the home --
 console.log('\nCompletion');
-// Mark it complete from the player — the never-played gate is already satisfied.
-await tap(student, 'mark-complete');
-await student.waitForTimeout(1500);
+/*
+ * A HURRIED DOUBLE TAP MEANS ONE MARK. Mark complete and Unmark swap places
+ * under the finger, so two taps 120 ms apart at the right of either used to
+ * hit both: the recording a student had just marked complete was left not
+ * complete. Both directions, at the spot where the other control appears.
+ */
+const doubleTapRightOf = async (testId) => {
+  const box = await student.getByTestId(testId).boundingBox();
+  const x = box.x + box.width - 8;
+  const y = box.y + box.height / 2;
+  await student.mouse.click(x, y);
+  await student.waitForTimeout(120);
+  await student.mouse.click(x, y);
+  await student.waitForTimeout(2000);
+};
+// In the order they were written: a collection reads back by random id.
+const completionActions = async () =>
+  (await readCollection('completionEvents'))
+    .map((e) => ({ action: e.fields.action?.stringValue, at: Number(e.fields.at?.integerValue) }))
+    .sort((a, b) => a.at - b.at)
+    .map((e) => e.action);
+// The never-played gate is already satisfied.
+await doubleTapRightOf('mark-complete');
 const completions = await readCollection('completions');
 check(
-  'marking complete writes a completion doc',
-  completions.length === 1 && completions[0].fields.completed.booleanValue === true,
-  `${completions.length} completion(s)`,
+  'a double tap on Mark complete leaves the recording complete, with one event',
+  completions.length === 1 &&
+    completions[0].fields.completed.booleanValue === true &&
+    (await completionActions()).join() === 'complete' &&
+    (await shows(student, 'mark-incomplete')),
+  `${completions.length} completion(s), events ${(await completionActions()).join()}`,
 );
+await doubleTapRightOf('mark-incomplete');
 check(
-  'a completion event is appended (append-only audit)',
-  (await readCollection('completionEvents')).some((e) => e.fields.action?.stringValue === 'complete'),
+  'a double tap on Unmark leaves it not complete, with one more event',
+  (await readCollection('completions'))[0].fields.completed.booleanValue === false &&
+    (await completionActions()).join() === 'complete,uncomplete' &&
+    (await shows(student, 'mark-complete')),
+  `events ${(await completionActions()).join()}`,
 );
+await tap(student, 'mark-complete');
 await student.getByTestId('mark-incomplete').waitFor({ timeout: 8000 });
 check(
   'the player reflects completion and offers unmark',

@@ -513,6 +513,9 @@ function ClosedRecord({
   );
 }
 
+/** How long the completion control ignores taps after one: past any double tap. */
+const COMPLETION_HOLD_MS = 1000;
+
 function CompletionControl({
   studentUid,
   recordingId,
@@ -525,6 +528,19 @@ function CompletionControl({
   everPlayed: boolean;
 }) {
   const { completed, pending, override } = useCompletion(studentUid, recordingId);
+  /*
+   * ONE MARK PER TAP, and a second tap a moment later lands on nothing. Mark
+   * complete and Unmark swap places a frame after the local write, so a double
+   * tap at the right of either hit the other: the student's Mark complete was
+   * undone by the tap after it, and every tap wrote an audit event for good.
+   * The write itself returns at once, so the gate is held a second past it.
+   */
+  const { run } = useOneAtATime();
+  const mark = (to: boolean) =>
+    void run('completion', async () => {
+      void setCompleted(studentUid, recordingId, courseId, to);
+      await new Promise((resolve) => setTimeout(resolve, COMPLETION_HOLD_MS));
+    });
 
   /*
    * A TEACHER'S MARK IS THEIRS TO EXPLAIN, AND NOT THE STUDENT'S TO UNDO.
@@ -555,7 +571,7 @@ function CompletionControl({
           testID="mark-incomplete"
           accessibilityRole="button"
           accessibilityLabel="Mark not complete"
-          onPress={() => void setCompleted(studentUid, recordingId, courseId, false)}
+          onPress={() => mark(false)}
         >
           <Text style={styles.unmark}>Unmark</Text>
         </Pressable>
@@ -571,7 +587,7 @@ function CompletionControl({
         accessibilityLabel="Mark complete"
         aria-disabled={!everPlayed}
         disabled={!everPlayed}
-        onPress={() => void setCompleted(studentUid, recordingId, courseId, true)}
+        onPress={() => mark(true)}
         style={({ pressed }) => [
           styles.completeButton,
           pressed ? styles.completePressed : null,
