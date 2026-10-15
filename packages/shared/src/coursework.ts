@@ -540,7 +540,11 @@ function settledState(
   // back to, left a grades document with no grade in it: the work dropped out
   // of To grade while Return would not take it.
   const graded = !!grade && grade.grade !== null;
-  if (sub.state === 'handedIn') return graded ? 'graded' : 'toGrade';
+  // A GRADE GIVEN ON PAPER IS NOT A GRADE OF WORK HANDED IN AFTER IT: the
+  // work was counted graded, and Return all sent the paper grade as the grade
+  // of an answer nobody had read. It is to grade until the grade is saved
+  // again, over the work.
+  if (sub.state === 'handedIn') return graded && !grade.withoutHandIn ? 'graded' : 'toGrade';
   // Work done on paper, graded with nothing handed in and not yet returned.
   if (graded && grade.withoutHandIn) return 'graded';
   return null;

@@ -460,6 +460,22 @@ describe('grading and returning', () => {
     expect(await sub(BILAL, id)).toMatchObject({ state: 'returned', returned: { grade: { points: 10 } } });
   });
 
+  /*
+   * HANDED IN AFTER THE GRADE ON PAPER: Return sent the paper grade as the
+   * grade of the written answer, which nobody had opened. The student keeps
+   * nothing of it until the answer is graded; graded, it goes back.
+   */
+  it('a grade on paper is not returned as the grade of work handed in after it', async () => {
+    const id = await posted();
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, grade: { points: 6 }, feedback: 'Recitation in class.' });
+    await handedIn(BILAL, id);
+    await expect(returnWorkRecord(id, [BILAL], null)).rejects.toThrow(/graded on paper/);
+    expect(await sub(BILAL, id)).toMatchObject({ state: 'handedIn', returned: null });
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, grade: { points: 9 }, feedback: 'The written answer.' });
+    await returnWorkRecord(id, [BILAL], null);
+    expect(await sub(BILAL, id)).toMatchObject({ state: 'returned', returned: { grade: { points: 9 } } });
+  });
+
   it('how it is graded cannot change once a grade went back with another try, either', async () => {
     const id = await posted();
     await handedIn(AMINAH, id);

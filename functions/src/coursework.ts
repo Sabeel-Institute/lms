@@ -960,6 +960,10 @@ export async function returnWorkRecord(
       if (sub.state === 'returned') throw new HttpsError('failed-precondition', 'This work has already been returned.');
       // A grade, not just a grades document: feedback written first leaves one with none.
       if ((!graded || graded.grade === null) && !retry) throw new HttpsError('failed-precondition', 'Grade the work before returning it.');
+      // Graded on paper before this was handed in: that grade is not of this work.
+      if (sub.state === 'handedIn' && graded?.withoutHandIn && !retry) {
+        throw new HttpsError('failed-precondition', 'This was graded on paper before it was handed in. Grade what was handed in, then return it.');
+      }
       if (sub.state === 'open' && !graded?.withoutHandIn) {
         throw new HttpsError('failed-precondition', 'Nothing has been handed in to return.');
       }

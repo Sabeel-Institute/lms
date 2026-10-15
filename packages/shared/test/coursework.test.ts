@@ -280,6 +280,21 @@ describe('coming back to the class', () => {
  * staff state as it was written before (copied verbatim below), and the sum
  * of per-student tallies, which the workbooks still use.
  */
+/*
+ * HANDED IN AFTER A GRADE ON PAPER. The work counted as graded with the
+ * paper grade, had no Grade button, and Return all sent that grade as the
+ * grade of an answer nobody had read. It is to grade until graded again.
+ */
+describe('work handed in after a grade on paper', () => {
+  const handedInSub = {
+    active: true, state: 'handedIn' as const, attempts: [], dueDate: '2026-10-20', lateUntil: null, notRequired: null, closedEarly: false,
+  };
+  it('is to grade, and is graded once the grade is saved over the work', () => {
+    expect(staffWorkState(handedInSub, { grade: { points: 6 }, withoutHandIn: true }, '2026-10-14', true)).toBe('toGrade');
+    expect(staffWorkState(handedInSub, { grade: { points: 6 }, withoutHandIn: false }, '2026-10-14', true)).toBe('graded');
+  });
+});
+
 describe('the stored tally', () => {
   /** `staffWorkState` as it was before it was split into settled and dated halves. */
   function staffWorkStateBefore(
@@ -288,12 +303,13 @@ describe('the stored tally', () => {
     today: string,
     courseOpen: boolean,
   ) {
-    // The one change made on purpose since: a student gone during another
-    // try is counted by the attempt given back, not as owing the open one.
+    // The two changes made on purpose since: a student gone during another
+    // try is counted by the attempt given back, not as owing the open one;
+    // and a grade given on paper is not a grade of work handed in after it.
     if (!sub.notRequired && !sub.active && sub.state === 'open' && sub.attempts.length > 0) return 'returned';
     const state = workState(sub, today, courseOpen);
     const graded = !!grade && grade.grade !== null;
-    if (state === 'handedIn') return graded ? 'graded' : 'toGrade';
+    if (state === 'handedIn') return graded && !grade.withoutHandIn ? 'graded' : 'toGrade';
     if (graded && grade.withoutHandIn && sub.state === 'open' && state !== 'notRequired') return 'graded';
     return state;
   }
