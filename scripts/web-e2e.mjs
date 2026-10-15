@@ -2195,7 +2195,10 @@ check(
  * Now the phone's save is refused, the essay stays, and the phone keeps what
  * it typed aside, on screen, to copy from.
  */
-const ESSAY = 'HUNT: the essay, written on the laptop.';
+// The laptop's essay keeps what was written before, formatting and all: the
+// teacher's view of it is checked further on.
+const ESSAY_TAIL = 'HUNT: the rest of the essay, written on the laptop.';
+let ESSAY = '';
 await student.context().setOffline(true);
 await student.getByTestId('work-note').click();
 await student.keyboard.press('ControlOrMeta+End');
@@ -2203,6 +2206,7 @@ await student.keyboard.type(' Bus notes.');
 await student.getByText('Not sent yet', { exact: false }).filter({ visible: true }).first().waitFor({ timeout: 15000 }).catch(() => {});
 {
   const draftDoc = (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId);
+  ESSAY = `${draftDoc.fields.note.stringValue}\n\n${ESSAY_TAIL}`;
   const r = await fetch(`${FS_READ}/drafts/${draftDoc.name.split('/').pop()}?updateMask.fieldPaths=note&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=basedOn`, {
     method: 'PATCH',
     headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
@@ -2225,7 +2229,7 @@ const keptAside = await student
 await student.waitForTimeout(1500);
 const storedNow = (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue;
 const editorFollows = await student
-  .waitForFunction((t) => document.querySelector('[data-testid="work-note"]')?.textContent.includes(t), ESSAY, { timeout: 15000 })
+  .waitForFunction((t) => document.querySelector('[data-testid="work-note"]')?.textContent.includes(t), ESSAY_TAIL, { timeout: 15000 })
   .then(() => true, () => false);
 check(
   'an answer typed offline over an older one does not replace the newer, and is kept aside on screen',
