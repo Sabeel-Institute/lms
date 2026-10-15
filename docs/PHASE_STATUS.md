@@ -37,6 +37,17 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Decision log
 
+- 2026-10-15 — **An iPhone's notifications go straight to Apple**
+  (Faisal). The app is built on the Firebase JS SDK, which has no messaging
+  on a phone, so an iPhone registers Apple's own device token, which FCM
+  cannot address. The server sends it to Apple's push service with the
+  team's push key (`functions/src/apns.ts`), rather than asking FCM to
+  exchange it for one of its own through an interface from a retired
+  generation of Google's APIs. Android phones and browsers stay on FCM. An
+  iPhone's device row says which of Apple's two services its token is from:
+  a development build's token works only on the sandbox, a TestFlight or
+  App Store build's only on production.
+
 - 2026-10-15 — **A manager may import any meeting on the institute's Zoom
   account, for now** (Faisal). The picker lists every meeting the account
   holds, staff meetings and one-to-ones included, to anyone who may add a

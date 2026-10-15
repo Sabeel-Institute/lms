@@ -36,6 +36,7 @@ import {
 const SUBMISSION_STATES: SubmissionState[] = ['open', 'handedIn', 'returned'];
 import { auditedCall } from './audited';
 import { reportedCall } from './reported';
+import { PUSH_SECRETS } from './messaging';
 import { isAdminCaller, requireCourseScope, requireStudent } from './guards';
 import { isCalendarDate } from './sessions';
 import { MEDIA_WRITE_SECRETS, deleteObject } from './mediaStore';
@@ -379,7 +380,7 @@ export const postCoursework = auditedCall('postCoursework', async (req, audit) =
     students: res.students,
   };
   return res;
-});
+}, PUSH_SECRETS);
 
 // ------------------------------------------------------------------ edit --
 
@@ -511,7 +512,7 @@ export const updateCoursework = auditedCall('updateCoursework', async (req, audi
     ...(res.changed.includes('lateUntil') ? { lateUntil: moved(res.before.lateUntil, res.after.lateUntil) } : {}),
   };
   return { id, changed: res.changed };
-});
+}, PUSH_SECRETS);
 
 /**
  * Stop taking work before its dates: every student with nothing in has
@@ -908,7 +909,7 @@ export const saveGrade = auditedCall('saveGrade', async (req, audit) => {
   const worded = (g: Grade | null) => (g ? gradeText(g, cw.grading) : 'none');
   audit.detail = { grade: `${worded(res.before)} → ${worded(res.after)}` };
   return { saved: true };
-});
+}, PUSH_SECRETS);
 
 /**
  * Give graded work back. Each student named must have a saved grade, unless
@@ -1040,7 +1041,7 @@ export const returnWork = auditedCall('returnWork', async (req, audit) => {
     retry: retry !== null,
   };
   return { returned: res.returned.length, refused: res.refused };
-});
+}, PUSH_SECRETS);
 
 /**
  * A later date for one student, before or after theirs has passed, with a

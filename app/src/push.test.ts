@@ -100,7 +100,7 @@ describe('pushPromptState', () => {
 });
 
 /**
- * The channel is a two-sided contract with `fcmSender`, and NEITHER SIDE CAN
+ * The channel is a two-sided contract with `sendToFcm`, and NEITHER SIDE CAN
  * CHECK THE OTHER at runtime: a send naming a channel the app never created
  * does not fail, it is quietly posted to FCM's fallback and shown under
  * "Miscellaneous". These pin this side to the shared id; the server's half is

@@ -20,6 +20,13 @@ export const APP_NAME = 'Sabeel Institute LMS';
  */
 export const APP_SHORT_NAME = 'Sabeel LMS';
 
+/**
+ * The phone apps' id: the Android package and the iOS bundle id, one value.
+ * Apple's push service is addressed by it (the `apns-topic` of every iPhone
+ * notification), so the server needs it as much as the builds do.
+ */
+export const APP_ID = 'com.sabeelinstitute.lms';
+
 /** Cloud Functions region. One constant so app, functions and tests agree. */
 export const REGION = 'us-central1';
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { APP_NAME, APP_SHORT_NAME, FIREBASE_PROJECT_ID } from '@sabeel/shared';
+import { APP_ID, APP_NAME, APP_SHORT_NAME, FIREBASE_PROJECT_ID } from '@sabeel/shared';
 
 /**
  * Nothing in this checkout can reach the retired personal project, and the
@@ -74,7 +74,7 @@ describe('the Android identity', () => {
   const gradle = read('app/android/app/build.gradle');
 
   it('is one package id in app.json, Gradle and the Kotlin sources', () => {
-    expect(pkg).toBe('com.sabeelinstitute.lms');
+    expect(pkg).toBe(APP_ID);
     expect(/applicationId '([^']+)'/.exec(gradle)?.[1]).toBe(pkg);
     expect(/namespace '([^']+)'/.exec(gradle)?.[1]).toBe(pkg);
     const dir = `app/android/app/src/main/java/${pkg.replace(/\./g, '/')}`;

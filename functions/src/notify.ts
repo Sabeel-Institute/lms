@@ -65,9 +65,8 @@ export async function notifyOnce(
   // and claiming the marker for them would burn the single delivery this
   // notification ever gets — registering a device an hour later would then hear
   // nothing about a recording already published.
-  const devices = await person.collection('devices').get();
-  const tokens = devices.docs.map((d) => (d.data() as DeviceTokenDoc).token);
-  if (tokens.length === 0) return false;
+  const devices = (await person.collection('devices').get()).docs.map((d) => d.data() as DeviceTokenDoc);
+  if (devices.length === 0) return false;
 
   // Claim the send. `create` fails if the document exists, which is exactly the
   // "someone already did this" answer, and it is atomic — so two concurrent
@@ -97,7 +96,7 @@ export async function notifyOnce(
    */
   let outcome;
   try {
-    outcome = await send(tokens, message);
+    outcome = await send(devices, message);
   } catch (e) {
     await marker.delete().catch(() => undefined);
     throw e;
@@ -106,9 +105,9 @@ export async function notifyOnce(
   for (const token of stale) {
     await person.collection('devices').doc(token).delete();
   }
-  if (sent === 0 && stale.length < tokens.length) {
+  if (sent === 0 && stale.length < devices.length) {
     await marker.delete().catch(() => undefined);
-    throw new Error(`push delivered to none of ${tokens.length} device(s) for ${kind} ${targetId}`);
+    throw new Error(`push delivered to none of ${devices.length} device(s) for ${kind} ${targetId}`);
   }
   return sent > 0;
 }

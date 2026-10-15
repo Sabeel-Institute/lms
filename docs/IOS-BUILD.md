@@ -281,10 +281,11 @@ with no alpha channel, the native DSN present, and the privacy manifest.
 
 ## Open on iOS
 
-- **Push will not reach an iPhone as the code stands.** `app/src/push.ts` stores
-  what `getDevicePushTokenAsync()` returns, and on iOS that is the APNs device
-  token, not an FCM registration token, which `admin.messaging()` cannot
-  address. `pushPlatform` is `'android'` everywhere.
+- **Push: the server half is done, the app half is not.** The server sends an
+  iPhone's notification straight to Apple (`functions/src/apns.ts`), to the
+  service its device row names (`apnsEnvironment`). The app does not register
+  an iPhone yet: `pushPlatform` is `'android'` on every phone, and the row it
+  writes has no `apnsEnvironment`, which the rules refuse.
 - **The update gate** compares `expo.android.versionCode` and sends an outdated
   build to `DOWNLOAD_PAGE_URL`, the Android download page.
 - **The rich-text answer keeps the keyboard up.** Tapping outside the field

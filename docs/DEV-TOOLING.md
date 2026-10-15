@@ -26,7 +26,7 @@ emulator — not your diff.
 | `scripts/emulator.sh headless` | Boots the `tb_emu` AVD with no window |
 | `npm run check:queries` | **Against the REAL project.** Every query shape the app sends, checked for a missing composite index. With `CHECK_ACCESS_TOKEN` set it runs over REST as that user token instead of Application Default Credentials (see `docs/DEPLOY.md`) |
 | `npm run check:documents` | **Against the REAL project, read-only.** Every live document the app reads, checked against the fields its type requires (`documentShapes` in `@sabeel/shared`), with the screens' helpers run on each. Fails on a document that lacks a required field (migrate it) or that a helper throws on, which includes an audit entry under an action the audit screen has no words for (`AUDIT_ACTION_LABELS`). Same `CHECK_ACCESS_TOKEN` as `check:queries` |
-| `npm run check:push` | **Against the REAL project.** FCM credentials, the VAPID key, and that the code FCM returns for a dead token is one the app prunes on. Takes `CHECK_ACCESS_TOKEN` too |
+| `npm run check:push` | **Against the REAL project.** FCM credentials, the VAPID key, and that the code FCM returns for a dead token is one the app prunes on; then Apple's: that it accepts the key Secret Manager holds as `APNS_KEY`, with the ids in `functions/.env.oursabeel-lms`, for this app (read with the active gcloud account). Takes `CHECK_ACCESS_TOKEN` too |
 | `npm run smoke:prod` | **Against the LIVE site.** The auth handler, the three store pages, the build label for this checkout's version and commit, a provoked Auth request going to Google and not an emulator, no dev sign-in rows, and the bundle's `.map` not served |
 | `npm run students:report [-- --email <address>]` | **Against the REAL project, read-only.** Every student's account: whether a password has ever been set and when, last sign-in, last activity. Test accounts and staff members' own student accounts are listed apart and left out of the counts. `--email` shows one record with its audited history and what its state means for the next set-password link. Start here when a student can't get in (see "A student can't set a password") |
 | `npm run seed:emulators` | Seeds the sweep's world into an already-running emulator suite and leaves it there, for a device pass (needs the web dev server up: see `docs/DEPLOY.md`) |
@@ -41,7 +41,7 @@ emulator — not your diff.
 | `uv run scripts/tutorials/asr_check.py --lines <json> --wav <dir>` | Transcribes the rendered narration (Whisper) and flags a line that does not say what its script says |
 | `node scripts/tutorials/record.mjs --wav <dir> --out <dir> [--only …] [--variant …]` | Records the help films against the guide world: MP4 + WebVTT per film and cut. Needs the emulators and the dev server on the e2e port |
 | `node scripts/tutorials/publish.mjs --from <dir> [--only …]` | **Into the REAL media bucket**, under `help/`, through wrangler: every film and its captions, both cuts, or nothing |
-| `node scripts/send-test-push.mjs <fcm-token> [title] [body]` | **Against the REAL project's FCM.** One real push to one device token, in the shape `fcmSender` sends; writes nothing. The device check for "a push is shown" with the app open and then closed — no emulator delivers a push. The token is in the `devices` collection of whichever Firestore the device registered with |
+| `node scripts/send-test-push.mjs <fcm-token> [path]`, or `--apple <development\|production> <iphone-token> [path]` | **Against the REAL services.** One real push to one device, built by the functions' own `fcm.ts` / `apns.ts`; writes nothing. The device check for "a push is shown, and a tap opens `path`", with the app open and then closed — no emulator delivers a push. An iPhone's token goes to the Apple service it came from: `development` for a debug build (an Apple-silicon simulator receives these), `production` for TestFlight; the key is `APNS_KEY_FILE` or `~/.config/sabeel-lms/AuthKey_<id>.p8`. The token is in the `devices` collection of whichever Firestore the device registered with |
 
 The last two are **pre-release checks, not part of the loop**: both authenticate
 against production with the Admin SDK, so neither can run in CI or against the
@@ -255,8 +255,8 @@ test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
 - **`functions/.secret.local`** must name every secret the functions bind, or
   the emulator asks Secret Manager for the demo project's and logs a 403:
   `SENTRY_DSN=disabled` and `R2_READ_KEY_ID`, `R2_READ_SECRET`,
-  `R2_WRITE_KEY_ID`, `R2_WRITE_SECRET` set to anything (they are unused under
-  the emulator). CI writes the same file.
+  `R2_WRITE_KEY_ID`, `R2_WRITE_SECRET`, `APNS_KEY` set to anything (they are
+  unused under the emulator). CI writes the same file.
 - **Android:** signed URLs name `127.0.0.1:61307`, and the host is signed, so
   `10.0.2.2` cannot be substituted. `adb reverse tcp:61307 tcp:61307` lets the
   AVD reach it at the address the URL names.

@@ -23,6 +23,9 @@ afterEach(() => {
 
 const MESSAGE = { title: 't', body: 'b', path: 'work/cw1' };
 
+/** A browser's registration: FCM's token, sent through FCM. */
+const web = (token: string) => ({ token, platform: 'web' as const, registeredAt: 1 });
+
 async function freshMessaging() {
   vi.resetModules();
   return import('../../src/messaging');
@@ -37,7 +40,7 @@ describe('sender selection', () => {
     // No FCM call at all: resolves, reports every token delivered so the
     // once-marker stands, and — the part that matters — reports no stale
     // tokens, so no device can be deleted.
-    await expect(send(['tok-a', 'tok-b'], MESSAGE)).resolves.toEqual({ stale: [], sent: 2 });
+    await expect(send([web('tok-a'), web('tok-b')], MESSAGE)).resolves.toEqual({ stale: [], sent: 2 });
     expect(log).toHaveBeenCalled();
   });
 
@@ -49,7 +52,7 @@ describe('sender selection', () => {
     // on getMessaging(). Reaching that throw is the assertion: it proves the
     // production branch was taken. The suppressed sender resolves and could
     // never get here.
-    await expect(send(['tok-a'], MESSAGE)).rejects.toThrow();
+    await expect(send([web('tok-a')], MESSAGE)).rejects.toThrow();
   });
 
   it('treats any value other than the literal "true" as production', async () => {
@@ -58,7 +61,7 @@ describe('sender selection', () => {
     for (const value of ['1', 'false', 'TRUE']) {
       vi.stubEnv('FUNCTIONS_EMULATOR', value);
       const { send } = await freshMessaging();
-      await expect(send(['tok-a'], MESSAGE)).rejects.toThrow();
+      await expect(send([web('tok-a')], MESSAGE)).rejects.toThrow();
     }
   });
 
@@ -81,7 +84,7 @@ describe('sender selection', () => {
     }));
 
     const { send } = await freshMessaging();
-    await send(['tok-a'], MESSAGE);
+    await send([web('tok-a')], MESSAGE);
 
     expect(sendEachForMulticast).toHaveBeenCalledTimes(1);
     expect(sendEachForMulticast.mock.calls[0][0]).toMatchObject({
@@ -108,7 +111,7 @@ describe('sender selection', () => {
     }));
 
     const { send } = await freshMessaging();
-    await send(['tok-a'], MESSAGE);
+    await send([web('tok-a')], MESSAGE);
 
     const sent = sendEachForMulticast.mock.calls[0][0] as { data: Record<string, string>; webpush: unknown };
     expect(sent).toMatchObject({ webpush: { fcmOptions: { link: `${WEB_APP_URL}work/cw1` } } });
@@ -143,7 +146,7 @@ describe('sender selection', () => {
     }));
 
     const { send } = await freshMessaging();
-    const out = await send(['keep-a', 'dead-b', 'keep-c'], MESSAGE);
+    const out = await send([web('keep-a'), web('dead-b'), web('keep-c')], MESSAGE);
 
     expect(out.stale).toEqual(['dead-b']);
     expect(out.sent).toBe(2);
@@ -171,7 +174,7 @@ describe('sender selection', () => {
     }));
 
     const { send } = await freshMessaging();
-    expect((await send(['still-good'], MESSAGE)).stale).toEqual([]);
+    expect((await send([web('still-good')], MESSAGE)).stale).toEqual([]);
     vi.doUnmock('firebase-admin/messaging');
   });
 
@@ -181,9 +184,113 @@ describe('sender selection', () => {
     const { send, setSender, resetSender } = await freshMessaging();
 
     setSender(async () => ({ stale: ['tok-a'], sent: 0 }));
-    await expect(send(['tok-a'], MESSAGE)).resolves.toEqual({ stale: ['tok-a'], sent: 0 });
+    await expect(send([web('tok-a')], MESSAGE)).resolves.toEqual({ stale: ['tok-a'], sent: 0 });
 
     resetSender();
-    await expect(send(['tok-a'], MESSAGE)).resolves.toEqual({ stale: [], sent: 1 });
+    await expect(send([web('tok-a')], MESSAGE)).resolves.toEqual({ stale: [], sent: 1 });
+  });
+});
+
+/*
+ * TWO SERVICES, ONE NOTIFICATION. An iPhone's token is Apple's and only Apple
+ * delivers it; Android and browser tokens are FCM's. What a person is promised
+ * is that each of their devices hears, and that one service being down neither
+ * silences the other nor makes the retry tell someone twice.
+ */
+describe('a person with an iPhone', () => {
+  const iphone = (token: string) => ({
+    token,
+    platform: 'ios' as const,
+    apnsEnvironment: 'production' as const,
+    registeredAt: 1,
+  });
+
+  function services(fcm: (message: unknown) => Promise<unknown>, apple: (devices: unknown[]) => Promise<unknown>) {
+    vi.stubEnv('FUNCTIONS_EMULATOR', '');
+    vi.stubEnv('APNS_KEY', 'a-key');
+    vi.stubEnv('APNS_KEY_ID', 'KEYID12345');
+    vi.stubEnv('APPLE_TEAM_ID', 'TEAM123456');
+    const sendEachForMulticast = vi.fn(fcm);
+    const sendToApns = vi.fn(apple);
+    vi.doMock('firebase-admin/messaging', () => ({ getMessaging: () => ({ sendEachForMulticast }) }));
+    vi.doMock('../../src/apns', () => ({ sendToApns }));
+    return { sendEachForMulticast, sendToApns };
+  }
+
+  afterEach(() => {
+    vi.doUnmock('firebase-admin/messaging');
+    vi.doUnmock('../../src/apns');
+  });
+
+  it('sends the iPhone to Apple and only the rest to FCM', async () => {
+    const { sendEachForMulticast, sendToApns } = services(
+      async () => ({ responses: [{ success: true }], successCount: 1 }),
+      async () => ({ delivered: ['ab12'], dead: [], failed: [] }),
+    );
+    const { send } = await freshMessaging();
+    await expect(send([web('tok-a'), iphone('ab12')], MESSAGE)).resolves.toEqual({ stale: [], sent: 2 });
+    expect(sendEachForMulticast.mock.calls[0][0]).toMatchObject({ tokens: ['tok-a'] });
+    expect(sendToApns.mock.calls[0][0]).toEqual([iphone('ab12')]);
+  });
+
+  it('prunes the iPhone Apple calls dead, and only that one', async () => {
+    services(
+      async () => ({ responses: [], successCount: 0 }),
+      async () => ({ delivered: ['ab12'], dead: ['cd34'], failed: [] }),
+    );
+    const { send } = await freshMessaging();
+    await expect(send([iphone('ab12'), iphone('cd34')], MESSAGE)).resolves.toEqual({ stale: ['cd34'], sent: 1 });
+  });
+
+  it('keeps what one service delivered when the other is down: no throw, so no second telling', async () => {
+    services(
+      async () => {
+        throw new Error('FCM unreachable');
+      },
+      async () => ({ delivered: ['ab12'], dead: [], failed: [] }),
+    );
+    const { send } = await freshMessaging();
+    await expect(send([web('tok-a'), iphone('ab12')], MESSAGE)).resolves.toEqual({ stale: [], sent: 1 });
+  });
+
+  it('throws when nothing reached anyone, so the trigger tries again', async () => {
+    services(
+      async () => {
+        throw new Error('FCM unreachable');
+      },
+      async () => {
+        throw new Error('Apple unreachable');
+      },
+    );
+    const { send } = await freshMessaging();
+    await expect(send([web('tok-a'), iphone('ab12')], MESSAGE)).rejects.toThrow(/unreachable/);
+  });
+
+  /*
+   * THE KEY IS BOUND, OR IT IS LOUD. A function that sends but was never given
+   * the key reads it as empty; sending on with an empty key would fail at
+   * Apple, device by device, as if every iPhone were unreachable.
+   */
+  it('refuses to send an iPhone anything without the key, and says why', async () => {
+    const { sendToApns } = services(
+      async () => ({ responses: [], successCount: 0 }),
+      async () => ({ delivered: [], dead: [], failed: [] }),
+    );
+    vi.stubEnv('APNS_KEY', '');
+    const { send } = await freshMessaging();
+    await expect(send([iphone('ab12')], MESSAGE)).rejects.toThrow(/APNS_KEY is not bound/);
+    expect(sendToApns).not.toHaveBeenCalled();
+  });
+
+  it('does not need the key for a person with no iPhone', async () => {
+    services(
+      async () => ({ responses: [{ success: true }], successCount: 1 }),
+      async () => {
+        throw new Error('Apple must not be called');
+      },
+    );
+    vi.stubEnv('APNS_KEY', '');
+    const { send } = await freshMessaging();
+    await expect(send([web('tok-a')], MESSAGE)).resolves.toEqual({ stale: [], sent: 1 });
   });
 });

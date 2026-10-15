@@ -782,11 +782,23 @@ service cloud.firestore {
          * does not wait for this write, so that refusal is silent: the settings
          * screen would report a registered, working device whose push is dead.
          */
+        /*
+         * Two shapes. An Android phone or a browser holds an FCM token; an
+         * iPhone holds Apple's, and says which of Apple's two services issued
+         * it, because the send path must ask that one and the other refuses it
+         * (functions/src/apns.ts). A platform outside these three is a row
+         * nothing would ever deliver to.
+         */
         allow create, update: if isMineToWrite()
-          && request.resource.data.keys().hasOnly(['token', 'platform', 'registeredAt'])
           && request.resource.data.token == token
-          && request.resource.data.platform is string
-          && isTime(request.resource.data.registeredAt);
+          && isTime(request.resource.data.registeredAt)
+          && (
+            (request.resource.data.keys().hasOnly(['token', 'platform', 'registeredAt'])
+              && request.resource.data.platform in ['android', 'web'])
+            || (request.resource.data.keys().hasOnly(['token', 'platform', 'apnsEnvironment', 'registeredAt'])
+              && request.resource.data.platform == 'ios'
+              && request.resource.data.apnsEnvironment in ['development', 'production'])
+          );
       }
 
       // Server-only, both ways. This is the idempotency marker the send path

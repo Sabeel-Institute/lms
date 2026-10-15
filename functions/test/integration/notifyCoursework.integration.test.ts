@@ -64,7 +64,8 @@ const told = () => outbox.map((o) => o.tokens[0].replace(/^tok-/, ''));
 beforeEach(async () => {
   outbox = [];
   process.env.NOTIFY_AUDIENCE = 'everyone';
-  setSender(async (tokens, message): Promise<SendOutcome> => {
+  setSender(async (devices, message): Promise<SendOutcome> => {
+    const tokens = devices.map((d) => d.token);
     outbox.push({ tokens, message });
     return { stale: [], sent: tokens.length };
   });

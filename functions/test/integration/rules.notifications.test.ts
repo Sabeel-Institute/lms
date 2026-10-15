@@ -214,6 +214,36 @@ describe('device tokens', () => {
     );
   });
 
+  /*
+   * AN IPHONE SAYS WHICH OF APPLE'S SERVICES ITS TOKEN IS FROM. The send path
+   * asks that one, and the other refuses the token, so a row that does not say
+   * — or says something else — is a phone that never hears anything.
+   */
+  it('lets an iPhone register, with the Apple service its token belongs to', async () => {
+    const row = (token: string, apnsEnvironment: string) => ({
+      token,
+      platform: 'ios',
+      apnsEnvironment,
+      registeredAt: 2,
+    });
+    const db = student().firestore();
+    await assertSucceeds(setDoc(doc(db, COLLECTIONS.notifications, STUDENT, 'devices', 'ab12'), row('ab12', 'production')));
+    await assertSucceeds(setDoc(doc(db, COLLECTIONS.notifications, STUDENT, 'devices', 'cd34'), row('cd34', 'development')));
+  });
+
+  it('does NOT let a device row name a service, or a platform, nothing delivers to', async () => {
+    const db = student().firestore();
+    const put = (token: string, data: Record<string, unknown>) =>
+      setDoc(doc(db, COLLECTIONS.notifications, STUDENT, 'devices', token), { token, registeredAt: 2, ...data });
+    // An iPhone that does not say, or says something Apple does not run.
+    await assertFails(put('ef56', { platform: 'ios' }));
+    await assertFails(put('ef57', { platform: 'ios', apnsEnvironment: 'staging' }));
+    // An FCM device carrying Apple's field: a shape nothing reads.
+    await assertFails(put('ef58', { platform: 'android', apnsEnvironment: 'production' }));
+    // A platform there is no app for.
+    await assertFails(put('ef59', { platform: 'windows' }));
+  });
+
   /** A whole number of milliseconds, which is what `Date.now()` is. */
   it('does NOT let registeredAt be a non-integer', async () => {
     await assertFails(

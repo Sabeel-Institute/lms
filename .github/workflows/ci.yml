@@ -89,12 +89,14 @@ jobs:
 
       # Secrets the functions bind, as the emulator wants them: present, and
       # never fetched from Secret Manager. Sentry off; the media keys are unused
-      # under the emulator (mediaStore.ts reads the local SeaweedFS keys).
+      # under the emulator (mediaStore.ts reads the local SeaweedFS keys), and
+      # so is Apple's push key (messaging.ts sends nothing there).
       - name: Emulator secret placeholders
         run: |
           printf '%s\n' SENTRY_DSN=disabled R2_READ_KEY_ID=unused-in-emulator \
             R2_READ_SECRET=unused-in-emulator R2_WRITE_KEY_ID=unused-in-emulator \
-            R2_WRITE_SECRET=unused-in-emulator > functions/.secret.local
+            R2_WRITE_SECRET=unused-in-emulator APNS_KEY=unused-in-emulator \
+            > functions/.secret.local
 
       # Firestore rules, the callables, and the media store's signed URLs.
       - name: Emulator integration tests

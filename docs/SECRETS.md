@@ -15,6 +15,7 @@
 | Service account keys | **Yes** | Should not exist — see below |
 | Android **release signing key** and its password | **Yes** | `~/.config/sabeel-lms/release.keystore` and `keystore.properties`, outside the repo, mode 600 — see below |
 | R2 API keys (`R2_READ_*`, `R2_WRITE_*`) | **Yes** | Secret Manager |
+| Apple **push key** (APNs, `AuthKey_X5R8FL94BC.p8`) | **Yes** | Secret Manager as `APNS_KEY`, which the functions that send a notification bind (`functions/src/messaging.ts`); the file in `~/.config/sabeel-lms/`, mode 600. Its id and the team id are not secret and are in `functions/.env.oursabeel-lms` |
 
 The Firebase "apiKey" is not a credential. It identifies the project; access is
 controlled by security rules and App Check. Treating it as a secret leads people
@@ -38,6 +39,7 @@ firebase functions:secrets:set SENTRY_DSN        # paste the FUNCTIONS DSN when 
 firebase functions:secrets:set ZOOM_ACCOUNT_ID
 firebase functions:secrets:set ZOOM_CLIENT_ID
 firebase functions:secrets:set ZOOM_CLIENT_SECRET
+firebase functions:secrets:set APNS_KEY --data-file ~/.config/sabeel-lms/AuthKey_X5R8FL94BC.p8 --project oursabeel-lms
 ```
 
 Then bind them in the function definition, and redeploy — a secret that is set
@@ -115,7 +117,8 @@ or only with effort:
 | `~/.config/sabeel-lms/release.keystore` + `keystore.properties` | Android release key and password | **No updates to the app, ever.** Back up both. |
 | `app/.env.local` | Sentry client DSNs | Copy again from Sentry project settings |
 | `app/android/sentry.properties` | Sentry org auth token | Create a new token in Sentry |
-| `functions/.secret.local` | `SENTRY_DSN=disabled` and `R2_*` placeholders for the emulator | Recreate from this file |
+| `~/.config/sabeel-lms/AuthKey_X5R8FL94BC.p8` | Apple push key (also in Secret Manager as `APNS_KEY`) | Apple never lets it be downloaded again. Make a new key in the developer portal, set `APNS_KEY` to it and `APNS_KEY_ID` to its id, redeploy the functions. Back it up |
+| `functions/.secret.local` | `SENTRY_DSN=disabled`, `R2_*` and `APNS_KEY` placeholders for the emulator | Recreate from this file |
 | `app/google-services.json`, `app/android/app/google-services.json` | Firebase Android config | `firebase apps:sdkconfig ANDROID 1:226338267845:android:a85d5935fb8f4555cac6ac` |
 | `app/GoogleService-Info.plist` | Firebase iOS config | `firebase apps:sdkconfig IOS 1:226338267845:ios:13ce4f7992ecd4decac6ac --out app/GoogleService-Info.plist` |
 | `~/.config/.wrangler/config/default.toml` | Cloudflare login | Log in again (`docs/DEV-TOOLING.md`) |

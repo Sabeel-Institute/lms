@@ -11,6 +11,17 @@ cannot be minted against the emulator at all.
 
 ---
 
+## The iPhone app (open)
+
+- [ ] **Set Apple's push key as a server secret.** Here, in the repo:
+      `firebase functions:secrets:set APNS_KEY --data-file ~/.config/sabeel-lms/AuthKey_X5R8FL94BC.p8 --project oursabeel-lms`.
+      The functions that send a notification cannot be deployed until it is
+      set.
+- [ ] **Back up the push key.** `~/.config/sabeel-lms/AuthKey_X5R8FL94BC.p8`,
+      into your password manager. Apple never lets it be downloaded again.
+- [ ] **Approve the TestFlight upload** in the Mac session (mac-lms), and
+      install the build from TestFlight on your iPhone when it arrives.
+
 ## oursabeel-lms — Phase 0 (open)
 
 The institute's project. The sections after this one record the setup of the

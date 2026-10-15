@@ -8,6 +8,7 @@ import {
   assignmentId,
   type AssignmentDoc,
   type CourseDoc,
+  type DeviceTokenDoc,
   type PushMessage,
   type RecordingDoc,
   type SessionDoc,
@@ -40,7 +41,7 @@ const COURSE = 'c-notify';
 const COHORT = 'coh-notify';
 
 /** Every message the stubbed sender was asked to deliver, in order. */
-let outbox: { tokens: string[]; message: PushMessage }[] = [];
+let outbox: { tokens: string[]; devices: DeviceTokenDoc[]; message: PushMessage }[] = [];
 let staleTokens: string[] = [];
 
 /*
@@ -63,8 +64,9 @@ beforeEach(async () => {
   testRun += 1;
   outbox = [];
   staleTokens = [];
-  setSender(async (tokens, message): Promise<SendOutcome> => {
-    outbox.push({ tokens, message });
+  setSender(async (devices, message): Promise<SendOutcome> => {
+    const tokens = devices.map((d) => d.token);
+    outbox.push({ tokens, devices, message });
     return { stale: staleTokens, sent: tokens.length - staleTokens.length };
   });
 
@@ -266,6 +268,31 @@ describe('recordingReady', () => {
     expect(await notifyRecordingReady(db(), await seedGrant('s1', 'r1', TODAY), TODAY)).toBe(true);
   });
 
+  /*
+   * AN IPHONE IS TOLD AS WELL, BY APPLE. Its row carries the service its token
+   * belongs to, and the sender needs it to pick Apple's sandbox or production
+   * (messaging.ts, apns.ts); a send path that passed tokens alone would hand
+   * an iPhone's token to FCM, which refuses it, and the phone would never hear.
+   */
+  it('reaches a phone of each kind, an iPhone with the service its token belongs to', async () => {
+    await withDevice('s1', 'tok-android');
+    await db()
+      .collection(COLLECTIONS.notifications)
+      .doc('s1')
+      .collection('devices')
+      .doc('a1b2c3')
+      .set({ token: 'a1b2c3', platform: 'ios', apnsEnvironment: 'production', registeredAt: Date.now() });
+    await seedRecording('r1', 'sess1', 'published');
+    expect(await notifyRecordingReady(db(), await seedGrant('s1', 'r1'), TODAY)).toBe(true);
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0].devices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: 'tok-android', platform: 'web' }),
+        expect.objectContaining({ token: 'a1b2c3', platform: 'ios', apnsEnvironment: 'production' }),
+      ]),
+    );
+  });
+
   it('tells the excused student, naming the class and the deadline', async () => {
     await withDevice('s1');
     await seedRecording('r1', 'sess1', 'published');
@@ -373,11 +400,12 @@ describe('recordingReady', () => {
     await withDevice('s1');
     await seedRecording('r1', 'sess1', 'published');
     let calls = 0;
-    setSender(async (tokens, message): Promise<SendOutcome> => {
+    setSender(async (devices, message): Promise<SendOutcome> => {
+    const tokens = devices.map((d) => d.token);
       calls += 1;
       if (calls === 1) throw new Error('FCM unreachable');
       if (calls === 2) return { stale: [], sent: 0 }; // reached, refused every token for a transient reason
-      outbox.push({ tokens, message });
+      outbox.push({ tokens, devices, message });
       return { stale: [], sent: tokens.length };
     });
     await expect(notifyRecordingReady(db(), await seedGrant('s1', 'r1'), TODAY)).rejects.toThrow(/unreachable/);

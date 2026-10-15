@@ -12,6 +12,7 @@ import { notifyAttendanceMissing, notifyLastDay, notifyRecordingReady } from './
 import { notifyHandInLastDay } from './notifyCoursework';
 import { reportError } from './sentry';
 import { SENTRY_DSN } from './reported';
+import { PUSH_SECRETS } from './messaging';
 
 /**
  * The two ways a notification is triggered: a grant appearing, and the morning.
@@ -135,7 +136,7 @@ export const onAssignmentWritten = onDocumentWritten(
    * handed the ORIGINAL payload, so `notifyRecordingReady` treats `after` as
    * no more than the grant's id and reads the document for the rest.
    */
-  { document: `${COLLECTIONS.assignments}/{assignmentId}`, secrets: [SENTRY_DSN], retry: true },
+  { document: `${COLLECTIONS.assignments}/{assignmentId}`, secrets: [SENTRY_DSN, ...PUSH_SECRETS], retry: true },
   async (event) => {
     try {
       const before = event.data?.before.data() as AssignmentDoc | undefined;
@@ -163,7 +164,7 @@ export const onAssignmentWritten = onDocumentWritten(
  * dates: one implementation of the rollover, or two that drift.
  */
 export const onMorning = onSchedule(
-  { schedule: '0 7 * * *', timeZone: INSTITUTE_TIMEZONE, secrets: [SENTRY_DSN] },
+  { schedule: '0 7 * * *', timeZone: INSTITUTE_TIMEZONE, secrets: [SENTRY_DSN, ...PUSH_SECRETS] },
   async () => {
     try {
       const db = getFirestore();

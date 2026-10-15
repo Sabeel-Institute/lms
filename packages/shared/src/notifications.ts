@@ -71,7 +71,7 @@ export const STAFF_KINDS: NotificationKind[] = ['attendanceMissing'];
  *
  * That fallback is exactly what was happening, confirmed on a device on
  * 2026-08-28: `push.ts` created a channel called "Class recordings" that
- * nothing ever posted to, because `fcmSender` sent no channel at all. The
+ * nothing ever posted to, because the FCM send named no channel at all. The
  * sibling kanban app hit the identical bug and fixed it the same way; this is
  * deliberately its shape, down to the constant names, so the two do not drift.
  *
@@ -121,12 +121,19 @@ export function prefEnabled(
  * Keyed BY the token so re-registering the same device is a no-op rather than a
  * slow leak of duplicates, and so a send failure can delete the exact row that
  * failed without a query.
+ *
+ * Android and web tokens are FCM's, and FCM delivers them. An iPhone's token
+ * is Apple's own, and the server sends it straight to Apple's push service
+ * (`functions/src/apns.ts`) — which has two, a sandbox and production, each
+ * refusing the other's tokens. Which one a token belongs to is fixed by the
+ * build that minted it (a development build: sandbox; TestFlight and the App
+ * Store: production), so the phone says, from its own provisioning profile.
  */
-export interface DeviceTokenDoc {
-  token: string;
-  platform: 'android' | 'web';
-  registeredAt: number;
-}
+export type DeviceTokenDoc =
+  | { token: string; platform: 'android' | 'web'; registeredAt: number }
+  | { token: string; platform: 'ios'; apnsEnvironment: ApnsEnvironment; registeredAt: number };
+
+export type ApnsEnvironment = 'development' | 'production';
 
 /**
  * Proof a message was already sent, at `notifications/{uid}/sent/{id}`.
@@ -152,10 +159,10 @@ export interface PushMessage {
   title: string;
   body: string;
   /**
-   * Where a tap lands: an app path (`work/<id>`), the same on both surfaces.
-   * Android opens it from the tapped notification's data; a browser can only
-   * open a URL, so the web link is the app's address plus this path. Built by
-   * `pushPaths`, which the app's route tables are tested against.
+   * Where a tap lands: an app path (`work/<id>`), the same on every surface.
+   * The phone apps open it from the tapped notification's data; a browser can
+   * only open a URL, so the web link is the app's address plus this path. Built
+   * by `pushPaths`, which the app's route tables are tested against.
    */
   path: string;
 }
