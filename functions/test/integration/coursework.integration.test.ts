@@ -209,7 +209,7 @@ describe('who receives an assignment', () => {
     await writeNote(AMINAH, id, 'First go');
     await handInWork(AMINAH, id);
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 4 }, feedback: 'Again, slowly.' });
-    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(10), lateUntil: null });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(10), lateUntil: inDays(17) });
     await classTimePasses(id, { dueDate: inDays(-1), lateUntil: null });
     await applyEnrollmentActive({ studentUid: AMINAH, courseId, active: false });
     await applyEnrollmentActive({ studentUid: AMINAH, courseId, active: true });
@@ -400,7 +400,7 @@ describe('grading and returning', () => {
     const id = await posted({ grading: { kind: 'scale' } });
     await handedIn(AMINAH, id);
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { scale: 'needsWork' }, feedback: 'Redo line 4.' });
-    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(10), lateUntil: null });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(10), lateUntil: inDays(17) });
     const after = (await sub(AMINAH, id))!;
     expect(after).toMatchObject({ state: 'open', attempt: 2, dueDate: inDays(10), note: '', returned: { retry: true } });
     expect(after.attempts).toHaveLength(1);
@@ -446,7 +446,7 @@ describe('grading and returning', () => {
     await handedIn(AMINAH, id);
     await closeCourseworkRecord(id);
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 4 }, feedback: 'Again, please.' });
-    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(5), lateUntil: null });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(14), lateUntil: null });
     expect(await stateOf(AMINAH, id)).toBe('toDo');
     await writeNote(AMINAH, id, 'Second go');
     await handInWork(AMINAH, id);
@@ -464,7 +464,7 @@ describe('grading and returning', () => {
     const id = await posted();
     await handedIn(AMINAH, id);
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 8 }, feedback: '' });
-    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(10), lateUntil: null });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(10), lateUntil: inDays(17) });
     await expect(updateCourseworkRecord(id, fields({ grading: { kind: 'points', outOf: 100 } }))).rejects.toThrow(/cannot change/);
   });
 
@@ -508,6 +508,36 @@ describe('grading and returning', () => {
     await closeCourseworkRecord(id);
     await updateCourseworkRecord(id, { ...fields({ title: 'Mine' }), ifUnchanged: opened });
     expect((await cw(id))?.title).toBe('Mine');
+  });
+});
+
+/*
+ * NO LESS TIME THAN THEY HAVE. Another try was offered a week from today with
+ * no late work, weeks less than the class for a student who handed in early,
+ * and a second "more time" from the class's date cut short a student already
+ * given until later. The server now refuses both.
+ */
+describe('no less time than they have', () => {
+  it('another try may not end before the class’s dates', async () => {
+    const id = await posted(); // due in 7 days, late work until 14
+    await handedIn(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 4 }, feedback: 'Again.' });
+    await expect(returnWorkRecord(id, [AMINAH], { dueDate: inDays(3), lateUntil: null })).rejects.toThrow(/cannot end before the class/);
+    await expect(returnWorkRecord(id, [AMINAH], { dueDate: inDays(10), lateUntil: null })).rejects.toThrow(/cannot end before the class/);
+    expect((await sub(AMINAH, id))?.state).toBe('handedIn');
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(7), lateUntil: inDays(14) });
+    expect(await sub(AMINAH, id)).toMatchObject({ state: 'open', dueDate: inDays(7), lateUntil: inDays(14) });
+  });
+
+  it('more time for a student given until later may not end before their own date', async () => {
+    const id = await posted();
+    const give = (dueDate: string) =>
+      giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, dates: { dueDate, lateUntil: null }, reason: 'Ill' });
+    await give(inDays(20));
+    await expect(give(inDays(16))).rejects.toThrow(/less time than they have now/);
+    expect((await sub(BILAL, id))?.dueDate).toBe(inDays(20));
+    await give(inDays(25));
+    expect((await sub(BILAL, id))?.dueDate).toBe(inDays(25));
   });
 });
 
@@ -613,7 +643,7 @@ describe('closing and archiving', () => {
     await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, dates: { dueDate: inDays(15), lateUntil: null }, reason: 'Travel' });
     await handedIn(AMINAH, id);
     await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 4 }, feedback: 'Again, please.' });
-    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(5), lateUntil: null });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(14), lateUntil: null });
     await createEnrollmentRecord(TEACHER, { studentUid: LATECOMER, courseId });
     await closeCourseworkRecord(id);
     expect(await stateOf(LATECOMER, id)).toBe('missed');

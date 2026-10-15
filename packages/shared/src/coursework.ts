@@ -284,6 +284,40 @@ export function closesOn(work: { dueDate: string; lateUntil: string | null }): s
   return work.lateUntil ?? work.dueDate;
 }
 
+type WorkDates = { dueDate: string; lateUntil: string | null };
+
+/** Whether `dates` give less time than `than`: due sooner, or closing sooner. */
+export function endsSooner(dates: WorkDates, than: WorkDates): boolean {
+  return dates.dueDate < than.dueDate || closesOn(dates) < closesOn(than);
+}
+
+/** A due date with the class's gap for late work after it; none when the class takes none. */
+function withClassGap(cw: WorkDates, dueDate: string): WorkDates {
+  return { dueDate, lateUntil: cw.lateUntil === null ? null : addDays(dueDate, daysUntilDue(cw.lateUntil, cw.dueDate)) };
+}
+
+const latestOf = (...dates: string[]) => dates.reduce((a, b) => (b > a ? b : a));
+
+/**
+ * What "Give more time" offers: a week past the latest of today, the class's
+ * due date and the student's own, with the class's gap for late work. MORE
+ * TIME IS MORE: offered from the class's date alone, a student already given
+ * until later was cut short by one tap, and the server now refuses that.
+ */
+export function offeredMoreTime(cw: WorkDates, sub: WorkDates, today: string): WorkDates {
+  return withClassGap(cw, addDays(latestOf(today, cw.dueDate, sub.dueDate), 7));
+}
+
+/**
+ * What "Ask for another try" offers: the latest of a week from today, the
+ * class's due date and the student's own, with the class's gap for late work.
+ * A student who handed in early was offered a week from today and no late
+ * work, weeks less than every classmate, for having been early.
+ */
+export function offeredAnotherTry(cw: WorkDates, sub: WorkDates, today: string): WorkDates {
+  return withClassGap(cw, latestOf(addDays(today, 7), cw.dueDate, sub.dueDate));
+}
+
 /**
  * Whether work handed in at `handedInAt` was late. Judged against the date AS
  * IT STANDS — moving a student's date later makes late work on time — and

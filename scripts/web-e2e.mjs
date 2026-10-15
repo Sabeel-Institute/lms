@@ -2269,6 +2269,26 @@ await admin.getByTestId('grade-points').filter({ visible: true }).first().waitFo
 check('K and J step to the previous and next student', afterK === 'Bilal Khan' && afterJ === 'Fatima Ahmed', `${afterK} → ${afterJ}`);
 await shot(admin, '41-grade');
 
+/*
+ * ONE STUDENT'S REASON STAYS WITH THEM. The grading screen stays mounted from
+ * one student to the next, and the "More time, or not required" editor left
+ * open carried the reason typed for one student onto the next, one tap from
+ * being theirs and shown to them.
+ */
+await tap(admin, 'grade-options');
+await admin.getByTestId('grade-reason').filter({ visible: true }).first().fill('HUNT: for Fatima alone');
+await admin.evaluate(() => document.activeElement?.blur());
+await admin.keyboard.press('k');
+await titleIs('Bilal Khan');
+const carried = await admin
+  .getByTestId('grade-reason')
+  .filter({ visible: true })
+  .evaluateAll((els) => els.map((e) => e.value ?? e.textContent));
+check('a reason typed for one student is not on the next student’s page', carried.length === 0, JSON.stringify(carried));
+await admin.evaluate(() => document.activeElement?.blur());
+await admin.keyboard.press('j');
+await titleIs('Fatima Ahmed');
+
 // SAVED IS NOT RETURNED. The student's own screen, live, shows no grade; the
 // record they can read carries none either.
 await student.waitForTimeout(2000);

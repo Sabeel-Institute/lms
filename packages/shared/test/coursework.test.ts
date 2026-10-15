@@ -8,6 +8,9 @@ import {
   canTakeBack,
   closesOn,
   countsFromTally,
+  endsSooner,
+  offeredAnotherTry,
+  offeredMoreTime,
   courseworkCounts,
   courseworkTally,
   defaultLateUntil,
@@ -374,5 +377,43 @@ describe('the stored tally', () => {
     expect(courseworkTally(grading, reversed, grades, INSTITUTE_TIMEZONE).waiting).toEqual(
       courseworkTally(grading, subs, grades, INSTITUTE_TIMEZONE).waiting,
     );
+  });
+});
+
+/*
+ * NO LESS TIME THAN THEY HAVE. Another try was offered a week from today with
+ * no late work, so a student who handed in early was given weeks less than
+ * every classmate; a second "more time" was offered from the class's date,
+ * so a student already given until later was cut short by one tap.
+ */
+describe('the dates a teacher is offered', () => {
+  const cls = { dueDate: '2026-11-04', lateUntil: '2026-11-11' };
+
+  it('another try for work handed in early keeps the class’s dates, late work included', () => {
+    const offer = offeredAnotherTry(cls, { dueDate: '2026-11-04', lateUntil: '2026-11-11' }, '2026-10-14');
+    expect(offer).toEqual({ dueDate: '2026-11-04', lateUntil: '2026-11-11' });
+    expect(endsSooner(offer, cls)).toBe(false);
+  });
+
+  it('another try once the class’s dates have gone gives a week, with the class’s gap for late work', () => {
+    expect(offeredAnotherTry(cls, cls, '2026-11-20')).toEqual({ dueDate: '2026-11-27', lateUntil: '2026-12-04' });
+    expect(offeredAnotherTry({ dueDate: '2026-11-04', lateUntil: null }, { dueDate: '2026-11-04', lateUntil: null }, '2026-11-20')).toEqual({
+      dueDate: '2026-11-27',
+      lateUntil: null,
+    });
+  });
+
+  it('more time for a student who already has until later starts from their date, not the class’s', () => {
+    const theirs = { dueDate: '2026-11-03', lateUntil: null };
+    const offer = offeredMoreTime({ dueDate: '2026-10-21', lateUntil: '2026-10-28' }, theirs, '2026-10-14');
+    expect(offer.dueDate).toBe('2026-11-10');
+    expect(endsSooner(offer, theirs)).toBe(false);
+  });
+
+  it('says when dates give less time: due sooner, or closing sooner', () => {
+    expect(endsSooner({ dueDate: '2026-10-21', lateUntil: null }, cls)).toBe(true);
+    expect(endsSooner({ dueDate: '2026-11-04', lateUntil: null }, cls)).toBe(true);
+    expect(endsSooner({ dueDate: '2026-11-04', lateUntil: '2026-11-11' }, cls)).toBe(false);
+    expect(endsSooner({ dueDate: '2026-11-12', lateUntil: null }, cls)).toBe(false);
   });
 });

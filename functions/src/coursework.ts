@@ -10,6 +10,7 @@ import {
   closesOn,
   gradeFits,
   gradeText,
+  endsSooner,
   hasOwnDates,
   isLate,
   normalizeMarkdown,
@@ -909,6 +910,21 @@ export async function returnWorkRecord(
    * gone back. Each refusal is now collected and reported beside the returns;
    * only when nothing at all was returned is the call refused.
    */
+  /*
+   * ANOTHER TRY IS NO LESS THAN THE CLASS HAS. A student who handed in early
+   * was asked for another try by a week from today with no late work: weeks
+   * less than every classmate, for having been early. Its dates may not end
+   * before the class's, as more time's may not.
+   */
+  if (retry) {
+    const cw = await readCoursework(cwId);
+    if (endsSooner(retry, cw)) {
+      throw new HttpsError(
+        'invalid-argument',
+        `Another try cannot end before the class's dates: due ${cw.dueDate}${cw.lateUntil ? `, late work until ${cw.lateUntil}` : ''}.`,
+      );
+    }
+  }
   const results: { studentUid: string; grade: Grade | null }[] = [];
   const refused: { studentUid: string; reason: string }[] = [];
   for (const studentUid of studentUids) {
@@ -1018,6 +1034,14 @@ export async function giveMoreTimeRecord(staffUid: string, input: StudentWorkInp
       throw new HttpsError(
         'invalid-argument',
         `More time cannot end before the class's dates: due ${cw.dueDate}${cw.lateUntil ? `, late work until ${cw.lateUntil}` : ''}.`,
+      );
+    }
+    // Nor before the student's own, for work not in yet: given until later
+    // already, a second "more time" from the class's date was less.
+    if (sub.state === 'open' && hasOwnDates(sub) && endsSooner(input.dates, sub)) {
+      throw new HttpsError(
+        'invalid-argument',
+        `That is less time than they have now: due ${sub.dueDate}${sub.lateUntil ? `, late work until ${sub.lateUntil}` : ''}.`,
       );
     }
     tx.update(subRef(input.studentUid, input.courseworkId), {

@@ -4,6 +4,8 @@ import { useIsFocused } from '@react-navigation/native';
 import {
   INSTITUTE_TIMEZONE,
   addDays,
+  offeredMoreTime,
+  offeredAnotherTry,
   daysUntilDue,
   gradeFits,
   gradeText,
@@ -32,6 +34,7 @@ import {
   useSubmissionEventsState,
   type CourseworkRow,
   type GradeRow,
+  type SubmissionRow,
 } from '../coursework';
 import { inFilter, rowLine, staffRows, stepFrom, type WorkFilter } from '../courseworkRows';
 import { useWorkFilter } from '../courseworkFilter';
@@ -145,8 +148,8 @@ export function GradeScreen({
       if (await settle()) onOpenStudent(uid);
       else if (formStatus.staged) setReturnError('Send the change to the returned grade, or undo it, before moving on.');
     });
-  const sendBack = (retryBy: string | null) =>
-    void run(retryBy ? 'retry' : 'return', async () => {
+  const sendBack = (retry: { dueDate: string; lateUntil: string | null } | null) =>
+    void run(retry ? 'retry' : 'return', async () => {
       setReturnError(null);
       try {
         // The server returns the STORED grade, so what is on the screen goes
@@ -155,7 +158,7 @@ export function GradeScreen({
         await returnWork({
           courseworkId: cw.id,
           studentUids: [studentUid],
-          ...(retryBy ? { retry: { dueDate: retryBy, lateUntil: null } } : {}),
+          ...(retry ? { retry } : {}),
         });
       } catch (e) {
         setReturnError(errorText(e));
@@ -299,12 +302,15 @@ export function GradeScreen({
         ) : null}
         {canReturn ? <Button testID="grade-return" label="Return now" busy={active === 'return'} onPress={() => sendBack(null)} /> : null}
       </Row>
-      {canReturn ? <RetryOption active={active} onRetry={(by) => sendBack(by)} /> : null}
+      {/* KEYED BY STUDENT, both editors: the screen stays mounted from one
+          student to the next, and an editor left open carried the reason and
+          date typed for one student onto the next, one tap from being theirs. */}
+      {canReturn ? <RetryOption key={studentUid} cw={cw} sub={sub} active={active} onRetry={(dates) => sendBack(dates)} /> : null}
       {!next && toGrade.length === 0 ? (
         <Text style={styles.quiet}>Everything handed in is graded. Return it from the assignment’s page, together.</Text>
       ) : null}
       {sub.state !== 'returned' ? (
-        <StudentOptions cw={cw} studentUid={studentUid} notRequired={sub.notRequired !== null} active={active} run={run} />
+        <StudentOptions key={studentUid} cw={cw} sub={sub} studentUid={studentUid} notRequired={sub.notRequired !== null} active={active} run={run} />
       ) : null}
       {layout !== 'stack' && Platform.OS === 'web' ? (
         <Text style={styles.keysHint}>J K next and previous · {RETURN_KEY} return</Text>
@@ -603,10 +609,26 @@ function GradeForm({
   );
 }
 
-/** Return with a request for another try, by a new date. */
-function RetryOption({ active, onRetry }: { active: string | null; onRetry: (dueDate: string) => void }) {
+/**
+ * Return with a request for another try, by new dates: offered from the
+ * latest of a week from today, the class's due date and the student's own,
+ * with the class's gap for late work (`offeredAnotherTry`); the server
+ * refuses dates that end before the class's.
+ */
+function RetryOption({
+  cw,
+  sub,
+  active,
+  onRetry,
+}: {
+  cw: CourseworkRow;
+  sub: SubmissionRow;
+  active: string | null;
+  onRetry: (dates: { dueDate: string; lateUntil: string | null }) => void;
+}) {
   const [open, setOpen] = useState(false);
-  const [date, setDate] = useState(addDays(todayInZone(INSTITUTE_TIMEZONE), 7));
+  const [date, setDate] = useState(() => offeredAnotherTry(cw, sub, todayInZone(INSTITUTE_TIMEZONE)).dueDate);
+  const lateUntil = cw.lateUntil === null ? null : addDays(date, daysUntilDue(cw.lateUntil, cw.dueDate));
   return (
     <View style={styles.returnNow}>
       <Button testID="grade-retry" label="Ask for another try…" variant="secondary" hug onPress={() => setOpen((o) => !o)} />
@@ -615,8 +637,20 @@ function RetryOption({ active, onRetry }: { active: string | null; onRetry: (due
           <Text style={styles.quiet}>
             The work goes back with your grade and feedback, and opens again for another try. This attempt stays with the next.
           </Text>
+          <Text style={styles.quiet}>
+            The class hands in by {unbreakableDate(cw.dueDate)}
+            {cw.lateUntil ? `, late work until ${unbreakableDate(cw.lateUntil)}` : ''}.
+          </Text>
           <DateField label="Hand in again by" value={date} onChange={setDate} />
-          <Button testID="grade-retry-confirm" label="Return and ask for another try" busy={active === 'retry'} onPress={() => onRetry(date)} />
+          {lateUntil ? (
+            <Text style={styles.quiet}>Late work then until {unbreakableDate(lateUntil)}, the same gap the class has.</Text>
+          ) : null}
+          <Button
+            testID="grade-retry-confirm"
+            label="Return and ask for another try"
+            busy={active === 'retry'}
+            onPress={() => onRetry({ dueDate: date, lateUntil })}
+          />
         </Card>
       ) : null}
     </View>
@@ -630,25 +664,25 @@ function RetryOption({ active, onRetry }: { active: string | null; onRetry: (due
  */
 function StudentOptions({
   cw,
+  sub,
   studentUid,
   notRequired,
   active,
   run,
 }: {
   cw: CourseworkRow;
+  /** The student's work: their dates now, which more time must not cut. */
+  sub: SubmissionRow;
   studentUid: string;
   notRequired: boolean;
   active: Gate['active'];
   run: Gate['run'];
 }) {
   const [open, setOpen] = useState(false);
-  // A week past the later of today and the class's own date: more time is
-  // more, and the server refuses a date earlier than the class's. Late work
-  // keeps the gap the class has, so a student given more time does not lose it.
-  const [date, setDate] = useState(() => {
-    const today = todayInZone(INSTITUTE_TIMEZONE);
-    return addDays(today > cw.dueDate ? today : cw.dueDate, 7);
-  });
+  // A week past the latest of today, the class's date and the student's own:
+  // more time is more, and the server refuses a date that ends sooner than
+  // either (`offeredMoreTime`). Late work keeps the gap the class has.
+  const [date, setDate] = useState(() => offeredMoreTime(cw, sub, todayInZone(INSTITUTE_TIMEZONE)).dueDate);
   const lateUntil = cw.lateUntil === null ? null : addDays(date, daysUntilDue(cw.lateUntil, cw.dueDate));
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -684,6 +718,10 @@ function StudentOptions({
         <Card>
           {error ? <Notice tone="error">{error}</Notice> : null}
           <Field testID="grade-reason" label="Reason (the student sees it)" value={reason} onChangeText={setReason} />
+          <Text testID="grade-dates-now" style={styles.quiet}>
+            Their dates now: hand in by {unbreakableDate(sub.dueDate)}
+            {sub.lateUntil ? `, late work until ${unbreakableDate(sub.lateUntil)}` : ''}.
+          </Text>
           <DateField label="New date" value={date} onChange={setDate} />
           {lateUntil ? (
             <Text style={styles.quiet}>Late work then until {unbreakableDate(lateUntil)}, the same gap the class has.</Text>
