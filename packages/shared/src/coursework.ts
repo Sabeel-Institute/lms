@@ -291,6 +291,29 @@ export function endsSooner(dates: WorkDates, than: WorkDates): boolean {
   return dates.dueDate < than.dueDate || closesOn(dates) < closesOn(than);
 }
 
+/**
+ * A student's dates once the class's move to `cls`, or null to leave them.
+ *
+ * - Work given back keeps the dates it was judged by: a returned second
+ *   attempt, on time for the student's own date, was re-dated to the class's
+ *   and shown late.
+ * - Dates of the student's own stand where they give more time, and give way
+ *   where the class's new ones give more: a class moved a week later passed
+ *   over a student given three days, who was then missed while the class was
+ *   still to do. More time is never less than the class has.
+ * - Everyone else takes the class's dates.
+ */
+export function datesAfterClassMove(
+  sub: Pick<SubmissionDoc, 'state' | 'dueDate' | 'lateUntil' | 'moreTime' | 'returned'>,
+  cls: WorkDates,
+): WorkDates | null {
+  if (sub.state === 'returned') return null;
+  if (!hasOwnDates(sub)) return cls;
+  const dueDate = latestOf(sub.dueDate, cls.dueDate);
+  const closes = latestOf(closesOn(sub), closesOn(cls));
+  return { dueDate, lateUntil: closes > dueDate ? closes : null };
+}
+
 /** A due date with the class's gap for late work after it; none when the class takes none. */
 function withClassGap(cw: WorkDates, dueDate: string): WorkDates {
   return { dueDate, lateUntil: cw.lateUntil === null ? null : addDays(dueDate, daysUntilDue(cw.lateUntil, cw.dueDate)) };
@@ -484,7 +507,7 @@ export function nextDeadline(state: WorkState, sub: Pick<SubmissionDoc, 'dueDate
 export type StaffWorkState = Exclude<WorkState, 'handedIn'> | 'toGrade' | 'graded';
 
 export function staffWorkState(
-  sub: Pick<SubmissionDoc, 'state' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly'>,
+  sub: Pick<SubmissionDoc, 'active' | 'state' | 'attempts' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly'>,
   grade: Pick<GradeDoc, 'grade' | 'withoutHandIn'> | undefined,
   today: string,
   courseOpen: boolean,
@@ -497,11 +520,15 @@ export function staffWorkState(
  * work with nothing in, which the date decides (`nothingInState`).
  */
 function settledState(
-  sub: Pick<SubmissionDoc, 'state' | 'notRequired'>,
+  sub: Pick<SubmissionDoc, 'active' | 'state' | 'attempts' | 'notRequired'>,
   grade: Pick<GradeDoc, 'grade' | 'withoutHandIn'> | undefined,
 ): 'notRequired' | 'returned' | 'toGrade' | 'graded' | null {
   if (sub.notRequired) return 'notRequired';
   if (sub.state === 'returned') return 'returned';
+  // GONE DURING ANOTHER TRY: counted by the attempt given back, never as
+  // owing the one they could no longer hand in. It was counted to do, then
+  // missed, while the attempt they did hand in counted nowhere.
+  if (!sub.active && sub.state === 'open' && sub.attempts.length > 0) return 'returned';
   // GRADED MEANS A GRADE. Feedback written first, or a grade cleared to come
   // back to, left a grades document with no grade in it: the work dropped out
   // of To grade while Return would not take it.
@@ -559,8 +586,9 @@ export function workTally(
   if (leftWithNothingIn(sub)) return null;
   const state = staffWorkState(sub, grade, today, courseOpen);
   // Graded on paper counts as handed in, on paper: as the student's page has
-  // always counted it, and as the comment above says.
-  const handedIn = state !== 'notRequired' && (sub.state !== 'open' || state === 'graded');
+  // always counted it, and as the comment above says. Whatever is settled was
+  // handed in, a student gone during another try included.
+  const handedIn = state === 'toGrade' || state === 'graded' || state === 'returned';
   const late = handedIn && sub.handedInAt !== null && isLate(sub.handedInAt, sub.dueDate, timeZone);
   const g = sub.returned?.grade;
   const share = state === 'returned' && g && 'points' in g && grading.kind === 'points' ? g.points / grading.outOf : null;

@@ -541,6 +541,62 @@ describe('no less time than they have', () => {
   });
 });
 
+/*
+ * WHEN THE CLASS'S DATES MOVE, OR WORK OPENS AGAIN, every student's record
+ * follows: a student back in the class has their work again, returned work
+ * keeps the dates it was judged by, and dates of a student's own never fall
+ * behind the class's.
+ */
+describe('records follow the class', () => {
+  it('a student who left and came back while work was stopped has it again when work is taken again', async () => {
+    const id = await posted();
+    await applyEnrollmentActive({ studentUid: BILAL, courseId, active: false });
+    await closeCourseworkRecord(id);
+    await applyEnrollmentActive({ studentUid: BILAL, courseId, active: true });
+    expect((await sub(BILAL, id))?.active).toBe(false);
+    await reopenCourseworkRecord(id);
+    expect(await sub(BILAL, id)).toMatchObject({ active: true, closedEarly: false });
+    expect(await stateOf(BILAL, id)).toBe('toDo');
+  });
+
+  it('a student who came back after the date has their work again when the class’s date moves later', async () => {
+    const id = await posted();
+    await applyEnrollmentActive({ studentUid: BILAL, courseId, active: false });
+    await classTimePasses(id, { dueDate: inDays(-9), lateUntil: inDays(-2) });
+    await timePasses(BILAL, id, { dueDate: inDays(-9), lateUntil: inDays(-2) });
+    await applyEnrollmentActive({ studentUid: BILAL, courseId, active: true });
+    expect((await sub(BILAL, id))?.active).toBe(false);
+    await updateCourseworkRecord(id, fields({ dueDate: inDays(5), lateUntil: null }));
+    expect(await sub(BILAL, id)).toMatchObject({ active: true, dueDate: inDays(5) });
+    expect(await stateOf(BILAL, id)).toBe('toDo');
+  });
+
+  it('returned work keeps the dates it was judged by', async () => {
+    const id = await posted();
+    await handedIn(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 4 }, feedback: 'Again.' });
+    await returnWorkRecord(id, [AMINAH], { dueDate: inDays(20), lateUntil: null });
+    await writeNote(AMINAH, id, 'Second go');
+    await handInWork(AMINAH, id);
+    await saveGradeRecord(TEACHER, { courseworkId: id, studentUid: AMINAH, grade: { points: 9 }, feedback: '' });
+    await returnWorkRecord(id, [AMINAH], null);
+    // Late work extended for the class, the due date resent as it stands.
+    await updateCourseworkRecord(id, fields({ dueDate: inDays(7), lateUntil: inDays(21) }));
+    expect(await sub(AMINAH, id)).toMatchObject({ state: 'returned', dueDate: inDays(20), lateUntil: null });
+  });
+
+  it('a student given more time is never left behind the class’s new dates', async () => {
+    const id = await posted(); // due 7, late work until 14
+    await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, dates: { dueDate: inDays(15), lateUntil: null }, reason: 'Travel' });
+    await updateCourseworkRecord(id, fields({ dueDate: inDays(20), lateUntil: inDays(27) }));
+    expect(await sub(BILAL, id)).toMatchObject({ dueDate: inDays(20), lateUntil: inDays(27) });
+    // And dates of their own later than the class's stand.
+    await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, dates: { dueDate: inDays(40), lateUntil: null }, reason: 'Longer' });
+    await updateCourseworkRecord(id, fields({ dueDate: inDays(22), lateUntil: inDays(27) }));
+    expect(await sub(BILAL, id)).toMatchObject({ dueDate: inDays(40), lateUntil: null });
+  });
+});
+
 describe('one student at a time', () => {
   it('moving a date re-judges late: more time makes late work on time', async () => {
     const id = await posted();
@@ -561,7 +617,7 @@ describe('one student at a time', () => {
     expect(after.moreTime?.reason).toBe('Ill all week');
   });
 
-  it('more time reopens missed work, and survives the class’s date moving', async () => {
+  it('more time reopens missed work, and is never left behind the class’s date moving later', async () => {
     const id = await posted();
     await classTimePasses(id, { dueDate: inDays(-9), lateUntil: inDays(-2) });
     await timePasses(BILAL, id, { dueDate: inDays(-9), lateUntil: inDays(-2) });
@@ -569,7 +625,8 @@ describe('one student at a time', () => {
     await giveMoreTimeRecord(TEACHER, { courseworkId: id, studentUid: BILAL, dates: { dueDate: inDays(3), lateUntil: null }, reason: 'Travel' });
     expect(await stateOf(BILAL, id)).toBe('toDo');
     await updateCourseworkRecord(id, fields({ dueDate: inDays(20), lateUntil: null }));
-    expect((await sub(BILAL, id))?.dueDate).toBe(inDays(3));
+    // The class's new date gives more than the three days he was given.
+    expect((await sub(BILAL, id))?.dueDate).toBe(inDays(20));
     expect((await sub(AMINAH, id))?.dueDate).toBe(inDays(20));
   });
 

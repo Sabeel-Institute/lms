@@ -229,7 +229,7 @@ describe('what a teacher sees', () => {
     expect(courseworkCounts({ kind: 'points', outOf: 10 }, subs, grades, '2026-10-21', true, INSTITUTE_TIMEZONE).missed).toBe(1);
   });
 
-  it('still counts a student who left during another try: they handed in first', () => {
+  it('still counts a student who left during another try, by the attempt given back', () => {
     const graded4 = { grade: { points: 4 }, feedback: '', at: 1, seq: 1, retry: true };
     const subs = [
       // Left while on another try, due on their own date: attempt 1 was in and graded.
@@ -238,7 +238,9 @@ describe('what a teacher sees', () => {
       sub({ studentUid: 'g', active: false }),
     ];
     const c = courseworkCounts({ kind: 'points', outOf: 10 }, subs, new Map(), '2026-10-15', true, INSTITUTE_TIMEZONE);
-    expect(c).toMatchObject({ expected: 1, notInYet: 1 });
+    // Counted as handed in and returned: never as owing the attempt they
+    // could no longer hand in (it was "not in yet", then "missed").
+    expect(c).toMatchObject({ expected: 1, notInYet: 0, missed: 0, handedIn: 1, returned: 1 });
   });
 });
 
@@ -281,11 +283,14 @@ describe('coming back to the class', () => {
 describe('the stored tally', () => {
   /** `staffWorkState` as it was before it was split into settled and dated halves. */
   function staffWorkStateBefore(
-    sub: Pick<SubmissionDoc, 'state' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly'>,
+    sub: Pick<SubmissionDoc, 'active' | 'state' | 'attempts' | 'dueDate' | 'lateUntil' | 'notRequired' | 'closedEarly'>,
     grade: { grade: { points: number } | { scale: 'satisfactory' | 'needsWork' } | null; withoutHandIn: boolean } | undefined,
     today: string,
     courseOpen: boolean,
   ) {
+    // The one change made on purpose since: a student gone during another
+    // try is counted by the attempt given back, not as owing the open one.
+    if (!sub.notRequired && !sub.active && sub.state === 'open' && sub.attempts.length > 0) return 'returned';
     const state = workState(sub, today, courseOpen);
     const graded = !!grade && grade.grade !== null;
     if (state === 'handedIn') return graded ? 'graded' : 'toGrade';
@@ -415,5 +420,31 @@ describe('the dates a teacher is offered', () => {
     expect(endsSooner({ dueDate: '2026-11-04', lateUntil: null }, cls)).toBe(true);
     expect(endsSooner({ dueDate: '2026-11-04', lateUntil: '2026-11-11' }, cls)).toBe(false);
     expect(endsSooner({ dueDate: '2026-11-12', lateUntil: null }, cls)).toBe(false);
+  });
+});
+
+describe('a student gone during another try', () => {
+  it('is counted by the attempt given back, never as owing the open one', () => {
+    const cw = { kind: 'points' as const, outOf: 10 };
+    const gone = {
+      studentUid: 'd',
+      active: false,
+      state: 'open' as const,
+      attempts: [{} as SubmissionDoc['attempts'][number]],
+      dueDate: '2026-10-17',
+      lateUntil: null,
+      notRequired: null,
+      closedEarly: false,
+      handedInAt: null,
+      returned: { grade: { points: 3 }, feedback: '', at: 1, seq: 1, retry: true },
+    };
+    expect(staffWorkState(gone, undefined, '2026-10-20', true)).toBe('returned');
+    expect(courseworkCounts(cw, [gone], new Map(), '2026-10-20', true, INSTITUTE_TIMEZONE)).toMatchObject({
+      missed: 0,
+      notInYet: 0,
+      returned: 1,
+      handedIn: 1,
+      average: 0.3,
+    });
   });
 });

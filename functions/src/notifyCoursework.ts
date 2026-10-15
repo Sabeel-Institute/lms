@@ -3,7 +3,6 @@ import {
   COLLECTIONS,
   dueDateMovedMessage,
   handInLastDayMessage,
-  hasOwnDates,
   newAssignmentMessage,
   submissionId,
   workReturnedMessage,
@@ -103,7 +102,9 @@ export async function notifyDueDateMoved(db: Firestore, courseworkId: string): P
   const subs = await db.collection(COLLECTIONS.submissions).where('courseworkId', '==', courseworkId).get();
   return toEach(
     db,
-    subs.docs.map((d) => d.data() as SubmissionDoc).filter((s) => stillWorking(s) && !hasOwnDates(s) && s.dueDate === cw.dueDate),
+    // Everyone now on the class's date: a student whose own date it overtook
+    // has it too (`datesAfterClassMove`), and is told.
+    subs.docs.map((d) => d.data() as SubmissionDoc).filter((s) => stillWorking(s) && s.dueDate === cw.dueDate),
     'assignmentPosted',
     (s) => dueDateMovedMessage(course.name, cw.title, s.dueDate, courseworkId),
     () => `${courseworkId}_moved_${cw.editedAt}`,

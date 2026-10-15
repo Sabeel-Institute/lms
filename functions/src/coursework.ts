@@ -11,6 +11,7 @@ import {
   gradeFits,
   gradeText,
   endsSooner,
+  datesAfterClassMove,
   hasOwnDates,
   isLate,
   normalizeMarkdown,
@@ -189,13 +190,10 @@ function freshSubmission(cwId: string, cw: CourseworkDoc, studentUid: string): S
   };
 }
 
-async function activeStudents(courseId: string): Promise<string[]> {
-  const snap = await db()
-    .collection(COLLECTIONS.enrollments)
-    .where('courseId', '==', courseId)
-    .where('active', '==', true)
-    .get();
-  return snap.docs.map((d) => d.data().studentUid as string);
+/** The students actively enrolled in a course, read in a transaction. */
+async function enrolledIn(tx: FirebaseFirestore.Transaction, courseId: string): Promise<Set<string>> {
+  const snap = await tx.get(db().collection(COLLECTIONS.enrollments).where('courseId', '==', courseId).where('active', '==', true));
+  return new Set(snap.docs.map((d) => d.data().studentUid as string));
 }
 
 /** Write in chunks under Firestore's batch limit. */
@@ -341,8 +339,10 @@ export async function postCourseworkRecord(callerUid: string, id: string): Promi
   const now = Date.now();
   // ONE POST, whoever presses it. Two posts of one draft at once both read
   // 'draft', both fanned out, and both were recorded; the flip is now a
-  // transaction that refuses anything already posted.
-  const cw = await db().runTransaction(async (tx) => {
+  // transaction that refuses anything already posted. The students' work is
+  // made in the same one: made after it, a failure part-way left the
+  // assignment posted to nobody, and Post refused as already posted.
+  const students = await db().runTransaction(async (tx) => {
     const snap = await tx.get(cwRef(id));
     if (!snap.exists) throw new HttpsError('not-found', 'No such assignment.');
     const current = snap.data() as CourseworkDoc;
@@ -350,13 +350,13 @@ export async function postCourseworkRecord(callerUid: string, id: string): Promi
     if (current.dueDate < today()) {
       throw new HttpsError('failed-precondition', 'Its due date has passed. Move it before posting.');
     }
+    const enrolled = await enrolledIn(tx, current.courseId);
+    const posted: CourseworkDoc = { ...current, status: 'posted', postedAt: now, postedBy: callerUid, updatedAt: now };
     tx.update(cwRef(id), { status: 'posted', postedAt: now, postedBy: callerUid, updatedAt: now });
-    return current;
+    for (const uid of enrolled) tx.set(subRef(uid, id), freshSubmission(id, posted, uid));
+    return enrolled.size;
   });
-  const posted: CourseworkDoc = { ...cw, status: 'posted', postedAt: now, postedBy: callerUid, updatedAt: now };
-  const students = await activeStudents(cw.courseId);
-  await inBatches(students, (batch, uid) => batch.set(subRef(uid, id), freshSubmission(id, posted, uid)));
-  return { id, students: students.length };
+  return { id, students };
 }
 
 export const postCoursework = auditedCall('postCoursework', async (req, audit) => {
@@ -435,6 +435,7 @@ export async function updateCourseworkRecord(id: string, d: Record<string, unkno
    * refused when any of that has changed since. Content only: posting, closing
    * and files move the timestamps without touching what the form edits.
    */
+  const todayIs = today();
   const cw = await db().runTransaction(async (tx) => {
     const snap = await tx.get(cwRef(id));
     if (!snap.exists) throw new HttpsError('not-found', 'No such assignment.');
@@ -445,6 +446,18 @@ export async function updateCourseworkRecord(id: string, d: Record<string, unkno
         'Someone else changed this assignment while you were editing it. Your changes are not saved; open it again to see theirs.',
       );
     }
+    /*
+     * THE STUDENTS' DATES MOVE IN THE SAME TRANSACTION. Moved after it, a
+     * failure part-way left the class on new dates and some students on the
+     * old, and the next save, changing nothing, wrote nothing to repair it;
+     * more time given while the date moved was overwritten. Each record takes
+     * `datesAfterClassMove`, and a student back in the class whose work the
+     * new dates leave open has it again.
+     */
+    const datesMoved = fields.dueDate !== current.dueDate || fields.lateUntil !== current.lateUntil;
+    const moving = current.status === 'posted' && datesMoved;
+    const subs = moving ? await tx.get(db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id)) : null;
+    const enrolled = moving ? await enrolledIn(tx, current.courseId) : new Set<string>();
     // A SAVE THAT CHANGES NOTHING WRITES NOTHING: on a posted assignment
     // every student reads "Updated <date>", which would then be untrue.
     const differs = FIELD_NAMES.some((k) => canonical(fields[k]) !== canonical(current[k]));
@@ -455,16 +468,16 @@ export async function updateCourseworkRecord(id: string, d: Record<string, unkno
         ...(current.status === 'posted' ? { editedAt: now } : {}),
       });
     }
+    for (const s of subs?.docs ?? []) {
+      const sub = s.data() as SubmissionDoc;
+      const dates = datesAfterClassMove(sub, { dueDate: fields.dueDate, lateUntil: fields.lateUntil }) ?? sub;
+      const back = !sub.active && enrolled.has(sub.studentUid) && returnsOnComingBack({ ...sub, ...dates }, todayIs);
+      if (dates.dueDate !== sub.dueDate || dates.lateUntil !== sub.lateUntil || back) {
+        tx.update(s.ref, { dueDate: dates.dueDate, lateUntil: dates.lateUntil, ...(back ? { active: true } : {}) });
+      }
+    }
     return current;
   });
-  const datesMoved = fields.dueDate !== cw.dueDate || fields.lateUntil !== cw.lateUntil;
-  if (cw.status === 'posted' && datesMoved) {
-    const subs = await db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id).get();
-    await inBatches(
-      subs.docs.filter((s) => !hasOwnDates(s.data() as SubmissionDoc)),
-      (batch, s) => batch.update(s.ref, { dueDate: fields.dueDate, lateUntil: fields.lateUntil }),
-    );
-  }
   const changed = (Object.keys(fields) as (keyof CourseworkFields)[]).filter(
     (k) => JSON.stringify(fields[k]) !== JSON.stringify(cw[k]),
   );
@@ -544,13 +557,17 @@ export async function reopenCourseworkRecord(id: string) {
     if (cw.closedAt === null) return { id, changed: false, given: 0 };
     const open: CourseworkDoc = { ...cw, closedAt: null, updatedAt: Date.now() };
     const subs = await tx.get(db().collection(COLLECTIONS.submissions).where('courseworkId', '==', id));
-    const enrolled = receivesOnJoining(open, todayIs)
-      ? await tx.get(db().collection(COLLECTIONS.enrollments).where('courseId', '==', cw.courseId).where('active', '==', true))
-      : null;
+    const enrolled = await enrolledIn(tx, cw.courseId);
     tx.update(cwRef(id), { closedAt: null, updatedAt: open.updatedAt });
-    for (const s of subs.docs) if (s.data().closedEarly === true) tx.update(s.ref, { closedEarly: false });
+    // A student who left and came back while it was stopped had their work
+    // left off, since it was stopped; open again, it is theirs again.
+    for (const s of subs.docs) {
+      const sub = s.data() as SubmissionDoc;
+      const back = !sub.active && enrolled.has(sub.studentUid) && returnsOnComingBack({ ...sub, closedEarly: false }, todayIs);
+      if (sub.closedEarly || back) tx.update(s.ref, { closedEarly: false, ...(back ? { active: true } : {}) });
+    }
     const has = new Set(subs.docs.map((s) => s.data().studentUid as string));
-    const joined = (enrolled?.docs ?? []).map((e) => e.data().studentUid as string).filter((uid) => !has.has(uid));
+    const joined = receivesOnJoining(open, todayIs) ? [...enrolled].filter((uid) => !has.has(uid)) : [];
     for (const uid of joined) tx.set(subRef(uid, id), freshSubmission(id, open, uid));
     return { id, changed: true, given: joined.length };
   });
