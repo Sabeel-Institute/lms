@@ -1710,6 +1710,21 @@ await admin.getByTestId('leave-confirm').waitFor({ state: 'detached', timeout: 1
 const addressBack = await admin.waitForURL(/\/assignments\/edit/, { timeout: 10000 }).then(() => true, () => false);
 check('Keep editing keeps the form, what was typed, and its address', (await typedStill()) && addressBack, admin.url());
 /*
+ * THE PARENT LINK ASKS TOO, on a form opened from its address. With nothing
+ * under the form, the course opened ON TOP of it: the form was never left,
+ * so nothing asked, and the question came minutes later from another page.
+ */
+// Emptied first: a form holding changes asks the browser before a reload.
+await admin.getByTestId('coursework-title').filter({ visible: true }).first().fill('');
+await admin.reload();
+await admin.getByTestId('coursework-title').filter({ visible: true }).first().waitFor({ timeout: 30000 });
+await admin.getByTestId('coursework-title').filter({ visible: true }).first().fill(ABANDONED);
+await tap(admin, 'up-to-course-from-edit');
+const parentAsked = await admin.getByTestId('leave-confirm').waitFor({ timeout: 10000 }).then(() => true, () => false);
+check('the course link above a form opened by its address asks first, and the form stays', parentAsked && (await typedStill()));
+if (parentAsked) await tap(admin, 'leave-stay');
+await admin.getByTestId('leave-confirm').waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
+/*
  * FILES FIRST, SAVE LATER (Faisal's choice): a file goes onto a new assignment
  * before it is saved — and discarding the form takes the file with it.
  */

@@ -851,13 +851,22 @@ function Sessions() {
  * from a link or a notification). React Navigation 7's plain `navigate` pushes
  * a second copy instead, and Back from the copy came down again into the
  * screen just left.
+ *
+ * Opened fresh, it REPLACES this screen rather than going on top of it: on
+ * top, this screen was never left, so its leave guard said nothing over an
+ * unsaved form or an unsent grade, and asked minutes later from another page.
  */
 function up<N extends 'CourseDetail' | 'Coursework' | 'CourseworkDetail'>(
   navigation: Nav,
   name: N,
   params: RootStackParamList[N],
 ) {
-  (navigation.navigate as (n: N, p: RootStackParamList[N], o: { pop: boolean }) => void)(name, params, { pop: true });
+  const { routes, index } = navigation.getState();
+  if (routes.slice(0, index).some((r) => r.name === name)) {
+    (navigation.navigate as (n: N, p: RootStackParamList[N], o: { pop: boolean }) => void)(name, params, { pop: true });
+  } else {
+    navigation.dispatch(StackActions.replace(name, params));
+  }
 }
 
 function Coursework() {
