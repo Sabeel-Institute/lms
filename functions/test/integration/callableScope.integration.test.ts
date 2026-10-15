@@ -175,7 +175,7 @@ async function seed() {
       studentUid: STUDENT,
       courseId: THEIRS,
       active: true,
-      enrolledAt: Date.now(),
+      stretches: [{ from: Date.now(), to: null }],
     }),
     // A file held for a new assignment of the class, not saved yet.
     d.collection(COLLECTIONS.attachmentUploads).doc('held1').set({

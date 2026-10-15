@@ -196,8 +196,10 @@ currently enrolled, so no later edit to a session can quietly hand access back.
 was out of the class does not come back: handing one back would create an
 obligation already over, against "nothing is ever born expired", over audio the
 server then refuses to serve. The student is not recorded as having missed
-a window they were not enrolled for. Staff keep the record either way: the
-recording ledger goes on listing them under **Excused, access closed**.
+a window they were not enrolled for — however many times they left and came
+back, since the enrolment keeps every stretch they spent in the class. Staff
+keep the record either way: the recording ledger goes on listing them under
+**Excused, access closed**.
 
 ### Late enrollment
 
@@ -409,7 +411,7 @@ The ledger should help staff find action items without inspecting every student 
 1. **Recording ledger:** split by the session's attendance — the **excused**, shown with completion and missed state; the **present** and the **absent**, neither required nor able to open it, listed so the ledger still accounts for the whole submitted roster. A residual "also listened" catches listening from someone who holds no current grant (excused, listened, then corrected to present).
 2. **Student ledger:** all assigned recordings for a student, filterable by course and status.
 3. **Course-level views:** grouped by cohort/course with incomplete and missed counts.
-4. **Attendance report:** per course, a toggle between a by-session summary (present/absent/excused counts, un-taken sessions flagged) and a by-student summary (attendance tallies + catch-up status: of the sessions each student was excused from, how many recordings are complete/missed). The by-student cut lists **everyone the submitted registers name**, not only the current roster: a student unenrolled mid-term keeps their marks, those marks keep counting in the by-session totals, and they are shown flagged *no longer enrolled* so the two cuts of one report reconcile.
+4. **Attendance report:** per course, a toggle between a by-session summary (present/absent/excused counts, un-taken sessions flagged) and a by-student summary (attendance tallies + catch-up status: of the sessions each student was excused from, how many recordings are complete/missed). The by-student cut lists **everyone the submitted registers name**, not only the current roster: a student unenrolled mid-term keeps their marks, those marks keep counting in the by-session totals, and they are shown flagged *no longer enrolled* so the two cuts of one report reconcile. A register counts as *not marked* for a student only if it was taken while they were in the class — the same question, asked of the same record, as the course workbook's Register tab.
 
 ### Recording ledger fields
 
@@ -601,7 +603,7 @@ This is not the final schema. It captures the product objects that need first-cl
 | `courses` | Courses (the subject) inside cohorts, archive state, and archived-access setting. |
 | `sessions` | One dated meeting of a course: attendance (present/absent/excused snapshot + submitted marker), date, title, required due date, notes, and its 0..1 `recordingId`. Staff-read only. |
 | `attendanceRecords` | Each student's own copy of their mark for one session, keyed `{studentUid}_{sessionId}`. A server-written projection of the session's map — the only way a student can be shown their own mark, since Firestore security is per-document. |
-| `enrollments` | Student membership in courses over time. |
+| `enrollments` | Student membership in courses over time: every stretch a student has spent in the class — joined, left, came back — so a view that needs to know whether they were in it on a day (the attendance report, the workbooks, a missed or closed recording) asks one record. |
 | `recordings` | Recording asset for a session (`sessionId`), status, source (`manual`/`zoom`), audio path/duration/size, and the denormalised student-facing title/notes/date. |
 | `assignments` | The grant: one per **excused** student × recording, reconciled from the session's attendance. Both the permission to play and the obligation to listen. `active:false` retains history; the due date closes it without deleting it. |
 | `listeningProgress` | How much of a recording a student has listened to, and when last: each sitting's listening (one opening in a player, on any device), added up into the total staff read. No place: that is each device's own. Client-written. |

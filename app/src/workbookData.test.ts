@@ -98,7 +98,7 @@ function world(n: number) {
       createdAt: 1,
       createdBy: 'adm',
     });
-    put('enrollments', `${STUDENT}_${course}`, { studentUid: STUDENT, courseId: course, cohortId: 'c', active: true, enrolledAt: 1_000 + i, enrolledBy: MANAGER });
+    put('enrollments', `${STUDENT}_${course}`, { studentUid: STUDENT, courseId: course, cohortId: 'c', active: true, stretches: [{ from: 1_000 + i, to: null }], enrolledBy: MANAGER });
     put('auditLog', `a-${i}`, {
       at: 1_000 + i,
       actorUid: MANAGER,

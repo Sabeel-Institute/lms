@@ -22,7 +22,17 @@ function decodeValue(v) {
 }
 
 /** A REST document's `fields` as the object `.data()` would return. */
-const decodeFields = (fields) => Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, decodeValue(v)]));
+export const decodeFields = (fields) => Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, decodeValue(v)]));
+
+/** A plain value as a REST `Value`, as an SDK would store it. */
+export function encodeValue(v) {
+  if (v === null) return { nullValue: null };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  if (typeof v === 'string') return { stringValue: v };
+  if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(encodeValue) } };
+  return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, encodeValue(x)])) } };
+}
 
 /**
  * Every top-level document of a collection, over REST as `token`'s user, a

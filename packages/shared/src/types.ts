@@ -1,4 +1,5 @@
 import type { Role, UserStatus } from './auth';
+import type { Stretch } from './membership';
 
 /**
  * Document shapes. Timestamps are epoch milliseconds everywhere — one
@@ -98,10 +99,17 @@ export interface EnrollmentDoc {
    * automatic.
    */
   active: boolean;
-  enrolledAt: number;
+  /**
+   * EVERY STRETCH THE STUDENT HAS SPENT IN THE CLASS, oldest first: one opens
+   * when they join or come back, and closes when they leave, so the last is
+   * open exactly while `active` is true. `active` stays beside it because the
+   * rules and the roster queries filter on it; `checkEnrolmentStretches` holds the two
+   * to one story. Read through `inClassAt` and its siblings (membership.ts),
+   * never by hand.
+   */
+  stretches: Stretch[];
+  /** Who last added them: the first enrolment, or a return. */
   enrolledBy: string;
-  /** Set when `active` last became false; left in place on re-enrolment. */
-  unenrolledAt?: number;
 }
 
 export function enrollmentId(studentUid: string, courseId: string): string {

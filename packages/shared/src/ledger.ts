@@ -8,7 +8,8 @@
  * rather than re-deriving.
  */
 import { isOverdue } from './assignments';
-import { attendanceGroups, type AttendanceStatus } from './types';
+import { registerExpects } from './membership';
+import { attendanceGroups, type AttendanceStatus, type EnrollmentDoc } from './types';
 
 /**
  * A staff override of a student's completion — separate from the student's own
@@ -133,7 +134,11 @@ export interface StudentAttendanceRow {
   present: number;
   absent: number;
   excused: number;
-  /** Submitted sessions the student was not in the snapshot for (enrolled later). */
+  /**
+   * Registers taken while they were in the class that hold no mark for them:
+   * a mark staff could have given. One taken before they joined, after they
+   * left or while they were away is not counted (`registerExpects`).
+   */
   notMarked: number;
   /** Recordings the student was granted (active assignments in the course). */
   assigned: number;
@@ -163,7 +168,8 @@ export interface AttendanceReport {
 /**
  * Aggregate a course's attendance.
  *
- * `sessions` are all the course's sessions; `rosterUids` the active enrollment;
+ * `sessions` are all the course's sessions; `enrollments` every enrolment in
+ * the course, past and present, with the stretches each student spent in it;
  * `assignments` the active catch-up obligations (one per excused
  * student×recording) already reduced to their effective completion. Only
  * SUBMITTED sessions count toward a student's present/absent/excused tally — an
@@ -178,12 +184,15 @@ export function attendanceReport(input: {
     attendance: Record<string, AttendanceStatus>;
     attendanceSubmittedAt: number | null;
   }[];
-  /** The CURRENT roster — everyone actively enrolled, marked or not. */
-  rosterUids: string[];
+  enrollments: Pick<EnrollmentDoc, 'studentUid' | 'active' | 'stretches'>[];
   assignments: { studentUid: string; completed: boolean; dueDate: string }[];
   today: string;
+  timeZone: string;
 }): AttendanceReport {
-  const { sessions, rosterUids, assignments, today } = input;
+  const { sessions, enrollments, assignments, today, timeZone } = input;
+  /** The CURRENT roster — everyone actively enrolled, marked or not. */
+  const rosterUids = enrollments.filter((e) => e.active).map((e) => e.studentUid);
+  const enrolmentOf = new Map(enrollments.map((e) => [e.studentUid, e]));
 
   const sessionRows: SessionAttendanceRow[] = sessions.map((s) => {
     const submitted = s.attendanceSubmittedAt !== null;
@@ -243,7 +252,7 @@ export function attendanceReport(input: {
       if (st === 'present') present++;
       else if (st === 'absent') absent++;
       else if (st === 'excused') excused++;
-      else notMarked++;
+      else if (registerExpects(enrolmentOf.get(uid), s, timeZone)) notMarked++;
     }
     const c = catchUp.get(uid) ?? { assigned: 0, completed: 0, missed: 0 };
     return { studentUid: uid, present, absent, excused, notMarked, ...c, departed: departed.has(uid) };

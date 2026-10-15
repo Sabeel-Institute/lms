@@ -68,7 +68,7 @@ beforeEach(async () => {
         courseId: CLASS,
         cohortId: 'c1',
         active: true,
-        enrolledAt: 1,
+        stretches: [{ from: 1, to: null }],
       }),
       setDoc(doc(db, COLLECTIONS.auditLog, 'someone-elses'), {
         at: 1,

@@ -29,6 +29,10 @@
  *    `zoomImports` claim so the picker knows the file is here. And EXCEPT the
  *    audit entries the live app writes under action names this app has
  *    replaced, which are renamed on the way (`scripts/lib/legacy-audit.mjs`).
+ *    And EXCEPT enrolments, which the live app keeps as a first joining and a
+ *    last leaving date and this project as every stretch in the class: each
+ *    is rebuilt from the live app's audit log on the way
+ *    (`scripts/lib/stretches.mjs`).
  *  - Every object under `recordings/` in the source's Storage bucket, into the
  *    R2 media bucket at the same key, with the R2 write key.
  *
@@ -43,6 +47,8 @@ import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 import { r2Config, s3For } from './lib/r2.mjs';
 import { ZOOM_IMPORTS, convertRecording, isLegacyRecording } from './lib/legacy-media.mjs';
 import { RENAMED_AUDIT_ACTIONS, convertAuditEntry } from './lib/legacy-audit.mjs';
+import { convertEnrolment, enrolmentHistory } from './lib/stretches.mjs';
+import { decodeFields, encodeValue } from './lib/firestore-rest.mjs';
 import { refuseAfterSwitchover } from './lib/before-switchover.mjs';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
@@ -227,6 +233,21 @@ console.log(`  ${String(srcUsers.length).padStart(5)}  accounts`);
 console.log(`  ${String(srcObjects.length).padStart(5)}  media objects (${mb(sum(srcObjects))})`);
 console.log(`\nThis project now: ${tgtDocs.length} documents, ${tgtUsers.length} accounts, ${tgtObjects.length} media objects. All are removed first.`);
 
+/*
+ * ENROLMENTS IN THE OLD SHAPE. The live app keeps a first joining and a last
+ * leaving date; this app keeps every stretch in the class, rebuilt here from
+ * the live app's own audit log. One where the log and the dates disagree is
+ * named, to look at after the copy.
+ */
+const legacyHistory = enrolmentHistory(srcDocs.filter((d) => shape(relPath(d.name)) === 'auditLog').map((d) => decodeFields(d.fields ?? {})));
+const enrolments = new Map(
+  srcDocs
+    .filter((d) => shape(relPath(d.name)) === 'enrollments')
+    .map((d) => [relPath(d.name), convertEnrolment(decodeFields(d.fields ?? {}), legacyHistory.get(relPath(d.name).split('/')[1]))]),
+);
+const inferredEnrolments = [...enrolments].filter(([, c]) => c?.inferred).map(([rel]) => rel);
+console.log(`\nEnrolments given their stretches: ${[...enrolments.values()].filter(Boolean).length}; inferred where the log and the dates disagree: ${inferredEnrolments.join(', ') || 'none'}`);
+
 if (!EXECUTE) {
   console.log('\nDry run. Re-run with --yes to wipe this project and copy.');
   process.exit(0);
@@ -274,6 +295,10 @@ for (const d of srcDocs) {
     const conv = convertRecording(rel.split('/')[1], fields);
     writes.push({ update: { name: docName(rel), fields: conv.fields } });
     if (conv.claim) writes.push({ update: { name: docName(`${ZOOM_IMPORTS}/${conv.claim.id}`), fields: conv.claim.fields } });
+  } else if (shape(rel) === 'enrollments' && enrolments.get(rel)) {
+    // Every field as it was, less the two dates the stretches replace.
+    const { enrolledAt: _first, unenrolledAt: _last, ...kept } = fields;
+    writes.push({ update: { name: docName(rel), fields: { ...kept, stretches: encodeValue(enrolments.get(rel).data.stretches) } } });
   } else if (shape(rel) === 'auditLog') {
     const entry = convertAuditEntry(fields);
     const from = fields.action?.stringValue;

@@ -27,6 +27,7 @@ import type { CompletionOverrideDoc } from './ledger';
 import { effectiveCompletion } from './ledger';
 import type { NotificationPrefsDoc } from './notifications';
 import { canPlayFromCourse } from './structure';
+import { checkEnrolmentStretches } from './membership';
 
 /*
  * THE FIELDS OF EVERY DOCUMENT THE APP READS, as data: each one `required` or
@@ -137,9 +138,8 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     courseId: 'required',
     cohortId: 'required',
     active: 'required',
-    enrolledAt: 'required',
+    stretches: { each: { from: 'required', to: 'required' } },
     enrolledBy: 'required',
-    unenrolledAt: 'optional',
   },
   sessions: {
     courseId: 'required',
@@ -411,6 +411,7 @@ export const SCREEN_CHECKS: { [C in StoredCollection]?: ((doc: StoredDocs[C], to
     (r) => hasLedger(r),
   ],
   courses: [(c) => canPlayFromCourse(c)],
+  enrollments: [(e) => checkEnrolmentStretches(e)],
   assignments: [(a, today) => hasRecordingAccess(a, today)],
   listeningProgress: [
     (p) => listenedShare(p.listenedMs, null),

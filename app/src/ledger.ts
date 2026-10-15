@@ -4,6 +4,7 @@ import { httpsCallable } from 'firebase/functions';
 import {
   AUDIT_PAGE,
   COLLECTIONS,
+  INSTITUTE_TIMEZONE,
   QUEUE_SCOPE,
   attendanceGroups,
   attendanceReport,
@@ -498,9 +499,12 @@ export function useCourseAttendance(
           attendance: s.attendance,
           attendanceSubmittedAt: s.attendanceSubmittedAt,
         })),
-        rosterUids: roster.filter((e) => e.active).map((e) => e.studentUid),
+        // Every enrolment, past ones included: a register counts as not
+        // marked for someone only inside their time in the class.
+        enrollments: roster,
         assignments: items.map((i) => ({ studentUid: i.studentUid, completed: i.completed, dueDate: i.dueDate })),
         today,
+        timeZone: INSTITUTE_TIMEZONE,
       }),
       resolved,
     }),

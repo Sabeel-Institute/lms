@@ -3,6 +3,7 @@ export * from './collections';
 export * from './auth';
 export * from './types';
 export * from './structure';
+export * from './membership';
 export * from './recordings';
 export * from './media';
 export * from './assignments';

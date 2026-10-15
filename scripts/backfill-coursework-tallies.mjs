@@ -24,7 +24,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { FIREBASE_PROJECT_ID, INSTITUTE_TIMEZONE, courseworkTally } from '@sabeel/shared';
-import { listDocuments } from './lib/firestore-rest.mjs';
+import { encodeValue, listDocuments } from './lib/firestore-rest.mjs';
 
 const ACCOUNT = 'faisal.shah@oursabeel.com';
 const args = process.argv.slice(2);
@@ -38,16 +38,6 @@ const token = execFileSync('gcloud', ['auth', 'print-access-token', `--account=$
   encoding: 'utf8',
   stdio: ['ignore', 'pipe', 'pipe'],
 }).trim();
-
-/** A plain value as Firestore's REST `Value`, as an SDK would store it. */
-function encode(v) {
-  if (v === null) return { nullValue: null };
-  if (typeof v === 'boolean') return { booleanValue: v };
-  if (typeof v === 'string') return { stringValue: v };
-  if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
-  if (Array.isArray(v)) return { arrayValue: { values: v.map(encode) } };
-  return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, encode(x)])) } };
-}
 
 const byWork = (rows) => {
   const out = new Map();
@@ -86,7 +76,7 @@ for (const { id, data: cw } of coursework) {
   const res = await fetch(`https://firestore.googleapis.com/v1/${DB}/courseworkTallies/${id}?currentDocument.exists=false`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'X-Goog-User-Project': FIREBASE_PROJECT_ID, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: encode(doc).mapValue.fields }),
+    body: JSON.stringify({ fields: encodeValue(doc).mapValue.fields }),
   });
   if (!res.ok) {
     const text = await res.text();

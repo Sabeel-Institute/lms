@@ -159,8 +159,9 @@ IAM change there).
 | What | How | Notes |
 |---|---|---|
 | Accounts | Identity Toolkit `accounts:batchGet` from legacy, `accounts:batchCreate` here with legacy's scrypt parameters (read from its Auth config into the process, never printed) | Same uids, same passwords, same Google links, same custom claims (`role`, `status`). |
-| Firestore | Every document, recursively, through the REST API, field values passed through unchanged, except recordings and two audit actions | Same document ids, so every reference by uid or id stays intact. |
+| Firestore | Every document, recursively, through the REST API, field values passed through unchanged, except recordings, enrolments and two audit actions | Same document ids, so every reference by uid or id stays intact. |
 | Recordings | Converted on the way: the one audio file becomes the recording's single media item (Part 1, audio only) at the key it already has (`scripts/lib/legacy-media.mjs`) | The live app stores one file per recording; this project stores media items. |
+| Enrolments | Converted on the way: the live app's first joining and last leaving dates become every stretch the student spent in the class, rebuilt from the live app's audit log (`scripts/lib/stretches.mjs`) | A second removal erases the first in the live app's two dates; the workbooks here need each one. The dry run names any enrolment whose log and dates disagree. |
 | Audit entries | Renamed on the way where the live app's action name is retired: `clearRecordingAudio` becomes `removeRecordingMedia`, `importZoomRecording` becomes `importZoomFiles` (`scripts/lib/legacy-audit.mjs`) | The audit screen has words only for the actions written today, and `check:documents` fails on any other. |
 | Media | Every object under `recordings/` in the legacy bucket, streamed into R2 at the same key | Through this machine: pennies of Google egress at this size. |
 | Push registrations | **Not copied** (`notifications/{uid}/devices`) | FCM tokens belong to the legacy project's sender and cannot deliver from here. Devices register again on first sign-in. |

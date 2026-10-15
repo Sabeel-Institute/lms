@@ -102,7 +102,7 @@ beforeEach(async () => {
         courseId,
         cohortId: COHORT,
         active: true,
-        enrolledAt: 1,
+        stretches: [{ from: 1, to: null }],
         enrolledBy: ADMIN,
       });
     await Promise.all([
@@ -181,7 +181,7 @@ describe('courses', () => {
     await testEnv.withSecurityRulesDisabled(async (c) => {
       await updateDoc(doc(c.firestore(), COLLECTIONS.enrollments, enrollmentId(STU_A, CLASS_MINE)), {
         active: false,
-        unenrolledAt: 2,
+        stretches: [{ from: 1, to: 2 }],
       });
     });
     await assertFails(getDoc(doc(studentA(), COLLECTIONS.courses, CLASS_MINE)));
@@ -374,7 +374,7 @@ describe('query cost: the arm-ordering property', () => {
             courseId: CLASS_MINE,
             cohortId: COHORT,
             active: true,
-            enrolledAt: 1,
+            stretches: [{ from: 1, to: null }],
             enrolledBy: ADMIN,
           }),
         );
@@ -398,7 +398,7 @@ describe('query cost: the arm-ordering property', () => {
             courseId: otherCourse,
             cohortId: COHORT,
             active: true,
-            enrolledAt: 1,
+            stretches: [{ from: 1, to: null }],
             enrolledBy: ADMIN,
           }),
         );

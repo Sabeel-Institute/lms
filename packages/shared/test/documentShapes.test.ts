@@ -75,7 +75,7 @@ const SAMPLES: { [C in StoredCollection]: Required<StoredDocs[C]> } = {
     createdAt: 1,
     createdBy: 's1',
   },
-  enrollments: { studentUid: 'u1', courseId: 'k1', cohortId: 'c1', active: true, enrolledAt: 1, enrolledBy: 's1', unenrolledAt: 2 },
+  enrollments: { studentUid: 'u1', courseId: 'k1', cohortId: 'c1', active: true, stretches: [{ from: 1, to: 2 }, { from: 3, to: null }], enrolledBy: 's1' },
   sessions: {
     courseId: 'k1',
     cohortId: 'c1',

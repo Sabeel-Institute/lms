@@ -5,6 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
+  checkEnrolmentStretches,
   enrollmentId,
   type CourseDoc,
   type EnrollmentDoc,
@@ -268,10 +269,12 @@ describe('enrollments', () => {
       .get();
     expect(snap.exists).toBe(true);
     expect(snap.data()?.active).toBe(false);
-    expect(typeof snap.data()?.unenrolledAt).toBe('number');
+    // …with the stretch they spent in the class, closed when they left.
+    const [stretch] = (snap.data() as EnrollmentDoc).stretches;
+    expect(stretch.to).toBeGreaterThanOrEqual(stretch.from);
   });
 
-  it('re-enrolling reuses the same row and preserves the original date', async () => {
+  it('re-enrolling reuses the same row and keeps every stretch in the class', async () => {
     const { courseId, studentUid } = await setup();
     const first = await createEnrollmentRecord(ADMIN, { studentUid, courseId });
     await applyEnrollmentActive({ studentUid, courseId, active: false });
@@ -288,7 +291,12 @@ describe('enrollments', () => {
     expect(all.size).toBe(1); // not a second row
     const doc = all.docs[0].data() as EnrollmentDoc;
     expect(doc.active).toBe(true);
-    expect(doc.enrolledAt).toBe(first.enrolledAt);
+    // The first stretch, closed when they left, and a new one open since.
+    expect(doc.stretches).toHaveLength(2);
+    expect(doc.stretches[0].from).toBe(first.stretches[0].from);
+    expect(doc.stretches[0].to).not.toBeNull();
+    expect(doc.stretches[1].to).toBeNull();
+    expect(() => checkEnrolmentStretches(doc)).not.toThrow();
   });
 
   it('refuses a duplicate active enrolment', async () => {

@@ -9,6 +9,7 @@ import {
   NEW_STUDENT_ACCESS,
   enrollmentId,
   isAllowedStaffEmail,
+  openStretch,
   type CourseDoc,
   type EnrollmentDoc,
   type StudentDoc,
@@ -147,7 +148,7 @@ export async function createStudentAccount(callerUid: string, input: CreateStude
         courseId: input.courseId,
         cohortId: (cls.data() as CourseDoc).cohortId,
         active: true,
-        enrolledAt: Date.now(),
+        stretches: openStretch([], Date.now()),
         enrolledBy: callerUid,
       };
       batch.set(

@@ -823,7 +823,10 @@ two ways — a toggle switches between them:
   a clear flag on any meeting where attendance was never taken.
 - **By student** — each student's attendance across the course (chronic absentees
   first), plus their **catch-up** status: of the recordings they were excused
-  from, how many are complete and how many they missed.
+  from, how many are complete and how many they missed. **Not marked** counts the
+  registers taken while the student was in the class that hold no mark for
+  them — a mark you could still give. A register taken before they joined,
+  after they left or while they were out of the class is not counted.
 
 The course **workbook** (Section 2.13) carries the same numbers in a form you
 can keep: the **Students** and **Sessions** tabs are these two views, and the
@@ -962,20 +965,22 @@ it; on a computer it downloads.
   rates for the class, how many required recordings are still open, how many
   assignments are posted, how much work waits to be graded, the average
   grade, and when the file was made and by whom.
-- **Students** — one row per student: when they joined and left, their
-  attendance counts and rate, and their catch-up on excused sessions —
-  required, completed, still open, missed deadline, closed. Sorted so the
-  students with the most missed deadlines are at the top. A **Note** column
-  flags registers they were never marked on and completions that came from a
-  staff override.
+- **Students** — one row per student: when they first joined and, if they
+  have left, when, their attendance counts and rate, and their catch-up on
+  excused sessions — required, completed, still open, missed deadline,
+  closed. Sorted so the students with the most missed deadlines are at the
+  top. A **Note** column flags registers they were never marked on, each time
+  they were out of the class and came back, why any recording closed, and
+  completions that came from a staff override.
 - **Sessions** — one row per meeting: when its register was taken and the
   marks on it, the recording's status, when it was published and its due
   date, and how the excused students have done with it. A recording that has
   been archived or unpublished is noted as *withdrawn from the totals*.
 - **Register** — students down the side, sessions across the top, one mark in
   each cell: **P**, **A**, **E**, a dot for a register never taken, a dash for
-  a session outside the time the student was enrolled that holds no mark for
-  them.
+  a register that had no place for the student and holds no mark for them —
+  a session before they joined, after they left or while they were out of the
+  class, or a register taken while they were out of it.
 - **Recordings** — the same grid for published recordings: whether each
   excused student completed it (and when), or is still open, missed the
   deadline, or was closed — with how much of the recording they have played.
@@ -1029,7 +1034,7 @@ The file's **Definitions** tab reads:
 | **Completed** | The student marked the recording complete, or staff overrode it as complete (the override’s reason is recorded). |
 | **Still open** | Not yet completed, and the due date has not passed. |
 | **Missed deadline** | Not completed by the due date. Access has closed; nothing further can happen to it unless the date is moved. |
-| **Closed** | Withdrawn before its date, so neither done nor missed: a required recording when the student left the class or the class was archived with its recordings closed; an assignment still open when its course was archived. |
+| **Closed** | Neither done nor missed: a required recording whose date came while the student was out of the class, or one withdrawn before its date when the class was archived with its recordings closed; an assignment still open when its course was archived. |
 | **Catch-up rate** | Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone. |
 | **Played** | Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark. |
 | **Assigned** | Students an assignment went to, less any a teacher marked not required. Someone who left the class counts only if they handed something in first. |

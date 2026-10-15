@@ -4,7 +4,9 @@ import { deactivateStudentCoursework, reconcileStudentCoursework } from './cours
 import { getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
+  closeStretch,
   enrollmentId,
+  openStretch,
   type CourseDoc,
   type EnrollmentDoc,
   type StudentDoc,
@@ -79,15 +81,10 @@ export async function createEnrollmentRecord(callerUid: string, input: Enrollmen
       courseId: input.courseId,
       cohortId: (courseSnap.data() as CourseDoc).cohortId,
       active: true,
-      // Preserve the original enrolment date across a re-enrolment.
-      enrolledAt: existing.exists ? (existing.data() as EnrollmentDoc).enrolledAt : Date.now(),
+      // A return adds a stretch to the ones before it: every time they were
+      // in the class, and so every time they were out of it, stays known.
+      stretches: openStretch(existing.exists ? (existing.data() as EnrollmentDoc).stretches : [], Date.now()),
       enrolledBy: callerUid,
-      // And when they last left, as coming back through `setEnrollmentActive`
-      // keeps it: the workbook reads it to tell a recording whose date passed
-      // while they were away (closed) from one they missed.
-      ...(existing.exists && (existing.data() as EnrollmentDoc).unenrolledAt !== undefined
-        ? { unenrolledAt: (existing.data() as EnrollmentDoc).unenrolledAt }
-        : {}),
     };
     tx.set(ref, next);
     return { doc: next, reenrolled: existing.exists };
@@ -208,9 +205,12 @@ export async function applyEnrollmentActive(input: SetEnrollmentActiveInput) {
   const changed = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'No such enrolment.');
-    if ((snap.data() as EnrollmentDoc).active === input.active) return false;
-    const update: Record<string, unknown> = { active: input.active };
-    if (!input.active) update.unenrolledAt = Date.now();
+    const current = snap.data() as EnrollmentDoc;
+    if (current.active === input.active) return false;
+    const update: Pick<EnrollmentDoc, 'active' | 'stretches'> = {
+      active: input.active,
+      stretches: (input.active ? openStretch : closeStretch)(current.stretches, Date.now()),
+    };
     tx.update(ref, update);
     return true;
   });

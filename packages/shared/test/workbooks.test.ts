@@ -146,14 +146,14 @@ const graded = (studentUid: string, courseworkId: string, grade: GradeIn, withou
   withoutHandIn,
 });
 
-const enrol = (studentUid: string, joined: string, left?: string) => ({
+/** An enrolment as the callables keep it: joined, then left and came back as the days alternate. */
+const enrol = (studentUid: string, ...days: string[]) => ({
   studentUid,
   courseId: COURSE,
   cohortId: 'aut26',
-  active: !left,
-  enrolledAt: T(joined),
+  active: days.length % 2 === 1,
+  stretches: days.flatMap((d, i) => (i % 2 === 0 ? [{ from: T(d), to: days[i + 1] ? T(days[i + 1]) : null }] : [])),
   enrolledBy: 'adm',
-  ...(left ? { unenrolledAt: T(left) } : {}),
 });
 
 const world: CourseData = {
@@ -343,13 +343,63 @@ describe('courseStudentStats', () => {
   it('a student brought back after a date passed while they were away has it closed, not missed', () => {
     const back = {
       ...world,
-      enrollments: world.enrollments.map((e) => (e.studentUid === S.fatima ? { ...enrol(S.fatima, '2026-08-24'), unenrolledAt: T('2026-09-10') } : e)),
+      enrollments: world.enrollments.map((e) => (e.studentUid === S.fatima ? enrol(S.fatima, '2026-08-24', '2026-09-10', '2026-09-29') : e)),
       assignments: world.assignments.map((a) => (a.studentUid === S.fatima && a.recordingId === 'r1' ? { ...a, active: false } : a)),
     };
     expect(courseStudentStats(back, S.fatima, ctx).items.find((i) => i.session.id === '1')?.outcome).toBe('closed');
     // …while one who left only after the date, and came back, did miss it.
-    const late = { ...back, enrollments: back.enrollments.map((e) => (e.studentUid === S.fatima ? { ...e, unenrolledAt: T('2026-09-20') } : e)) };
+    const late = { ...back, enrollments: back.enrollments.map((e) => (e.studentUid === S.fatima ? enrol(S.fatima, '2026-08-24', '2026-09-20', '2026-09-29') : e)) };
     expect(courseStudentStats(late, S.fatima, ctx).items.find((i) => i.session.id === '1')?.outcome).toBe('missed');
+  });
+
+  /*
+   * EVERY ABSENCE, NOT THE LAST. Fatima was out of the class from 09-10 to
+   * 09-29, over Session 1's date (09-15); a manager then removed her again on
+   * 10-06 and added her back on 10-08. The second removal must not make the
+   * first forgotten: the file charged her "Missed deadline" for a recording
+   * she could not open, while the recording's own ledger said access closed.
+   */
+  it('a second removal does not make an earlier absence count as a missed deadline', () => {
+    const twice = {
+      ...world,
+      enrollments: world.enrollments.map((e) => (e.studentUid === S.fatima ? enrol(S.fatima, '2026-08-24', '2026-09-10', '2026-09-29', '2026-10-06', '2026-10-08') : e)),
+      assignments: world.assignments.map((a) => (a.studentUid === S.fatima && a.recordingId === 'r1' ? { ...a, active: false } : a)),
+    };
+    const s = courseStudentStats(twice, S.fatima, ctx);
+    expect(s.items.find((i) => i.session.id === '1')).toMatchObject({ outcome: 'closed', closedBy: 'away' });
+    expect(s).toMatchObject({ missed: 0, closed: 1, joined: '2026-08-24', left: null });
+    // …and the same while she is still out after the second removal.
+    const stillOut = { ...twice, enrollments: twice.enrollments.map((e) => (e.studentUid === S.fatima ? enrol(S.fatima, '2026-08-24', '2026-09-10', '2026-09-29', '2026-10-06') : e)) };
+    expect(courseStudentStats(stillOut, S.fatima, ctx)).toMatchObject({ missed: 0, closed: 1, left: '2026-10-06' });
+  });
+
+  /*
+   * A REGISTER WITH NO PLACE FOR THEM is not one they were left off. Idris
+   * left on 10-02 and came back on 10-14: Session 5's register (10-13) was
+   * taken while he was out, when the register could not list him. Fatima's
+   * missing mark on the same register, taken while she was in the class, is
+   * one staff could have given.
+   */
+  it('a register held while a student was out of the class is not one without a mark for them', () => {
+    const back = { ...world, enrollments: world.enrollments.map((e) => (e.studentUid === S.idris ? enrol(S.idris, '2026-08-24', '2026-10-02', '2026-10-14') : e)) };
+    const idris = courseStudentStats(back, S.idris, ctx);
+    expect(idris.marks.get('5')).toBe('—');
+    expect(idris.unmarked).toBe(1); // Session 4, taken while he was in
+    expect(idris.away).toEqual([{ left: '2026-10-02', back: '2026-10-14' }]);
+    expect(courseStudentStats(back, S.fatima, ctx).marks.get('5')).toBe('');
+  });
+
+  /*
+   * THE SAME DAY, THE REGISTER'S OWN TIME. A newcomer added on the evening a
+   * class met, after its register was taken, was not on it; one added that
+   * morning, before it was taken, was.
+   */
+  it('a newcomer added after the day’s register was taken was not on it, and one added before was', () => {
+    // Session 5's register was taken at 20:00 on 10-13.
+    const at = (hhmm: string) => ({ ...world, enrollments: [...world.enrollments.filter((e) => e.studentUid !== S.ayesha), { ...enrol(S.ayesha, '2026-10-13'), stretches: [{ from: T('2026-10-13', hhmm), to: null }] }] });
+    const ayeshaOff = (d: CourseData) => ({ ...d, sessions: d.sessions.map((x) => (x.id === '5' ? { ...x, attendance: { [S.bilal]: 'present' as const } } : x)) });
+    expect(courseStudentStats(ayeshaOff(at('21:00')), S.ayesha, ctx).marks.get('5')).toBe('—');
+    expect(courseStudentStats(ayeshaOff(at('09:00')), S.ayesha, ctx).marks.get('5')).toBe('');
   });
 
   it('recordings closed on an archived class closes an open grant', () => {

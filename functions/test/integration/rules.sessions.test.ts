@@ -102,7 +102,7 @@ beforeEach(async () => {
         courseId: COURSE_MINE,
         cohortId: 'c1',
         active: true,
-        enrolledAt: 1,
+        stretches: [{ from: 1, to: null }],
         enrolledBy: ADMIN,
       }),
     ]);

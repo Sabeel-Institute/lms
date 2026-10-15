@@ -10,26 +10,38 @@ import {
 } from '../src';
 
 describe('attendanceReport', () => {
-  const mkSession = (
-    id: string,
-    attendance: Record<string, AttendanceStatus>,
-    submitted: boolean,
-  ) => ({ id, title: id, date: '2026-07-10', attendance, attendanceSubmittedAt: submitted ? 1 : null });
+  const ZONE = 'America/Chicago';
+  const T = (d: string, hhmm = '12:00') => Date.parse(`${d}T${hhmm}:00-05:00`);
+  /** A session on `date`, its register taken that evening unless `submitted` is false. */
+  const mkSession = (id: string, date: string, attendance: Record<string, AttendanceStatus>, submitted = true) => ({
+    id,
+    title: id,
+    date,
+    attendance,
+    attendanceSubmittedAt: submitted ? T(date, '20:00') : null,
+  });
+  /** An enrolment: joined, then left and came back as the days alternate. */
+  const enrolled = (studentUid: string, ...days: string[]) => ({
+    studentUid,
+    active: days.length % 2 === 1,
+    stretches: days.flatMap((d, i) => (i % 2 === 0 ? [{ from: T(d, '09:00'), to: days[i + 1] ? T(days[i + 1], '09:00') : null }] : [])),
+  });
 
   const report = () =>
     attendanceReport({
       sessions: [
-        mkSession('s1', { a: 'present', b: 'absent', c: 'excused' }, true),
-        mkSession('s2', { a: 'absent', b: 'present' }, true), // c not in snapshot (late)
-        mkSession('s3', { a: 'present', b: 'present', c: 'present' }, false), // not taken
+        mkSession('s1', '2026-07-06', { a: 'present', b: 'absent', c: 'excused' }),
+        mkSession('s2', '2026-07-08', { a: 'absent', b: 'present' }), // c in the class, left off
+        mkSession('s3', '2026-07-10', { a: 'present', b: 'present', c: 'present' }, false), // not taken
       ],
-      rosterUids: ['a', 'b', 'c'],
+      enrollments: [enrolled('a', '2026-07-01'), enrolled('b', '2026-07-01'), enrolled('c', '2026-07-01')],
       assignments: [
         { studentUid: 'a', completed: false, dueDate: '2026-07-01' }, // missed
         { studentUid: 'b', completed: true, dueDate: '2026-07-01' }, // done
         { studentUid: 'c', completed: false, dueDate: '2026-08-01' }, // still open
       ],
       today: '2026-07-15',
+      timeZone: ZONE,
     });
 
   it('per-session counts, and marks the un-taken session', () => {
@@ -40,21 +52,40 @@ describe('attendanceReport', () => {
     expect(r.sessions[2]).toMatchObject({ sessionId: 's3', submitted: false, present: 0, absent: 0, excused: 0 });
   });
 
-  it('per-student tallies over SUBMITTED sessions only, with notMarked for late enrollees', () => {
+  it('per-student tallies over SUBMITTED sessions only, with a register that left them off as not marked', () => {
     const r = report();
     const a = r.students.find((s) => s.studentUid === 'a')!;
     expect(a).toMatchObject({ present: 1, absent: 1, excused: 0, notMarked: 0 });
     const c = r.students.find((s) => s.studentUid === 'c')!;
-    // c was excused in s1 and absent from the s2 snapshot; s3 untaken doesn't count.
+    // c was excused in s1 and left off s2's register while in the class; s3 untaken doesn't count.
     expect(c).toMatchObject({ present: 0, absent: 0, excused: 1, notMarked: 1 });
   });
 
-  it('catch-up grouped from active assignments, missed at the day boundary', () => {
-    const r = report();
-    const byUid = Object.fromEntries(r.students.map((s) => [s.studentUid, s]));
-    expect(byUid.a).toMatchObject({ assigned: 1, completed: 0, missed: 1 });
-    expect(byUid.b).toMatchObject({ assigned: 1, completed: 1, missed: 0 });
-    expect(byUid.c).toMatchObject({ assigned: 1, completed: 0, missed: 0 });
+  /*
+   * "NOT MARKED" IS A MARK STAFF COULD HAVE GIVEN. A register taken before a
+   * newcomer joined, after a student left, or while they were away could not
+   * list them; counting those told a teacher to fix registers that are right,
+   * and disagreed with the course workbook, which says '—' for the same
+   * sessions.
+   */
+  it('counts as not marked only registers taken while the student was in the class', () => {
+    const r = attendanceReport({
+      sessions: [
+        mkSession('s1', '2026-07-06', { a: 'present', gone: 'present' }),
+        mkSession('s2', '2026-07-08', { a: 'present' }), // gone is out of the class
+        mkSession('s3', '2026-07-13', { a: 'present', gone: 'absent' }), // newcomer not yet in
+      ],
+      enrollments: [
+        enrolled('a', '2026-07-01'),
+        enrolled('gone', '2026-07-01', '2026-07-07', '2026-07-12', '2026-07-14'),
+        enrolled('newcomer', '2026-07-14'),
+      ],
+      assignments: [],
+      today: '2026-07-15',
+      timeZone: ZONE,
+    });
+    expect(r.students.find((s) => s.studentUid === 'gone')).toMatchObject({ present: 1, absent: 1, notMarked: 0, departed: true });
+    expect(r.students.find((s) => s.studentUid === 'newcomer')).toMatchObject({ notMarked: 0, departed: false });
   });
 
   it('flags nobody as departed when everyone marked is still enrolled', () => {
@@ -80,13 +111,14 @@ describe('attendanceReport', () => {
   it('keeps a departed student, flagged, so the two halves of the report agree', () => {
     const r = attendanceReport({
       sessions: [
-        mkSession('s1', { a: 'present', gone: 'excused' }, true),
-        mkSession('s2', { a: 'absent', gone: 'absent' }, true),
+        mkSession('s1', '2026-07-06', { a: 'present', gone: 'excused' }),
+        mkSession('s2', '2026-07-08', { a: 'absent', gone: 'absent' }),
       ],
       // `gone` was unenrolled after both registers were submitted.
-      rosterUids: ['a'],
+      enrollments: [enrolled('a', '2026-07-01'), enrolled('gone', '2026-07-01', '2026-07-10')],
       assignments: [],
       today: '2026-07-15',
+      timeZone: ZONE,
     });
 
     const departed = r.students.find((s) => s.studentUid === 'gone');
@@ -101,10 +133,11 @@ describe('attendanceReport', () => {
 
   it('does not resurrect someone marked only in a register that was never submitted', () => {
     const r = attendanceReport({
-      sessions: [mkSession('s1', { a: 'present', ghost: 'present' }, false)],
-      rosterUids: ['a'],
+      sessions: [mkSession('s1', '2026-07-06', { a: 'present', ghost: 'present' }, false)],
+      enrollments: [enrolled('a', '2026-07-01')],
       assignments: [],
       today: '2026-07-15',
+      timeZone: ZONE,
     });
     // An un-taken register counts nobody, so it names nobody either.
     expect(r.students.map((s) => s.studentUid)).toEqual(['a']);

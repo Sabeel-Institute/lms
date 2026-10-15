@@ -243,7 +243,7 @@ for (const s of students) {
     const c = courses.find((x) => x.courseId === courseId);
     writes.push((b) => b.set(db.collection('enrollments').doc(`${s.uid}_${courseId}`), {
       studentUid: s.uid, courseId, cohortId: c.cohortId, active: true,
-      enrolledAt: now - 180 * day, enrolledBy: 'demo-seed', ...DEMO }));
+      stretches: [{ from: now - 180 * day, to: null }], enrolledBy: 'demo-seed', ...DEMO }));
   }
 }
 await commitAll(writes);

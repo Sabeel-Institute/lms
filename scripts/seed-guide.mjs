@@ -61,8 +61,8 @@ const courses={
 for (const c of Object.values(courses))
   await db.collection('courses').doc(c.id).set({ cohortId, name:c.name, archived:false, effectiveActive:true, archivedAccess:false, managerUids:[], createdAt:now-45*day, createdBy:ADMIN });
 // enroll all 8 in Hikam; first 4 also in Arabic
-for (const s of students) await db.collection('enrollments').doc(`${s.uid}_${courses.hikam.id}`).set({ studentUid:s.uid, courseId:courses.hikam.id, cohortId, active:true, enrolledAt:now-40*day, enrolledBy:ADMIN });
-for (const s of students.slice(0,4)) await db.collection('enrollments').doc(`${s.uid}_${courses.arabic.id}`).set({ studentUid:s.uid, courseId:courses.arabic.id, cohortId, active:true, enrolledAt:now-40*day, enrolledBy:ADMIN });
+for (const s of students) await db.collection('enrollments').doc(`${s.uid}_${courses.hikam.id}`).set({ studentUid:s.uid, courseId:courses.hikam.id, cohortId, active:true, stretches:[{ from:now-40*day, to:null }], enrolledBy:ADMIN });
+for (const s of students.slice(0,4)) await db.collection('enrollments').doc(`${s.uid}_${courses.arabic.id}`).set({ studentUid:s.uid, courseId:courses.arabic.id, cohortId, active:true, stretches:[{ from:now-40*day, to:null }], enrolledBy:ADMIN });
 
 // ---- sessions + their recordings: attendance-driven ----
 ensureAudioFixture();

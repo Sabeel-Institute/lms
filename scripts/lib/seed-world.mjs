@@ -409,16 +409,24 @@ export async function seedWorld({ db, auth, browser, base }) {
   await course(LONG_COURSE, COHORT, LONG_COURSE_NAME);
   await course('sw-past-course', 'sw-past', 'Seerah Survey', { effectiveActive: false });
 
+  /*
+   * The demo student's time in the class is the one their history tells
+   * (below): removed 26 days ago and back 4 days later, so the workbook's
+   * "out of the class" note and its register's dashes have a stretch to show.
+   */
   for (const s of students) {
     await db.collection('enrollments').doc(`${s.uid}_${COURSE}`).set({
-      studentUid: s.uid, courseId: COURSE, cohortId: COHORT,
-      active: true, enrolledAt: now - 40 * DAY, enrolledBy: adminUid,
+      studentUid: s.uid, courseId: COURSE, cohortId: COHORT, active: true,
+      stretches: s === STUDENT
+        ? [{ from: now - 40 * DAY, to: now - 26 * DAY }, { from: now - 22 * DAY, to: null }]
+        : [{ from: now - 40 * DAY, to: null }],
+      enrolledBy: adminUid,
     });
   }
   for (const s of students.slice(0, 4)) {
     await db.collection('enrollments').doc(`${s.uid}_${LONG_COURSE}`).set({
       studentUid: s.uid, courseId: LONG_COURSE, cohortId: COHORT,
-      active: true, enrolledAt: now - 40 * DAY, enrolledBy: adminUid,
+      active: true, stretches: [{ from: now - 40 * DAY, to: null }], enrolledBy: adminUid,
     });
   }
 
@@ -609,7 +617,7 @@ export async function seedWorld({ db, auth, browser, base }) {
    */
   await db.collection('enrollments').doc(`${STUDENT.uid}_sw-past-course`).set({
     studentUid: STUDENT.uid, courseId: 'sw-past-course', cohortId: 'sw-past',
-    active: true, enrolledAt: now - 200 * DAY, enrolledBy: adminUid,
+    active: true, stretches: [{ from: now - 200 * DAY, to: null }], enrolledBy: adminUid,
   });
   const archived = await seedSession('sw-p1', 'sw-p1r', 'Week 12 — The Farewell Pilgrimage',
     { courseId: 'sw-past-course', cohortId: 'sw-past', daysAgo: 12, dueOffset: 10, roster: [STUDENT] });

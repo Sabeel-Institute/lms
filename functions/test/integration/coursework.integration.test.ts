@@ -15,6 +15,7 @@ import {
   workState,
   type CourseworkDoc,
   type DraftDoc,
+  type EnrollmentDoc,
   type SubmissionDoc,
 } from '@sabeel/shared';
 import { createCohortRecord } from '../../src/cohorts';
@@ -160,13 +161,16 @@ describe('who receives an assignment', () => {
     expect((await sub(AMINAH, id))?.active).toBe(true);
   });
 
-  it('coming back through Add a student keeps the day they left, which the workbook reads', async () => {
-    const enrolment = () => db().collection(COLLECTIONS.enrollments).doc(enrollmentId(BILAL, courseId)).get();
+  it('coming back through Add a student keeps the stretch they left, which the workbook reads', async () => {
+    const enrolment = async () => (await db().collection(COLLECTIONS.enrollments).doc(enrollmentId(BILAL, courseId)).get()).data() as EnrollmentDoc;
     await applyEnrollmentActive({ studentUid: BILAL, courseId, active: false });
-    const leftAt = (await enrolment()).data()?.unenrolledAt;
-    expect(typeof leftAt).toBe('number');
+    const [away] = (await enrolment()).stretches;
+    expect(typeof away.to).toBe('number');
     await createEnrollmentRecord(TEACHER, { studentUid: BILAL, courseId });
-    expect((await enrolment()).data()).toMatchObject({ active: true, unenrolledAt: leftAt });
+    const back = await enrolment();
+    expect(back.active).toBe(true);
+    expect(back.stretches[0]).toEqual(away);
+    expect(back.stretches[1]).toMatchObject({ to: null });
   });
 
   /*
@@ -178,7 +182,7 @@ describe('who receives an assignment', () => {
     const id = await posted();
     // Enrolled, as a first call left it, and nothing given.
     await db().collection(COLLECTIONS.enrollments).doc(enrollmentId(LATECOMER, courseId)).set({
-      studentUid: LATECOMER, courseId, cohortId: 'c', active: true, enrolledAt: 1, enrolledBy: TEACHER,
+      studentUid: LATECOMER, courseId, cohortId: 'c', active: true, stretches: [{ from: 1, to: null }], enrolledBy: TEACHER,
     });
     expect(await sub(LATECOMER, id)).toBeUndefined();
     await expect(enrol(TEACHER, { studentUid: LATECOMER, courseId })).rejects.toThrow(/already in this course/);

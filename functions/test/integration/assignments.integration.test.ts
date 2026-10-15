@@ -9,10 +9,12 @@ import {
   EMULATOR_PROJECT_ID,
   assignmentId,
   attendanceRecordId,
+  closeStretch,
   enrollmentId,
   type AssignmentDoc,
   type AttendanceRecordDoc,
   type AttendanceStatus,
+  type EnrollmentDoc,
   type RecordingDoc,
   type SessionDoc,
   type StudentDoc,
@@ -466,10 +468,9 @@ describe('unenrolment', () => {
     await seedRecording('r1', 'sess', 'published');
     await reconcile('sess');
     expect((await getAssignment('s1', 'r1'))?.active).toBe(true);
-    await db()
-      .collection(COLLECTIONS.enrollments)
-      .doc(enrollmentId('s1', courseId))
-      .update({ active: false, unenrolledAt: Date.now() });
+    // The removal's own write, as `applyEnrollmentActive` commits it.
+    const ref = db().collection(COLLECTIONS.enrollments).doc(enrollmentId('s1', courseId));
+    await ref.update({ active: false, stretches: closeStretch(((await ref.get()).data() as EnrollmentDoc).stretches, Date.now()) });
 
     const again = await applyEnrollmentActive({ studentUid: 's1', courseId, active: false });
     expect(again.changed).toBe(false); // nothing to change on the roster…

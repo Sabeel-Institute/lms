@@ -7,6 +7,7 @@ import type { CompletionOverrideDoc } from './ledger';
 import { isVisibleToStudents, listenedShare } from './recordings';
 import type { ListeningProgressDoc, RecordingDoc } from './recordings';
 import { canPlayFromCourse } from './structure';
+import { inClassWhenDayEnds, joinedOn, leftOn, registerExpects, timesAway } from './membership';
 import type { CourseDoc, EnrollmentDoc, SessionDoc } from './types';
 import type { Cell, CellStyle, SheetSpec, WorkbookSpec } from './xlsx';
 
@@ -56,7 +57,7 @@ export const WORKBOOK_DEFINITIONS: readonly [term: string, definition: string][]
   ],
   [
     'Closed',
-    'Withdrawn before its date, so neither done nor missed: a required recording when the student left the class or the class was archived with its recordings closed; an assignment still open when its course was archived.',
+    'Neither done nor missed: a required recording whose date came while the student was out of the class, or one withdrawn before its date when the class was archived with its recordings closed; an assignment still open when its course was archived.',
   ],
   ['Catch-up rate', 'Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone.'],
   [
@@ -136,6 +137,8 @@ export interface RequiredItem {
   session: WorkbookSession;
   recording: WorkbookRecording;
   outcome: ListeningOutcome;
+  /** Why a closed one closed: the student was out of the class, or the class's recordings were closed. */
+  closedBy: 'away' | 'class' | null;
   /** Share heard, or null when the recording's length is unknown. */
   heard: number | null;
   lastListened: number | null;
@@ -147,8 +150,12 @@ export interface RequiredItem {
 
 export interface StudentCourseStats {
   studentUid: string;
+  /** The day they first joined. */
   joined: string | null;
+  /** The day they last left, while they are out of the class. */
   left: string | null;
+  /** The times they were out of the class and came back. */
+  away: { left: string; back: string }[];
   enrolled: boolean;
   held: number;
   present: number;
@@ -166,10 +173,6 @@ export interface StudentCourseStats {
   marks: Map<string, string>;
 }
 
-function dateOf(ms: number | undefined, zone: string): string | null {
-  return typeof ms === 'number' ? todayInZone(zone, ms) : null;
-}
-
 /**
  * The whole of one student's standing in one course. Both workbooks read it.
  */
@@ -179,11 +182,6 @@ export function courseStudentStats(
   ctx: WorkbookContext,
 ): StudentCourseStats {
   const enrollment = data.enrollments.find((e) => e.studentUid === studentUid);
-  const joined = enrollment ? dateOf(enrollment.enrolledAt, ctx.timeZone) : null;
-  const left = enrollment && !enrollment.active ? dateOf(enrollment.unenrolledAt, ctx.timeZone) : null;
-  // When they last left, even if they have come back since.
-  const lastLeft = dateOf(enrollment?.unenrolledAt, ctx.timeZone);
-  const inWindow = (date: string) => (!joined || date >= joined) && (!left || date <= left);
   const playable = canPlayFromCourse(data.course);
   const recordingById = new Map(data.recordings.map((r) => [r.id, r]));
   const completionOf = new Map(
@@ -201,8 +199,9 @@ export function courseStudentStats(
 
   const stats: StudentCourseStats = {
     studentUid,
-    joined,
-    left,
+    joined: joinedOn(enrollment, ctx.timeZone),
+    left: leftOn(enrollment, ctx.timeZone),
+    away: timesAway(enrollment, ctx.timeZone),
     enrolled: !!enrollment?.active,
     held: 0,
     present: 0,
@@ -227,10 +226,10 @@ export function courseStudentStats(
      * caught up by being excused on an earlier session's register (the brief's
      * late-enrolment step); the server grants on the mark, with no date window.
      * Dropping those left the file disagreeing with the register, the grants
-     * and every screen. Only a session with no mark for them, outside the days
-     * they were in the class, is '—'.
+     * and every screen. Only a register that had no place for them — a session
+     * while they were out of the class, or taken while they were — is '—'.
      */
-    if (!(taken && mark) && !inWindow(session.date)) {
+    if (!(taken && mark) && !registerExpects(enrollment, session, ctx.timeZone)) {
       stats.marks.set(session.id, '—');
       continue;
     }
@@ -264,15 +263,19 @@ export function courseStudentStats(
     const eff = effectiveCompletion(completion, override);
     const progress = progressOf.get(recording.id);
     let outcome: ListeningOutcome;
+    let closedBy: RequiredItem['closedBy'] = null;
     if (eff.completed) outcome = 'completed';
-    // Left the class before the date: the date never closed on them. Nor on
-    // one brought back since, whose grant leaving switched off and a date
-    // already past did not switch on again: the ledger says closed too.
-    else if (left && left < session.dueDate) outcome = 'closed';
-    else if (!grant.active && lastLeft && lastLeft < session.dueDate) outcome = 'closed';
-    else if (isOverdue(session.dueDate, ctx.today)) outcome = 'missed';
-    else if (!grant.active || !playable) outcome = 'closed';
-    else outcome = 'open';
+    // A date that has gone was missed only by a student in the class when it
+    // ran out. One out of the class then could not open the recording: their
+    // grant went off when they left, and a date already past did not switch
+    // it on again when they came back. The ledger says closed too.
+    else if (isOverdue(session.dueDate, ctx.today)) {
+      outcome = inClassWhenDayEnds(enrollment, session.dueDate, ctx.timeZone) ? 'missed' : 'closed';
+      if (outcome === 'closed') closedBy = 'away';
+    } else if (!grant.active || !playable) {
+      outcome = 'closed';
+      closedBy = enrollment?.active ? 'class' : 'away';
+    } else outcome = 'open';
 
     stats.required += 1;
     stats[outcome] += 1;
@@ -281,6 +284,7 @@ export function courseStudentStats(
       session,
       recording,
       outcome,
+      closedBy,
       heard: progress ? listenedShare(progress.listenedMs, recording.durationSec) : 0,
       lastListened: progress?.updatedAt ?? null,
       completedAt: eff.completed
@@ -483,7 +487,10 @@ export function courseWorkbook(data: CourseData, ctx: WorkbookContext): Workbook
     .map((s) => {
       const notes: string[] = [];
       if (s.unmarked > 0) notes.push(`${s.unmarked} register${s.unmarked === 1 ? '' : 's'} without a mark for them`);
-      if (s.closed > 0) notes.push(`${s.closed} closed: ${s.left ? 'left the class' : 'recordings closed'}`);
+      for (const a of s.away) notes.push(`out of the class ${shortDate(a.left)} to ${shortDate(a.back)}`);
+      const closedBy = (why: RequiredItem['closedBy']) => s.items.filter((i) => i.outcome === 'closed' && i.closedBy === why).length;
+      if (closedBy('away') > 0) notes.push(`${closedBy('away')} closed: out of the class`);
+      if (closedBy('class') > 0) notes.push(`${closedBy('class')} closed: recordings closed`);
       const byOverride = s.items.filter((i) => i.outcome === 'completed' && i.override?.completed).length;
       if (byOverride > 0) notes.push(`${byOverride} completion${byOverride === 1 ? '' : 's'} by override`);
       return [
