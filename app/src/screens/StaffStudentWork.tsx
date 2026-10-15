@@ -4,6 +4,7 @@ import {
   INSTITUTE_TIMEZONE,
   gradeText,
   isLate,
+  leftWithNothingIn,
   staffWorkState,
   tallyCounts,
   todayInZone,
@@ -51,11 +52,17 @@ export function StaffStudentWork({
   const rows = useMemo(() => {
     const titles = new Map((coursework ?? []).map((c) => [c.id, c]));
     const gradeOf = new Map((grades ?? []).filter((g) => g.studentUid === studentUid).map((g) => [g.courseworkId, g]));
-    return (subs ?? [])
-      .filter((s) => s.studentUid === studentUid && titles.has(s.courseworkId))
-      .map((s) => ({ s, cw: titles.get(s.courseworkId)!, g: gradeOf.get(s.courseworkId) }))
-      .map((r) => ({ ...r, st: staffWorkState(r.s, r.g, today, cls.effectiveActive) }))
-      .sort((a, b) => b.s.dueDate.localeCompare(a.s.dueDate));
+    return (
+      (subs ?? [])
+        // Work they left with nothing in is not theirs any more: the
+        // assignment's page and the workbooks leave it out, and so does the
+        // line above the rows, which counted none of it while each row said
+        // Missed or Not due yet.
+        .filter((s) => s.studentUid === studentUid && titles.has(s.courseworkId) && !leftWithNothingIn(s))
+        .map((s) => ({ s, cw: titles.get(s.courseworkId)!, g: gradeOf.get(s.courseworkId) }))
+        .map((r) => ({ ...r, st: staffWorkState(r.s, r.g, today, cls.effectiveActive) }))
+        .sort((a, b) => b.s.dueDate.localeCompare(a.s.dueDate))
+    );
   }, [coursework, subs, grades, studentUid, today, cls.effectiveActive]);
 
   if (coursework === null || subs === null || grades === null) return <Empty>Checking their assignments…</Empty>;
