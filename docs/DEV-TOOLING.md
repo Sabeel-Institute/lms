@@ -190,7 +190,9 @@ audit lie, and an audit that reports nothing is worse than no audit.
   **Kill dev servers by port:** `ss -lptn 'sport = :61311' | grep -oP 'pid=\K[0-9]+' | xargs -r kill`
   (`lsof` is not on PATH in a non-interactive shell without the toolchain env
   sourced, and a missing `lsof` turns a port guard into a silent no-op)
-  (or `free-emulator-ports.sh` for the emulator suite).
+  (or `free-emulator-ports.sh` for the emulator suite). macOS is the other way
+  round — no `ss`, no `/proc` — so `free-emulator-ports.sh` and
+  `preflight-metro.mjs` ask `lsof` there.
 - **Waiting for the port is not waiting for readiness.** The functions emulator
   accepts connections before it has registered anything. Poll a known callable
   until it stops 404ing.
@@ -229,7 +231,9 @@ test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
 - **Install:** release 4.47, `linux_amd64.tar.gz` from GitHub, sha256
   `31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d`, unpacked
   to `~/opt/seaweedfs-4.47/weed`. `WEED_BIN` overrides the path; CI installs the
-  same release and checks the digest.
+  same release and checks the digest. On the Mac it is `darwin_arm64.tar.gz`,
+  sha256 `3ad466db33e83d0b103f90a06997feeb1cc42fd536e6cbdcdded975778f64fda`,
+  unpacked to the same path.
 - **`weed server`, not `weed mini`.** Mini also starts an admin server and a
   plugin worker that bind ports outside this checkout's block, one of them on
   every interface, and neither can be switched off. Every port is pinned from

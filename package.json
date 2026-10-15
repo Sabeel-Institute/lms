@@ -2,7 +2,7 @@
   "name": "sabeel-institute-lms",
   "version": "0.0.0",
   "private": true,
-  "description": "Sabeel Institute LMS \u2014 attendance, class recordings, assignments and grades (Android + web from one Expo codebase, Firebase backend)",
+  "description": "Sabeel Institute LMS \u2014 attendance, class recordings, assignments and grades (Android, iOS and web from one Expo codebase, Firebase backend)",
   "workspaces": [
     "packages/*",
     "functions",
@@ -32,6 +32,8 @@
     "check:queries": "node scripts/check-query-shapes.mjs",
     "check:documents": "node scripts/check-documents.mjs",
     "check:push": "node scripts/check-push.mjs",
+    "check:ios": "node scripts/check-ios-config.mjs",
+    "build:ios": "bash scripts/build-ios.sh",
     "students:report": "node scripts/students-report.mjs"
   },
   "devDependencies": {
