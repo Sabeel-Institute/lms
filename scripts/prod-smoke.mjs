@@ -92,6 +92,15 @@ for (const [path, marker] of [
   const gone = await fetch(`${BASE}/_expo/static/js/web/gone-0000000000000000.js`, { cache: 'no-store' });
   check(gone.status === 404, `a build file that is not there answers 404 (got ${gone.status})`);
   const deep = await fetch(`${BASE}/courses/not-a-course`, { cache: 'no-store' });
+  // Never inside another site's frame: a signed-in admin's clicks steered by a page over it.
+  check(deep.headers.get('x-frame-options') === 'DENY', `the app refuses to be framed (x-frame-options ${deep.headers.get('x-frame-options')})`);
+  // Except Firebase's own sign-in frame, which the app itself frames: denied,
+  // Google sign-in would stop working.
+  const authFrame = await fetch(`${BASE}/__/auth/iframe`, { cache: 'no-store' });
+  check(
+    authFrame.ok && !authFrame.headers.get('x-frame-options') && !/frame-ancestors/.test(authFrame.headers.get('content-security-policy') ?? ''),
+    `the sign-in frame can still be framed (${authFrame.status}, x-frame-options ${authFrame.headers.get('x-frame-options')})`,
+  );
   check(deep.ok && (await deep.text()).includes('/_expo/static/js/web/'), 'a deep link still answers with the app');
 }
 
