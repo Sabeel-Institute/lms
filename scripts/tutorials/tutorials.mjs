@@ -60,7 +60,7 @@ export const TUTORIALS = [
       { say: 'Each card says which class it is from, and its date: watch by, listen by, or hand in by.', do: (t) => t.highlight('task-Memorize the first hikma') },
       { say: 'Missed ones stay on the list, quietly, so you can see what they were. Done holds what you finished in the last two weeks.', do: (t) => t.scroll(700) },
       { say: 'Tap a card to open it.', do: async (t) => { await t.scroll(-700); await t.tap('next-up-Session 3 — Patience in Hardship'); } },
-      { say: 'A recording opens in the player.', do: (t) => t.waitEnabled('player-play') },
+      { say: 'A recording opens in the player.', do: (t) => t.waitEnabled('player-forward') },
     ],
   },
   {
@@ -68,7 +68,7 @@ export const TUTORIALS = [
     as: 'student',
     start: (t) => t.tap('next-up-Session 3 — Patience in Hardship'),
     steps: [
-      { say: 'This is the player.', do: (t) => t.waitEnabled('player-play') },
+      { say: 'This is the player.', do: (t) => t.waitEnabled('player-forward') },
       {
         say: 'A long title slides along its line. Tap it to read it whole, and again to fold it back.',
         cut: 'phone',
