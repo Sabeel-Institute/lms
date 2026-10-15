@@ -4,6 +4,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
   deriveEffectiveActive,
+  recordingsClosedAfter,
   type CourseDoc,
   type CohortDoc,
 } from '@sabeel/shared';
@@ -67,24 +68,26 @@ export function validateSetCohortArchived(data: unknown): { cohortId: string; ar
 export async function applyCohortArchived(input: { cohortId: string; archived: boolean }) {
   const db = getFirestore();
   const cohortRef = db.collection(COLLECTIONS.cohorts).doc(input.cohortId);
-  if (!(await cohortRef.get()).exists) throw new HttpsError('not-found', 'No such cohort.');
 
-  const courses = await db
-    .collection(COLLECTIONS.courses)
-    .where('cohortId', '==', input.cohortId)
-    .get();
+  /*
+   * ONE TRANSACTION over the cohort and its classes: each class's
+   * `recordingsClosed` is decided from what the class was, and a class
+   * updated at the same moment must be read as it is.
+   */
+  const coursesUpdated = await db.runTransaction(async (tx) => {
+    if (!(await tx.get(cohortRef)).exists) throw new HttpsError('not-found', 'No such cohort.');
+    const courses = await tx.get(db.collection(COLLECTIONS.courses).where('cohortId', '==', input.cohortId));
+    const now = Date.now();
+    tx.update(cohortRef, { archived: input.archived });
+    for (const cls of courses.docs) {
+      const data = cls.data() as CourseDoc;
+      const after = { effectiveActive: deriveEffectiveActive(input.archived, data.archived), archivedAccess: data.archivedAccess };
+      tx.update(cls.ref, { effectiveActive: after.effectiveActive, recordingsClosed: recordingsClosedAfter(data, after, now) });
+    }
+    return courses.size;
+  });
 
-  const batch = db.batch();
-  batch.update(cohortRef, { archived: input.archived });
-  for (const cls of courses.docs) {
-    const data = cls.data() as CourseDoc;
-    batch.update(cls.ref, {
-      effectiveActive: deriveEffectiveActive(input.archived, data.archived),
-    });
-  }
-  await batch.commit();
-
-  return { cohortId: input.cohortId, archived: input.archived, coursesUpdated: courses.size };
+  return { cohortId: input.cohortId, archived: input.archived, coursesUpdated };
 }
 
 export const setCohortArchived = auditedCall('setCohortArchived', async (req, audit) => {

@@ -1,7 +1,12 @@
 import { todayInZone } from './assignments';
 import type { AuditEntryDoc } from './audit';
+import { canPlayFromCourse, deriveEffectiveActive } from './structure';
+import type { CourseDoc } from './types';
 
 /**
+ * TIME KEPT AS STRETCHES: a student's in a class, and a class's recordings
+ * closed to its students.
+ *
  * A STUDENT'S TIME IN A CLASS, and the one answer to "were they in it then?".
  *
  * An enrolment keeps every stretch the student has spent in the class: one
@@ -143,6 +148,65 @@ export function timesAway(m: Membership | undefined, zone: string): { left: stri
   const s = m?.stretches ?? [];
   return s.slice(1).map((next, i) => ({ left: todayInZone(zone, s[i].to ?? next.from), back: todayInZone(zone, next.from) }));
 }
+
+// -------------------------------------------------- recordings closed --
+
+/**
+ * The class's `recordingsClosed` after a change that may open or close its
+ * recordings to students: a stretch opens, at `at`, when they stop being
+ * playable, and closes when they can be played again. Every writer of
+ * `effectiveActive` or `archivedAccess` writes this beside them.
+ */
+export function recordingsClosedAfter(
+  before: Pick<CourseDoc, 'effectiveActive' | 'archivedAccess' | 'recordingsClosed'>,
+  after: { effectiveActive: boolean; archivedAccess: boolean },
+  at: number,
+): Stretch[] {
+  const was = canPlayFromCourse(before);
+  const now = canPlayFromCourse(after);
+  if (was === now) return [...before.recordingsClosed];
+  return now ? closeStretch(before.recordingsClosed, at) : openStretch(before.recordingsClosed, at);
+}
+
+/**
+ * A class's `recordingsClosed`, rebuilt from the audit log: the migration
+ * for classes written before they kept it.
+ *
+ * `history` is the log's `updateCourse` rows for this class and
+ * `setCohortArchived` rows for its cohort, any order; their `detail` says
+ * which flags moved. The class starts running with access off, inside a
+ * cohort that stood as its first row turned it from (or as it stands now,
+ * if no row moved it). A row written before the detail was recorded says
+ * nothing and is passed over. The stored flags win at the end: when the log
+ * does not arrive at them, the last stretch opens or closes at the last row
+ * (or at creation), and `inferred` says so.
+ */
+export function recordingsClosedFromHistory(
+  course: Pick<CourseDoc, 'createdAt' | 'effectiveActive' | 'archivedAccess'> & { cohortArchived: boolean },
+  history: readonly Pick<AuditEntryDoc, 'at' | 'action' | 'detail'>[],
+): { recordingsClosed: Stretch[]; inferred: boolean } {
+  const rows = [...history].filter((r) => r.at >= course.createdAt).sort((a, b) => a.at - b.at);
+  const firstCohortRow = rows.find((r) => r.action === 'setCohortArchived' && typeof r.detail?.archived === 'boolean');
+  let cohortArchived = firstCohortRow ? !firstCohortRow.detail?.archived : course.cohortArchived;
+  let archived = false;
+  let access = false;
+  const playable = () => canPlayFromCourse({ effectiveActive: deriveEffectiveActive(cohortArchived, archived), archivedAccess: access });
+  let closed: Stretch[] = playable() ? [] : [{ from: course.createdAt, to: null }];
+  for (const r of rows) {
+    const was = playable();
+    const d = r.detail ?? {};
+    if (r.action === 'setCohortArchived' && typeof d.archived === 'boolean') cohortArchived = d.archived;
+    if (r.action === 'updateCourse' && typeof d.archived === 'boolean') archived = d.archived;
+    if (r.action === 'updateCourse' && typeof d.archivedAccess === 'boolean') access = d.archivedAccess;
+    const now = playable();
+    if (was !== now) closed = now ? closeStretch(closed, r.at) : openStretch(closed, r.at);
+  }
+  if (playable() === canPlayFromCourse(course)) return { recordingsClosed: closed, inferred: false };
+  const at = rows.length ? rows[rows.length - 1].at : course.createdAt;
+  return { recordingsClosed: canPlayFromCourse(course) ? closeStretch(closed, at) : openStretch(closed, at), inferred: true };
+}
+
+// ------------------------------------------- enrolments, from the log --
 
 /** Two rows this close, with no direction recorded, are one tap twice. */
 const SAME_TAP_MS = 60_000;

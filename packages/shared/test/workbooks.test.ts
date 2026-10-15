@@ -164,6 +164,7 @@ const world: CourseData = {
     archived: false,
     effectiveActive: true,
     archivedAccess: false,
+    recordingsClosed: [],
     managerUids: ['mgr'],
     createdAt: 1,
     createdBy: 'adm',
@@ -403,8 +404,27 @@ describe('courseStudentStats', () => {
   });
 
   it('recordings closed on an archived class closes an open grant', () => {
-    const off = { ...world, course: { ...world.course, effectiveActive: false, archivedAccess: false } };
+    const off = { ...world, course: { ...world.course, effectiveActive: false, archivedAccess: false, recordingsClosed: [{ from: T('2026-10-14'), to: null }] } };
     expect(courseStudentStats(off, S.aminah, ctx)).toMatchObject({ open: 0, closed: 1 });
+  });
+
+  /*
+   * AN ARCHIVE BEFORE THE DATE LEFT NOTHING TO MISS. Session 1 was due on
+   * 09-15. Archived with its recordings closed on 09-12, the class gave
+   * Fatima nothing she could do by then: Closed, as her own home files it,
+   * however long after the date the file is made. Archived on 09-20, after
+   * the date, the miss stands as it was.
+   */
+  it('a date that ran out while the class’s recordings were closed is closed, not missed', () => {
+    const archived = (on: string) => ({
+      ...world,
+      course: { ...world.course, archived: true, effectiveActive: false, archivedAccess: false, recordingsClosed: [{ from: T(on), to: null }] },
+    });
+    expect(courseStudentStats(archived('2026-09-12'), S.fatima, ctx).items.find((i) => i.session.id === '1')).toMatchObject({ outcome: 'closed', closedBy: 'class' });
+    expect(courseStudentStats(archived('2026-09-20'), S.fatima, ctx).items.find((i) => i.session.id === '1')?.outcome).toBe('missed');
+    // Opened again since: the date still ran out while it was shut.
+    const reopened = { ...world, course: { ...world.course, recordingsClosed: [{ from: T('2026-09-12'), to: T('2026-09-30') }] } };
+    expect(courseStudentStats(reopened, S.fatima, ctx).items.find((i) => i.session.id === '1')?.outcome).toBe('closed');
   });
 });
 

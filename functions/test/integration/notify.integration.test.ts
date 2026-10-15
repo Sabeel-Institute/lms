@@ -94,6 +94,7 @@ beforeEach(async () => {
     archived: false,
     effectiveActive: true,
     archivedAccess: false,
+    recordingsClosed: [],
     managerUids: ['mgr1'],
     createdAt: 1,
     createdBy: ADMIN,
@@ -248,7 +249,7 @@ describe('recordingReady', () => {
   it('says nothing for a course that is archived with listening off', async () => {
     await withDevice('s1');
     await seedRecording('r1', 'sess1', 'published');
-    await db().collection(COLLECTIONS.courses).doc(COURSE).update({ effectiveActive: false, archivedAccess: false });
+    await db().collection(COLLECTIONS.courses).doc(COURSE).update({ effectiveActive: false, archivedAccess: false, recordingsClosed: [{ from: Date.now(), to: null }] });
     expect(await notifyRecordingReady(db(), await seedGrant('s1', 'r1'), TODAY)).toBe(false);
     expect(outbox).toHaveLength(0);
   });
@@ -720,7 +721,7 @@ describe('lastDay', () => {
     // point at a locked door. Mirrors the attendanceMissing case below.
     await withDevice('s1');
     await seedRecording('r1', 'sess1', 'published');
-    await db().collection(COLLECTIONS.courses).doc(COURSE).update({ effectiveActive: false, archivedAccess: false });
+    await db().collection(COLLECTIONS.courses).doc(COURSE).update({ effectiveActive: false, archivedAccess: false, recordingsClosed: [{ from: Date.now(), to: null }] });
     await db()
       .collection(COLLECTIONS.assignments)
       .doc(assignmentId('s1', ns('r1')))
@@ -759,7 +760,7 @@ describe('attendanceMissing', () => {
 
   it('says nothing about a course that has finished', async () => {
     await withDevice('mgr1');
-    await db().collection(COLLECTIONS.courses).doc(COURSE).update({ effectiveActive: false });
+    await db().collection(COLLECTIONS.courses).doc(COURSE).update({ effectiveActive: false, recordingsClosed: [{ from: Date.now(), to: null }] });
     await seedSession('sess1', { date: '2026-08-10', attendanceSubmittedAt: null });
     expect(await notifyAttendanceMissing(db(), TODAY)).toBe(0);
   });

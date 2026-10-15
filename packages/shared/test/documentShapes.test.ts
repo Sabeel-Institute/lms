@@ -71,6 +71,8 @@ const SAMPLES: { [C in StoredCollection]: Required<StoredDocs[C]> } = {
     archived: false,
     effectiveActive: true,
     archivedAccess: false,
+    // Archived once with its recordings closed, and running again since.
+    recordingsClosed: [{ from: 1, to: 2 }],
     managerUids: ['m1'],
     createdAt: 1,
     createdBy: 's1',

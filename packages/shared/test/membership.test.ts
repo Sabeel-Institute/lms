@@ -7,6 +7,8 @@ import {
   inClassOn,
   inClassWhenDayEnds,
   openStretch,
+  recordingsClosedAfter,
+  recordingsClosedFromHistory,
   registerExpects,
   stretchesFromHistory,
   timesAway,
@@ -124,5 +126,60 @@ describe('stretchesFromHistory: the migration from the two dates', () => {
       row(200_000, 'createEnrollment', { reenrolled: true }),
     ]);
     expect(out).toEqual({ stretches: [{ from: 0, to: 500 }], inferred: true });
+  });
+});
+
+describe('a class’s recordings closed to its students', () => {
+  const running = { effectiveActive: true, archivedAccess: false, recordingsClosed: [] };
+
+  it('a stretch opens when they can no longer be played and closes when they can again, and nothing else moves it', () => {
+    const shut = recordingsClosedAfter(running, { effectiveActive: false, archivedAccess: false }, 10);
+    expect(shut).toEqual([{ from: 10, to: null }]);
+    // Archived with listening kept on: still playable, nothing opens.
+    expect(recordingsClosedAfter(running, { effectiveActive: false, archivedAccess: true }, 10)).toEqual([]);
+    // Listening turned on in the archive: the stretch closes.
+    const archived = { effectiveActive: false, archivedAccess: false, recordingsClosed: shut };
+    expect(recordingsClosedAfter(archived, { effectiveActive: false, archivedAccess: true }, 20)).toEqual([{ from: 10, to: 20 }]);
+    // A rename, or another archive of an archived class, changes nothing.
+    expect(recordingsClosedAfter(archived, { effectiveActive: false, archivedAccess: false }, 30)).toEqual(shut);
+  });
+
+  const row = (at: number, action: string, detail?: Record<string, unknown>) => ({ at, action, ...(detail ? { detail } : {}) });
+  const stored = (o: { effectiveActive: boolean; archivedAccess: boolean; cohortArchived?: boolean }) => ({ createdAt: 0, cohortArchived: false, ...o });
+
+  it('rebuilds every archive the log holds, by the class and by its cohort', () => {
+    const { recordingsClosed, inferred } = recordingsClosedFromHistory(stored({ effectiveActive: false, archivedAccess: false, cohortArchived: true }), [
+      row(100, 'updateCourse', { archived: true }),
+      row(200, 'updateCourse', { archivedAccess: true }),
+      row(300, 'updateCourse', { name: 'Renamed' }),
+      row(400, 'updateCourse', { archived: false }),
+      row(500, 'setCohortArchived', { archived: true }),
+      row(600, 'updateCourse', { archivedAccess: false }),
+    ]);
+    expect(inferred).toBe(false);
+    // Closed 100–200 (archived, access off); open while access was on, and
+    // after the class came back; the cohort's archive with access still on
+    // closed nothing, and turning access off then did.
+    expect(recordingsClosed).toEqual([{ from: 100, to: 200 }, { from: 600, to: null }]);
+    expect(() => checkStretches(recordingsClosed, true)).not.toThrow();
+  });
+
+  it('a class made inside an archived cohort was closed from its making', () => {
+    expect(recordingsClosedFromHistory(stored({ effectiveActive: false, archivedAccess: false, cohortArchived: true }), [])).toEqual({
+      recordingsClosed: [{ from: 0, to: null }],
+      inferred: false,
+    });
+    // …unless the cohort's own rows say it was running then.
+    expect(recordingsClosedFromHistory(stored({ effectiveActive: false, archivedAccess: false, cohortArchived: true }), [row(50, 'setCohortArchived', { archived: true })]).recordingsClosed).toEqual([
+      { from: 50, to: null },
+    ]);
+  });
+
+  it('when the log does not arrive at what is stored, what is stored wins, at the last row, and says so', () => {
+    // Archived, but by a row written before the detail was recorded.
+    expect(recordingsClosedFromHistory(stored({ effectiveActive: false, archivedAccess: false }), [row(100, 'updateCourse')])).toEqual({
+      recordingsClosed: [{ from: 100, to: null }],
+      inferred: true,
+    });
   });
 });

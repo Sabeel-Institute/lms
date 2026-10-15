@@ -29,7 +29,7 @@ export function CourseAttendanceScreen({
   onOpenStudent: (studentUid: string) => void;
 }) {
   const today = todayInZone(INSTITUTE_TIMEZONE);
-  const report = useCourseAttendance(cls.id, today);
+  const report = useCourseAttendance(cls, today);
   const students = useStudents(true);
   const [tab, setTab] = useState<Tab>('sessions');
   const nameOf = useMemo(() => {

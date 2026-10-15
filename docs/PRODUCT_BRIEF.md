@@ -83,6 +83,7 @@ Cohort/Semester -> Course -> Session -> Recording
 - Staff can explicitly keep archived course recordings available.
 - If access is off, students can still see the course/history, but playback is disabled with a clear message.
 - When a course is archived, active reminders and active accountability counts stop. Final ledger history remains available for reporting and audit.
+- A required recording whose due date passed while its course was archived with access off is **Closed**, never Missed — in every ledger, the attendance report and both workbooks, whatever the course's state later. The course keeps every stretch its recordings were closed to students, which is what that is read from; a course archived only after a date leaves a miss as it was.
 
 ## Recording ingestion
 
@@ -600,7 +601,7 @@ This is not the final schema. It captures the product objects that need first-cl
 | `staffUsers` (`staff`) | Staff identity, role, approval state, and admin/manager permissions. Manager course scoping is `managerUids` on each course, not a separate collection. |
 | `students` | Student identity, active/disabled state, and profile fields. |
 | `cohorts` | Cohort/semester records and archive state. |
-| `courses` | Courses (the subject) inside cohorts, archive state, and archived-access setting. |
+| `courses` | Courses (the subject) inside cohorts, archive state, and archived-access setting, with every stretch the course's recordings were closed to its students. |
 | `sessions` | One dated meeting of a course: attendance (present/absent/excused snapshot + submitted marker), date, title, required due date, notes, and its 0..1 `recordingId`. Staff-read only. |
 | `attendanceRecords` | Each student's own copy of their mark for one session, keyed `{studentUid}_{sessionId}`. A server-written projection of the session's map — the only way a student can be shown their own mark, since Firestore security is per-document. |
 | `enrollments` | Student membership in courses over time: every stretch a student has spent in the class — joined, left, came back — so a view that needs to know whether they were in it on a day (the attendance report, the workbooks, a missed or closed recording) asks one record. |

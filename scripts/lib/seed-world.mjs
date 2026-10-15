@@ -396,6 +396,7 @@ export async function seedWorld({ db, auth, browser, base }) {
       archived: false,
       effectiveActive: true,
       archivedAccess: false,
+      recordingsClosed: [],
       managerUids: [],
       createdAt: now - 45 * DAY,
       createdBy: adminUid,
@@ -407,7 +408,8 @@ export async function seedWorld({ db, auth, browser, base }) {
   // courses, so the course page's managers list draws its marked row.
   await course(COURSE, COHORT, 'Hikam Foundations', { managerUids: [managerUid, 'sw-disabled'] });
   await course(LONG_COURSE, COHORT, LONG_COURSE_NAME);
-  await course('sw-past-course', 'sw-past', 'Seerah Survey', { effectiveActive: false });
+  // Its cohort archived five days ago, recordings closed since.
+  await course('sw-past-course', 'sw-past', 'Seerah Survey', { effectiveActive: false, recordingsClosed: [{ from: now - 5 * DAY, to: null }] });
 
   /*
    * The demo student's time in the class is the one their history tells

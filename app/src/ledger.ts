@@ -16,6 +16,7 @@ import {
   type AttendanceReport,
   type AttendanceStatus,
   type AuditEntryDoc,
+  type CourseAccess,
   type LedgerRollup,
   type StoredCollection,
   type StoredDocs,
@@ -24,7 +25,7 @@ import { db, functions } from './firebase';
 import { useListenerFailed, useLiveQuery } from './liveQuery';
 import { useStudentsState } from './students';
 import { useCourseSessionsState } from './sessions';
-import { useRosterState, type EnrollmentRow } from './structure';
+import { useRosterState, type CourseRow, type EnrollmentRow } from './structure';
 import type { RecordingRow } from './recordings';
 import type { SessionRow } from './sessions';
 import { read } from './documents';
@@ -188,6 +189,8 @@ export interface RecordingLedger {
 export function useRecordingLedger(
   recording: RecordingRow,
   session: SessionRow,
+  /** Its class: a date that ran out while the class's recordings were closed is not missed. */
+  cls: CourseAccess,
   today: string,
 ): RecordingLedger {
   const rid = recording.id;
@@ -372,9 +375,12 @@ export function useRecordingLedger(
       rollup: rollup(
         accountable.map((r) => ({ completed: r.completed, dueDate: r.dueDate })),
         today,
+        cls,
+        INSTITUTE_TIMEZONE,
       ),
     };
   }, [
+    cls,
     assignments,
     students,
     failed,
@@ -414,7 +420,8 @@ export interface CourseLedger {
  * Course-level counts: every active assignment in the class, its effective
  * completion, rolled up whole-class and per-recording. `courseId ==` reads.
  */
-export function useCourseLedger(courseId: string | null, today: string): CourseLedger {
+export function useCourseLedger(cls: CourseRow, today: string): CourseLedger {
+  const courseId = cls.id;
   const granted = useLiveQuery<AssignmentDoc[] | null>(
     () =>
       courseId
@@ -463,8 +470,8 @@ export function useCourseLedger(courseId: string | null, today: string): CourseL
       if (it.completed) cur.complete++;
       byRecording.set(it.recordingId, cur);
     }
-    return { resolved: granted !== null, rollup: rollup(items, today), byRecording, items };
-  }, [granted, assignments, completions, overrides, today]);
+    return { resolved: granted !== null, rollup: rollup(items, today, cls, INSTITUTE_TIMEZONE), byRecording, items };
+  }, [granted, assignments, completions, overrides, today, cls]);
 }
 
 const NO_ASSIGNMENTS: AssignmentDoc[] = [];
@@ -477,16 +484,17 @@ const NO_ASSIGNMENTS: AssignmentDoc[] = [];
  * live reads (no new listener shapes), so the security rules already cover it.
  */
 export function useCourseAttendance(
-  courseId: string | null,
+  cls: CourseRow,
   today: string,
 ): AttendanceReport & { resolved: boolean } {
+  const courseId = cls.id;
   // The `State` variants: "0 of 0 sessions taken" and "Nobody is enrolled"
   // are answers, and the report gave them for the length of every cold load.
   const sessionsState = useCourseSessionsState(courseId);
   const rosterState = useRosterState(courseId);
   const sessions = sessionsState ?? NO_SESSIONS;
   const roster = rosterState ?? NO_ROSTER;
-  const { items, resolved: grantsResolved } = useCourseLedger(courseId, today);
+  const { items, resolved: grantsResolved } = useCourseLedger(cls, today);
   const resolved = sessionsState !== null && rosterState !== null && grantsResolved;
 
   return useMemo(
@@ -503,12 +511,13 @@ export function useCourseAttendance(
         // marked for someone only inside their time in the class.
         enrollments: roster,
         assignments: items.map((i) => ({ studentUid: i.studentUid, completed: i.completed, dueDate: i.dueDate })),
+        course: cls,
         today,
         timeZone: INSTITUTE_TIMEZONE,
       }),
       resolved,
     }),
-    [sessions, roster, items, today, resolved],
+    [sessions, roster, items, cls, today, resolved],
   );
 }
 

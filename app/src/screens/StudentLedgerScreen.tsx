@@ -2,12 +2,11 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
   INSTITUTE_TIMEZONE,
-  canPlayFromCourse,
   grantOutcome,
-  isOverdue,
   playVerb,
   todayInZone,
   unbreakableDate,
+  type GrantOutcome,
 } from '@sabeel/shared';
 import { Chips, Empty, Grid, Screen, Segmented, useGridCell } from '../components/ui';
 import { StaffStudentWork } from './StaffStudentWork';
@@ -36,9 +35,11 @@ export function StudentLedgerScreen({
 }) {
   const [tab, setTab] = useState<'listening' | 'assignments'>('listening');
   const today = todayInZone(INSTITUTE_TIMEZONE);
-  // An archived class with listening off closes every open grant on it — the
-  // rows say so rather than "Listen by" or "Watch by", which read as still doable.
-  const playable = canPlayFromCourse(cls);
+  // Where each row stands, from the one function every ledger asks: an
+  // archived class with listening off closes every open grant on it — the rows
+  // say so rather than "Listen by" or "Watch by", which read as still doable —
+  // and a date that ran out while it was so is closed, not missed.
+  const outcomeOf = (r: StudentLedgerItem) => grantOutcome(r, today, cls, INSTITUTE_TIMEZONE);
   const items = useStudentLedger(studentUid, cls.id);
   const recordings = useCourseRecordings(cls.id);
   const byId = useMemo(() => new Map(recordings.map((r) => [r.id, r])), [recordings]);
@@ -50,9 +51,9 @@ export function StudentLedgerScreen({
       return { ...it, title: rec?.title ?? it.recordingId, verb: playVerb(rec?.media ?? {}) };
     });
     if (filter === 'notComplete') return withTitle.filter((r) => !r.completed);
-    if (filter === 'missed') return withTitle.filter((r) => !r.completed && isOverdue(r.dueDate, today));
+    if (filter === 'missed') return withTitle.filter((r) => grantOutcome(r, today, cls, INSTITUTE_TIMEZONE) === 'missed');
     return withTitle;
-  }, [items, byId, filter, today]);
+  }, [items, byId, filter, today, cls]);
 
   return (
     <Screen
@@ -95,7 +96,7 @@ export function StudentLedgerScreen({
       ) : (
         <Grid min={330} rows>
           {rows.map((r) => (
-            <RequiredRow key={r.recordingId} row={r} today={today} playable={playable} />
+            <RequiredRow key={r.recordingId} row={r} outcome={outcomeOf(r)} />
           ))}
         </Grid>
       )}
@@ -108,12 +109,10 @@ export function StudentLedgerScreen({
 /** One recording required of the student: its title, any override, and where it stands. */
 function RequiredRow({
   row: r,
-  today,
-  playable,
+  outcome,
 }: {
   row: StudentLedgerItem & { title: string; verb: 'Watch' | 'Listen' };
-  today: string;
-  playable: boolean;
+  outcome: GrantOutcome;
 }) {
   return (
     <View style={[styles.row, useGridCell()]}>
@@ -125,19 +124,14 @@ function RequiredRow({
           As a bare Text a wrapped status fell to the left of its own line, so a
           four-row list showed the same fact in two places. */}
       <View style={styles.rowMeta}>
-        <Text style={[styles.status, styleFor(r, today, playable)]}>{statusLabel(r, r.verb, today, playable)}</Text>
+        <Text style={[styles.status, styleFor(outcome)]}>{statusLabel(r, r.verb, outcome)}</Text>
       </View>
     </View>
   );
 }
 
-function statusLabel(
-  r: StudentLedgerItem,
-  verb: 'Watch' | 'Listen',
-  today: string,
-  playable: boolean,
-): string {
-  switch (grantOutcome(r, today, playable)) {
+function statusLabel(r: StudentLedgerItem, verb: 'Watch' | 'Listen', outcome: GrantOutcome): string {
+  switch (outcome) {
     case 'complete':
       return r.source === 'override' ? 'Completed (override)' : 'Completed';
     case 'missed':
@@ -150,8 +144,7 @@ function statusLabel(
       return `${verb} by ${unbreakableDate(r.dueDate)}`;
   }
 }
-function styleFor(r: StudentLedgerItem, today: string, playable: boolean) {
-  const outcome = grantOutcome(r, today, playable);
+function styleFor(outcome: GrantOutcome) {
   if (outcome === 'complete') return styles.ok;
   if (outcome === 'open') return styles.warn;
   return styles.bad;

@@ -67,6 +67,16 @@ export interface CourseDoc {
    */
   archivedAccess: boolean;
   /**
+   * EVERY STRETCH THE CLASS'S RECORDINGS WERE CLOSED TO ITS STUDENTS, oldest
+   * first: one opens when `canPlayFromCourse` stops being true (the class or
+   * its cohort archived, with access off) and closes when it is true again,
+   * so the last is open exactly while it is false. A student's date that ran
+   * out inside one could not be met, which is Closed, never Missed — however
+   * the class stands now (`grantOutcome`). Written beside `effectiveActive`
+   * and `archivedAccess` by every writer of either (`recordingsClosedAfter`).
+   */
+  recordingsClosed: Stretch[];
+  /**
    * Managers scoped to this class. Denormalised onto the class rather than kept
    * in a separate scopes collection so that a manager's LIST query can be
    * `where('managerUids','array-contains',uid)` — a rule depending on a

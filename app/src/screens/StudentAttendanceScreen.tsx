@@ -9,6 +9,7 @@ import {
   todayInZone,
   unbreakableDate,
   type AttendanceStatus,
+  type CourseAccess,
 } from "@sabeel/shared";
 import {
   CountsLine,
@@ -183,7 +184,7 @@ export function StudentAttendanceScreen({
                       completed={completions.get(a.recordingId)?.completed ?? false}
                       dueDate={a.dueDate}
                       today={today}
-                      playable={canPlayFromCourse(cls)}
+                      cls={cls}
                     />
                   ) : null}
                 </MarkRow>
@@ -224,19 +225,19 @@ function RecordingLine({
   completed,
   dueDate,
   today,
-  playable,
+  cls,
 }: {
   recordingId: string;
   completed: boolean;
   dueDate: string;
   today: string;
-  playable: boolean;
+  cls: CourseAccess;
 }) {
   const { value: recording, resolved } = useRecordingState(recordingId, "attendanceLine", true);
   if (!resolved) return null;
   return (
     <Text style={styles.listening}>
-      {listeningLine(completed, dueDate, today, playable, playVerb(recording?.media ?? {}))}
+      {listeningLine(completed, dueDate, today, cls, playVerb(recording?.media ?? {}))}
     </Text>
   );
 }
@@ -252,14 +253,14 @@ function listeningLine(
   completed: boolean,
   dueDate: string,
   today: string,
-  playable: boolean,
+  cls: CourseAccess,
   verb: "Watch" | "Listen",
 ): string {
   // Non-breaking spaces around the date AND non-breaking hyphens inside it: it
   // is the whole point of the line, and it is the one token a wrap split — see
   // `unbreakableDate`.
   const when = unbreakableDate(dueDate);
-  switch (grantOutcome({ completed, dueDate }, today, playable)) {
+  switch (grantOutcome({ completed, dueDate }, today, cls, INSTITUTE_TIMEZONE)) {
     case 'complete':
       return 'Recording required · completed';
     // "Missed", the word the student's own home uses for the same session.

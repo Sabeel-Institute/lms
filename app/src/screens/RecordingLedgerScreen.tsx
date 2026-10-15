@@ -4,7 +4,6 @@ import {
   INSTITUTE_TIMEZONE,
   canPlayFromCourse,
   grantOutcome,
-  isOverdue,
   isVisibleToStudents,
   todayInZone,
   type GrantOutcome,
@@ -61,11 +60,17 @@ export function RecordingLedgerScreen({
   // listening off, closes every open grant — the rows say which rather than
   // "Not complete", which reads as still doable.
   const closedBy = closedReason(recording, cls);
+  // Where each row stands, from the one function every ledger asks: a date
+  // that ran out while the class's recordings were closed is closed, not
+  // missed, however the class stands now.
+  const recordingOpen = isVisibleToStudents(recording.status);
+  const outcomeOf = (r: RequiredRow) => grantOutcome(r, today, cls, INSTITUTE_TIMEZONE, recordingOpen);
   // Reached from the cross-cohort library, where the course name alone is ambiguous.
   const cohortName = useCohortName()(cls.cohortId);
   const { loading, failed, accountable, attendees, absentees, lapsed, otherListeners, rollup } = useRecordingLedger(
     recording,
     session,
+    cls,
     today,
   );
   const [filter, setFilter] = useState<LedgerFilter>('notComplete');
@@ -75,8 +80,8 @@ export function RecordingLedgerScreen({
   const rows = useMemo(() => {
     if (filter === 'all') return accountable;
     if (filter === 'notComplete') return accountable.filter((r) => !r.completed);
-    return accountable.filter((r) => !r.completed && isOverdue(r.dueDate, today));
-  }, [accountable, filter, today]);
+    return accountable.filter((r) => grantOutcome(r, today, cls, INSTITUTE_TIMEZONE, recordingOpen) === 'missed');
+  }, [accountable, filter, today, cls, recordingOpen]);
 
   // One write at a time on this screen: the three buttons on an open editor
   // each locked on their own key, so "Remove override" stayed live while
@@ -161,7 +166,7 @@ export function RecordingLedgerScreen({
               key={r.studentUid}
               row={r}
               recordingId={recording.id}
-              today={today}
+              outcome={outcomeOf(r)}
               closedBy={closedBy}
               busy={busy}
               onRun={run}
@@ -262,14 +267,14 @@ function ListenerRow({ row: r }: { row: LedgerRow }) {
 function LedgerRowCard({
   row: r,
   recordingId,
-  today,
+  outcome,
   closedBy,
   busy,
   onRun,
 }: {
   row: RequiredRow;
   recordingId: string;
-  today: string;
+  outcome: GrantOutcome;
   closedBy: ClosedBy;
   busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>, shown: (text: string | null) => void) => void;
@@ -297,13 +302,12 @@ function LedgerRowCard({
     setRefused(null);
     setOpen(false);
   };
-  const outcome = grantOutcome(r, today, closedBy === null);
   const inGrid = useGridCell();
   const writing = busy === `ov-${r.studentUid}` || busy === `rm-${r.studentUid}`;
   const caption = (
     <Text style={styles.sub}>
       {/* THE STATUS LEADS, in its colour: it is what the row is read for. */}
-      <Text style={[styles.status, statusStyle(outcome)]}>{statusLabel(r, today, closedBy)}</Text>
+      <Text style={[styles.status, statusStyle(outcome)]}>{statusLabel(r, outcome, closedBy)}</Text>
       {` · ${listenedText(r.listenedPct)}`}
       {r.lastListened ? ` · last ${fmtDate(r.lastListened)}` : ''}
       {r.pending ? ' · pending sync' : ''}
@@ -409,14 +413,16 @@ function closedReason(recording: RecordingRow, cls: CourseRow): ClosedBy {
   return null;
 }
 
-function statusLabel(r: RequiredRow, today: string, closedBy: ClosedBy): string {
-  switch (grantOutcome(r, today, closedBy === null)) {
+function statusLabel(r: RequiredRow, outcome: GrantOutcome, closedBy: ClosedBy): string {
+  switch (outcome) {
     case 'complete':
       return r.source === 'override' ? 'Completed (override)' : 'Completed';
     case 'missed':
       return 'Missed';
+    // Nothing closes it now only when it closed with its date, while the
+    // class was archived with its recordings closed.
     case 'closed':
-      return `Closed (${closedBy})`;
+      return `Closed (${closedBy ?? 'course archived'})`;
     case 'open':
       return 'Not complete';
   }

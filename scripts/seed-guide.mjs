@@ -53,13 +53,13 @@ await db.collection('cohorts').doc(cohortId).set({ name:'Autumn 2026', archived:
 // A finished term, so the cohort list has an "Archived" section to show. Its
 // course carries effectiveActive:false, which is what the cascade would leave.
 await db.collection('cohorts').doc('guide-cohort-past').set({ name:'Spring 2026', archived:true, createdAt:now-220*day, createdBy:ADMIN });
-await db.collection('courses').doc('guide-past-course').set({ cohortId:'guide-cohort-past', name:'Seerah Survey', archived:false, effectiveActive:false, archivedAccess:false, managerUids:[], createdAt:now-220*day, createdBy:ADMIN });
+await db.collection('courses').doc('guide-past-course').set({ cohortId:'guide-cohort-past', name:'Seerah Survey', archived:false, effectiveActive:false, archivedAccess:false, recordingsClosed:[{ from:now-120*day, to:null }], managerUids:[], createdAt:now-220*day, createdBy:ADMIN });
 const courses={
   hikam:{ id:'guide-hikam', name:'Hikam Foundations' },
   arabic:{ id:'guide-arabic', name:'Arabic I' },
 };
 for (const c of Object.values(courses))
-  await db.collection('courses').doc(c.id).set({ cohortId, name:c.name, archived:false, effectiveActive:true, archivedAccess:false, managerUids:[], createdAt:now-45*day, createdBy:ADMIN });
+  await db.collection('courses').doc(c.id).set({ cohortId, name:c.name, archived:false, effectiveActive:true, archivedAccess:false, recordingsClosed:[], managerUids:[], createdAt:now-45*day, createdBy:ADMIN });
 // enroll all 8 in Hikam; first 4 also in Arabic
 for (const s of students) await db.collection('enrollments').doc(`${s.uid}_${courses.hikam.id}`).set({ studentUid:s.uid, courseId:courses.hikam.id, cohortId, active:true, stretches:[{ from:now-40*day, to:null }], enrolledBy:ADMIN });
 for (const s of students.slice(0,4)) await db.collection('enrollments').doc(`${s.uid}_${courses.arabic.id}`).set({ studentUid:s.uid, courseId:courses.arabic.id, cohortId, active:true, stretches:[{ from:now-40*day, to:null }], enrolledBy:ADMIN });

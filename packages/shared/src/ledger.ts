@@ -8,8 +8,9 @@
  * rather than re-deriving.
  */
 import { isOverdue } from './assignments';
-import { registerExpects } from './membership';
-import { attendanceGroups, type AttendanceStatus, type EnrollmentDoc } from './types';
+import { coversEndOf, registerExpects } from './membership';
+import { canPlayFromCourse } from './structure';
+import { attendanceGroups, type AttendanceStatus, type CourseDoc, type EnrollmentDoc } from './types';
 
 /**
  * A staff override of a student's completion — separate from the student's own
@@ -58,24 +59,30 @@ export interface LedgerRollup {
   missed: number;
 }
 
+/** What a grant's outcome needs to know about its class: may it be played now, and when could it not. */
+export type CourseAccess = Pick<CourseDoc, 'effectiveActive' | 'archivedAccess' | 'recordingsClosed'>;
+
 /**
  * Tally a set of obligations by effective completion and due state.
  *
  * `incomplete` is everything not (effectively) complete; `missed` is the subset
- * of those past their due date — so a missed item is always also incomplete. A
- * completed item is never missed, however far past its due date. Staff and
- * students use the same word, and it says the truth: access closed, so nothing
- * further will happen to that row on its own.
+ * of those whose date ran out while the class could be played
+ * (`grantOutcome`) — so a missed item is always also incomplete. A completed
+ * item is never missed, however far past its due date. Staff and students use
+ * the same word, and it says the truth: access closed, so nothing further will
+ * happen to that row on its own.
  */
 export function rollup(
   items: { completed: boolean; dueDate: string }[],
   today: string,
+  cls: CourseAccess,
+  timeZone: string,
 ): LedgerRollup {
   let complete = 0;
   let missed = 0;
   for (const it of items) {
     if (it.completed) complete++;
-    else if (isOverdue(it.dueDate, today)) missed++;
+    else if (grantOutcome(it, today, cls, timeZone) === 'missed') missed++;
   }
   return {
     total: items.length,
@@ -89,25 +96,28 @@ export function rollup(
  * Where one required listening stands, for a staff ledger row.
  *
  * In the order the answers outrank each other: done is done; a date that has
- * gone is Missed, the word the manual defines by the date, whether or not the
- * class can still be played — nothing stored can tell a miss that predates an
- * archive from one the archive caused, so the row keeps the fact it has; and
- * a grant still inside its date on a course archived with listening OFF is
- * CLOSED, not open: `getPlaybackUrl` refuses the audio, the student's own
- * screens file it under Archived as "no longer required", and a ledger that
- * went on saying "Not complete" or "Listen by <date>" promised something
- * nobody could do. `playable` is `canPlayFromCourse` of the grant's class.
+ * gone is Missed — unless the class's recordings were closed to its students
+ * when it ran out (archived with listening off, `recordingsClosed`): then the
+ * student had nothing they could do, and it is CLOSED, as their own home has
+ * it ("no longer required"), whatever the class is now. A class archived only
+ * after the date leaves the miss as it was. A grant still inside its date on a
+ * class that cannot be played now is CLOSED, not open: `getPlaybackUrl`
+ * refuses the audio, and a ledger that went on saying "Not complete" or
+ * "Listen by <date>" promised something nobody could do. `recordingOpen` is
+ * false for a grant whose recording itself has been withdrawn.
  */
 export type GrantOutcome = 'complete' | 'missed' | 'closed' | 'open';
 
 export function grantOutcome(
   item: { completed: boolean; dueDate: string },
   today: string,
-  playable: boolean,
+  cls: CourseAccess,
+  timeZone: string,
+  recordingOpen = true,
 ): GrantOutcome {
   if (item.completed) return 'complete';
-  if (isOverdue(item.dueDate, today)) return 'missed';
-  if (!playable) return 'closed';
+  if (isOverdue(item.dueDate, today)) return coversEndOf(cls.recordingsClosed, item.dueDate, timeZone) ? 'closed' : 'missed';
+  if (!recordingOpen || !canPlayFromCourse(cls)) return 'closed';
   return 'open';
 }
 
@@ -186,10 +196,12 @@ export function attendanceReport(input: {
   }[];
   enrollments: Pick<EnrollmentDoc, 'studentUid' | 'active' | 'stretches'>[];
   assignments: { studentUid: string; completed: boolean; dueDate: string }[];
+  /** The class, for whether a date that has gone was missed or closed (`grantOutcome`). */
+  course: CourseAccess;
   today: string;
   timeZone: string;
 }): AttendanceReport {
-  const { sessions, enrollments, assignments, today, timeZone } = input;
+  const { sessions, enrollments, assignments, course, today, timeZone } = input;
   /** The CURRENT roster — everyone actively enrolled, marked or not. */
   const rosterUids = enrollments.filter((e) => e.active).map((e) => e.studentUid);
   const enrolmentOf = new Map(enrollments.map((e) => [e.studentUid, e]));
@@ -217,7 +229,7 @@ export function attendanceReport(input: {
     const c = catchUp.get(a.studentUid) ?? { assigned: 0, completed: 0, missed: 0 };
     c.assigned++;
     if (a.completed) c.completed++;
-    else if (isOverdue(a.dueDate, today)) c.missed++;
+    else if (grantOutcome(a, today, course, timeZone) === 'missed') c.missed++;
     catchUp.set(a.studentUid, c);
   }
 

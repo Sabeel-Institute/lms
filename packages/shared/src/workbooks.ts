@@ -2,11 +2,10 @@ import { isOverdue, stampInZone, todayInZone } from './assignments';
 import type { AssignmentDoc, CompletionDoc } from './assignments';
 import { SCALE_LABELS, gradeText, submissionId, tallyCounts, workTally, courseworkCounts } from './coursework';
 import type { CourseworkDoc, GradeDoc, StaffWorkState, SubmissionDoc, WorkTally } from './coursework';
-import { effectiveCompletion } from './ledger';
+import { effectiveCompletion, grantOutcome } from './ledger';
 import type { CompletionOverrideDoc } from './ledger';
 import { isVisibleToStudents, listenedShare } from './recordings';
 import type { ListeningProgressDoc, RecordingDoc } from './recordings';
-import { canPlayFromCourse } from './structure';
 import { inClassWhenDayEnds, joinedOn, leftOn, registerExpects, timesAway } from './membership';
 import type { CourseDoc, EnrollmentDoc, SessionDoc } from './types';
 import type { Cell, CellStyle, SheetSpec, WorkbookSpec } from './xlsx';
@@ -57,7 +56,7 @@ export const WORKBOOK_DEFINITIONS: readonly [term: string, definition: string][]
   ],
   [
     'Closed',
-    'Neither done nor missed: a required recording whose date came while the student was out of the class, or one withdrawn before its date when the class was archived with its recordings closed; an assignment still open when its course was archived.',
+    'Neither done nor missed: a required recording the student could not play when its date came, because they were out of the class or the class was archived with its recordings closed (or cannot play now, for either reason, with its date still ahead); an assignment still open when its course was archived.',
   ],
   ['Catch-up rate', 'Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone.'],
   [
@@ -182,7 +181,6 @@ export function courseStudentStats(
   ctx: WorkbookContext,
 ): StudentCourseStats {
   const enrollment = data.enrollments.find((e) => e.studentUid === studentUid);
-  const playable = canPlayFromCourse(data.course);
   const recordingById = new Map(data.recordings.map((r) => [r.id, r]));
   const completionOf = new Map(
     data.completions.filter((c) => c.studentUid === studentUid).map((c) => [c.recordingId, c]),
@@ -269,13 +267,16 @@ export function courseStudentStats(
     // ran out. One out of the class then could not open the recording: their
     // grant went off when they left, and a date already past did not switch
     // it on again when they came back. The ledger says closed too.
-    else if (isOverdue(session.dueDate, ctx.today)) {
-      outcome = inClassWhenDayEnds(enrollment, session.dueDate, ctx.timeZone) ? 'missed' : 'closed';
-      if (outcome === 'closed') closedBy = 'away';
-    } else if (!grant.active || !playable) {
+    else if (isOverdue(session.dueDate, ctx.today) && !inClassWhenDayEnds(enrollment, session.dueDate, ctx.timeZone)) {
       outcome = 'closed';
-      closedBy = enrollment?.active ? 'class' : 'away';
-    } else outcome = 'open';
+      closedBy = 'away';
+    } else {
+      // The rest is the ledger's answer, from the same function: a date that
+      // ran out while the class's recordings were closed is closed too.
+      const g = grantOutcome({ completed: false, dueDate: session.dueDate }, ctx.today, data.course, ctx.timeZone, grant.active);
+      outcome = g === 'complete' ? 'completed' : g;
+      if (outcome === 'closed') closedBy = isOverdue(session.dueDate, ctx.today) || enrollment?.active ? 'class' : 'away';
+    }
 
     stats.required += 1;
     stats[outcome] += 1;

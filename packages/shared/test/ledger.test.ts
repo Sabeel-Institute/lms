@@ -9,8 +9,11 @@ import {
   type AttendanceStatus,
 } from '../src';
 
+/** A class that has never been archived. */
+const RUNNING = { effectiveActive: true, archivedAccess: false, recordingsClosed: [] };
+const ZONE = 'America/Chicago';
+
 describe('attendanceReport', () => {
-  const ZONE = 'America/Chicago';
   const T = (d: string, hhmm = '12:00') => Date.parse(`${d}T${hhmm}:00-05:00`);
   /** A session on `date`, its register taken that evening unless `submitted` is false. */
   const mkSession = (id: string, date: string, attendance: Record<string, AttendanceStatus>, submitted = true) => ({
@@ -40,6 +43,7 @@ describe('attendanceReport', () => {
         { studentUid: 'b', completed: true, dueDate: '2026-07-01' }, // done
         { studentUid: 'c', completed: false, dueDate: '2026-08-01' }, // still open
       ],
+      course: RUNNING,
       today: '2026-07-15',
       timeZone: ZONE,
     });
@@ -81,6 +85,7 @@ describe('attendanceReport', () => {
         enrolled('newcomer', '2026-07-14'),
       ],
       assignments: [],
+      course: RUNNING,
       today: '2026-07-15',
       timeZone: ZONE,
     });
@@ -117,6 +122,7 @@ describe('attendanceReport', () => {
       // `gone` was unenrolled after both registers were submitted.
       enrollments: [enrolled('a', '2026-07-01'), enrolled('gone', '2026-07-01', '2026-07-10')],
       assignments: [],
+      course: RUNNING,
       today: '2026-07-15',
       timeZone: ZONE,
     });
@@ -136,6 +142,7 @@ describe('attendanceReport', () => {
       sessions: [mkSession('s1', '2026-07-06', { a: 'present', ghost: 'present' }, false)],
       enrollments: [enrolled('a', '2026-07-01')],
       assignments: [],
+      course: RUNNING,
       today: '2026-07-15',
       timeZone: ZONE,
     });
@@ -203,11 +210,11 @@ describe('rollup', () => {
       { completed: false, dueDate: '2026-07-24' }, // missed
       { completed: false, dueDate: '2026-07-30' }, // incomplete, still open
     ];
-    expect(rollup(items, TODAY)).toEqual({ total: 3, complete: 1, incomplete: 2, missed: 1 });
+    expect(rollup(items, TODAY, RUNNING, ZONE)).toEqual({ total: 3, complete: 1, incomplete: 2, missed: 1 });
   });
 
   it('a completed item is never missed, however far past due', () => {
-    expect(rollup([{ completed: true, dueDate: '2000-01-01' }], TODAY)).toEqual({
+    expect(rollup([{ completed: true, dueDate: '2000-01-01' }], TODAY, RUNNING, ZONE)).toEqual({
       total: 1,
       complete: 1,
       incomplete: 0,
@@ -216,11 +223,16 @@ describe('rollup', () => {
   });
 
   it('due today is not yet missed', () => {
-    expect(rollup([{ completed: false, dueDate: '2026-07-25' }], TODAY).missed).toBe(0);
+    expect(rollup([{ completed: false, dueDate: '2026-07-25' }], TODAY, RUNNING, ZONE).missed).toBe(0);
+  });
+
+  it('a date that ran out while the class’s recordings were closed is not missed', () => {
+    const shut = { effectiveActive: false, archivedAccess: false, recordingsClosed: [{ from: Date.parse('2026-07-20T12:00:00-05:00'), to: null }] };
+    expect(rollup([{ completed: false, dueDate: '2026-07-24' }], TODAY, shut, ZONE)).toMatchObject({ incomplete: 1, missed: 0 });
   });
 
   it('empties to zeros', () => {
-    expect(rollup([], TODAY)).toEqual({ total: 0, complete: 0, incomplete: 0, missed: 0 });
+    expect(rollup([], TODAY, RUNNING, ZONE)).toEqual({ total: 0, complete: 0, incomplete: 0, missed: 0 });
   });
 });
 
@@ -234,23 +246,42 @@ describe('rollup', () => {
  */
 describe('grantOutcome', () => {
   const TODAY = '2026-07-25';
+  const at = (d: string) => Date.parse(`${d}T12:00:00-05:00`);
+  /** Archived with listening off on `on`, and still so. */
+  const archivedOn = (on: string) => ({ effectiveActive: false, archivedAccess: false, recordingsClosed: [{ from: at(on), to: null }] });
+
   it('is open while the date is ahead and the class can be played', () => {
-    expect(grantOutcome({ completed: false, dueDate: '2026-07-30' }, TODAY, true)).toBe('open');
+    expect(grantOutcome({ completed: false, dueDate: '2026-07-30' }, TODAY, RUNNING, ZONE)).toBe('open');
   });
 
   it('is closed by an archived class with listening off, however far ahead the date', () => {
-    expect(grantOutcome({ completed: false, dueDate: '2099-01-01' }, TODAY, false)).toBe('closed');
+    expect(grantOutcome({ completed: false, dueDate: '2099-01-01' }, TODAY, archivedOn('2026-07-20'), ZONE)).toBe('closed');
   });
 
-  it('is missed once the date has gone, whether or not the class can still be played', () => {
-    // The date passed: that is the Missed the manual defines, and archiving
-    // afterwards is filing. Nothing here can tell a miss that predates the
-    // archive from one the archive caused, so the row keeps the fact it has.
-    expect(grantOutcome({ completed: false, dueDate: '2026-07-24' }, TODAY, true)).toBe('missed');
-    expect(grantOutcome({ completed: false, dueDate: '2026-07-24' }, TODAY, false)).toBe('missed');
+  it('is closed by a recording withdrawn while the date is ahead', () => {
+    expect(grantOutcome({ completed: false, dueDate: '2026-07-30' }, TODAY, RUNNING, ZONE, false)).toBe('closed');
+  });
+
+  /*
+   * THE DATE AND WHAT COULD BE DONE BY IT. A date that ran out while the class
+   * could be played is the Missed the manual defines, and archiving afterwards
+   * is filing. One that ran out while the class's recordings were closed left
+   * the student nothing to do: their own home says "archived, no longer
+   * required", and the ledger says Closed with it — a week later as on the day.
+   */
+  it('is missed once the date has gone, if the class could be played when it did', () => {
+    expect(grantOutcome({ completed: false, dueDate: '2026-07-24' }, TODAY, RUNNING, ZONE)).toBe('missed');
+    expect(grantOutcome({ completed: false, dueDate: '2026-07-22' }, TODAY, archivedOn('2026-07-24'), ZONE)).toBe('missed');
+  });
+
+  it('is closed once the date has gone, if the class’s recordings were closed when it did', () => {
+    expect(grantOutcome({ completed: false, dueDate: '2026-07-24' }, TODAY, archivedOn('2026-07-20'), ZONE)).toBe('closed');
+    // …and stays so after the class is opened again.
+    const reopened = { ...RUNNING, recordingsClosed: [{ from: at('2026-07-20'), to: at('2026-07-25') }] };
+    expect(grantOutcome({ completed: false, dueDate: '2026-07-24' }, TODAY, reopened, ZONE)).toBe('closed');
   });
 
   it('is complete before anything else is asked', () => {
-    expect(grantOutcome({ completed: true, dueDate: '2000-01-01' }, TODAY, false)).toBe('complete');
+    expect(grantOutcome({ completed: true, dueDate: '2000-01-01' }, TODAY, archivedOn('1999-01-01'), ZONE)).toBe('complete');
   });
 });

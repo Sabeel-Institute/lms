@@ -27,7 +27,7 @@ import type { CompletionOverrideDoc } from './ledger';
 import { effectiveCompletion } from './ledger';
 import type { NotificationPrefsDoc } from './notifications';
 import { canPlayFromCourse } from './structure';
-import { checkEnrolmentStretches } from './membership';
+import { checkEnrolmentStretches, checkStretches } from './membership';
 
 /*
  * THE FIELDS OF EVERY DOCUMENT THE APP READS, as data: each one `required` or
@@ -129,6 +129,7 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     archived: 'required',
     effectiveActive: 'required',
     archivedAccess: 'required',
+    recordingsClosed: { each: { from: 'required', to: 'required' } },
     managerUids: 'required',
     createdAt: 'required',
     createdBy: 'required',
@@ -410,7 +411,7 @@ export const SCREEN_CHECKS: { [C in StoredCollection]?: ((doc: StoredDocs[C], to
     (r) => isEmptyDraft(r),
     (r) => hasLedger(r),
   ],
-  courses: [(c) => canPlayFromCourse(c)],
+  courses: [(c) => checkStretches(c.recordingsClosed, !canPlayFromCourse(c))],
   enrollments: [(e) => checkEnrolmentStretches(e)],
   assignments: [(a, today) => hasRecordingAccess(a, today)],
   listeningProgress: [

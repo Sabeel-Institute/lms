@@ -3,7 +3,9 @@ import { auditedCall } from './audited';
 import { getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
+  canPlayFromCourse,
   deriveEffectiveActive,
+  recordingsClosedAfter,
   type CourseDoc,
   type CohortDoc,
   type StaffUserDoc,
@@ -36,18 +38,22 @@ export async function createCourseRecord(callerUid: string, input: CreateCourseI
   const cohortSnap = await db.collection(COLLECTIONS.cohorts).doc(input.cohortId).get();
   if (!cohortSnap.exists) throw new HttpsError('not-found', 'No such cohort.');
   const cohort = cohortSnap.data() as CohortDoc;
+  const now = Date.now();
+  // Seeded from the cohort: a class created inside an archived cohort is
+  // inactive from birth, without anyone having to remember to run a cascade.
+  const effectiveActive = deriveEffectiveActive(cohort.archived, false);
 
   const doc: CourseDoc = {
     cohortId: input.cohortId,
     name: input.name,
     archived: false,
-    // Seeded from the cohort: a class created inside an archived cohort is
-    // inactive from birth, without anyone having to remember to run a cascade.
-    effectiveActive: deriveEffectiveActive(cohort.archived, false),
+    effectiveActive,
     // Archiving turns student access off unless staff explicitly say otherwise.
     archivedAccess: false,
+    // Closed from birth, then, in an archived cohort.
+    recordingsClosed: effectiveActive ? [] : [{ from: now, to: null }],
     managerUids: [],
-    createdAt: Date.now(),
+    createdAt: now,
     createdBy: callerUid,
   };
   const ref = await db.collection(COLLECTIONS.courses).add(doc);
@@ -96,24 +102,38 @@ export function validateUpdateCourse(data: unknown): UpdateCourseInput {
 export async function applyCourseUpdate(input: UpdateCourseInput) {
   const db = getFirestore();
   const ref = db.collection(COLLECTIONS.courses).doc(input.courseId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'No such class.');
-  const current = snap.data() as CourseDoc;
+  /*
+   * READ AND WRITE IN ONE TRANSACTION: whether the class's recordings just
+   * opened or closed to its students is decided from what it was, and a
+   * cohort archived at the same moment must be read as it is.
+   */
+  const update = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'No such class.');
+    const current = snap.data() as CourseDoc;
 
-  const update: Record<string, unknown> = {};
-  if (input.name !== undefined) update.name = input.name;
-  if (input.archivedAccess !== undefined) update.archivedAccess = input.archivedAccess;
+    const update: Partial<CourseDoc> = {};
+    if (input.name !== undefined) update.name = input.name;
+    if (input.archivedAccess !== undefined) update.archivedAccess = input.archivedAccess;
 
-  if (input.archived !== undefined) {
-    update.archived = input.archived;
-    // The cohort is the other half of the derivation, so it has to be read —
-    // a class archived inside an archived cohort must stay inactive.
-    const cohortSnap = await db.collection(COLLECTIONS.cohorts).doc(current.cohortId).get();
-    const cohortArchived = (cohortSnap.data() as CohortDoc | undefined)?.archived ?? false;
-    update.effectiveActive = deriveEffectiveActive(cohortArchived, input.archived);
-  }
+    if (input.archived !== undefined) {
+      update.archived = input.archived;
+      // The cohort is the other half of the derivation, so it has to be read —
+      // a class archived inside an archived cohort must stay inactive.
+      const cohortSnap = await tx.get(db.collection(COLLECTIONS.cohorts).doc(current.cohortId));
+      const cohortArchived = (cohortSnap.data() as CohortDoc | undefined)?.archived ?? false;
+      update.effectiveActive = deriveEffectiveActive(cohortArchived, input.archived);
+    }
+    // When the class's recordings were closed to its students, kept for good:
+    // a date that ran out inside such a stretch was not missed.
+    const after = { effectiveActive: update.effectiveActive ?? current.effectiveActive, archivedAccess: update.archivedAccess ?? current.archivedAccess };
+    if (canPlayFromCourse(after) !== canPlayFromCourse(current)) {
+      update.recordingsClosed = recordingsClosedAfter(current, after, Date.now());
+    }
 
-  await ref.update(update);
+    tx.update(ref, update);
+    return update;
+  });
   return { courseId: input.courseId, ...update };
 }
 

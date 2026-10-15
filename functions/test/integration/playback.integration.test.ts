@@ -214,7 +214,7 @@ describe('getPlaybackUrl', () => {
     await db()
       .collection(COLLECTIONS.courses)
       .doc(COURSE)
-      .update({ archived: true, effectiveActive: false, archivedAccess: false });
+      .update({ archived: true, effectiveActive: false, archivedAccess: false, recordingsClosed: [{ from: Date.now(), to: null }] });
     expect(await denialOf(await req(STUDENT, 'student'))).toMatch(/archived/i);
   });
 });

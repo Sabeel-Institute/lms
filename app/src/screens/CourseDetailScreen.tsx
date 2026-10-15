@@ -96,7 +96,7 @@ export function CourseDetailScreen({
     [staff, cls.managerUids],
   );
   const today = todayInZone(INSTITUTE_TIMEZONE);
-  const ledger = useCourseLedger(cls.id, today);
+  const ledger = useCourseLedger(cls, today);
   const assignmentsCaption = useAssignmentsCaption(cls);
   const { active: busy, run: once } = useOneAtATime();
   // The export changes nothing the other actions touch, so it has its own

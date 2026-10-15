@@ -226,7 +226,9 @@ for (const co of COHORTS) {
       : c.key === 'ara2' ? [staff[1].uid] : [];
     writes.push((b) => b.set(db.collection('courses').doc(courseId), {
       cohortId, name: c.name, archived: false,
-      effectiveActive: !co.archived, archivedAccess: co.archived,
+      // An archived cohort's classes keep their recordings open here, so
+      // nothing was ever closed to their students.
+      effectiveActive: !co.archived, archivedAccess: co.archived, recordingsClosed: [],
       managerUids, createdAt: now - 300 * day, createdBy: 'demo-seed', ...DEMO }));
     courses.push({ ...c, courseId, cohortId, cohort: co });
   }

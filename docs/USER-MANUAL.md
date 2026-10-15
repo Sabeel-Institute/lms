@@ -505,7 +505,10 @@ The **course page** is your dashboard for that course:
   *disabled*, until you untick them.
 - **Settings** (admins), at the bottom: **Keep recordings open when archived**
   decides whether an archived course's recordings stay open to the students they
-  were required of, and **Archive course** ends the term. The **pencil** beside
+  were required of, and **Archive course** ends the term. A recording whose due
+  date came while the course was archived with its recordings closed reads
+  *Closed* in every ledger and workbook, never *Missed*, even after the course
+  is opened again: its students could not play it. The **pencil** beside
   the course's name renames it. A manager's own course page has neither
   Managers nor Settings.
 
@@ -1034,7 +1037,7 @@ The file's **Definitions** tab reads:
 | **Completed** | The student marked the recording complete, or staff overrode it as complete (the override’s reason is recorded). |
 | **Still open** | Not yet completed, and the due date has not passed. |
 | **Missed deadline** | Not completed by the due date. Access has closed; nothing further can happen to it unless the date is moved. |
-| **Closed** | Neither done nor missed: a required recording whose date came while the student was out of the class, or one withdrawn before its date when the class was archived with its recordings closed; an assignment still open when its course was archived. |
+| **Closed** | Neither done nor missed: a required recording the student could not play when its date came, because they were out of the class or the class was archived with its recordings closed (or cannot play now, for either reason, with its date still ahead); an assignment still open when its course was archived. |
 | **Catch-up rate** | Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone. |
 | **Played** | Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark. |
 | **Assigned** | Students an assignment went to, less any a teacher marked not required. Someone who left the class counts only if they handed something in first. |
