@@ -996,6 +996,47 @@ check(
   `before ${beforeSwitch}s, after ${afterSwitch}s, picture ${JSON.stringify(picture)}`,
 );
 await shot(student, '12b-player-video');
+
+/*
+ * A TITLE TOO LONG FOR ITS LINE, in Arabic, which the institute teaches in.
+ * At rest it shows its BEGINNING, which is its right end, and it slides on
+ * the browser's compositor: moved from JavaScript every frame, a long title
+ * kept a phone's main thread a tenth busy for as long as the player was open.
+ */
+const recordingDocId = (await readCollection('recordings'))[0].name.split('/').pop();
+const titleBox = () =>
+  student.evaluate(() => {
+    const pressable = document.querySelector('[data-testid="player-title"]');
+    const win = pressable?.firstElementChild?.getBoundingClientRect();
+    const text = [...(pressable?.querySelectorAll('*') ?? [])].find((el) => el.children.length === 0 && el.textContent.length > 20);
+    const r = text?.getBoundingClientRect();
+    return win && r ? { winLeft: win.left, winRight: win.right, left: r.left, right: r.right } : null;
+  });
+const ARABIC_TITLE = 'الدرس الأول: أحكام التجويد ومراجعة شاملة لمخارج الحروف وصفاتها مع أمثلة من سورة البقرة';
+await patchField('recordings', recordingDocId, 'title', ARABIC_TITLE);
+await student.waitForFunction((t) => document.querySelector('[data-testid="player-title"]')?.textContent?.includes(t), ARABIC_TITLE, { timeout: 15000 });
+const atRest = await titleBox();
+const cdp = await student.context().newCDPSession(student);
+await cdp.send('Performance.enable');
+const recalcs = async () => (await cdp.send('Performance.getMetrics')).metrics.find((m) => m.name === 'RecalcStyleCount').value;
+const recalcsBefore = await recalcs();
+await student.waitForTimeout(4000);
+const recalcsDuring = (await recalcs()) - recalcsBefore;
+const sliding = await titleBox();
+check(
+  'a long Arabic title rests on its beginning, and slides without the main thread',
+  atRest !== null &&
+    Math.abs(atRest.right - atRest.winRight) <= 2 &&
+    atRest.left < atRest.winLeft - 20 &&
+    sliding !== null &&
+    Math.abs(sliding.right - atRest.right) > 20 &&
+    recalcsDuring < 40,
+  `rest ${JSON.stringify(atRest)}, after 4s ${JSON.stringify(sliding)}, ${recalcsDuring} style recalcs in 4s`,
+);
+await cdp.detach();
+await patchField('recordings', recordingDocId, 'title', 'Session 1');
+await student.waitForFunction(() => document.querySelector('[data-testid="player-title"]')?.textContent?.includes('Session 1'), null, { timeout: 15000 });
+
 await tap(student, 'player-play');
 await student.waitForTimeout(4000);
 const videoPlayed = await elapsedSeconds(student);

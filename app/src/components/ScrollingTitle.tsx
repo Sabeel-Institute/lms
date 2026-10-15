@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
-
-/** How fast a title too long for its line slides, and how long it rests at each end. */
-const PX_PER_SECOND = 35;
-const REST_MS = 1600;
+import { useEffect, useState } from 'react';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import { readsRightToLeft } from '../titleSlide';
+import { SlidingText } from './SlidingText';
 
 /**
  * A TITLE ON ONE LINE, whatever its length (Faisal, 2026-10-14). One that
@@ -18,7 +16,6 @@ export function ScrollingTitle({ text, style, testID }: { text: string; style: S
   const [still, setStill] = useState(false);
   const [box, setBox] = useState(0);
   const [line, setLine] = useState(0);
-  const x = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let live = true;
@@ -31,22 +28,6 @@ export function ScrollingTitle({ text, style, testID }: { text: string; style: S
   }, []);
 
   const overflow = Math.max(0, line - box);
-  useEffect(() => {
-    x.setValue(0);
-    if (expanded || still || overflow < 2) return;
-    const slide = (toValue: number) =>
-      Animated.timing(x, {
-        toValue,
-        duration: (overflow / PX_PER_SECOND) * 1000,
-        easing: Easing.linear,
-        useNativeDriver: Platform.OS !== 'web',
-      });
-    const loop = Animated.loop(
-      Animated.sequence([Animated.delay(REST_MS), slide(-overflow), Animated.delay(REST_MS), slide(0)]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [expanded, still, overflow, x]);
 
   return (
     <Pressable
@@ -75,9 +56,13 @@ export function ScrollingTitle({ text, style, testID }: { text: string; style: S
             showsHorizontalScrollIndicator={false}
             onContentSizeChange={(w) => setLine(w)}
           >
-            <Animated.Text style={[style, { transform: [{ translateX: x }] }]} numberOfLines={1}>
-              {text}
-            </Animated.Text>
+            <SlidingText
+              text={text}
+              style={style}
+              overflow={overflow}
+              rightToLeft={readsRightToLeft(text)}
+              moving={overflow >= 2}
+            />
           </ScrollView>
         </View>
       )}
