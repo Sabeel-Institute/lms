@@ -621,8 +621,36 @@ describe('studentWorkbook', () => {
     expect(rows[1].Grade).toBe('Satisfactory');
     const summary = Object.fromEntries(sheet(wb, 'Summary').rows.map((r) => [String(r[0].v), String(r[1].v)]));
     expect(summary['Assignments, all courses']).toBe(
-      '4 assigned · 2 returned · 1 with the teacher · 1 not in yet · 0 missed · average grade 85%',
+      '4 assigned · 2 returned · 1 with the teacher · 0 not in yet · 1 past due · 0 missed · average grade 85%',
     );
+  });
+
+  /*
+   * THE SUMMARY SPEAKS THE DEFINITIONS TAB'S WORDS. A teacher reading the
+   * Summary to a student says "one not in yet" of an essay whose date has
+   * gone; the same file defines Not in yet as work whose date has not passed,
+   * and its Assignments tab says Past due. Each figure is checked against the
+   * rows of the Assignments tab that carry the same word.
+   */
+  it('the Summary counts each piece of work under the word its Assignments tab gives it', () => {
+    const summary = Object.fromEntries(sheet(wb, 'Summary').rows.map((r) => [String(r[0].v), String(r[1].v)]));
+    const said = new Map(
+      summary['Assignments, all courses']
+        .split(' · ')
+        .map((part) => /^(\d+) (.+)$/.exec(part))
+        .filter((m): m is RegExpExecArray => m !== null)
+        .map((m) => [m[2], Number(m[1])]),
+    );
+    const stands = table(wb, 'Assignments', 1).map((r) => String(r['Where it stands']));
+    const rowsSaying = (...words: string[]) => stands.filter((s) => words.includes(s)).length;
+    expect(said.get('not in yet')).toBe(rowsSaying('Not in yet'));
+    expect(said.get('past due')).toBe(rowsSaying('Past due'));
+    expect(said.get('missed')).toBe(rowsSaying('Missed'));
+    expect(said.get('returned')).toBe(rowsSaying('Returned'));
+    expect(said.get('with the teacher')).toBe(rowsSaying('To grade', 'Graded, to return'));
+    // …and every word it uses is one the Definitions tab defines.
+    const terms = new Set(WORKBOOK_DEFINITIONS.map(([t]) => t.toLowerCase()));
+    for (const word of ['not in yet', 'past due', 'missed', 'returned']) expect(terms.has(word), word).toBe(true);
   });
 
   it('says so when the history read stopped at its cap, before the rows it has', () => {

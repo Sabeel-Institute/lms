@@ -810,7 +810,9 @@ export function studentWorkbook(input: StudentWorkbookInput, ctx: WorkbookContex
       [
         text('Assignments, all courses', 'bold'),
         text(
-          `${work.expected} assigned · ${work.returned} returned · ${work.toGrade + work.toReturn} with the teacher · ${work.notInYet + work.pastDue} not in yet · ${work.missed} missed · average grade ${averageText(work.average)}`,
+          // Each in the Definitions tab's words: past-due work is not "not
+          // in yet", which that tab defines as work whose date is still ahead.
+          `${work.expected} assigned · ${work.returned} returned · ${work.toGrade + work.toReturn} with the teacher · ${work.notInYet} not in yet · ${work.pastDue} past due · ${work.missed} missed · average grade ${averageText(work.average)}`,
         ),
       ],
       [text('Scope', 'bold'), text(ctx.scopeNote ?? 'every course')],
