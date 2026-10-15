@@ -99,6 +99,10 @@ export function CourseDetailScreen({
   const ledger = useCourseLedger(cls.id, today);
   const assignmentsCaption = useAssignmentsCaption(cls);
   const { active: busy, run: once } = useOneAtATime();
+  // The export changes nothing the other actions touch, so it has its own
+  // slot: on the shared one, an Add pressed during an export was dropped
+  // and its row stayed on "Adding…" for good.
+  const exporter = useOneAtATime();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Enrollment id whose removal is being confirmed, if any. */
@@ -141,7 +145,9 @@ export function CourseDetailScreen({
     if (lock.current.has(uid)) return;
     lock.current.add(uid);
     publish();
+    let ran = false;
     void run(`add-${uid}`, async () => {
+      ran = true;
       try {
         await createEnrollment({ studentUid: uid, courseId: cls.id });
       } catch (e) {
@@ -149,6 +155,13 @@ export function CourseDetailScreen({
         lock.current.delete(uid);
         publish();
         throw e;
+      }
+    }).then(() => {
+      // Not run at all, another action holding the page: nothing was sent,
+      // so the row is free again rather than "Adding…" for good.
+      if (!ran) {
+        lock.current.delete(uid);
+        publish();
       }
     });
   };
@@ -300,8 +313,17 @@ export function CourseDetailScreen({
         label="Export workbook"
         variant="quiet"
         hug
-        busy={busy === 'export'}
-        onPress={() => void run('export', () => exportCourseWorkbook(cls, uid))}
+        busy={exporter.active === 'export'}
+        onPress={() =>
+          void exporter.run('export', async () => {
+            setError(null);
+            try {
+              await exportCourseWorkbook(cls, uid);
+            } catch (e) {
+              setError(errorText(e));
+            }
+          })
+        }
       />
 
       <SectionTitle
