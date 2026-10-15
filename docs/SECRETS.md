@@ -7,7 +7,7 @@
 | Thing | Secret? | Where it lives |
 |---|---|---|
 | Firebase web config (apiKey, appId, …) | **No** | Committed in `app/src/firebase-config.ts` — it ships in every client bundle |
-| `google-services.json` | No, but not committed | Regenerated from the console; gitignored because it is per-project and carries OAuth client ids |
+| `google-services.json`, `GoogleService-Info.plist` | No, but not committed | Regenerated from Firebase; gitignored because they are per-project and carry OAuth client ids |
 | Sentry **client** DSNs (web, android) | No, but not committed | Gitignored `app/.env.local` as `EXPO_PUBLIC_SENTRY_DSN_WEB` and `EXPO_PUBLIC_SENTRY_DSN_ANDROID`. Send-only, and they ship in the bundle anyway; kept out of git so they can rotate per environment |
 | Sentry **functions** DSN | **Yes** | Secret Manager as `SENTRY_DSN` (server-side, never shipped to a client) |
 | Sentry **auth token** (source-map upload) | **Yes** | Gitignored `app/android/sentry.properties` (`auth.token=`). An **org** token (org `devnull-ke`), shared across all the Sabeel Sentry projects; the web pipeline reads it via `SENTRY_PROPERTIES`, overriding the project to `sabeel-recording-web` |
@@ -117,6 +117,7 @@ or only with effort:
 | `app/android/sentry.properties` | Sentry org auth token | Create a new token in Sentry |
 | `functions/.secret.local` | `SENTRY_DSN=disabled` and `R2_*` placeholders for the emulator | Recreate from this file |
 | `app/google-services.json`, `app/android/app/google-services.json` | Firebase Android config | `firebase apps:sdkconfig ANDROID 1:226338267845:android:a85d5935fb8f4555cac6ac` |
+| `app/GoogleService-Info.plist` | Firebase iOS config | `firebase apps:sdkconfig IOS 1:226338267845:ios:13ce4f7992ecd4decac6ac --out app/GoogleService-Info.plist` |
 | `~/.config/.wrangler/config/default.toml` | Cloudflare login | Log in again (`docs/DEV-TOOLING.md`) |
 
 Server secrets live in Secret Manager and are not on this machine.
