@@ -13,13 +13,31 @@
 // which is where this guard was written; copied here 2026-08-28 because the
 // port is shared and the guard was not.)
 import { execSync } from 'node:child_process';
-import { readlinkSync } from 'node:fs';
+import { readlinkSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const PORT = 8081;
-const APP_DIR = resolve(import.meta.dirname, '..', 'app');
+// Real path: on macOS the checkout is reachable both as /Users/… and through
+// /Volumes/<disk>/Users/…, and lsof reports a cwd by its real path.
+const APP_DIR = realpathSync(resolve(import.meta.dirname, '..', 'app'));
+const MAC = process.platform === 'darwin';
 
 function pidsOnPort(port) {
+  // macOS has no `ss` (and no /proc), so there the answer comes from lsof,
+  // which exits 1 when nothing listens. Without this branch `ss` failed to
+  // start, the catch read that as "nothing listening", and the guard passed
+  // on the Mac whatever held the port.
+  if (MAC) {
+    try {
+      return execSync(`lsof -nP -ti TCP:${port} -sTCP:LISTEN`, { stdio: ['ignore', 'pipe', 'ignore'] })
+        .toString()
+        .split('\n')
+        .filter(Boolean)
+        .filter((v, i, a) => a.indexOf(v) === i);
+    } catch {
+      return []; // nothing listening
+    }
+  }
   try {
     // `ss`, not `lsof`. This guard protects the ONE port that cannot be moved
     // into a per-repo block (Metro 8081, which the Android emulator reaches
@@ -39,6 +57,10 @@ function pidsOnPort(port) {
 
 function cwdOf(pid) {
   try {
+    if (MAC) {
+      const out = execSync(`lsof -a -p ${pid} -d cwd -Fn`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+      return out.split('\n').find((l) => l.startsWith('n'))?.slice(1) || null;
+    }
     return readlinkSync(`/proc/${pid}/cwd`);
   } catch {
     return null;

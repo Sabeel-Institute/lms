@@ -17,8 +17,31 @@ set -uo pipefail
 PORTS=(61300 61301 61302 61303 61304 61305 61306 61307 61320 61321 61322 61323 61324 61325 61326)
 CALLER_PIDS=" $$ $PPID "
 
-pids_on_port() {
-  ss -lptn "sport = :$1" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u
+# Who holds a port: `ss` on Linux, `lsof` on macOS, which has no `ss`. Checked
+# HERE, at the top, rather than inside the helper: an `exit` within `$(...)`
+# ends only the substitution, so a helper that cannot look returns an empty list
+# and reads as "the port is free" -- which on the Mac it did, every time, until
+# the lsof branch existed.
+if command -v ss >/dev/null 2>&1; then
+  pids_on_port() {
+    ss -lptn "sport = :$1" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u
+  }
+elif command -v lsof >/dev/null 2>&1; then
+  pids_on_port() {
+    lsof -nP -ti "TCP:$1" -sTCP:LISTEN 2>/dev/null | sort -u
+  }
+else
+  echo "free-emulator-ports: neither ss nor lsof found; cannot see who holds a port" >&2
+  exit 1
+fi
+
+# A process's working directory: /proc on Linux, lsof on macOS.
+cwd_of() {
+  if [ -e "/proc/$1/cwd" ]; then
+    readlink "/proc/$1/cwd" 2>/dev/null
+  else
+    lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p'
+  fi
 }
 
 # The leftovers that hold NO port, and so survive everything above.
@@ -65,9 +88,9 @@ reap_orphaned_runtimes() {
     # is legitimately in progress. Verified against a live emulator, not assumed.
     ps -p "$ppid" -o args= 2>/dev/null | grep -q 'firebase' && continue
     case "$CALLER_PIDS" in *" $pid "*) continue ;; esac
-    [ "$(readlink "/proc/$pid/cwd" 2>/dev/null)" = "$repo_functions" ] || continue
+    [ "$(cwd_of "$pid")" = "$repo_functions" ] || continue
     orphans+=("$pid")
-  done < <(ps -eo pid,ppid,args --no-headers | grep '[f]irebase-tools')
+  done < <(ps -eo pid=,ppid=,args= | grep '[f]irebase-tools')
 
   [ ${#orphans[@]} -eq 0 ] && return 0
   echo "reaping ${#orphans[@]} orphaned functions runtime(s): ${orphans[*]}"
