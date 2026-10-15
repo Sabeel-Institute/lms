@@ -64,13 +64,13 @@ export function initDb(app: FirebaseApp): Firestore {
  * account, to go when they next sign in. Either way the address goes back to
  * the root, so the next person does not land on the last one's page.
  */
-export async function afterSignOut(db: Firestore, drained: boolean): Promise<void> {
+export async function afterSignOut(db: Firestore, drained: boolean, to = '/'): Promise<void> {
   if (!drained) {
-    window.history.replaceState(null, '', '/');
+    window.history.replaceState(null, '', to);
     return;
   }
   await dropCache(db, '/');
-  window.location.replace('/');
+  window.location.replace(to);
 }
 
 /**

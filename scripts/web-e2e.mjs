@@ -2625,6 +2625,8 @@ await bilalOpen.getByTestId('signin-email').fill('bilal@example.com');
 await bilalOpen.getByTestId('signin-password').fill('BilalPass123!');
 await tap(bilalOpen, 'signin-student');
 await bilalOpen.getByTestId('tab-classes').waitFor({ timeout: 30000 });
+let bilalLoads = 0;
+bilalOpen.on('load', () => bilalLoads++);
 
 // Disabling moves them into a section that is CLOSED, and closed means
 // unmounted: the row must be unreachable until the section is expanded.
@@ -2640,6 +2642,32 @@ const toldDisabled = await bilalOpen
   .waitFor({ timeout: 30000 })
   .then(() => true, () => false);
 check('a student disabled while signed in is told so on the sign-in screen', toldDisabled);
+/*
+ * AND THE BROWSER KEEPS NOTHING OF THEM. Ended without Sign out, the cache
+ * stayed: on an office PC, everything the session had read. The page is
+ * started again on an emptied cache, as at Sign out, and still says why.
+ */
+const bilalCache = await bilalOpen.evaluate(async () => {
+  const dbs = await indexedDB.databases();
+  const name = dbs.map((d) => d.name).find((n) => n?.startsWith('firestore/'));
+  if (!name) return 0;
+  return new Promise((resolve) => {
+    const open = indexedDB.open(name);
+    open.onsuccess = () => {
+      const store = open.result.objectStoreNames.contains('remoteDocumentsV14') ? 'remoteDocumentsV14' : null;
+      if (!store) return resolve(-2);
+      const count = open.result.transaction(store).objectStore(store).count();
+      count.onsuccess = () => resolve(count.result);
+      count.onerror = () => resolve(-1);
+    };
+    open.onerror = () => resolve(-1);
+  });
+});
+check(
+  'the page of a student disabled while signed in starts again with nothing of theirs cached',
+  bilalLoads >= 1 && bilalCache === 0,
+  JSON.stringify({ bilalLoads, bilalCache }),
+);
 await bilalOpen.context().close();
 await goHome(admin);
 await tap(admin, 'tab-people');

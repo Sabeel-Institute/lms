@@ -98,6 +98,35 @@ export async function signOut(): Promise<void> {
 }
 
 /**
+ * A session ended by the server rather than by Sign out: what Sign out leaves
+ * behind, nothing, is left behind here too, once nothing is waiting to be
+ * sent. A write still waiting stays with the cache, as at Sign out.
+ */
+async function endedElsewhere(why: SessionEnd | null): Promise<void> {
+  const drained = await Promise.race([
+    waitForPendingWrites(db).then(
+      () => true,
+      () => false,
+    ),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SIGN_OUT_DRAIN_MS)),
+  ]);
+  if (drained) await forgetEveryAnswer();
+  // The page starts again on the web; why it ended goes with it, so the
+  // sign-in screen still says the account was disabled.
+  await afterSignOut(db, drained, why ? `/?ended=${why}` : '/');
+}
+
+/** Why the last session ended, carried into a page started again after it. */
+function endedOnArrival(): SessionEnd | null {
+  const place = (globalThis as { location?: Location }).location;
+  if (!place?.search) return null;
+  const why = new URLSearchParams(place.search).get('ended');
+  if (why !== 'refused' && why !== 'disabled') return null;
+  globalThis.history?.replaceState(null, '', place.pathname);
+  return why;
+}
+
+/**
  * The profile listener's errors, marked expected when the session ended it as
  * `liveQuery` marks its own: Try again ends Firestore under it while signed
  * in (`reloadFromServer`).
@@ -198,7 +227,7 @@ export function useSession(): Session {
      * before they can do anything, so for them the same error is a revoked
      * session, not a refusal, and the message would be false.
      */
-    let ended: SessionEnd | null = null;
+    let ended: SessionEnd | null = endedOnArrival();
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       const gen = chain.claim();
@@ -352,6 +381,13 @@ export function useSession(): Session {
             ended = why;
             setSession((s) => (s.phase === 'signedOut' ? { phase: 'signedOut', ended: why } : s));
           }
+          /*
+           * ENDED HERE WITHOUT SIGN OUT — disabled, deleted, or signed out by
+           * a password changed elsewhere — and the browser kept everything
+           * the session had read: an office PC, the whole student directory.
+           * The same ending Sign out has, from the tab that found out.
+           */
+          if (provisioned && auth.currentUser === null) void endedElsewhere(why);
           console.warn('session poll', code ?? (e as Error).message);
           /*
            * AND TRY AGAIN. Only `publish` arms the chain, so a poll that failed
