@@ -30,7 +30,7 @@ import {
 import { idTokenFor } from './emulatorToken';
 import { clearPrefix, objectExists, objectInfo, uploadIsOpen } from './mediaObjects';
 import { uploadFile } from './uploadVia';
-import { sample } from '../mediaSamples';
+import { cameraData, sample } from '../mediaSamples';
 
 beforeAll(() => {
   if (getApps().length === 0) initializeApp({ projectId: EMULATOR_PROJECT_ID });
@@ -116,6 +116,12 @@ describe('a file that plays', () => {
   it.each(['chapters', 'subtitles', 'timecode'] as const)('takes an H.264 and AAC video that also carries %s', async (name) => {
     const id = await newDraft();
     const { itemId } = await uploadFile(ADMIN, id, sample(name), 'video/mp4');
+    expect(await item(id, itemId)).toMatchObject({ kind: 'video', status: 'ready', durationSec: 3 });
+  });
+
+  it('takes an H.264 and AAC video carrying a camera’s own data track, as a GoPro’s does', async () => {
+    const id = await newDraft();
+    const { itemId } = await uploadFile(ADMIN, id, cameraData(), 'video/mp4');
     expect(await item(id, itemId)).toMatchObject({ kind: 'video', status: 'ready', durationSec: 3 });
   });
 
@@ -253,17 +259,28 @@ describe('a file phones cannot play', () => {
 
 describe('write once', () => {
   /*
-   * CONFIRMED TWICE AT ONCE: a client retrying, or the HTTP layer under it
-   * sending the POST again. The second read the ready file as removed and
-   * deleted its bytes; every link to it then answered 404.
+   * CONFIRMED TWICE: a client retrying, or the HTTP layer under it sending the
+   * POST again. Both answers are what the app acts on: an error on either,
+   * and the app removes the file that landed. So both must be the success,
+   * whether the second overlaps the first or follows it.
    */
-  it('confirmed twice at once, it is ready and its bytes stay', async () => {
+  it('confirmed twice at once, both answer ready and its bytes stay', async () => {
     const id = await newDraft();
     const { itemId, parts } = await uploadFile(ADMIN, id, sample('m4a'), 'audio/mp4', { finalize: false });
-    await Promise.allSettled([
+    const answers = await Promise.allSettled([
       finalizeUpload({ recordingId: id, itemId, parts }),
       finalizeUpload({ recordingId: id, itemId, parts }),
     ]);
+    expect(answers.map((a) => a.status)).toEqual(['fulfilled', 'fulfilled']);
+    expect((await item(id, itemId))?.status).toBe('ready');
+    expect(await objectExists(`media/${id}/${itemId}`)).toBe(true);
+  });
+
+  it('confirmed again after it finished, it answers the same, and nothing is undone', async () => {
+    const id = await newDraft();
+    const { itemId, parts } = await uploadFile(ADMIN, id, sample('m4a'), 'audio/mp4', { finalize: false });
+    const first = await finalizeUpload({ recordingId: id, itemId, parts });
+    await expect(finalizeUpload({ recordingId: id, itemId, parts })).resolves.toEqual(first);
     expect((await item(id, itemId))?.status).toBe('ready');
     expect(await objectExists(`media/${id}/${itemId}`)).toBe(true);
   });

@@ -319,13 +319,23 @@ async function discard(input: { recordingId: string; itemId: string }, upload: U
  * length is the probe's, read from the file — not the uploader's device's.
  */
 export async function finalizeUpload(input: FinalizeUploadInput) {
+  /*
+   * A CONFIRMATION SENT TWICE IS ONE CONFIRMATION, answered alike both times.
+   * The HTTP layer resends after a dropped connection; the second call, after
+   * the first had finished, was told the upload was not in progress, and the
+   * app, taking that as a failure, removed the file that had just landed.
+   */
+  const rec = (await recordingRef(input.recordingId).get()).data() as RecordingDoc | undefined;
+  const item = rec?.media[input.itemId];
+  if (item?.status === 'ready') {
+    return { recordingId: input.recordingId, itemId: input.itemId, sizeBytes: item.sizeBytes, durationSec: item.durationSec };
+  }
   const upload = await openUpload(input.recordingId, input.itemId);
   const numbers = input.parts.map((p) => p.partNumber).sort((a, b) => a - b);
   if (numbers.length !== upload.partCount || numbers.some((n, i) => n !== i + 1)) {
     throw new HttpsError('invalid-argument', `This upload has ${upload.partCount} parts, and every one must be listed once.`);
   }
-  const rec = (await recordingRef(input.recordingId).get()).data() as RecordingDoc | undefined;
-  if (rec?.media[input.itemId]?.status !== 'uploading') {
+  if (item?.status !== 'uploading') {
     throw new HttpsError('failed-precondition', 'That file is not waiting to be confirmed.');
   }
   try {
@@ -335,7 +345,11 @@ export async function finalizeUpload(input: FinalizeUploadInput) {
       [...input.parts].sort((a, b) => a.partNumber - b.partNumber),
     );
   } catch {
-    throw new HttpsError('failed-precondition', 'The file did not arrive whole. Remove it and upload it again.');
+    // Joined already by the other call for the same upload, running beside
+    // this one: the bucket will not join it twice, and the file is there.
+    if (!(await head(upload.storageKey))) {
+      throw new HttpsError('failed-precondition', 'The file did not arrive whole. Remove it and upload it again.');
+    }
   }
   const object = await head(upload.storageKey);
   if (!object) throw new HttpsError('failed-precondition', 'No file found for that upload.');

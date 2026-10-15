@@ -83,6 +83,23 @@ const SPECS = {
 
 export type SampleName = keyof typeof SPECS;
 
+/**
+ * H.264 + AAC with a camera's own data track, as a GoPro writes beside its
+ * picture ("fdsc", "gpmd"): the timecode sample with its timecode track's
+ * sample entry renamed, so the track is one no list of known names holds.
+ * Its handler still says it is not a picture, which is what decides.
+ */
+export function cameraData(): Uint8Array {
+  const bytes = sample('timecode').slice();
+  const text = Buffer.from(bytes).toString('latin1');
+  for (let at = text.indexOf('stsd'); at >= 0; at = text.indexOf('stsd', at + 4)) {
+    const entry = text.indexOf('tmcd', at);
+    if (entry >= 0 && entry - at < 24) bytes.set(Buffer.from('fdsc', 'latin1'), entry);
+  }
+  if (Buffer.from(bytes).includes(Buffer.from('fdsc', 'latin1'))) return bytes;
+  throw new Error('cameraData: the timecode sample has no timecode entry to rename');
+}
+
 /** A one-page PDF and a plain-text note, which need no ffmpeg. */
 export const PDF = new TextEncoder().encode(
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',

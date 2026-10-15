@@ -75,23 +75,25 @@ export async function probeObject(key: string, sizeBytes: number): Promise<Probe
   } catch (e) {
     throw new UnreadableMedia((e as Error).message);
   }
+  const container = format.container ?? '';
+  // Asked of the file's own boxes, which the tag parser does not read: an
+  // MP4's length, its H.264 profiles and which of its tracks are pictures.
+  const mp4 = MP4_FAMILY.test(container) ? await mp4Facts((first, last) => readRange(key, first, last), sizeBytes) : null;
   // Chapters, subtitles, captions and timecode are neither picture nor sound,
   // and play no part in whether a phone can play the file.
   const tracks = (format.trackInfo ?? []).filter((t) => !NEITHER.has(fourcc(t.codecName) ?? ''));
   // The parser names a codec it has no word for by its fourcc in angle
-  // brackets — "<avc1>", "<hvc1>" — and marks audio tracks as type 2. A video
-  // track is one it did not mark as audio.
-  const video = tracks.filter((t) => t.type !== 2 && fourcc(t.codecName));
-  const audio = tracks.filter((t) => !video.includes(t));
-  const container = format.container ?? '';
-  // Asked of the file's own boxes, which the tag parser does not read: an
-  // MP4's length and its H.264 profiles.
-  const mp4 = MP4_FAMILY.test(container) ? await mp4Facts((first, last) => readRange(key, first, last), sizeBytes) : null;
+  // brackets — "<avc1>", "<hvc1>" — and marks audio tracks as type 2. It does
+  // not say which tracks are pictures: an MP4's own handlers do, and a
+  // camera's data track the list above has never heard of is not one. For
+  // anything else, a picture is a track it did not mark as audio.
+  const video = mp4 ? [] : tracks.filter((t) => t.type !== 2 && fourcc(t.codecName));
+  const audio = mp4 ? tracks.filter((t) => t.type === 2) : tracks.filter((t) => !video.includes(t));
   return {
     container,
     codec: format.codec ?? null,
     durationSec: format.duration && format.duration > 0 ? Math.round(format.duration) : null,
-    videoCodecs: video.map((t) => fourcc(t.codecName) as string),
+    videoCodecs: mp4 ? mp4.pictures : video.map((t) => fourcc(t.codecName) as string),
     audioCodecs: audio.map((t) => fourcc(t.codecName) ?? t.codecName ?? ''),
     movieDurationSec: mp4?.durationSec ?? null,
     avcProfiles: mp4?.avcProfiles ?? [],

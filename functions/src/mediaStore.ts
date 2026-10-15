@@ -78,6 +78,18 @@ function credentials(access: Access) {
   };
 }
 
+/*
+ * EVERY CALL TO THE BUCKET HAS A TIME LIMIT. The SDK's own default is none:
+ * one request on a connection that never answered held a file's confirmation
+ * for the Function's whole five minutes, and the app then gave the file up.
+ * Each try now ends after STORE_CALL_MS and the SDK tries once more on a
+ * fresh connection, so a stalled call costs seconds. Joining an upload's
+ * parts can take longer for a large file, so it has a longer limit of its own.
+ */
+const STORE_CONNECT_MS = 5_000;
+const STORE_CALL_MS = 15_000;
+const STORE_JOIN_MS = 120_000;
+
 const clients = new Map<Access, S3Client>();
 
 function client(access: Access): S3Client {
@@ -95,6 +107,8 @@ function client(access: Access): S3Client {
       // pre-signed URLs. Send them only where an operation requires them.
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
+      requestHandler: { connectionTimeout: STORE_CONNECT_MS, requestTimeout: STORE_CALL_MS, throwOnRequestTimeout: true },
+      maxAttempts: 2,
     });
     clients.set(access, c);
   }
@@ -204,6 +218,7 @@ export async function completeMultipart(
       UploadId: uploadId,
       MultipartUpload: { Parts: parts.map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })) },
     }),
+    { requestTimeout: STORE_JOIN_MS },
   );
 }
 
