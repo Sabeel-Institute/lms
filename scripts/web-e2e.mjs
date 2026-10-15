@@ -1056,6 +1056,12 @@ const titleBox = () =>
 const ARABIC_TITLE = 'الدرس الأول: أحكام التجويد ومراجعة شاملة لمخارج الحروف وصفاتها مع أمثلة من سورة البقرة';
 await patchField('recordings', recordingDocId, 'title', ARABIC_TITLE);
 await student.waitForFunction((t) => document.querySelector('[data-testid="player-title"]')?.textContent?.includes(t), ARABIC_TITLE, { timeout: 15000 });
+// Once its new width is measured and its slide has begun: it rests 1.6 s first.
+await student.waitForFunction(
+  () => [...(document.querySelector('[data-testid="player-title"]')?.querySelectorAll('*') ?? [])].some((el) => el.getAnimations().length > 0),
+  null,
+  { timeout: 15000 },
+);
 const atRest = await titleBox();
 const cdp = await student.context().newCDPSession(student);
 await cdp.send('Performance.enable');

@@ -2208,6 +2208,25 @@ describe('Play while the file is on its way', () => {
     expect(shown).toMatchObject({ ready: true, playing: false });
   });
 
+  /*
+   * A CLOCK RUNNING AHEAD OF THE SERVER'S sees every link it is given as
+   * already out of date. Checked again after the fresh link had loaded, the
+   * Play tapped early fetched another, and another, and never played.
+   */
+  it('a clock past the link it was just given plays it, rather than fetching another for ever', async () => {
+    const pb = await load();
+    callable.mockImplementation(() => Promise.resolve({ data: { url: 'https://signed/audio.m4a', expiresAt: nowMs - 60_000 } }));
+    holdLoad = true;
+    pb.openPlayback(recording('rec-a'));
+    await flush();
+    pb.playback.play();
+    players[0].finishLoad?.();
+    holdLoad = false;
+    for (let i = 0; i < 10; i += 1) await flush();
+    expect(callable.mock.calls.length).toBeLessThanOrEqual(1);
+    expect(players[0].playing).toBe(true);
+  });
+
   it('is not kept over a file that fails as it loads', async () => {
     const pb = await load();
     pb.usePlayback();

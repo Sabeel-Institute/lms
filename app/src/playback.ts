@@ -707,7 +707,7 @@ export function openPlayback(req: OpenRequest): void {
       loadedOk = true;
       if (state.error) return;
       set({ ready: true, positionMs: position });
-      if (state.startWhenReady) start();
+      if (state.startWhenReady) begin();
     } catch (e) {
       // `errorText`, like every other failure a person reads: an offline tap on
       // a lecture, or any unhandled throw in `getPlaybackUrl`, otherwise put the
@@ -858,7 +858,7 @@ function switchTo(item: MediaItem, startMs: number, play: boolean): void {
     set({ ready: true });
     // The new file is where the listener now is.
     keepHere();
-    if (state.startWhenReady) start();
+    if (state.startWhenReady) begin();
   })();
 }
 
@@ -966,12 +966,24 @@ export function formatClock(ms: number): string {
   return `${h > 0 ? `${h}:` : ''}${mm}:${String(s).padStart(2, '0')}`;
 }
 
-/** Play the loaded file: Play itself, and a Play tapped before the file could. */
+/**
+ * Play, as Play itself does: on a link that will not last the rest of the
+ * file, a fresh one first, and the file plays once it has loaded (`begin`).
+ */
 function start(): void {
   if (state.ready && !urlLasts(position)) {
     renew(position, true);
     return;
   }
+  begin();
+}
+
+/**
+ * Play the file loaded, with no question about its link: it has just been
+ * given one. Asked again, a device whose clock runs ahead of the server's
+ * took every fresh link for an old one, fetched another, and never played.
+ */
+function begin(): void {
   lastTick = Date.now();
   player?.play();
   // An error beside a ready transport is a switch that could not be made,
