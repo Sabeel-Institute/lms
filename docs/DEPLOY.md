@@ -142,6 +142,9 @@ A release bumps one version and ships it to both surfaces. In order:
 
    `functions/test/unit/appVersion.test.ts` fails if the two files disagree on
    either, so forgetting one is caught by `npm test` rather than on a device.
+   Bump the line under the manual's title too (`docs/USER-MANUAL.md`):
+   `render-manual.py` refuses to render while it disagrees with `app.json`,
+   and a render chained to a copy step then ships the previous PDF.
 
    Commit the bump **first**, so the build carries that commit: the sign-in label
    is `v<version> · <commit>`, injected from `EXPO_PUBLIC_COMMIT` (the
@@ -206,6 +209,13 @@ A release bumps one version and ships it to both surfaces. In order:
        --title "vX.Y.Z — Android" --notes-file NOTES.md --latest \
        /tmp/sabeel-institute-lms-arm64-v8a.apk /tmp/sabeel-institute-lms-universal.apk
      ```
+     **This clone holds the old recording app's tags, `v0.1.0`–`v0.7.1`**,
+     from the history it carries, and they are not this repo's: `git tag
+     vX.Y.Z` fails with "already exists" for a version the old app used, or a
+     local tag points at an old-app commit. Publishing a release whose tag does
+     not exist on GitHub yet creates it there at the release's target; then
+     `git fetch origin --tags --force` brings the local tags in line. The old
+     app keeps its own copies in its own repository.
      **The latest release, never a pre-release.** The download page links
      through `releases/latest`, which skips a pre-release, so a build published
      as one answers its download link with a 404.

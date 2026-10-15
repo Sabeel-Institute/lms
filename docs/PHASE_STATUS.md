@@ -1879,6 +1879,26 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-15 — **v0.1.2 released** (`76f06f0`; Android latest release,
+  website, download page and manual). The device pass ran on the AVD, every
+  step of it but the staff export: the emulator ignores its own network
+  speed setting at run time and at boot, so a throttling proxy on the host
+  (the AVD's `http_proxy`) held it to 1.6 Mbit/s. At that speed a tap during
+  loading started the 3-hour recording by itself in 17 to 22 s; it played
+  60 s with the screen off and answered the lock-screen controls; killed
+  mid-play, it sent its last 12 s of listening at the next launch and
+  reopened at the same second; a bookmark set on it was offered in a browser
+  and taken there while each kept its own place, and the two devices'
+  listening added up; double taps on Mark complete and Unmark wrote one
+  event each; offline it said it could not reach the server, then played;
+  signed out and back in, it opened at the start with the bookmark offered.
+  The pass found one fault, fixed before release (`76f06f0`): Android's own
+  spinner drew its ring on the Play button's rim, and most of the wait came
+  after the file counted as loaded, under a bare "Loading…". The ring is the
+  app's own now, and buffering gets it and the sentence too. Before
+  release: browser 256 checks, the sweep 2087, `check:queries`,
+  `check:documents`, `check:push`, `smoke:prod`; no new Sentry issues.
+
 - 2026-10-15 — **Faisal's follow-ups to the hunt: done and deployed**
   (`f95b8a0`–`fe7347e`; rules, functions and hosting deployed, live at
   `v0.1.1 · fe7347e`). Of the bugs found and not fixed, he chose: a double
