@@ -1873,6 +1873,38 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-15 — **Faisal's follow-ups to the hunt: done and deployed**
+  (`f95b8a0`–`fe7347e`; rules, functions and hosting deployed, live at
+  `v0.1.1 · fe7347e`). Of the bugs found and not fixed, he chose: a double
+  tap on Mark complete no longer undoes itself; the place is each device's
+  own, kept every second, with one bookmark per recording to carry it to
+  another device, and listening counted per sitting and added up (a tab
+  left open and taken up again counted nothing it played); Play is taken
+  while a long recording's index loads, with a ring round it and the wait
+  said; a long title slides on the browser's compositor (10% of a phone's
+  main thread before) and an Arabic one rests on its beginning; the
+  exports: each enrolment keeps every stretch in the class, so the
+  attendance report and the workbooks agree on who was in it when, a
+  second removal no longer charges Missed, past due is not "not in yet", a
+  manager's workbook for a student in 20+ of their classes works, and a
+  date that ran out while a course was archived reads Closed. A link just
+  fetched now plays on a device whose clock runs ahead (found by the e2e's
+  midnight run, on code not yet shipped). Migrated on live: 56 progress
+  rows to one `earlier` sitting each, 222 enrolments and 53 classes to
+  stretches (2 inferred where the audit log fell short); `check:documents`
+  clean. Suites: unit 875, `test:emulator` 710 passed and 2 skipped (in 5
+  full runs since, 3 had one timing failure each — a reset's transaction
+  lock timeout twice, a trigger slower than its 10 s once — each in a
+  different file and passing on rerun; one run of the commit before was
+  clean, and the new tests add about 7% more trigger work), browser 256
+  checks, the sweep 2087, lint, typecheck, knip; each new rule shown to
+  fail its test when weakened. On live: `smoke:prod`, `check:queries`, and
+  a test student's three sittings adding up, a bookmark, and a reload
+  resuming. The four help films that show the player, and the manual's
+  player figures and PDF, are redone. Not yet on Android: the player
+  changes need the device pass, and the released v0.1.1 writes progress in
+  the old shape, which the rules now refuse.
+
 - 2026-10-14 — **Bug hunt, round 2: done and deployed — the hunt ends here**
   (`01da30f`–`4d1a94c`; rules, functions and hosting deployed, live at
   `v0.1.1 · 4d1a94c`). Faisal set two rounds as the limit. Eight reviewers
