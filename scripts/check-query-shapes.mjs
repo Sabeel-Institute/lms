@@ -248,7 +248,6 @@ const shapes = [
   ['coursework — Today across managed courses', () => db.collection('coursework').where('courseId', 'in', [ID])],
   ['submissions — a student’s own (To do)', () => db.collection('submissions').where('studentUid', '==', ID).where('active', '==', true)],
   ['submissions — a course’s (course workbook)', () => db.collection('submissions').where('courseId', '==', ID)],
-  ['submissions — handed in, Today', () => db.collection('submissions').where('courseId', 'in', [ID]).where('state', '==', 'handedIn')],
   ['submissions — one assignment’s (server)', () => db.collection('submissions').where('courseworkId', '==', ID)],
   ['submissions — one assignment’s (grading desk)', () => db.collection('submissions').where('courseId', '==', ID).where('courseworkId', '==', ID)],
   ['submissions — a student in a course (reconcile, student workbook)', () => db.collection('submissions').where('courseId', '==', ID).where('studentUid', '==', ID)],
@@ -261,8 +260,8 @@ const shapes = [
   ['grades — a course’s (course workbook)', () => db.collection('grades').where('courseId', '==', ID)],
   ['grades — one assignment’s (tallies, server)', () => db.collection('grades').where('courseworkId', '==', ID)],
   ['courseworkTallies — a course’s (staff pages)', () => db.collection('courseworkTallies').where('courseId', '==', ID)],
+  ['courseworkTallies — Today across managed courses', () => db.collection('courseworkTallies').where('courseId', 'in', [ID])],
   ['grades — a student in a course (student workbook)', () => db.collection('grades').where('studentUid', '==', ID).where('courseId', '==', ID)],
-  ['grades — Today across managed courses', () => db.collection('grades').where('courseId', 'in', [ID])],
   ['grades — any on an assignment (server)', () => db.collection('grades').where('courseworkId', '==', ID).limit(1)],
   ['grades — one assignment’s (grading desk)', () => db.collection('grades').where('courseId', '==', ID).where('courseworkId', '==', ID)],
   [

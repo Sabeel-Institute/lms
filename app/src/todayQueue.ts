@@ -10,15 +10,11 @@
  */
 import {
   DUE_SOON_DAYS,
-  INSTITUTE_TIMEZONE,
   daysUntilDue,
-  tallyCounts,
-  workTally,
   type CourseworkDoc,
-  type GradeDoc,
+  type CourseworkTally,
   type RecordingDoc,
   type SessionDoc,
-  type SubmissionDoc,
 } from '@sabeel/shared';
 
 export type TodayKind = 'attendance' | 'recording' | 'publish' | 'closing' | 'grading';
@@ -152,9 +148,26 @@ const RANK: Record<TodayKind, number> = {
 export interface GradingInput {
   managed: ReadonlySet<string>;
   coursework: (CourseworkDoc & { id: string })[] | null;
-  /** Work in `handedIn` state across the scope. */
-  handedIn: SubmissionDoc[] | null;
-  grades: GradeDoc[] | null;
+  /** Each assignment's stored tally (`courseworkTallies`), by its id. */
+  tallies: ReadonlyMap<string, CourseworkTally> | null;
+}
+
+/**
+ * The queue, or a queue that says it could not be read: never a throw.
+ *
+ * The shell builds this while it draws, outside every screen's boundary, so
+ * one document missing a field the queue reads (an old cached shape, a
+ * script's write) replaced the whole app with an error page for everyone who
+ * watched that course. The failure is reported, and Today and its badge say
+ * the courses could not be read.
+ */
+export function todayQueueOrFailed(input: Parameters<typeof buildTodayQueue>[0], report: (e: unknown) => void): TodayQueue {
+  try {
+    return buildTodayQueue(input);
+  } catch (e) {
+    report(e);
+    return { items: [], blocking: 0, loading: false, failed: true, scoped: true, allFinished: false, truncated: input.truncated };
+  }
 }
 
 /**
@@ -358,22 +371,21 @@ export function buildTodayQueue({
  * return it, and leaves when it is all back with the students.
  */
 function gradingRows(grading: GradingInput | undefined, names: Map<string, string>, today: string): TodayItem[] {
-  if (!grading?.coursework || !grading.handedIn || !grading.grades) return [];
-  const gradeOf = new Map(grading.grades.map((g) => [`${g.studentUid}_${g.courseworkId}`, g]));
+  if (!grading?.coursework || !grading.tallies) return [];
   const rows: TodayItem[] = [];
   for (const cw of grading.coursework) {
     if (cw.status !== 'posted' || !grading.managed.has(cw.courseId)) continue;
     /*
-     * COUNTED AS THE ASSIGNMENT'S PAGE COUNTS (`workTally`), so the row and the
-     * page it opens agree: work marked not required after it went in is not
-     * waiting on anyone, and a grade with no grade in it is still to grade.
-     * Handed-in work is judged the same whether its course runs or not.
+     * THE ASSIGNMENT'S OWN TALLY, which its page counts from too, so the row
+     * and the page it opens agree: work marked not required after it went in
+     * is not waiting on anyone, a grade with no grade in it is still to grade,
+     * and a grade given on paper with nothing handed in is still to return.
+     * One small document per assignment, where this read every grade of the
+     * term in every class the reader teaches.
      */
-    const tallies = grading.handedIn
-      .filter((s) => s.courseworkId === cw.id)
-      .map((s) => workTally(cw.grading, s, gradeOf.get(`${s.studentUid}_${cw.id}`), today, true, INSTITUTE_TIMEZONE));
-    const { toGrade, toReturn } = tallyCounts(tallies);
-    const late = tallies.filter((t) => t?.state === 'toGrade' && t.late).length;
+    const tally = grading.tallies.get(cw.id);
+    if (!tally) continue;
+    const { toGrade, toReturn, lateToGrade: late } = tally;
     if (toGrade + toReturn === 0) continue;
     rows.push({
       key: `grade-${cw.id}`,

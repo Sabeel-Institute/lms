@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { KIND_ORDER, buildTodayQueue, queueScope } from './todayQueue';
-import { DUE_SOON_DAYS, type CourseworkDoc, type GradeDoc, type RecordingDoc, type SessionDoc, type SubmissionDoc } from '@sabeel/shared';
+import { KIND_ORDER, buildTodayQueue, queueScope, todayQueueOrFailed } from './todayQueue';
+import {
+  DUE_SOON_DAYS,
+  INSTITUTE_TIMEZONE,
+  courseworkTally,
+  type CourseworkDoc,
+  type GradeDoc,
+  type RecordingDoc,
+  type SessionDoc,
+  type SubmissionDoc,
+} from '@sabeel/shared';
 
 /**
  * The staff work queue's derivation.
@@ -117,6 +126,31 @@ const handedIn = (uid: string, cwId: string, onDay: string, over: Partial<Submis
 });
 const graded = (uid: string, cwId: string): GradeDoc =>
   ({ studentUid: uid, courseworkId: cwId, courseId: COURSE, grade: { points: 8 }, feedback: '', gradedBy: 't', gradedAt: 1, withoutHandIn: false });
+
+/**
+ * What Today reads for its grading rows, from the work and grades a class
+ * holds: each assignment's tally as the server stores it (`courseworkTally`),
+ * so these cases say what the work is, not what the tally is.
+ */
+function gradingOf(
+  coursework: (CourseworkDoc & { id: string })[],
+  subs: SubmissionDoc[],
+  grades: GradeDoc[],
+  managed: ReadonlySet<string> = new Set([COURSE]),
+) {
+  const tallies = new Map(
+    coursework.map((cw) => [
+      cw.id,
+      courseworkTally(
+        cw.grading,
+        subs.filter((s) => s.courseworkId === cw.id),
+        new Map(grades.filter((g) => g.courseworkId === cw.id).map((g) => [g.studentUid, g])),
+        INSTITUTE_TIMEZONE,
+      ),
+    ]),
+  );
+  return { managed, coursework, tallies };
+}
 
 const build = (
   sessions: (SessionDoc & { id: string })[],
@@ -356,12 +390,7 @@ describe('the order', () => {
       ],
       [recording('r1', 'published'), recording('r2', 'draft')],
       {
-        grading: {
-          managed: new Set([COURSE]),
-          coursework: [coursework('echo-grading')],
-          handedIn: [handedIn('u1', 'echo-grading', day(-2))],
-          grades: [],
-        },
+        grading: gradingOf([coursework('echo-grading')], [handedIn('u1', 'echo-grading', day(-2))], []),
       },
     );
     // All four, in KIND_ORDER — the length matters as much as the sequence, or
@@ -533,13 +562,15 @@ describe('queueScope', () => {
 });
 
 describe('work to grade', () => {
-  const grading = (over: Partial<Parameters<typeof buildTodayQueue>[0]['grading'] & object> = {}) => ({
-    managed: new Set([COURSE]),
-    coursework: [coursework('reflection')],
-    handedIn: [handedIn('u1', 'reflection', day(-2)), handedIn('u2', 'reflection', day(0)), handedIn('u3', 'reflection', day(-3))],
-    grades: [graded('u3', 'reflection')],
-    ...over,
-  });
+  const grading = (
+    over: { managed?: ReadonlySet<string>; coursework?: (CourseworkDoc & { id: string })[]; handedIn?: SubmissionDoc[]; grades?: GradeDoc[] } = {},
+  ) =>
+    gradingOf(
+      over.coursework ?? [coursework('reflection')],
+      over.handedIn ?? [handedIn('u1', 'reflection', day(-2)), handedIn('u2', 'reflection', day(0)), handedIn('u3', 'reflection', day(-3))],
+      over.grades ?? [graded('u3', 'reflection')],
+      over.managed,
+    );
 
   it('says how much is waiting, how much of it late, and never counts it in the badge', () => {
     const q = build([], [], { grading: grading() });
@@ -552,6 +583,21 @@ describe('work to grade', () => {
   it('turns into a reminder to return once everything is graded', () => {
     const q = build([], [], { grading: grading({ handedIn: [handedIn('u3', 'reflection', day(-3))] }) });
     expect(q.items[0]).toMatchObject({ detail: 'All graded, 1 not returned yet', action: 'Return' });
+  });
+
+  /*
+   * GRADED ON PAPER, NOTHING HANDED IN: the assignment's page offers "Return
+   * 1 graded", and Today said nothing was waiting, because it read only work
+   * in the handed-in state.
+   */
+  it('reminds the teacher to return a grade given on paper', () => {
+    const q = build([], [], {
+      grading: grading({
+        handedIn: [handedIn('u4', 'reflection', day(-2), { state: 'open', handedInAt: null, note: '', attempt: 0 })],
+        grades: [{ ...graded('u4', 'reflection'), withoutHandIn: true }],
+      }),
+    });
+    expect(q.items).toEqual([expect.objectContaining({ detail: 'All graded, 1 not returned yet', action: 'Return' })]);
   });
 
   it('counts as the assignment’s page counts: not work let off after it went in, and not a grade with no grade in it', () => {
@@ -575,5 +621,41 @@ describe('work to grade', () => {
   it('only for courses the reader manages by name, and never for a draft', () => {
     expect(build([], [], { grading: grading({ managed: new Set() }) }).items).toEqual([]);
     expect(build([], [], { grading: grading({ coursework: [coursework('reflection', { status: 'draft' })] }) }).items).toEqual([]);
+  });
+
+  it('waits for an assignment’s tally rather than saying nothing is in', () => {
+    const q = build([], [], { grading: { ...grading(), tallies: new Map() } });
+    expect(q.items).toEqual([]);
+  });
+});
+
+/*
+ * ONE BAD DOCUMENT DOES NOT TAKE THE APP DOWN. The shell builds the queue
+ * while it draws, outside every screen's boundary: two assignments to grade,
+ * one of them read without its title, threw while sorting and replaced the
+ * whole app with an error page. The queue now says it could not be read.
+ */
+describe('a document the queue cannot read', () => {
+  it('makes a failed queue, reported, never a throw', () => {
+    const reported: unknown[] = [];
+    const untitled = { ...coursework('b-untitled'), title: undefined as unknown as string };
+    const input = {
+      courses: [{ id: COURSE, name: 'Hikam Foundations' }],
+      sessions: [],
+      recordings: new Map(),
+      scope: [COURSE],
+      today: TODAY,
+      failed: false,
+      settled: true,
+      truncated: false,
+      grading: gradingOf(
+        [coursework('a-titled'), untitled],
+        [handedIn('u1', 'a-titled', day(-2)), handedIn('u2', 'b-untitled', day(-2))],
+        [],
+      ),
+    };
+    expect(() => buildTodayQueue(input)).toThrow();
+    expect(todayQueueOrFailed(input, (e) => reported.push(e))).toMatchObject({ failed: true, loading: false, items: [] });
+    expect(reported).toHaveLength(1);
   });
 });

@@ -373,6 +373,9 @@ describe('the stored tally', () => {
           expect(countsFromTally(tally, today, courseOpen), `seed ${seed} on ${today}`).toEqual(direct);
         }
       }
+      // Today's "N of them late": late work still to grade, as the page judges each.
+      const each = subs.map((s) => workTally(grading, s, grades.get(s.studentUid), days[0], true, INSTITUTE_TIMEZONE));
+      expect(tally.lateToGrade, `seed ${seed}`).toBe(each.filter((t) => t?.state === 'toGrade' && t.late).length);
     }
   });
 

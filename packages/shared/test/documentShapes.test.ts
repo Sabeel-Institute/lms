@@ -184,6 +184,7 @@ const SAMPLES: { [C in StoredCollection]: Required<StoredDocs[C]> } = {
     handedIn: 2,
     late: 1,
     toGrade: 1,
+    lateToGrade: 1,
     toReturn: 0,
     returned: 1,
     notRequired: 0,

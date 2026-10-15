@@ -276,6 +276,7 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     handedIn: 'required',
     late: 'required',
     toGrade: 'required',
+    lateToGrade: 'required',
     toReturn: 'required',
     returned: 'required',
     notRequired: 'required',

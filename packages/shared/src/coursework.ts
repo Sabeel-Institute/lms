@@ -657,6 +657,8 @@ export interface CourseworkTally {
   handedIn: number;
   late: number;
   toGrade: number;
+  /** Of `toGrade`, how many came in late: Today says so beside the count. */
+  lateToGrade: number;
   toReturn: number;
   returned: number;
   notRequired: number;
@@ -687,7 +689,7 @@ export function courseworkTally(
   timeZone: string,
 ): CourseworkTally {
   const t: CourseworkTally = {
-    handedIn: 0, late: 0, toGrade: 0, toReturn: 0, returned: 0, notRequired: 0, shareSum: 0, shareCount: 0, waiting: [],
+    handedIn: 0, late: 0, toGrade: 0, lateToGrade: 0, toReturn: 0, returned: 0, notRequired: 0, shareSum: 0, shareCount: 0, waiting: [],
   };
   const waiting = new Map<string, WaitingGroup>();
   for (const s of subs) {
@@ -707,9 +709,12 @@ export function courseworkTally(
     // Everything settled was handed in, or graded on paper, which counts as
     // handed in on paper: as the student's page has always counted it.
     t.handedIn++;
-    if (s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, timeZone)) t.late++;
-    if (state === 'toGrade') t.toGrade++;
-    else if (state === 'graded') t.toReturn++;
+    const late = s.handedInAt !== null && isLate(s.handedInAt, s.dueDate, timeZone);
+    if (late) t.late++;
+    if (state === 'toGrade') {
+      t.toGrade++;
+      if (late) t.lateToGrade++;
+    } else if (state === 'graded') t.toReturn++;
     else t.returned++;
     const g = s.returned?.grade;
     if (state === 'returned' && g && 'points' in g && grading.kind === 'points') {

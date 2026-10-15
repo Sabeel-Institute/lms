@@ -7,6 +7,11 @@
  * Migrated, not accommodated: this computes each with `courseworkTally`,
  * exactly as the trigger does, from the same work and grades, and writes it.
  *
+ * ONLY WHERE NONE IS STORED. It runs after the triggers are deployed, and a
+ * change to the work while it runs brings that assignment's trigger, whose
+ * tally is newer than anything read here: each write is made only if the
+ * document does not exist yet, so a trigger's answer is never overwritten.
+ *
  * Run once on the live project when the triggers are deployed: an assignment
  * made after that has its tally from the first write to its work, and the
  * switchover seed copies the legacy app, which has no assignments. Dry run
@@ -64,6 +69,7 @@ const gradesOf = byWork(grades);
 
 const DB = `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 let written = 0;
+let kept = 0;
 for (const { id, data: cw } of coursework) {
   const tally = courseworkTally(
     cw.grading,
@@ -77,12 +83,22 @@ for (const { id, data: cw } of coursework) {
       `${tally.waiting.reduce((n, g) => n + g.count, 0)} with nothing in, ${tally.notRequired} not required`,
   );
   if (!write) continue;
-  const res = await fetch(`https://firestore.googleapis.com/v1/${DB}/courseworkTallies/${id}`, {
+  const res = await fetch(`https://firestore.googleapis.com/v1/${DB}/courseworkTallies/${id}?currentDocument.exists=false`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'X-Goog-User-Project': FIREBASE_PROJECT_ID, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: encode(doc).mapValue.fields }),
   });
-  if (!res.ok) throw new Error(`courseworkTallies/${id}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    if (/FAILED_PRECONDITION|ALREADY_EXISTS/.test(text)) {
+      console.log(`  ${id} already has a tally, kept by its trigger: left as it is`);
+      kept++;
+      continue;
+    }
+    throw new Error(`courseworkTallies/${id}: HTTP ${res.status} ${text.slice(0, 200)}`);
+  }
   written++;
 }
-console.log(`${coursework.length} assignments; ${write ? `${written} tallies written` : 'nothing written (dry run; --yes to write)'}`);
+console.log(
+  `${coursework.length} assignments; ${write ? `${written} tallies written, ${kept} already there` : 'nothing written (dry run; --yes to write)'}`,
+);

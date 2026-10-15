@@ -4,7 +4,8 @@ import { captureError } from '../sentry';
 import { db } from '../firebase';
 import { reloadFromServer } from '../firestoreInit';
 import { setLiveDataSession } from '../liveQuery';
-import { Button } from './ui';
+import { signOut } from '../session';
+import { Button, Row } from './ui';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
@@ -47,16 +48,23 @@ export class ScreenBoundary extends Component<{ where: 'screen' | 'app'; childre
             ? 'Something on it did not load as it should. Try again, or go back.'
             : 'Something did not load as it should. Try again.'}
         </Text>
-        <Button
-          testID="page-failed-retry"
-          label="Try again"
-          variant="secondary"
-          hug
-          // Ending Firestore ends every listener with it: expected, not a fault.
-          onPress={() =>
-            void reloadFromServer(db, () => setLiveDataSession(false)).then((reloading) => !reloading && this.setState({ failed: false }))
-          }
-        />
+        <Row>
+          <Button
+            testID="page-failed-retry"
+            label="Try again"
+            variant="secondary"
+            hug
+            // Ending Firestore ends every listener with it: expected, not a fault.
+            onPress={() =>
+              void reloadFromServer(db, () => setLiveDataSession(false)).then((reloading) => !reloading && this.setState({ failed: false }))
+            }
+          />
+          {/* The whole app is this message: with no bar and no More, it is
+              the only way to sign out. */}
+          {this.props.where === 'app' ? (
+            <Button testID="page-failed-sign-out" label="Sign out" variant="secondary" hug onPress={() => void signOut()} />
+          ) : null}
+        </Row>
       </View>
     );
   }

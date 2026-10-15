@@ -6,16 +6,16 @@ import {
   QUEUE_SCOPE,
   todayInZone,
   type CourseworkDoc,
-  type GradeDoc,
   type RecordingDoc,
   type SessionDoc,
-  type SubmissionDoc,
+  type CourseworkTallyDoc,
 } from '@sabeel/shared';
 // The queue's vocabulary, re-exported so a screen has one import for the hook
 // and the shapes it returns. `buildTodayQueue` itself is not: its callers are
 // this file and its own test, and both name the module it lives in.
 export { KIND_ORDER, type TodayItem, type TodayKind, type TodayQueue } from './todayQueue';
-import { buildTodayQueue, queueScope, type TodayQueue } from './todayQueue';
+import { queueScope, todayQueueOrFailed, type TodayQueue } from './todayQueue';
+import { captureError } from './sentry';
 import { db } from './firebase';
 import { useListenerFailed, useLiveQuery } from './liveQuery';
 import { useAllCoursesSource, useMyCoursesSource, type CourseRow } from './structure';
@@ -170,11 +170,11 @@ function useTodayQueue(
    * seeing a query is worse than the duplication.
    */
   /*
-   * WORK TO GRADE: the assignments, the work handed in and not yet returned,
-   * and the grades being written, in the courses the reader MANAGES by name,
-   * the only courses `gradingRows` shows a row for. Not the queue's whole
-   * scope: an admin's is every live course, and an admin who taught nothing
-   * downloaded every grade in all of them, a megabyte on a phone, on sign-in.
+   * WORK TO GRADE: the assignments and their stored tallies, in the courses
+   * the reader MANAGES by name, the only courses `gradingRows` shows a row
+   * for. Not the queue's whole scope: an admin's is every live course. And
+   * not the work and grades themselves: every grade of the term in every
+   * class taught was hundreds of kilobytes held open on a phone.
    */
   const gradingKey = useMemo(
     () => scope.filter((id) => (courses ?? []).some((c) => c.id === id && (c.managerUids ?? []).includes(uid))).join(','),
@@ -195,31 +195,15 @@ function useTodayQueue(
       extra: { scope: key },
     },
   );
-  const handedIn = useLiveQuery<SubmissionDoc[] | null>(
+  const tallies = useLiveQuery<Map<string, CourseworkTallyDoc> | null>(
     () =>
       gradingScope.length > 0
-        ? query(
-            collection(db, COLLECTIONS.submissions),
-            where('courseId', 'in', gradingScope),
-            where('state', '==', 'handedIn'),
-          )
+        ? query(collection(db, COLLECTIONS.courseworkTallies), where('courseId', 'in', gradingScope))
         : null,
     [gradingScope],
     {
-      label: 'todayHandedIn',
-      map: (snap) => snap.docs.map((d) => read('submissions', d)),
-      empty: null,
-      expectDenial,
-      extra: { scope: key },
-    },
-  );
-  const grades = useLiveQuery<GradeDoc[] | null>(
-    () =>
-      gradingScope.length > 0 ? query(collection(db, COLLECTIONS.grades), where('courseId', 'in', gradingScope)) : null,
-    [gradingScope],
-    {
-      label: 'todayGrades',
-      map: (snap) => snap.docs.map((d) => read('grades', d)),
+      label: 'todayTallies',
+      map: (snap) => new Map(snap.docs.map((d) => [d.id, read('courseworkTallies', d)])),
       empty: null,
       expectDenial,
       extra: { scope: key },
@@ -243,18 +227,21 @@ function useTodayQueue(
 
   return useMemo(
     () =>
-      buildTodayQueue({
-        courses,
-        sessions,
-        recordings,
-        scope,
-        today,
-        failed,
-        settled,
-        truncated,
-        grading: { managed, coursework, handedIn, grades },
-      }),
-    [courses, sessions, recordings, scope, today, failed, settled, truncated, managed, coursework, handedIn, grades],
+      todayQueueOrFailed(
+        {
+          courses,
+          sessions,
+          recordings,
+          scope,
+          today,
+          failed,
+          settled,
+          truncated,
+          grading: { managed, coursework, tallies },
+        },
+        (e) => captureError(e, { source: 'todayQueue' }),
+      ),
+    [courses, sessions, recordings, scope, today, failed, settled, truncated, managed, coursework, tallies],
   );
 }
 
