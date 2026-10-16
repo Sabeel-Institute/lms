@@ -70,6 +70,9 @@ export function StudentDetailScreen({
   const [info, setInfo] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Whether a manager runs a course this student is in now: reported by the
+  // course list below, which is the only place a manager may ask.
+  const [managesThem, setManagesThem] = useState(false);
 
   const run = (key: string, fn: () => Promise<void>) =>
     once(key, async () => {
@@ -142,7 +145,11 @@ export function StudentDetailScreen({
       ) : (
         <>
           <Sheet visible={menuOpen} title={who} onClose={() => setMenuOpen(false)} closeAt="corner">
-            {email !== null ? (
+            {/* WHO MAY SEND IT is who may manage the student, as the server
+                decides (`sendPasswordLink`): an admin, whoever made the
+                account, or a manager of a course they are in now. Offered to
+                nobody else, rather than refused after a tap. */}
+            {email !== null && (isAdmin || student.createdBy === uid || managesThem) ? (
               <SheetOption
                 testID="student-resend"
                 label="Resend password link"
@@ -151,7 +158,7 @@ export function StudentDetailScreen({
                 detail="Emails them a link to set their password."
                 onPress={() =>
                   choose('resend', async () => {
-                    await resendPasswordSetup(email);
+                    await resendPasswordSetup(studentUid);
                     setInfo(`Password link sent to ${email}.`);
                   })
                 }
@@ -201,7 +208,13 @@ export function StudentDetailScreen({
           {isAdmin ? (
             <AdminCourses studentUid={studentUid} who={who} deleted={student.status === 'deleted'} onOpenCourse={onOpenCourse} />
           ) : (
-            <ManagerCourses studentUid={studentUid} uid={uid} who={who} onOpenCourse={onOpenCourse} />
+            <ManagerCourses
+              studentUid={studentUid}
+              uid={uid}
+              who={who}
+              onOpenCourse={onOpenCourse}
+              onManages={setManagesThem}
+            />
           )}
 
           <History student={student} isAdmin={isAdmin} uid={uid} />
@@ -393,11 +406,14 @@ function ManagerCourses({
   uid,
   who,
   onOpenCourse,
+  onManages,
 }: {
   studentUid: string;
   uid: string;
   who: string;
   onOpenCourse: (cls: CourseRow) => void;
+  /** Whether the student is in one of these courses now. */
+  onManages: (manages: boolean) => void;
 }) {
   const coursesState = useMyCoursesState(uid);
   const courses = coursesState ?? NO_COURSES;
@@ -418,6 +434,8 @@ function ManagerCourses({
   // Only the courses that hold them are rows: a probe that found nothing must
   // not leave an empty row between two dividers.
   const matched = courses.filter((c) => enrolledIn[c.id]);
+  const managesNow = courses.some((c) => enrolledIn[c.id]?.active === true);
+  useEffect(() => onManages(managesNow), [managesNow, onManages]);
 
   return (
     <>

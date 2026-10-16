@@ -63,6 +63,14 @@ export function describeStudentEvent(
           : 'Account access changed';
     case 'deleteAccount':
       return 'Account deleted';
+    case 'sendPasswordLink':
+      // Which link, and whether it went: the question a student who cannot
+      // get in is asked first.
+      return e.detail?.mail === 'failed'
+        ? 'Password link not sent: the email failed'
+        : e.detail?.kind === 'reset'
+          ? 'Password reset link sent'
+          : 'Set-password link sent';
     default:
       return null;
   }

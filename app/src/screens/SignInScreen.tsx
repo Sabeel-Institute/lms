@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { APP_NAME, FIRST_ADMIN_LOCAL_PART } from '@sabeel/shared';
 import { auth } from '../firebase';
 import { redirectFailure, signInWithGoogle } from '../auth/google';
@@ -11,6 +11,7 @@ import { Button, Field, Notice, Screen } from '../components/ui';
 import { BUILD_LABEL } from '../buildInfo';
 import { getTheme, spacing } from '../theme';
 import { useOneAtATime } from '../oneAtATime';
+import { requestPasswordLink } from '../students';
 
 const t = getTheme();
 
@@ -121,10 +122,10 @@ export function SignInScreen({ ended }: { ended: SessionEnd | null }) {
           disabled={busy !== null || !email.trim()}
           onPress={() =>
             void run('reset', async () => {
-              await sendPasswordResetEmail(auth, email.trim().toLowerCase());
-              // Deliberately the same message whether or not the address exists:
-              // a differing one turns this into a way to test who has an account.
-              setInfo('If that address has an account, a link is on its way.');
+              // The server's answer, the same sentence for every address: a
+              // differing one would turn this into a way to test who has an
+              // account. Only a student is ever sent a link.
+              setInfo(await requestPasswordLink(email.trim().toLowerCase()));
             })
           }
           style={styles.link}

@@ -118,7 +118,7 @@ export function MoreSheet({
             // and the person then waits for an email that is not coming.
             setSent(false);
             setResetError(null);
-            void sendMyPasswordReset(email)
+            void sendMyPasswordReset()
               .then(() => setSent(true))
               .catch((e) => setResetError(errorText(e)));
           }}

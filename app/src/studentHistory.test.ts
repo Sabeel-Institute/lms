@@ -51,6 +51,14 @@ describe('describeStudentEvent', () => {
     ).toBe('Re-enrolled in Hikam Foundations · Autumn 2026');
   });
 
+  it('says which password link staff sent, and when the email failed', () => {
+    const link = (detail: Record<string, string>) =>
+      describeStudentEvent(row({ action: 'sendPasswordLink', courseId: null, targets: { studentUid: 'stu' }, detail }), label);
+    expect(link({ kind: 'set', mail: 'sent' })).toBe('Set-password link sent');
+    expect(link({ kind: 'reset', mail: 'sent' })).toBe('Password reset link sent');
+    expect(link({ kind: 'reset', mail: 'failed' })).toBe('Password link not sent: the email failed');
+  });
+
   it('reads the access change by its status', () => {
     const access = (status: string) =>
       describeStudentEvent(
