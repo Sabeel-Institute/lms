@@ -256,11 +256,19 @@ A release bumps one version and ships it to both surfaces. In order:
    never changes. `publish-play.mjs` refuses a debug-signed bundle, one that
    does not carry HEAD's commit (the same Gradle trap as step 3; it prints the
    40-second rebuild of the JS alone), and a versionCode Play reads differently
-   from `build.gradle`. It never makes an app's first release: that one is
-   made in Play Console, where the app's signing key is chosen (the LMS's own
-   release key, uploaded with Google's PEPK tool). The bundle carries every
-   ABI and Play cuts per-device APKs from it, so `build.gradle` turns the APK
-   splits off for bundle tasks. The publishing key: `docs/SECRETS.md`.
+   from `build.gradle`. It puts the build up as a draft release no tester sees,
+   waits for the APKs Play generates from it, and completes the release only
+   if they are signed with the LMS's own release key. Play Console gives every
+   new app a Google-generated signing key when it is created; the LMS's was
+   replaced with its own (App integrity, App signing, "Change key", "Export
+   and upload a key from Java keystore", with Google's PEPK tool), so a Play
+   install and the APK from the GitHub release update each other. APKs Play
+   generated before a key change stay signed with the old key, which is what
+   the check catches. Play keeps an app's first release a draft if the API may
+   not complete it: one "Start rollout" in Play Console sends it. The bundle
+   carries every ABI and Play cuts per-device APKs from it, so `build.gradle`
+   turns the APK splits off for bundle tasks. The publishing key:
+   `docs/SECRETS.md`.
 
 7. **iPhone:** a TestFlight build of the release commit, from GitHub:
    `gh workflow run ios.yml --ref main -f testflight=true`

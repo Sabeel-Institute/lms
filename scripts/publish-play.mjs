@@ -19,16 +19,22 @@
  *    bundle and its label (the 2026-10-15 build of 0.1.2 did exactly that);
  *  - names a different versionName from `app/android/app/build.gradle`.
  *
- * Then Play is asked, and the script refuses:
+ * Then, in two steps:
  *
- *  - an app with no release on any track. Its FIRST release is made in Play
- *    Console, because that is where the app signing key is chosen; an upload
- *    through the API before then would have Google generate a new key, and an
- *    app's signing key never changes after its first release;
- *  - an upload whose versionCode, as Play read it, is not build.gradle's.
+ *  1. The bundle goes up as a DRAFT release on the internal track, which no
+ *     tester sees, replacing whatever draft was there. The script refuses an
+ *     upload whose versionCode, as Play read it, is not build.gradle's.
+ *  2. Play turns the bundle into the APKs phones install. The script waits for
+ *     them and refuses unless they are signed with the key the bundle is
+ *     signed with: the LMS release key, which is also its Play app signing
+ *     key (docs/DEPLOY.md). Play Console now gives every new app a
+ *     Google-generated key the moment it is created, and copies generated
+ *     before the key was changed stay signed with Google's. Only then does the
+ *     draft become a completed release that testers get.
  *
- * The flow is edit, upload, point the internal track at the new versionCode,
- * commit. Anything failing before the commit discards the edit.
+ * Play keeps an app's very first release a draft if the API may not complete
+ * it; the script says so, and one "Start rollout" in Play Console sends it.
+ * A rerun after a failure picks up a bundle Play already has.
  *
  * The key is the Play publishing service account's JSON, outside the repo
  * (this repo is public): ~/keys/sabeel-play-publisher.json, or the path in
@@ -111,6 +117,11 @@ console.log(`package   ${pkg}`);
 console.log(`version   ${versionName} (${versionCode})`);
 console.log(`bundle    ${(size / 1024 / 1024).toFixed(1)} MB, commit ${head}, signed by ${signer}`);
 
+// The certificate the bundle is signed with: this app's release key, which is
+// also the key Play must sign the installed app with.
+const certSha256 = /SHA256: ([0-9A-F:]+)/.exec(run('keytool', ['-printcert', '-jarfile', AAB]))?.[1];
+if (!certSha256) die(`Could not read the signing certificate of ${AAB}.`);
+
 // ---- Play -----------------------------------------------------------------
 
 let account;
@@ -155,9 +166,27 @@ const api = async (method, path, body) => {
   return text ? JSON.parse(text) : {};
 };
 
-let edit;
+/** Runs `fn` in a fresh edit; the edit is discarded unless `fn` commits it. */
+const inEdit = async (fn) => {
+  const { id } = await api('POST', '/edits');
+  let committed = false;
+  try {
+    await fn(id, async () => {
+      await api('POST', `/edits/${id}:commit`);
+      committed = true;
+    });
+  } finally {
+    if (!committed) await api('DELETE', `/edits/${id}`).catch(() => {});
+  }
+};
+
+const release = (status) => ({
+  track: 'internal',
+  releases: [{ versionCodes: [String(versionCode)], status }],
+});
+
 try {
-  edit = await api('POST', '/edits');
+  await inEdit(async () => {});
 } catch (e) {
   die(
     `Play refused ${account.client_email}:\n${e.message}\n\n` +
@@ -165,49 +194,75 @@ try {
       '"Release apps to testing tracks".',
   );
 }
+if (check) {
+  console.log('\n--check: every gate passes, and the publishing account may release this app.\nNothing was uploaded.');
+  process.exit(0);
+}
 
-let committed = false;
 try {
-  const { tracks = [] } = await api('GET', `/edits/${edit.id}/tracks`);
-  if (!tracks.some((t) => (t.releases ?? []).length > 0)) {
+  // 1. Up as a draft no tester sees.
+  await inEdit(async (id, commit) => {
+    const { bundles = [] } = await api('GET', `/edits/${id}/bundles`);
+    if (bundles.some((b) => b.versionCode === versionCode)) {
+      console.log(`\nPlay already has ${versionName} (${versionCode}); not uploading it again.`);
+    } else {
+      console.log('\nUploading...');
+      const res = await fetch(`${API}/upload/androidpublisher/v3/applications/${pkg}/edits/${id}/bundles?uploadType=media`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/octet-stream' },
+        body: readFileSync(AAB),
+        signal: AbortSignal.timeout(15 * 60 * 1000),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Upload: HTTP ${res.status}\n${text}`);
+      const uploaded = JSON.parse(text).versionCode;
+      if (uploaded !== versionCode) {
+        throw new Error(`Play read versionCode ${uploaded} from the bundle; build.gradle says ${versionCode}. Rebuild it.`);
+      }
+    }
+    await api('PUT', `/edits/${id}/tracks/internal`, release('draft'));
+    await commit();
+  });
+  console.log('A draft release on the internal track holds it; no tester sees a draft.');
+
+  // 2. What will phones install? Play generates the APKs after the commit.
+  let hashes = [];
+  for (let i = 0; i < 60 && hashes.length === 0; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 10_000));
+    const { generatedApks = [] } = await api('GET', `/generatedApks/${versionCode}`).catch(() => ({}));
+    hashes = generatedApks.map((g) => g.certificateSha256Hash);
+  }
+  if (hashes.length === 0) throw new Error('Play generated no APKs from the bundle within 10 minutes. Rerun later.');
+  if (hashes.some((h) => h !== certSha256)) {
     throw new Error(
-      `${pkg} has no release on any track. Make its first release in Play Console\n` +
-        '(Internal testing, Create new release), where the app signing key is chosen.\n' +
-        'An upload from here first would have Google generate a new signing key, for good.',
+      `Play signs this build with ${hashes.join(', ')},\nnot with this app's own key, ${certSha256}.\n` +
+        'It stays an unreleased draft. If Play Console, App integrity, App signing shows this\n' +
+        "app's own key, the build was processed before the key changed: release a new version.\n" +
+        'If it does not: "Change key", then "Export and upload a key from Java keystore" (docs/DEPLOY.md).',
     );
   }
+  console.log('Play signs the APKs phones install with this app\'s own key.');
 
-  if (check) {
-    await api('DELETE', `/edits/${edit.id}`);
-    console.log('\n--check: every gate passes, and the publishing account may release this app.\nNothing was uploaded.');
-    process.exit(0);
-  }
-
-  console.log('\nUploading to the internal testing track...');
-  const res = await fetch(
-    `${API}/upload/androidpublisher/v3/applications/${pkg}/edits/${edit.id}/bundles?uploadType=media`,
-    {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/octet-stream' },
-      body: readFileSync(AAB),
-      signal: AbortSignal.timeout(15 * 60 * 1000),
-    },
-  );
-  const text = await res.text();
-  if (!res.ok) throw new Error(`Upload: HTTP ${res.status}\n${text}`);
-  const uploaded = JSON.parse(text).versionCode;
-  if (uploaded !== versionCode) {
-    throw new Error(`Play read versionCode ${uploaded} from the bundle; build.gradle says ${versionCode}. Rebuild it.`);
-  }
-
-  await api('PUT', `/edits/${edit.id}/tracks/internal`, {
-    track: 'internal',
-    releases: [{ versionCodes: [String(versionCode)], status: 'completed' }],
+  // 3. Out to the testers.
+  let draftOnly = false;
+  await inEdit(async (id, commit) => {
+    await api('PUT', `/edits/${id}/tracks/internal`, release('completed'));
+    try {
+      await commit();
+    } catch (e) {
+      // "Only releases with status draft may be created on draft app."
+      if (!/draft app/i.test(e.message)) throw e;
+      draftOnly = true;
+    }
   });
-  await api('POST', `/edits/${edit.id}:commit`);
-  committed = true;
-  console.log(`\n${versionName} (${versionCode}) is on the internal testing track. Testers get it from Play within minutes.`);
+  if (draftOnly) {
+    console.log(
+      `\n${versionName} (${versionCode}) is a draft on the internal testing track: Play keeps an app's first\n` +
+        'release a draft until it is rolled out in Play Console (Internal testing, Start rollout).',
+    );
+  } else {
+    console.log(`\n${versionName} (${versionCode}) is on the internal testing track. Testers get it from Play within minutes.`);
+  }
 } catch (e) {
-  if (!committed) await api('DELETE', `/edits/${edit.id}`).catch(() => {});
-  die(`${e.message}\n\nThe edit was discarded; nothing was released.`);
+  die(`${e.message}\n\nNothing reached the testers.`);
 }
