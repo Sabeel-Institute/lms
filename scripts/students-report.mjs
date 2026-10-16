@@ -12,10 +12,10 @@
  * 2026-10-07 (docs/DEV-TOOLING.md, "A student can't set a password"): a link
  * dies the moment a newer one is sent, once it has been used, when it is cut
  * off, and an hour after it was sent; a disabled account opens the form and
- * fails at Save. The app records none of it. Every link goes out through the
- * client's `sendPasswordResetEmail` — at creation, from Resend, from "Email
- * me a password link" — so no callable sees a send and the audit log holds
- * no resend, and Firebase Auth outside Identity Platform logs nothing per user.
+ * fails at Save. Every link is made by the server (`passwordLinks.ts`): a
+ * send from staff is in the audit log, so this report's history lists it, and
+ * the others are in the functions' log by account; none of that says whether
+ * the link then worked.
  * The Auth user record is the one place that says whether a link ever worked:
  * `passwordUpdatedAt` is the moment one did, and an account created by
  * `createStudent` has no password until then.

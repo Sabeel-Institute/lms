@@ -473,6 +473,16 @@ After the deploy, send one report from the live app as yourself: it arrives
 at `apps-reports@oursabeel.com` with Reply-To set to you, and its document in
 `reports` says `mail.status: 'sent'`.
 
+**Password links use the same sender, grant and API.** The server makes each
+link with the Admin SDK (`generatePasswordResetLink`, continue URL
+`https://oursabeel-lms.web.app/`, an authorised domain) and mails it
+(`functions/src/passwordLinks.ts`). `onPasswordLinkRequested` is a Firestore
+trigger: its first deploy may meet the Eventarc permission trap below. Firebase's
+password-reset template is not used any more and needs no setting. After the
+deploy, as a test student, tap "Email me a password link" on the live sign-in
+screen: the email arrives from Sabeel Apps No Reply, and its link sets the
+password and offers Continue to the website.
+
 ## First-deploy traps
 
 Three that come from the project living in a Google Cloud **organization**

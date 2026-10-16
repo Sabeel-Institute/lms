@@ -49,7 +49,13 @@ Here:
   instruction to sign in on the web first goes in the onboarding email.
 - **A client password sign-up is refused before any account exists**: the
   `beforeSignUp` blocking function (`functions/src/signUpGate.ts`, Identity
-  Platform).
+  Platform). Beside it, `beforeSignIn` refuses a password sign-in to any
+  account that is not a student's, so the Students form is a door for
+  students and the review account (a student) only.
+- **Password emails** (set-password, resend, More → Change password, Email
+  me a password link) come from `apps-noreply@oursabeel.com` with the
+  institute's wording; they name the app and the website as where to sign in
+  to the account that exists, never a way to get one.
 
 Tests:
 

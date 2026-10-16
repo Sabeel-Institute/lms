@@ -40,14 +40,6 @@ sections marked DONE below record the setup of the legacy project,
       attachment) or on other storage. It is also Play's app signing and
       upload key; losing it ends updates. `docs/SECRETS.md` has the details
       and the list of everything else on this machine worth backing up.
-- [ ] **Password email subject and body.** `scripts/set-auth-email.mjs`
-      holds the wording and applied the sender name ("Sabeel Institute") and
-      reply-to (admin@oursabeel.com); Google refuses the subject and body
-      for this project through the API (`EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`).
-      Try the console: Authentication → Templates → Password reset → the
-      pencil. If the subject and message are editable there, tell me and I
-      will give you the text to paste; if they are greyed out too, the
-      remaining route is sending from our own domain, which is a decision.
 - [ ] **Google sign-in consent screen**: Google Cloud console →
       `oursabeel-lms` → APIs & Services → OAuth consent screen. Check the app
       name reads "Sabeel Institute LMS" and the support email is an
@@ -279,15 +271,11 @@ Still yours, once the web build is deployed:
       credentials and branded Chrome under it refuses — so this is the one path
       with no automated check behind it.
 
-### 3. Reword the password-reset email
+### ✅ 3. The password email — NOT NEEDED (2026-10-16)
 
-Authentication → **Templates → Password reset**. One template serves two
-journeys: a student receiving it for an account that has never had a password,
-where the default "reset your password" reads as though something has gone
-wrong, and a student who asked for it themselves from **More → Change
-password**, where it is exactly right. Wording that covers both — "Set your
-password for Sabeel Class Recordings" or similar — is what to aim for; there is
-no way to send two different templates from one Firebase project.
+The set-password and reset emails no longer come from Firebase's template:
+the server sends them from `apps-noreply@oursabeel.com` with the institute's
+own wording (`functions/src/passwordLinks.ts`). The template is unused.
 
 ### ✅ 4. Android app registered — DONE (2026-07-23)
 

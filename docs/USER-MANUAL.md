@@ -110,9 +110,13 @@ agree** to carry on (see "The institute's rules, and reporting a problem"
 above).
 
 Your first password comes from an email. When your teacher creates your account,
-the app sends you a "set your password" link — open it, choose a password, and
-you're ready. If you never received it or the link has expired, tap **Email me a
-password link** on this screen to get a fresh one.
+the institute emails you a link, from **Sabeel Apps No Reply**
+(apps-noreply@oursabeel.com), titled "Set your password for the Sabeel
+Institute LMS" — open it, choose a password, and you're ready. The link works
+once, within an hour. If you never received it or the link has expired, enter
+your email address here and tap **Email me a password link** to get a fresh
+one; the screen answers the same way whatever address you type, and the email
+comes only to a student's address.
 
 The **Staff** line at the bottom is only for teachers and administrators — you
 don't need it.
@@ -344,8 +348,9 @@ Two things this page is not: it isn't where you play a recording (that's
 
 ## 1.7 Changing your password
 
-Tap **More**, then **Change password**. The app emails you a link to set a new
-one — the same kind of link you used when your account was first created. Your
+Tap **More**, then **Change password**. The institute emails you a link to set
+a new one, titled "Reset your password for the Sabeel Institute LMS" — the same
+kind of link you used when your account was first created. Your
 account is created for you by the institute; you can't sign yourself up, and
 there's nothing to create here.
 
@@ -930,7 +935,10 @@ open it.
 It shows their name, address and whether they're **active** or **disabled**.
 The **⋮** beside the name holds what can be done:
 
-- **Resend password link** — if they lost the email or the link expired.
+- **Resend password link** — if they lost the email or the link expired. It
+  comes from Sabeel Apps No Reply, and their page's history records that it
+  was sent. Offered to admins, to whoever made the account, and to a manager
+  of a course the student is in now.
 - **Export workbook** — one Excel file for this student across their courses
   (Section 2.13).
 - **Disable account** — turns off access without deleting anything. (Disable,
@@ -1341,7 +1349,13 @@ refresh needed. If you're stuck, contact your administrator.
 **A student can't sign in.** Check the email address matches the one on their
 account exactly, then open their page from the People screen and use
 **Resend password link**, in the **⋮** beside their name, so they can set a
-fresh password. New students have no password until they use that link.
+fresh password. New students have no password until they use that link. It
+comes from apps-noreply@oursabeel.com; if it has not arrived, ask them to
+look in their spam folder too.
+
+**A teacher can't sign in with a password.** Staff sign in only with **Sign in
+with Google**; the Students form refuses a staff account even with the right
+password, and says only that the email and password don't match.
 
 **A recording won't play.** Streaming needs a working connection — try switching
 between Wi-Fi and mobile data, or to **Audio only**, which needs far less of

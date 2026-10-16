@@ -32,7 +32,6 @@ emulator — not your diff.
 | `npm run seed:emulators` | Seeds the sweep's world into an already-running emulator suite and leaves it there, for a device pass (needs the web dev server up: see `docs/DEPLOY.md`) |
 | `node scripts/repro-stale-scope.mjs delete\|remove\|none` | The WEB-4 regression: a manager's cold load with a stale cached course list must render the work queue and report no listener refusal. Needs emulators + the e2e dev server; resets the emulators; exit 1 on a refusal |
 | `node scripts/set-min-version.mjs <versionCode>` | **Against the REAL project** (or the emulator with `CHECK_PROJECT` + `FIRESTORE_EMULATOR_HOST`). Sets the oldest Android build allowed to run |
-| `node scripts/set-auth-email.mjs [--yes]` | **Against the REAL project**, as the active gcloud account. Applies the password email's sender, reply-to, subject and body from the script; dry run without `--yes`. Fails if Google refuses a field |
 | `node scripts/s3-conformance.mjs local\|r2` | The 18 S3 behaviours the media code relies on (signatures, expiry, write-once PUT, signed type, `Range`, multipart ETags, a completed upload taking no more parts, CORS, read key cannot write), against SeaweedFS or **against the REAL R2 bucket** with the real keys from Secret Manager. Writes and deletes a few objects under `conformance/`. Run after changing either |
 | `npm run bucket-config -w @sabeel/media-copier` | **Against the REAL R2 bucket.** Applies `cloudflare/media-bucket/cors.json` and `lifecycle.json`; `wrangler r2 bucket cors list` / `lifecycle list` read them back |
 | `npm test -w @sabeel/media-copier` | The copier Worker's tests, inside workerd with a local R2 |
@@ -692,29 +691,27 @@ throwaway password-less accounts and Admin-generated links:
 
 | Situation | What the link does |
 |---|---|
-| A newer link was issued: by `createStudent`, **Resend password link**, **Email me a password link** or **More → Change password** (all one client call, `sendPasswordResetEmail`), or by the Admin SDK | Every earlier link fails at once (`INVALID_OOB_CODE`) |
+| A newer link was issued: by `createStudent`, **Resend password link**, **Email me a password link** or **More → Change password** (all made by the server with the Admin SDK, `functions/src/passwordLinks.ts`) | Every earlier link fails at once (`INVALID_OOB_CODE`) |
 | The link was used to set a password | Fails from then on (`INVALID_OOB_CODE`) |
 | The code was cut off or altered in copying | Fails (`INVALID_OOB_CODE`) |
 | The account is disabled | Opens the form; Save fails and no password is set |
 | The link is more than an hour old | Fails (`EXPIRED_OOB_CODE`). Valid at 58 minutes, expired at 60 |
 | The link was only opened | Still valid. Verifying does not consume it, so link previews and mail scanners do not burn it |
 
-After a successful Save the page reads "Password changed" and offers no way
-onward: it renders a Continue button only for a continue URL, and the app calls
-`sendPasswordResetEmail` without `ActionCodeSettings`.
+After a successful Save the page reads "Password changed" with a Continue
+button to the website's sign-in: the server makes every link with the website
+as its continue URL.
 
-The app records no sends. They are client calls, so no callable sees them, and
-the audit log holds only `createStudent`. Firebase Auth outside Identity
-Platform keeps no per-user log either. The one timeline is Cloud Monitoring's
-`serviceruntime.googleapis.com/api/request_count` for
-`resource.type="consumed_api"` and
-`resource.labels.service="identitytoolkit.googleapis.com"`, summed per hour and
-grouped by `resource.labels.method` and `metric.labels.response_code`:
-
-- `GetOobCode` 200: a link email requested. Each `npm run smoke:prod` adds one,
-  to an address that does not exist, so nothing is sent.
-- `ResetPassword` 200: a link opened or a password saved. One successful set is
-  two.
-- `ResetPassword` 400: a link that no longer worked.
-
-Links the Admin SDK generates do not appear there.
+Where the sends are recorded: a link staff send (**Resend password link**, and
+`createStudent`'s) is in the audit log, on the student's page as "Set-password
+link sent", "Password reset link sent" or "Password link not sent: the email
+failed". A link asked for from the sign-in screen or More is in the functions'
+log by account (`password link requested for <uid>: sent`), never by address;
+an address with no student account logs only that. A failed email goes to
+Sentry. Cloud Monitoring's Identity Toolkit counts
+(`serviceruntime.googleapis.com/api/request_count`, `resource.type="consumed_api"`,
+`resource.labels.service="identitytoolkit.googleapis.com"`, by
+`resource.labels.method` and `metric.labels.response_code`) still show the
+link's use: `ResetPassword` 200 is a link opened or a password saved (one
+successful set is two), 400 a link that no longer worked. Links the Admin SDK
+makes do not appear under `GetOobCode`.

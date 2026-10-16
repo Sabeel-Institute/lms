@@ -121,7 +121,7 @@ async function reportFailed(outcome: MailOutcome, uid: string, source: string): 
 }
 
 /** An address as the limits count it: trimmed, lower case. */
-export function normalEmail(email: string): string {
+function normalEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
