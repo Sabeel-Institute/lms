@@ -1890,6 +1890,38 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-16 — **The institute's rules, and Report a problem** (branch
+  `rules-and-report`, from `241301c`; not deployed). Store
+  decision 4 (`docs/STORE-RELEASE.md`), decided by Faisal today. An active
+  account whose record has not accepted `RULES_VERSION` sees "Before you
+  continue" in place of the whole app, after the pending and disabled
+  gates; **I agree** calls `acceptRules`, which writes `rulesAcceptedAt` and
+  `rulesVersion` on the caller's own `staffUsers` or `students` record.
+  More → **Report a problem** (staff and students) sends one field to
+  `reportProblem`, which keeps `reports/{id}` and emails it from
+  `apps-noreply@` to `apps-reports@` with Reply-To the reporter, as text
+  and HTML, through domain-wide delegation signed by IAM (no key, no
+  secret); 1 to 2000 characters, 5 an hour per account. In the browser:
+  every new account met the rules first, an address past them landed on
+  them, and after I agree none was asked again on reload, after signing
+  out and in, or in a second browser; a student's and an admin's reports
+  were each kept once (`mail.status: 'skipped'` under the emulator), and
+  Back with unsent text asked first. Shown red: the e2e's rules checks
+  with the gate switched off; the reports rules suite with the rule opened
+  to `if true`; the acceptance write test with profile self-writes opened;
+  the hourly limit off by one, any signed-in caller let through, the email
+  sent before the limit, a repeated acceptance overwriting the first, a
+  failed email losing the report; HTML escaping removed, a fact missing
+  from the HTML; header injection, a character split across encoded
+  words, the wrong delegation subject, Gmail called with the function's
+  own token; the leave guard switched off (a browser probe). Unit 340 +
+  264 + 321 + 26, emulator 251 (+2 skipped) + 487, sweep 2162/2162, e2e
+  277/277; an earlier e2e run failed once on the offline-export check,
+  which touches nothing here and passed on the rerun. Not verified: a
+  real email (needs the deploy and the Token Creator grant, `DEPLOY.md`),
+  and the two help films that open More (`student-notifications`,
+  `admin-audit`) now show a sheet one row short: record them again.
+
 - 2026-10-16 — **Play signs the LMS with its own key** (`965cb04`). Play
   Console had given the app a Google-generated signing key when it was
   created; it was replaced with the LMS release key (Change key, Export and

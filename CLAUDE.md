@@ -168,6 +168,14 @@ Do not silently change any of these.
   a file no student ever saw (still arriving, or failed) can be removed from any
   recording. None destroys history, all are audited, and all are ordinary
   corrections to their own class — see `docs/PRODUCT_BRIEF.md`.
+- **The institute's rules come before the app, and reports go by email.**
+  An account that has not accepted the current `RULES_VERSION` sees
+  `RulesScreen` in place of the whole navigator, after the pending and
+  disabled gates; only `acceptRules` records the agreement, on the account's
+  own record. Report a problem keeps `reports/{id}` and emails the
+  administrators from `apps-noreply@` (`functions/src/mail.ts`); no client
+  reads or writes `reports`, and no screen lists them. Store decision record:
+  `docs/STORE-RELEASE.md`, decision 4.
 - **BRAND COLORS ARE FIXED.** `docs/BRAND.md` and the shared `sabeel-brand`
   skill are the authority. Single light theme, **no dark mode**. Never hardcode a
   colour; the ESLint rule will reject it. `app/src/theme/palette.ts` is the only

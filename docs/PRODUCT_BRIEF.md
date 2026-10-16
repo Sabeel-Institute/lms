@@ -45,6 +45,8 @@ The product should be designed for Android, web, and future iOS support. Initial
 - Disabling a student prevents login while preserving all history, enrollments, and reports.
 - A student's page carries their **history**: when the account was created and by whom, then every enrolment, removal and return, and every time the account was disabled or re-enabled — each with who did it and when. It is read out of the audit log, which is the record of those changes, not kept as a second one. A manager's view of it is pinned to the classes they manage; account changes are admin-only.
 - The student picker on the create-student form offers only courses that are running — an archived course, or one in an archived cohort, is not offered there. Enrolling into an archived course remains possible from the course's own page.
+- **The institute's rules, accepted once** (Faisal, 2026-10-16). Every account, staff or student, agrees to the institute's rules before any screen of the app, once: after approval for staff, at first sign-in for a student, and again only if the rules themselves change (`RULES_VERSION`). The server records when, on the account's own record. The rules state no minimum age.
+- **Report a problem** (Faisal, 2026-10-16). Under More, for staff and students: one field saying what or who, and what is wrong. The server keeps the report and emails it to the administrators' group with Reply-To set to the reporter; the administrators reply by email and act within 24 hours by removing content or disabling the account. Nobody reviews reports inside the app, and there is no blocking between members: a student who blocked a teacher would stop receiving assignments. See `docs/STORE-RELEASE.md`, decision 4.
 
 ## Academic structure
 
@@ -512,6 +514,7 @@ cost, so the reasoning is not lost.
 ### Student
 
 - Email/password login, with a self-service reset from **More → Change password**.
+- Accept the institute's rules once, and report a problem from **More**.
 - View the classes they are enrolled in.
 - See To do: required recordings and assignments together, nearest deadline first.
 - Hand in an assignment: a formatted answer and files, with a camera button on phones; take it back to change it before the due date.
@@ -532,6 +535,7 @@ cost, so the reasoning is not lost.
 ### Manager
 
 - Google sign-in with approved Manager role.
+- Accept the institute's rules once, and report a problem from **More**.
 - Access only assigned classes.
 - Create/manage students in assigned classes.
 - Quick-create student accounts (web only — see the access rules above).
@@ -598,8 +602,8 @@ This is not the final schema. It captures the product objects that need first-cl
 
 | Object | Purpose |
 |---|---|
-| `staffUsers` (`staff`) | Staff identity, role, approval state, and admin/manager permissions. Manager course scoping is `managerUids` on each course, not a separate collection. |
-| `students` | Student identity, active/disabled state, and profile fields. |
+| `staffUsers` (`staff`) | Staff identity, role, approval state, and admin/manager permissions, and when the account accepted the institute's rules. Manager course scoping is `managerUids` on each course, not a separate collection. |
+| `students` | Student identity, active/disabled state, profile fields, and when the account accepted the institute's rules. |
 | `cohorts` | Cohort/semester records and archive state. |
 | `courses` | Courses (the subject) inside cohorts, archive state, and archived-access setting, with every stretch the course's recordings were closed to its students. |
 | `sessions` | One dated meeting of a course: attendance (present/absent/excused snapshot + submitted marker), date, title, required due date, notes, and its 0..1 `recordingId`. Staff-read only. |
@@ -619,6 +623,7 @@ This is not the final schema. It captures the product objects that need first-cl
 | `notifications` | Notification preferences, registered devices, and sent-notification records. |
 | `backendStats` | Admin-facing operational metrics such as storage usage, recording counts, import failures, background jobs, and notification errors. |
 | `auditLog` | Staff and system changes that must remain inspectable. |
+| `reports` | What people sent with Report a problem: who, what, when, from which app, and whether the email to the administrators went. Server-written; no client reads or writes it. |
 
 ## Existing research
 

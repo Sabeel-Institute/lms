@@ -417,6 +417,43 @@ fails as a *listener error* — visible only as an empty screen and a console
 warning. Rules before functions so a new function never runs against permissions
 that have not landed.
 
+### Report a problem sends mail: a grant, the Gmail API, the index first
+
+`reportProblem` emails each report from `apps-noreply@oursabeel.com` by
+domain-wide delegation, with no password and no key (`functions/src/gmail.ts`):
+the function's own credentials ask IAM to sign a `gmail.send` token as
+`report-mailer@oursabeel-lms.iam.gserviceaccount.com` (the address is
+`MAILER_SERVICE_ACCOUNT` in `functions/.env.oursabeel-lms`), and Gmail sends
+it. What it needs in the project:
+
+- **The Gmail API enabled** (it is, since 2026-10-16):
+  `gcloud services list --enabled --project oursabeel-lms | grep gmail`.
+- **The Functions runtime account may sign as `report-mailer@`**, once:
+
+  ```bash
+  gcloud iam service-accounts add-iam-policy-binding \
+    report-mailer@oursabeel-lms.iam.gserviceaccount.com \
+    --project oursabeel-lms \
+    --member serviceAccount:226338267845-compute@developer.gserviceaccount.com \
+    --role roles/iam.serviceAccountTokenCreator
+  ```
+
+  On the mailer account only, never project-wide. Without it every report
+  is kept with `mail.status: 'failed'` and `signJwt refused (HTTP 403)` in
+  Sentry, and the person is told the email did not go out.
+- **The delegation in the Admin console** (Security → API controls →
+  Domain-wide delegation: the mailer account's client id, scope
+  `https://www.googleapis.com/auth/gmail.send`), set up on 2026-10-16 for
+  each Sabeel project. A missing one fails at the token exchange
+  (`unauthorized_client`).
+- **The `reports (uid, createdAt)` index**, deployed with
+  `firestore:indexes` before the functions (the order above): the hourly
+  limit counts with it, and until it is built every report fails.
+
+After the deploy, send one report from the live app as yourself: it arrives
+at `apps-reports@oursabeel.com` with Reply-To set to you, and its document in
+`reports` says `mail.status: 'sent'`.
+
 ## First-deploy traps
 
 Three that come from the project living in a Google Cloud **organization**

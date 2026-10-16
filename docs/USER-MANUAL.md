@@ -56,8 +56,9 @@ Students have **To do**, **Classes** and **More**. Staff have **Today**,
 **Courses**, **Library**, **People** and **More**.
 
 **More** holds the things you need occasionally rather than daily: **Help**,
-notification settings, the privacy policy, signing out, and — for students —
-changing your password. Admins also reach the audit history there.
+**Report a problem**, notification settings, the privacy policy, signing out,
+and — for students — changing your password. Admins also reach the audit
+history there.
 
 **Help** is short films of the app at work, narrated, with captions: each thing
 you do, shown on a phone and on a computer. A student sees the students'
@@ -70,6 +71,25 @@ When something is playing, a slim bar shows what it is with a play/pause button
 — above the tabs on a phone, along the foot of the window on a computer. You can
 move around the app and it keeps playing; tap the bar to go back to the full
 player.
+
+## The institute's rules, and reporting a problem
+
+**The rules, once.** The first time you sign in, before anything else, the app
+shows the institute's rules under **Before you continue**: the app is for Sabeel
+Institute's staff and students, what you post is seen only by members of your
+class, and nothing abusive, harassing, hateful, sexual or otherwise
+objectionable belongs in it. Administrators may remove content and suspend
+accounts that break the rules. Tap **I agree** to carry on, or **Sign out**. You
+agree once for your account, and are not asked again on this or any other phone
+or computer.
+
+**Report a problem.** To tell the administrators about something or someone in
+the app — a post, a comment, a file, a person — tap **More**, then **Report a
+problem**. Say what or who it is and what is wrong, in your own words, and tap
+**Send**. The report reaches the institute's administrators by email with your
+name and email address, and they reply to you by email within a day. If you
+leave the screen before sending, the app asks first, so what you wrote is not
+lost by accident.
 
 ---
 
@@ -84,6 +104,10 @@ player.
 
 Open the app or the website. Under **Students**, enter the **email address your
 teacher registered** and your password, then tap **Sign in**.
+
+The first time you sign in, the app shows the institute's rules: tap **I
+agree** to carry on (see "The institute's rules, and reporting a problem"
+above).
 
 Your first password comes from an email. When your teacher creates your account,
 the app sends you a "set your password" link — open it, choose a password, and
@@ -392,7 +416,8 @@ turned away, and the sign-in screen says so.
 *pending* — an administrator has to approve you and choose your role before you
 can do anything. The screen updates by itself the moment they do; you do not
 need to sign in again. (If you're the very first administrator, that step was
-done for you during setup.)
+done for you during setup.) Once approved, you agree to the institute's rules,
+once, before anything else.
 
 ## 2.2 Today — what's waiting
 
@@ -1301,6 +1326,7 @@ where their record can still be opened and exported. It cannot be undone.
 | **Export a course for records** *(staff)* | Course page → **Export workbook**. |
 | **Export one student's record** *(staff)* | **People** → the student → **⋮** → **Export workbook**. |
 | **Turn a notification off** | **More** → **Notifications** → tap the one you don't want. |
+| **Report something or someone** | **More** → **Report a problem** → say what or who, and what is wrong → **Send**. An administrator replies by email within a day. |
 | **Approve a new teacher** *(admin)* | **People** → **Staff** → **Approve as manager / admin**. |
 | **Give a manager a course** *(admin)* | Course page → **Managers** → add them. |
 | **Create a student** *(staff)* | On the website: **People** → **+** → name + email → **Create account**. |

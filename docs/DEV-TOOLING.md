@@ -355,7 +355,11 @@ the library with a cohort chosen (the state its clear control exists in) and
 the More sheet itself; the manager tour covers People and one student's page,
 which render a different screen from an admin's rather than the same one with
 rows removed; the student tour covers the docked now-playing bar, a row that
-exists in no other state and eats the bottom of every screen under it. Both
+exists in no other state and eats the bottom of every screen under it; a
+fourth tour signs in as the one seeded student who has not accepted the
+institute's rules (`RULES_UNSEEN`) and measures the rules screen, a gate whose
+way out is Sign out, without ever pressing I agree. Every other seeded account
+has accepted, as accounts in use have. Both
 student-page visits anchor on a seeded history row, so the page is measured
 with its history listener answered rather than before. Every navigating visit
 also asserts a testID only its destination renders, so a mis-landed tap fails

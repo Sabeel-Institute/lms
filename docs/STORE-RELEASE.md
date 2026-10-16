@@ -105,6 +105,14 @@ assignment's closes the hand-in. Then sign in as the reviewer and check the
 recording plays and the assignment can be handed in. Apple requires a demo
 account that does not expire, and every update is reviewed again.
 
+**The rules screen and the reviewer.** The first sign-in to the reviewer
+account meets the institute's rules (decision 4) and **I agree** is recorded
+on the account, so App Review sees the screen only if nobody has agreed on
+that account first, the check above included. For the reviewer to meet it,
+remove `rulesAcceptedAt` and `rulesVersion` from the reviewer's
+`students/<uid>` record after the check (an Admin SDK update; no screen does
+it). Undecided: whether App Review should meet the screen.
+
 **It must survive switchover day.** The final seed wipes this project
 (`docs/plans/SWITCHOVER.md`, switchover day, step 3). Recreate it afterwards,
 as an admin on the web:
@@ -136,8 +144,61 @@ them).
 Decided by Faisal on 2026-10-16 for every app: the institute's rules,
 accepted once at first sign-in, and **Report a problem** under More, reaching
 the LMS's administrators, who answer within 24 hours by removing the content
-or disabling the account. **Neither is built.** Both go in before the LMS's
-first App Store submission or Play production release, whichever comes first.
+or disabling the account. **Both are built** (branch `rules-and-report`, not
+yet deployed):
+
+- **The rules.** `RulesScreen` (`app/src/screens/GateScreens.tsx`), titled
+  "Before you continue", with **I agree** and **Sign out**. `App.tsx` shows it
+  in place of the whole navigator to any active account whose profile has not
+  accepted the current `RULES_VERSION` (`packages/shared/src/conduct.ts`), after
+  the pending and disabled gates and before any screen, so no screen and no
+  URL is reachable until the account agrees. **I agree** calls `acceptRules`
+  (`functions/src/conduct.ts`), which writes `rulesAcceptedAt` (server time)
+  and `rulesVersion` on the caller's own `staffUsers` or `students` record;
+  the rules deny clients any write there. The first acceptance stands, on
+  every device. The words are the skill's, with "staff and students", "your
+  class" and "in More", and state no minimum age.
+- **Report a problem.** More → **Report a problem** for staff and students
+  (`app/src/screens/ReportScreen.tsx`): a line of explanation, one field,
+  **Send**; unsent text is held by the leave guard. `reportProblem` refuses an
+  account that is not active, keeps `reports/{id}` (app, uid, name, email,
+  role, text, time, platform, version), and emails it from
+  `apps-noreply@oursabeel.com` to `apps-reports@oursabeel.com` with Reply-To
+  the reporter, as plain text and plain HTML carrying the same facts (the
+  person's words escaped in the HTML), then writes
+  `mail: { status, messageId | error }` on the report. 1 to 2000
+  characters; 5 per account per hour, counted from the stored reports. A
+  failed email keeps the report, tells the person, and goes
+  to Sentry; nothing retries. The email goes by domain-wide delegation with no
+  key: `functions/src/mail.ts` composes it, `functions/src/gmail.ts` signs
+  with IAM as `report-mailer@oursabeel-lms.iam.gserviceaccount.com` and
+  sends through Gmail. No client reads or writes `reports`.
+
+Tests:
+
+- `functions/test/integration/conduct.integration.test.ts`, 14 tests: an
+  inactive, disabled or signed-out caller keeps and sends nothing; an active
+  one keeps exactly one report and sends exactly one email, To
+  `apps-reports@`, Reply-To the reporter; the sixth report in an hour is
+  refused with nothing kept or sent; a failed email keeps the report;
+  acceptance is recorded once, on the account's own record.
+- `functions/test/integration/rules.reports.test.ts` (no client reads or
+  writes a report, admins included) and the "institute's rules, accepted"
+  cases in `rules.identity.test.ts` (no client writes its acceptance), each
+  shown red with its rule opened.
+- `functions/test/unit/mail.test.ts`, `reportMail.test.ts`,
+  `validateReport.test.ts`, and `gmail.test.ts`, which runs the real three
+  requests against a local fake of Google.
+- `npm run test:e2e`: each new account meets the rules first and cannot reach
+  a screen by its address until it agrees; after **I agree** it is not asked
+  again on reload, after signing out and in, or on a second browser; a
+  student and an admin each send a report, and Back with unsent text asks
+  first. `npm run test:screens` tours the rules screen and the report screen
+  at every width.
+
+**Before submission**: deploy (`DEPLOY.md`: the index, the rules, the
+functions, and the Token Creator grant), then send one report from the live
+app and check it arrives at `apps-reports@` with Reply-To set.
 
 Deliberately not: blocking between members (a student who blocked a teacher
 would stop receiving assignments; an administrator disables an abusive
@@ -147,8 +208,8 @@ automatic removal.
 ### 5. Adults only
 
 Students and staff are adults; the LMS has no users under 13, and the privacy
-policy says it is not offered to children under 13. The institute's rules,
-when built, state no minimum age.
+policy says it is not offered to children under 13. The institute's rules
+state no minimum age.
 
 ### 6. Privacy
 
@@ -172,9 +233,12 @@ when built, state no minimum age.
   attendance and completed listening; assignment work (written answers,
   documents, photos, audio); grades and teachers' comments; the class
   recordings, audio and video; whether a device may receive notifications, and
-  its device token; crash and error diagnostics, which carry no name, email
-  address or account identifier.
-- **Third parties named**: Google (staff sign-in), Google Cloud and Firebase
+  its device token; when the account agreed to the institute's rules; a
+  report sent with Report a problem, with the reporter's name, email address
+  and role, which is emailed to the administrators; crash and error
+  diagnostics, which carry no name, email address or account identifier.
+- **Third parties named**: Google (staff sign-in, and the Workspace email a
+  report is delivered by), Google Cloud and Firebase
   (hosting and database, United States), Cloudflare (recordings and assignment
   files, R2, North America), Zoom (classes recorded there before import),
   Sentry (crash diagnostics), Apple (iPhone notifications and their device
@@ -298,7 +362,7 @@ sign-in screen) states the address, the process and what is retained.
 
 | | Item | Status |
 |---|---|---|
-| [ ] | The institute's rules screen and More → Report a problem (decision 4) | not built |
+| [x] | The institute's rules screen and More → Report a problem (decision 4) | built on `rules-and-report`; deploy, then one live report checked at `apps-reports@` |
 | [ ] | A privacy link on the sign-in screen (decision 6; the review notes promise it). Never a support link in the app | not built |
 | [ ] | The update screen sends store installs to their store (above) | not built |
 | [ ] | The reviewer's due dates moved into the future, and the reviewer signed in to check | session 2027-02-12, assignment 2026-11-14 |
