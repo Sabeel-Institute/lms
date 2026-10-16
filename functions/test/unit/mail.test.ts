@@ -1,6 +1,17 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { APPS_MAIL_SENDER } from '@sabeel/shared';
-import { composeMessage, mailbox, resetMailTransport, sendMail, setMailTransport, type MailTransport } from '../../src/mail';
+import {
+  composeMessage,
+  escapeHtml,
+  htmlLines,
+  mailbox,
+  mailtoLink,
+  resetMailTransport,
+  sendMail,
+  setMailTransport,
+  type MailTransport,
+} from '../../src/mail';
+import { parseMessage } from '../mailMessage';
 
 /**
  * What a message from the apps promises its reader: it is from the apps'
@@ -13,16 +24,10 @@ import { composeMessage, mailbox, resetMailTransport, sendMail, setMailTransport
 const AT = new Date(Date.UTC(2026, 9, 16, 15, 4, 5));
 const FROM = { name: APPS_MAIL_SENDER.name, address: APPS_MAIL_SENDER.address };
 
-/** The headers, unfolded, by lower-case name; and the body, decoded. */
+/** The headers, unfolded, by lower-case name; and the plain-text body, decoded. */
 function parse(raw: string) {
-  const [head, ...rest] = raw.split('\r\n\r\n');
-  const headers = new Map<string, string>();
-  for (const line of head.replace(/\r\n[ \t]/g, ' ').split('\r\n')) {
-    const at = line.indexOf(':');
-    headers.set(line.slice(0, at).toLowerCase(), line.slice(at + 1).trim());
-  }
-  const body = Buffer.from(rest.join('\r\n\r\n').replace(/\r\n/g, ''), 'base64').toString('utf8');
-  return { headers, body, head };
+  const m = parseMessage(raw);
+  return { headers: m.headers, head: m.head, body: m.text ?? '' };
 }
 
 /**
@@ -120,6 +125,59 @@ describe('composeMessage', () => {
     for (const address of ['', 'nobody', 'a@b', 'x@example.com\r\nBcc: y@example.com', 'two@at@example.com', 'sp ace@example.com']) {
       expect(() => mailbox({ address }), address).toThrow(/not an address/);
     }
+  });
+});
+
+describe('composeMessage, with HTML beside the text', () => {
+  const mail = {
+    to: { address: 'apps-reports@oursabeel.com' },
+    subject: 'Hello',
+    text: 'One paragraph, one line, however long it runs.\n\nA second.',
+    html: '<!DOCTYPE html>\n<html><body><p>One paragraph.</p><p>Café ✓</p></body></html>',
+  };
+
+  it('is multipart/alternative: the text first, the HTML last, each base64 UTF-8', () => {
+    const raw = composeMessage(mail, FROM, AT, 'sabeel_alt_test');
+    const m = parseMessage(raw);
+    expect(m.headers.get('mime-version')).toBe('1.0');
+    expect(m.headers.get('content-type')).toBe('multipart/alternative; boundary="sabeel_alt_test"');
+    expect(m.parts.map((p) => p.headers.get('content-type'))).toEqual(['text/plain; charset=UTF-8', 'text/html; charset=UTF-8']);
+    expect(m.parts.every((p) => p.headers.get('content-transfer-encoding') === 'base64')).toBe(true);
+    expect(m.text).toBe('One paragraph, one line, however long it runs.\r\n\r\nA second.');
+    expect(m.html).toBe(mail.html.replace(/\n/g, '\r\n'));
+    expect(raw.endsWith('--sabeel_alt_test--\r\n')).toBe(true);
+    expect(raw.split('\r\n').every((line) => line.length <= 998)).toBe(true);
+  });
+
+  it('draws a fresh boundary for each message, which no base64 part can contain', () => {
+    const a = parseMessage(composeMessage(mail, FROM, AT)).boundary!;
+    const b = parseMessage(composeMessage(mail, FROM, AT)).boundary!;
+    expect(a).not.toBe(b);
+    expect(a).toMatch(/_/);
+  });
+
+  it('keeps the headers of a plain message when there is HTML', () => {
+    const m = parseMessage(composeMessage({ ...mail, replyTo: { name: 'Fatima', address: 'f@example.com' } }, FROM, AT));
+    expect(m.headers.get('from')).toBe('"Sabeel Apps No Reply" <apps-noreply@oursabeel.com>');
+    expect(m.headers.get('reply-to')).toBe('"Fatima" <f@example.com>');
+  });
+});
+
+describe('the HTML helpers', () => {
+  it('escape every character that could open markup or close an attribute', () => {
+    expect(escapeHtml(`<script>alert("x")</script> & 'q'`)).toBe('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;q&#39;');
+  });
+
+  it('keep a person’s line breaks as <br>, and nothing they typed as markup', () => {
+    expect(htmlLines('First line\r\nSecond <b>bold</b>\n\nAfter a blank')).toBe(
+      'First line<br>\nSecond &lt;b&gt;bold&lt;/b&gt;<br>\n<br>\nAfter a blank',
+    );
+  });
+
+  it('link an address with mailto, escaped, and refuse anything that is not one', () => {
+    expect(mailtoLink('fatima@example.com')).toBe('<a href="mailto:fatima@example.com">fatima@example.com</a>');
+    expect(mailtoLink("o'brien+x@example.com")).toBe('<a href="mailto:o&#39;brien%2Bx@example.com">o&#39;brien+x@example.com</a>');
+    expect(() => mailtoLink('x" onclick="y@example.com')).toThrow(/not an address/);
   });
 });
 

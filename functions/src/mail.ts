@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { defineString } from 'firebase-functions/params';
 import { GoogleAuth } from 'google-auth-library';
 import { APPS_MAIL_SENDER } from '@sabeel/shared';
@@ -24,13 +25,23 @@ export interface Mailbox {
   address: string;
 }
 
-/** One message from the apps' sender. Plain text, UTF-8. */
+/**
+ * One message from the apps' sender, UTF-8.
+ *
+ * `text` is the message as plain text, ONE LINE PER PARAGRAPH: a mail
+ * program on a phone wraps it to the screen, and a line broken by hand at a
+ * fixed width reads ragged there. `html` is the same message as plain HTML;
+ * when it is given, the two go together as multipart/alternative and the
+ * reader's mail program shows the one it prefers, so they must say the same
+ * thing.
+ */
 export interface OutgoingMail {
   to: Mailbox;
   /** Where a reply goes, when it is not the sender (who reads nothing). */
   replyTo?: Mailbox;
   subject: string;
   text: string;
+  html?: string;
 }
 
 export type MailOutcome =
@@ -104,16 +115,54 @@ function rfc5322Date(at: Date): string {
   return `${DAYS[at.getUTCDay()]}, ${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()} ${two(at.getUTCHours())}:${two(at.getUTCMinutes())}:${two(at.getUTCSeconds())} +0000`;
 }
 
+/** Text for HTML, element content or a quoted attribute alike: `&`, `<`, `>` and both quotes escaped. */
+export function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+/** A person's own words in HTML: escaped, every line break kept as `<br>`. */
+export function htmlLines(text: string): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(escapeHtml)
+    .join('<br>\n');
+}
+
+/** A link that writes to `address`, for an address `mailbox` would accept. */
+export function mailtoLink(address: string): string {
+  if (!ADDRESS.test(address)) throw new Error(`not an address a message can carry: ${JSON.stringify(address)}`);
+  const at = address.lastIndexOf('@');
+  const href = `mailto:${encodeURIComponent(address.slice(0, at))}@${address.slice(at + 1)}`;
+  return `<a href="${escapeHtml(href)}">${escapeHtml(address)}</a>`;
+}
+
+/** CRLF line ends, then base64 in lines of 76: no line of the message can pass 998. */
+const base64Body = (content: string) =>
+  Buffer.from(content.replace(/\r\n?/g, '\n').replace(/\n/g, '\r\n'), 'utf8')
+    .toString('base64')
+    .replace(/.{76}/g, '$&\r\n')
+    .replace(/\r\n$/, '');
+
+/** One body part's headers and content. */
+const bodyPart = (type: 'text/plain' | 'text/html', content: string) =>
+  [`Content-Type: ${type}; charset=UTF-8`, 'Content-Transfer-Encoding: base64', '', base64Body(content)].join('\r\n');
+
+/**
+ * A boundary no part can contain: `_` is not in the base64 alphabet, and every
+ * part is base64. Random, so no two messages share one.
+ */
+const newBoundary = () => `sabeel_alt_${randomBytes(12).toString('hex')}`;
+
 /**
  * The message as Gmail's `messages.send` takes it, CRLF throughout.
  *
- * The body is base64 UTF-8: a report is free text up to 2000 characters, and
+ * Every body is base64 UTF-8: a report is free text up to 2000 characters, and
  * one long paragraph would break the 998-character line limit as it stands.
+ * With `html`, the message is multipart/alternative, the plain text first and
+ * the HTML last, as RFC 2046 orders them (last is preferred).
  */
-export function composeMessage(mail: OutgoingMail, from: Mailbox, at: Date): string {
-  const body = Buffer.from(mail.text.replace(/\r\n?/g, '\n').replace(/\n/g, '\r\n'), 'utf8')
-    .toString('base64')
-    .replace(/.{76}/g, '$&\r\n');
+export function composeMessage(mail: OutgoingMail, from: Mailbox, at: Date, boundary: string = newBoundary()): string {
   const headers = [
     `From: ${mailbox(from)}`,
     `To: ${mailbox(mail.to)}`,
@@ -121,10 +170,19 @@ export function composeMessage(mail: OutgoingMail, from: Mailbox, at: Date): str
     `Subject: ${headerText(mail.subject)}`,
     `Date: ${rfc5322Date(at)}`,
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
   ];
-  return `${headers.join('\r\n')}\r\n\r\n${body.replace(/\r\n$/, '')}\r\n`;
+  if (mail.html === undefined) return `${headers.join('\r\n')}\r\n${bodyPart('text/plain', mail.text)}\r\n`;
+  return [
+    ...headers,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    bodyPart('text/plain', mail.text),
+    `--${boundary}`,
+    bodyPart('text/html', mail.html),
+    `--${boundary}--`,
+    '',
+  ].join('\r\n');
 }
 
 /**

@@ -7,6 +7,7 @@ import { COLLECTIONS, EMULATOR_PROJECT_ID, RULES_VERSION, type Role, type UserSt
 import { acceptRules, reportProblem, REPORTS_PER_HOUR } from '../../src/conduct';
 import { resetMailTransport, setMailTransport, type MailOutcome, type OutgoingMail } from '../../src/mail';
 import { idTokenFor } from './emulatorToken';
+import { parseMessage } from '../mailMessage';
 
 /*
  * THE INSTITUTE'S RULES AND REPORT A PROBLEM, driven through the callables as
@@ -108,8 +109,7 @@ async function refusal(call: Promise<unknown>): Promise<string | null> {
 }
 
 /** One header of a composed message, unfolded. */
-const header = (raw: string, name: string) =>
-  new RegExp(`^${name}: (.*)$`, 'mi').exec(raw.split('\r\n\r\n')[0].replace(/\r\n[ \t]/g, ' '))?.[1];
+const header = (raw: string, name: string) => parseMessage(raw).headers.get(name.toLowerCase());
 
 describe('acceptRules', () => {
   const profile = async (collection: string, uid: string) => (await db().collection(collection).doc(uid).get()).data()!;
@@ -175,9 +175,11 @@ describe('reportProblem', () => {
     expect(header(raw, 'To')).toBe('apps-reports@oursabeel.com');
     expect(header(raw, 'Reply-To')).toBe('"Fatima Ahmed" <fatima@example.com>');
     expect(header(raw, 'Subject')).toBe('[Sabeel Institute LMS] Report from Fatima Ahmed');
-    const body = Buffer.from(raw.split('\r\n\r\n').slice(1).join('').replace(/\r\n/g, ''), 'base64').toString('utf8');
-    expect(body).toContain(TEXT);
-    expect(body).toContain(`Report:  ${r.id}`);
+    const { text, html } = parseMessage(raw);
+    expect(text).toContain(TEXT);
+    expect(text).toContain(`Report:  ${r.id}`);
+    expect(html).toContain(TEXT);
+    expect(html).toContain(`Report: ${r.id}`);
   });
 
   it('takes a report from staff as from a student', async () => {
