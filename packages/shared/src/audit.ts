@@ -82,4 +82,5 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   authProvision: 'Staff account created',
   authReject: 'Rejected sign-up',
   deleteAccount: 'Deleted an account',
+  sendPasswordLink: 'Sent a password link',
 };

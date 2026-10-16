@@ -54,6 +54,7 @@ export { onCourseworkTallied, onGradeTallied, onSubmissionTallied } from './cour
 export { onAssignmentWritten, onDeviceRegistered, onMorning } from './notifyTrigger';
 export { overrideCompletion, clearCompletionOverride } from './overrides';
 export { acceptRules, reportProblem } from './conduct';
+export { requestPasswordLink, onPasswordLinkRequested, sendPasswordLink, sendMyPasswordLink } from './passwordLinks';
 
 /**
  * `bootstrapAdmin` exists ONLY against the emulator.

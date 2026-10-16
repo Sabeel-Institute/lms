@@ -5,6 +5,7 @@ import { COLLECTIONS, type EnrollmentDoc, type StaffUserDoc, type StudentDoc } f
 import { auditedCall } from './audited';
 import { applyEnrollmentActive } from './enrollments';
 import { requireAdmin } from './guards';
+import { addressKey } from './passwordLinks';
 
 /**
  * DELETING AN ACCOUNT (Faisal's choice, 2026-10-14): admin-only, on the
@@ -18,8 +19,8 @@ import { requireAdmin } from './guards';
  *
  * - Goes: the Auth user; the address on their directory row (and a
  *   colleague's photo); the address copied into the audit rows about them,
- *   their creation and their first sign-in; their notification settings and
- *   devices.
+ *   their creation and their first sign-in; the count of password links
+ *   asked for at that address; their notification settings and devices.
  * - Changes: a student leaves every class they are in, as removing them from
  *   it would; a colleague stops managing the courses they managed.
  * - Stays: their name, and everything they did or had done to them —
@@ -61,6 +62,9 @@ export async function deleteAccountRecord(callerUid: string, uid: string): Promi
   ]);
   const withAddress = about.flatMap((q) => q.docs).filter((d) => d.data().detail?.email !== undefined);
   await Promise.all(withAddress.map((d) => d.ref.update({ 'detail.email': FieldValue.delete() })));
+  // And when password links were asked for at that address, which is kept
+  // under a hash of it.
+  if (person.email) await db.collection(COLLECTIONS.passwordLinkLimits).doc(addressKey(person.email)).delete();
 
   try {
     await getAuth().deleteUser(uid);

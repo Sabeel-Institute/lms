@@ -84,6 +84,13 @@ export const COLLECTIONS = {
    *  email to the administrators went. Server-written; no client reads or
    *  writes it (`reportProblem`). */
   reports: 'reports',
+  /** "Email me a password link", asked from the sign-in screen and waiting to
+   *  be sent: the typed address, removed as it is taken up. Server-only
+   *  (`requestPasswordLink`, `onPasswordLinkRequested`). */
+  passwordLinkRequests: 'passwordLinkRequests',
+  /** When password links were asked for, per address (keyed by a hash of it,
+   *  never the address) and in all: the limits on asking. Server-only. */
+  passwordLinkLimits: 'passwordLinkLimits',
 } as const;
 
 /** The one document under `config`. */

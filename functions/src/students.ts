@@ -17,6 +17,8 @@ import {
 } from '@sabeel/shared';
 import { requireAdmin, requireCourseScope, requireStaff } from './guards';
 import { shutOutAccount } from './shutOut';
+import { sendLinkTo } from './passwordLinks';
+import { reportError } from './sentry';
 
 export interface CreateStudentInput {
   displayName: string;
@@ -185,6 +187,13 @@ export const createStudent = auditedCall('createStudent', async (req, audit) => 
   // courseId when enrolled at creation, so the scoped manager sees it in audit.
   if (input.courseId) audit.courseId = input.courseId;
   const created = await createStudentAccount(callerUid, input);
+  // The set-password email, from the institute's address. A failed send
+  // leaves the account as it is: staff resend from the student's page, and
+  // the answer says which of the two happened.
+  const mail = await sendLinkTo(await getAuth().getUser(created.uid));
+  if (mail.status === 'failed') {
+    await reportError(new Error(`Set-password link for ${created.uid} not sent: ${mail.error}`), { source: 'createStudent' });
+  }
   // THE ACCOUNT IT MADE. Nothing in the request names it — the uid does not
   // exist until the line above — so the derivation had nothing to pick up, and
   // the most privilege-adjacent thing a manager can do audited as "someone
@@ -194,8 +203,8 @@ export const createStudent = auditedCall('createStudent', async (req, audit) => 
   // that one query — `targets.studentUid == uid` — is the whole of a student's
   // history. It is what the student's page reads.
   audit.targets.studentUid = created.uid;
-  audit.detail = { email: created.email };
-  return created;
+  audit.detail = { email: created.email, mail: mail.status };
+  return { ...created, emailSent: mail.status !== 'failed' };
 });
 
 export interface StudentAccessInput {

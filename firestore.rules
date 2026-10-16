@@ -833,6 +833,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ---- Password links ----
+    // "Email me a password link" queues the typed address here for the
+    // server to take up (`requestPasswordLink`), and counts the asking per
+    // address and in all. A client that could read either would learn which
+    // addresses were asked for; one that could write could skip the limits.
+    match /passwordLinkRequests/{requestId} {
+      allow read, write: if false;
+    }
+    match /passwordLinkLimits/{key} {
+      allow read, write: if false;
+    }
+
     // ---- Everything else ----
     // The backend-stats collection stays denied until it is opened deliberately
     // with its consumer.

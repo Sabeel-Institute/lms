@@ -137,6 +137,30 @@ export function mailtoLink(address: string): string {
   return `<a href="${escapeHtml(href)}">${escapeHtml(address)}</a>`;
 }
 
+/** One block of a plain message: a paragraph, or a link on a line of its own. */
+export type MailBlock = string | { link: string; label: string };
+
+/**
+ * A plain message as text and as HTML, from one list of blocks, so the two say
+ * the same thing. Text: one line per paragraph, a link as its bare address.
+ * HTML: a paragraph each, escaped, a link as an anchor with its label. Only an
+ * http(s) address is a link here.
+ */
+export function plainMessage(blocks: MailBlock[]): { text: string; html: string } {
+  const text = blocks.map((b) => (typeof b === 'string' ? b : b.link)).join('\n\n');
+  const html = [
+    '<!DOCTYPE html>',
+    '<html><head><meta charset="utf-8"></head><body>',
+    ...blocks.map((b) => {
+      if (typeof b === 'string') return `<p>${escapeHtml(b)}</p>`;
+      if (!/^https?:\/\/[^\s]+$/.test(b.link)) throw new Error(`not a link a message can carry: ${JSON.stringify(b.link)}`);
+      return `<p><a href="${escapeHtml(b.link)}">${escapeHtml(b.label)}</a></p>`;
+    }),
+    '</body></html>',
+  ].join('\n');
+  return { text, html };
+}
+
 /** CRLF line ends, then base64 in lines of 76: no line of the message can pass 998. */
 const base64Body = (content: string) =>
   Buffer.from(content.replace(/\r\n?/g, '\n').replace(/\n/g, '\r\n'), 'utf8')

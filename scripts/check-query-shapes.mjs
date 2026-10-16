@@ -282,6 +282,10 @@ const shapes = [
   ['completionOverrides — a student’s in a course (ledger, student workbook)', () => db.collection('completionOverrides').where('studentUid', '==', ID).where('courseId', '==', ID)],
   ['listeningProgress — a student’s in a course (ledger, student workbook)', () => db.collection('listeningProgress').where('studentUid', '==', ID).where('courseId', '==', ID)],
   ['enrollments — one student in one class', () => db.collection('enrollments').where('courseId', '==', ID).where('studentUid', '==', ID)],
+  [
+    "enrollments — a student's current classes (password link scope, account deletion; server)",
+    () => db.collection('enrollments').where('studentUid', '==', ID).where('active', '==', true),
+  ],
   ['sessions — Today across managed courses', () => db.collection('sessions').where('courseId', 'in', [ID])],
   ['recordings — Today across managed courses', () => db.collection('recordings').where('courseId', 'in', [ID])],
   ['courses — every class, oldest first (admin)', () => db.collection('courses').orderBy('createdAt', 'asc')],

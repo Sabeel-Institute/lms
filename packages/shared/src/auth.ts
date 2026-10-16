@@ -85,3 +85,11 @@ export function isAllowedStaffEmail(
 export function isStaffRole(role: Role | undefined): boolean {
   return role === 'admin' || role === 'manager';
 }
+
+/**
+ * What the sign-in screen's "Email me a password link" answers, whatever the
+ * address: an account or none, a student or staff. A different answer for an
+ * address with an account would make the screen a way to test who has one
+ * (`requestPasswordLink`).
+ */
+export const PASSWORD_LINK_ANSWER = 'If that address has a student account, a link is on its way.';
