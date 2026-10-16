@@ -32,7 +32,17 @@
  */
 import { chromium } from 'playwright';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { HELP_VIDEOS, INSTITUTE_TIMEZONE, SIGN_UP_REFUSED, helpVideoKey, pushPaths, readXlsx, todayInZone } from '@sabeel/shared';
+import {
+  FIRST_ADMIN_EMAIL,
+  HELP_VIDEOS,
+  INSTITUTE_TIMEZONE,
+  RULES_VERSION,
+  SIGN_UP_REFUSED,
+  helpVideoKey,
+  pushPaths,
+  readXlsx,
+  todayInZone,
+} from '@sabeel/shared';
 import { EMULATOR_PORTS, MEDIA_STORE_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import {
@@ -308,6 +318,43 @@ const onToDo = (page, timeout = 25000) =>
 const bodyText = async (page) =>
   (await page.locator('body').innerText()).replace(/\u2011/g, '-').replace(/\u00A0/g, ' ');
 
+/**
+ * WHICH SCREEN A SIGN-IN REACHES FIRST: the institute's rules, or the app.
+ *
+ * A wait for the app alone cannot tell "went straight in" from "met the rules
+ * and was let through", and a wait for the rules alone cannot fail on an
+ * account that skips them. The race answers which came up, so a check on it
+ * goes red either way the gate is wrong.
+ */
+const firstOf = (page, ...testIds) =>
+  Promise.race(
+    testIds.map((id) =>
+      page
+        .getByTestId(id)
+        .filter({ visible: true })
+        .first()
+        .waitFor({ timeout: 30000 })
+        .then(() => id),
+    ),
+  ).catch(() => 'neither');
+
+/** The rules as the server recorded them on an account: the version and when, or null. */
+async function acceptanceOf(collection, field, value) {
+  const rec = (await readCollection(collection)).find((d) => d.fields[field]?.stringValue === value);
+  const version = Number(rec?.fields.rulesVersion?.integerValue ?? 0);
+  const at = Number(rec?.fields.rulesAcceptedAt?.integerValue ?? 0);
+  return version ? { version, at } : null;
+}
+
+/**
+ * THE RULES, AGREED TO, on a page showing them: "I agree", then the app.
+ * Every account in this run meets the rules once, at its first sign-in.
+ */
+async function agreeToRules(page, appMarker) {
+  await tap(page, 'rules-agree');
+  await page.getByTestId(appMarker).filter({ visible: true }).first().waitFor({ timeout: 30000 });
+}
+
 rmSync(SHOTS, { recursive: true, force: true });
 mkdirSync(SHOTS, { recursive: true });
 ensureAudioFixture();
@@ -330,8 +377,36 @@ check(
 await shot(admin, '02-pending');
 
 const boot = await fetch(`${FN}/bootstrapAdmin`);
-await admin.getByTestId('tab-courses').waitFor({ timeout: 30000 });
-check('bootstrapAdmin promotes and the gate lifts LIVE, with no sign-out', boot.status === 200);
+/*
+ * APPROVED, THE ACCOUNT MEETS THE INSTITUTE'S RULES before any screen of the
+ * app, and nothing past them exists until it agrees: not the bar, and not a
+ * screen reached by its address. The agreement is the server's record, on
+ * the account, so it is read back from there.
+ */
+const adminFirst = await firstOf(admin, 'rules-agree', 'tab-courses');
+check('bootstrapAdmin promotes and the gate lifts LIVE, with no sign-out', boot.status === 200 && adminFirst !== 'neither');
+check('an approved account meets the institute’s rules before anything else', adminFirst === 'rules-agree', adminFirst);
+check('the rules stand in place of the app: no bar, no rail', !(await shows(admin, 'tab-more')));
+const rulesWords = await bodyText(admin);
+check(
+  'the rules say who the app is for, who sees a post, and where Report a problem is',
+  /staff and students/.test(rulesWords) && /members of your class/.test(rulesWords) && /Report a problem in More/.test(rulesWords),
+  rulesWords.replace(/\s+/g, ' ').slice(0, 200),
+);
+await shot(admin, '03-rules');
+await admin.goto(`${WEB}cohorts`, { waitUntil: 'domcontentloaded' });
+check(
+  'an address past the rules lands on the rules, not on the screen it names',
+  (await firstOf(admin, 'rules-agree', 'cohorts-add')) === 'rules-agree' && !(await shows(admin, 'tab-more')),
+);
+check('nothing is recorded before "I agree"', (await acceptanceOf('staffUsers', 'email', FIRST_ADMIN_EMAIL)) === null);
+await agreeToRules(admin, 'tab-courses');
+const adminAgreed = await acceptanceOf('staffUsers', 'email', FIRST_ADMIN_EMAIL);
+check(
+  '"I agree" opens the app, and the server records the rules’ version and the time on the account',
+  (await shows(admin, 'tab-courses')) && adminAgreed?.version === RULES_VERSION && adminAgreed.at > Date.now() - 120_000,
+  JSON.stringify(adminAgreed),
+);
 await shot(admin, '03-home-admin');
 
 /*
@@ -384,11 +459,10 @@ check(
 await tap(admin, 'tab-people');
 await tap(admin, 'segment-staff');
 await tap(admin, 'approve-manager@oursabeel.com');
-await mgr.getByTestId('tab-courses').waitFor({ timeout: 30000 });
-check(
-  'approving a pending manager un-gates THEIR session live',
-  await shows(mgr, 'tab-courses'),
-);
+const mgrFirst = await firstOf(mgr, 'rules-agree', 'tab-courses');
+check('approving a pending manager un-gates THEIR session live, onto the institute’s rules', mgrFirst === 'rules-agree', mgrFirst);
+await agreeToRules(mgr, 'tab-courses');
+check('…and once the manager agrees, the app', await shows(mgr, 'tab-courses'));
 
 // An off-domain account is refused at the door: the sign-up gate turns it
 // away before any account exists, and the sign-in screen says which account
@@ -690,9 +764,22 @@ const student = await newSession('student');
 await student.getByTestId('signin-email').fill('fatima@example.com');
 await student.getByTestId('signin-password').fill('StudentPass123!');
 await tap(student, 'signin-student');
+// A student's first sign-in meets the rules too, before a single screen they
+// could hand work in from; a work address does not get past them.
+const fatimaFirst = await firstOf(student, 'rules-agree', 'tab-todo');
+check('the student signs in with their own password, and meets the institute’s rules first', fatimaFirst === 'rules-agree', fatimaFirst);
+await student.goto(`${WEB}my-classes`, { waitUntil: 'domcontentloaded' });
+check(
+  'a student’s address past the rules lands on the rules',
+  (await firstOf(student, 'rules-agree', 'tab-classes')) === 'rules-agree' && !(await shows(student, 'tab-more')),
+);
+await agreeToRules(student, 'tab-todo');
+await student.goto(WEB, { waitUntil: 'domcontentloaded' });
 // The student lands on their task home ("To do"), not a staff greeting.
 await onToDo(student);
 check('the student signs in with their own password', (await screenTitle(student)) === 'To do');
+await student.reload({ waitUntil: 'domcontentloaded' });
+check('once agreed, a reload goes straight into the app', (await firstOf(student, 'rules-agree', 'tab-todo')) === 'tab-todo');
 await shot(student, '09-home-student');
 
 // ------------------------------------------------ session, attendance, publish --
@@ -1276,6 +1363,7 @@ check(
 await student.getByTestId('signin-email').fill('fatima@example.com');
 await student.getByTestId('signin-password').fill('StudentPass123!');
 await tap(student, 'signin-student');
+check('signed out and in again, the rules are not asked again', (await firstOf(student, 'rules-agree', 'tab-classes')) === 'tab-classes');
 // The TAB BAR, not a screen title: signing out sent the address back to the
 // root, so signing back in lands on the first tab, not where they left off.
 await student.getByTestId('tab-classes').waitFor({ timeout: 30000 });
@@ -1631,6 +1719,8 @@ const overridden = await newSession('overridden');
 await overridden.getByTestId('signin-email').fill('bilal@example.com');
 await overridden.getByTestId('signin-password').fill('BilalPass123!');
 await tap(overridden, 'signin-student');
+check('another student’s first sign-in meets the rules: they are each account’s', (await firstOf(overridden, 'rules-agree', 'tab-todo')) === 'rules-agree');
+await agreeToRules(overridden, 'tab-todo');
 await onToDo(overridden);
 /*
  * THE GROUP, not the word — same reasoning as Fatima's completion above. The
@@ -2116,10 +2206,9 @@ check(
 );
 await secondDevice.keyboard.type('StudentPass123!');
 await secondDevice.keyboard.press('Enter');
-check(
-  "the password field's Enter signs the student in",
-  await secondDevice.getByTestId('tab-classes').waitFor({ timeout: 30000 }).then(() => true, () => false),
-);
+const secondFirst = await firstOf(secondDevice, 'rules-agree', 'tab-classes');
+check("the password field's Enter signs the student in", secondFirst !== 'neither');
+check('agreed on one device, the rules are not asked on another', secondFirst === 'tab-classes', secondFirst);
 await secondDevice.goto(`${WEB}${pushPaths.work(cwId)}`, { waitUntil: 'domcontentloaded' });
 await noteHas(secondDevice, 'not on what I did.');
 await student.getByTestId('work-note').click();
@@ -3868,6 +3957,76 @@ check(
   'a createSession entry names the session it created',
   !!targetsOf(sessionEntry).sessionId?.stringValue,
   JSON.stringify(Object.keys(targetsOf(sessionEntry))),
+);
+
+// -------------------------------------------------------- report a problem --
+/*
+ * REPORT A PROBLEM, from More, for a student and for staff. The promise: what
+ * the person writes reaches the administrators, once, in their name; nothing
+ * they typed is lost to a stray Back. "Reaches" ends at the server here: the
+ * Functions emulator sends no email (`mail.status: 'skipped'`), and what the
+ * email says is held by conduct.integration.test.ts and gmail.test.ts.
+ */
+console.log('\nReport a problem');
+const reportsOf = async (role) =>
+  (await readCollection('reports')).filter((d) => d.fields.role?.stringValue === role).map((d) => d.fields);
+const reporter = await newSession('reporter');
+await reporter.getByTestId('signin-email').fill('fatima@example.com');
+await reporter.getByTestId('signin-password').fill('StudentPass123!');
+await tap(reporter, 'signin-student');
+await onToDo(reporter);
+await more(reporter, 'more-report');
+await reporter.getByTestId('report-text').filter({ visible: true }).first().waitFor({ timeout: 20000 });
+check('More → Report a problem opens one field and Send', (await screenTitle(reporter)) === 'Report a problem' && (await shows(reporter, 'report-send')));
+const REPORT_TEXT = 'A comment on Session 1 called another student names. It was posted by Bilal Khan.';
+await reporter.getByTestId('report-text').fill(REPORT_TEXT);
+await shot(reporter, '60-report');
+// Back with words in the field asks first; Stay keeps every one of them.
+await reporter.goBack();
+const askedFirst = await reporter
+  .getByTestId('leave-stay')
+  .filter({ visible: true })
+  .first()
+  .waitFor({ timeout: 10000 })
+  .then(() => true, () => false);
+if (askedFirst) await tap(reporter, 'leave-stay');
+await reporter.waitForTimeout(800);
+check(
+  'Back with an unsent report asks first, and Stay keeps what was written',
+  askedFirst && (await screenTitle(reporter)) === 'Report a problem' && (await reporter.getByTestId('report-text').inputValue()) === REPORT_TEXT,
+);
+const studentReportsBefore = (await reportsOf('student')).length;
+await tap(reporter, 'report-send');
+const sentSaid = await sawText(reporter, 'Sent. An administrator will reply by email within a day.').then(() => true, () => false);
+check('Send says it went, and empties the field', sentSaid && (await reporter.getByTestId('report-text').inputValue()) === '');
+await shot(reporter, '61-report-sent');
+const studentReports = await reportsOf('student');
+const kept = studentReports.find((f) => f.text?.stringValue === REPORT_TEXT);
+check(
+  'exactly one report is kept, in the student’s own name, address and words, and the emulator emailed nothing',
+  studentReports.length === studentReportsBefore + 1 &&
+    kept?.displayName?.stringValue === 'Fatima Ahmed' &&
+    kept?.email?.stringValue === 'fatima@example.com' &&
+    kept?.platform?.stringValue === 'web' &&
+    /^v\d/.test(kept?.appVersion?.stringValue ?? '') &&
+    kept?.mail?.mapValue?.fields?.status?.stringValue === 'skipped',
+  JSON.stringify(kept ?? null).slice(0, 300),
+);
+// With nothing in the field, Back simply leaves.
+await reporter.goBack();
+const leftFreely = await onToDo(reporter, 10000).then(() => true, () => false);
+check('with nothing unsent, Back leaves without asking', leftFreely && !(await shows(reporter, 'leave-stay')));
+await reporter.context().close();
+
+await goHome(admin);
+await more(admin, 'more-report');
+await admin.getByTestId('report-text').filter({ visible: true }).first().waitFor({ timeout: 20000 });
+await admin.getByTestId('report-text').fill('The recording for Session 1 has someone else’s meeting in it.');
+await tap(admin, 'report-send');
+const staffSent = await sawText(admin, 'Sent. An administrator will reply by email within a day.').then(() => true, () => false);
+check(
+  'staff report a problem from the same place, kept in their name',
+  staffSent && (await reportsOf('admin')).some((f) => f.email?.stringValue === FIRST_ADMIN_EMAIL),
 );
 
 // ---------------------------------------------------------------- two tabs --
