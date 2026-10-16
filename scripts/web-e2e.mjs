@@ -36,6 +36,7 @@ import {
   FIRST_ADMIN_EMAIL,
   HELP_VIDEOS,
   INSTITUTE_TIMEZONE,
+  PASSWORD_LINK_ANSWER,
   RULES_VERSION,
   SIGN_UP_REFUSED,
   helpVideoKey,
@@ -369,7 +370,11 @@ await shot(admin, '01-signin');
 check('sign-in screen renders', (await bodyText(admin)).includes('Sign in with Google'));
 
 await tap(admin, 'dev-signin-first-admin');
-await sawText(admin, 'Waiting for approval');
+// A minute, not the usual twenty seconds: the run's first sign-in meets both
+// blocking functions (beforeSignUp, beforeSignIn) cold, and the Functions
+// emulator starts a worker for each, which took longer than twenty seconds on
+// a run straight after the emulators came up.
+await sawText(admin, 'Waiting for approval', 60000);
 check(
   'first staff sign-in lands PENDING — domain membership grants nothing',
   await showsText(admin, 'Waiting for approval'),
@@ -389,8 +394,11 @@ check('an approved account meets the institute’s rules before anything else', 
 check('the rules stand in place of the app: no bar, no rail', !(await shows(admin, 'tab-more')));
 const rulesWords = await bodyText(admin);
 check(
-  'the rules say who the app is for, who sees a post, and where Report a problem is',
-  /staff and students/.test(rulesWords) && /members of your class/.test(rulesWords) && /Report a problem in More/.test(rulesWords),
+  'the rules say who the app is for, who sees a post, what they forbid, and where Report a problem is',
+  /staff and students/.test(rulesWords) &&
+    /members of your class/.test(rulesWords) &&
+    /never abuse another member\. The institute tolerates neither\./.test(rulesWords) &&
+    /Report a problem in More/.test(rulesWords),
   rulesWords.replace(/\s+/g, ' ').slice(0, 200),
 );
 await shot(admin, '03-rules');
@@ -2991,6 +2999,15 @@ check(
   'and answers it without a permission denial — an absent enrollment is asked as a query, never a get',
   !mgrNoMatch.includes('live data error'),
 );
+// Nor may they send this student a password link: not in a course of theirs,
+// and not of their making. Sampled with the menu open and settled.
+await tap(mgr, 'student-actions');
+await mgr.getByTestId('student-export-workbook').filter({ visible: true }).first().waitFor({ timeout: 10000 });
+check(
+  'a manager is not offered a password link for a student outside their courses',
+  (await mgr.getByTestId('student-resend').count()) === 0,
+);
+await closeSheet(mgr);
 
 /*
  * DELETING AN ACCOUNT, the second of two decisions: offered only once the
@@ -3957,6 +3974,72 @@ check(
   'a createSession entry names the session it created',
   !!targetsOf(sessionEntry).sessionId?.stringValue,
   JSON.stringify(Object.keys(targetsOf(sessionEntry))),
+);
+
+// ---------------------------------------------------------- password links --
+/*
+ * PASSWORD LINKS COME FROM THE SERVER, and only to students. The emulator
+ * sends no email (`mail.status: 'skipped'`), but the link is still made, and
+ * the Auth emulator lists every one it made: that list is what is read here.
+ * The sign-in screen answers every address alike; afterwards a link exists for
+ * the student's address and for nobody else's.
+ */
+console.log('\nPassword links');
+const linksFor = async (email) =>
+  ((await (await fetch(`${AUTH}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/oobCodes`)).json()).oobCodes ?? []).filter(
+    (c) => c.email === email,
+  ).length;
+const asker = await newSession('password-link');
+/** The sign-in screen's answer for one address, from a fresh page. */
+const askFor = async (email) => {
+  await asker.goto(WEB, { waitUntil: 'domcontentloaded' });
+  await asker.getByTestId('signin-email').fill(email);
+  await tap(asker, 'signin-reset');
+  await sawText(asker, PASSWORD_LINK_ANSWER).catch(() => {});
+  return (await bodyText(asker)).includes(PASSWORD_LINK_ANSWER);
+};
+const NOBODY = 'nobody-at-all@example.com';
+const before = { fatima: await linksFor('fatima@example.com'), staff: await linksFor(FIRST_ADMIN_EMAIL), nobody: await linksFor(NOBODY) };
+const answered = [await askFor(NOBODY), await askFor(FIRST_ADMIN_EMAIL), await askFor('fatima@example.com')];
+await shot(asker, '58-password-link');
+check('the sign-in screen gives every address the same answer: unknown, staff, student', answered.every(Boolean), JSON.stringify(answered));
+// Asked last, so once the student's link exists the two before it are settled.
+let fatimaLinks = before.fatima;
+for (let i = 0; i < 60 && fatimaLinks === before.fatima; i += 1) {
+  await asker.waitForTimeout(500);
+  fatimaLinks = await linksFor('fatima@example.com');
+}
+check(
+  'afterwards a link is made for the student, and none for staff or an unknown address',
+  fatimaLinks === before.fatima + 1 && (await linksFor(FIRST_ADMIN_EMAIL)) === before.staff && (await linksFor(NOBODY)) === before.nobody,
+  JSON.stringify({ before, fatima: fatimaLinks, staff: await linksFor(FIRST_ADMIN_EMAIL), nobody: await linksFor(NOBODY) }),
+);
+await asker.context().close();
+
+// More → Change password: the student's own account.
+const selfLink = await newSession('password-self');
+await selfLink.getByTestId('signin-email').fill('fatima@example.com');
+await selfLink.getByTestId('signin-password').fill('StudentPass123!');
+await tap(selfLink, 'signin-student');
+await onToDo(selfLink);
+const beforeSelf = await linksFor('fatima@example.com');
+await more(selfLink, 'more-password');
+const selfSaid = await selfLink.getByText('Reset link sent', { exact: true }).filter({ visible: true }).first().waitFor({ timeout: 20000 }).then(() => true, () => false);
+check('More → Change password sends the student a link for their own account', selfSaid && (await linksFor('fatima@example.com')) === beforeSelf + 1);
+await selfLink.context().close();
+
+// Staff resend from the student's page, and the student's history says so.
+await goHome(admin);
+await tap(admin, 'tab-people');
+await tap(admin, 'student-open-fatima@example.com');
+const beforeResend = await linksFor('fatima@example.com');
+await tap(admin, 'student-actions');
+await tap(admin, 'student-resend');
+const resent = await sawText(admin, 'Password link sent to fatima@example.com.').then(() => true, () => false);
+const historyLine = await sawText(admin, 'Password reset link sent').then(() => true, () => false);
+check(
+  'staff resend a password link, for the student’s account, and their history says which link was sent',
+  resent && historyLine && (await linksFor('fatima@example.com')) === beforeResend + 1,
 );
 
 // -------------------------------------------------------- report a problem --
