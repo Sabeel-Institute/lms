@@ -77,9 +77,9 @@ player.
 **The rules, once.** The first time you sign in, before anything else, the app
 shows the institute's rules under **Before you continue**: the app is for Sabeel
 Institute's staff and students, what you post is seen only by members of your
-class, and nothing abusive, harassing, hateful, sexual or otherwise
-objectionable belongs in it. Administrators may remove content and suspend
-accounts that break the rules. Tap **I agree** to carry on, or **Sign out**. You
+class, nothing abusive, harassing, hateful, sexual or otherwise objectionable
+belongs in it, and no member may abuse another. Administrators may remove
+content and suspend accounts that break the rules. Tap **I agree** to carry on, or **Sign out**. You
 agree once for your account, and are not asked again on this or any other phone
 or computer.
 

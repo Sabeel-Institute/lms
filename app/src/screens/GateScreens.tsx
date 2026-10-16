@@ -95,10 +95,10 @@ export function RulesScreen() {
         <Text style={styles.rules} testID="rules-text">
           {APP_NAME} is for Sabeel Institute’s staff and students, and what you post is seen only by members of
           your class. By continuing you agree to the institute’s rules: post only what belongs to your work or
-          class, and nothing abusive, harassing, hateful, sexual or otherwise objectionable. The institute does not
-          tolerate either. Administrators may remove content and suspend accounts that break these rules. To report
-          something or someone, use <Text style={styles.strong}>Report a problem</Text> in More; administrators
-          respond within 24 hours.
+          class, post nothing abusive, harassing, hateful, sexual or otherwise objectionable, and never abuse
+          another member. The institute tolerates neither. Administrators may remove content and suspend accounts
+          that break these rules. To report something or someone, use{' '}
+          <Text style={styles.strong}>Report a problem</Text> in More; administrators respond within 24 hours.
         </Text>
         {error ? <Notice tone="error">{error}</Notice> : null}
         <Button
