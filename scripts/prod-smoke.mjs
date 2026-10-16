@@ -233,6 +233,7 @@ const NOT_CALLABLES = new Set([
   'sweepAbandonedUploads', // scheduled
   'bootstrapAdmin', // the emulator's only
   'beforeSignUp', // the sign-up gate: Identity Platform calls it, the app never does
+  'beforeSignIn', // the sign-in gate, the same
 ]);
 const indexSrc = readFileSync(`${ROOT}functions/src/index.ts`, 'utf8');
 const exported = [

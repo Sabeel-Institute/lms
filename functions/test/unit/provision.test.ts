@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ALLOWED_EMAIL_DOMAIN } from '@sabeel/shared';
-import { decideProvision, refusedSignUp } from '../../src/provision';
+import { decideProvision, refusedSignIn, refusedSignUp } from '../../src/provision';
 
 const staffEmail = `teacher@${ALLOWED_EMAIL_DOMAIN}`;
 const google = (over: Partial<Parameters<typeof decideProvision>[0]> = {}) =>
@@ -149,5 +149,19 @@ describe('refusedSignUp', () => {
     for (const provider of ['facebook.com', 'apple.com', 'anonymous', 'phone', null]) {
       expect(refusedSignUp(provider, staffEmail, true)).toBe('unsupported-provider');
     }
+  });
+});
+
+describe('refusedSignIn', () => {
+  it('lets a student in with a password, and anyone in with Google', () => {
+    expect(refusedSignIn('password', { role: 'student', status: 'active' })).toBeNull();
+    for (const role of ['admin', 'manager', 'student'] as const) expect(refusedSignIn('google.com', { role, status: 'active' })).toBeNull();
+  });
+
+  it('refuses a password to staff and to an account with no role', () => {
+    expect(refusedSignIn('password', { role: 'manager', status: 'active' })).toBe('not-a-student');
+    expect(refusedSignIn('password', { role: 'admin', status: 'active' })).toBe('not-a-student');
+    expect(refusedSignIn('password', {})).toBe('not-a-student');
+    expect(refusedSignIn('password', undefined)).toBe('not-a-student');
   });
 });

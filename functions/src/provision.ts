@@ -1,5 +1,5 @@
 import { NEW_STAFF_ACCESS, isAllowedStaffEmail } from '@sabeel/shared';
-import type { Role, UserStatus } from '@sabeel/shared';
+import type { Role, TokenClaims, UserStatus } from '@sabeel/shared';
 
 /**
  * The decision half of new-user provisioning, kept pure so every branch can be
@@ -111,6 +111,20 @@ export function decideProvision(user: NewUser): ProvisionDecision {
  * The same verdicts as `decideProvision`, which stays behind the door for
  * anything that gets past it.
  */
+/**
+ * THE STUDENTS' DOOR TAKES STUDENTS: what the blocking `beforeUserSignedIn`
+ * asks of every sign-in. A password sign-in is for a student, and for nobody
+ * else. Staff sign in with Google; an account with no role has no business
+ * with a password. A staff account can come to have one: a reset link sent
+ * to a staff address and followed adds a password to the Google account, and
+ * signing in with it would skip Google's own sign-in protections. Google
+ * sign-ins pass, as they always have. Null lets it in.
+ */
+export function refusedSignIn(providerId: string | null, claims: TokenClaims | undefined): 'not-a-student' | null {
+  if (providerId === 'password' && claims?.role !== 'student') return 'not-a-student';
+  return null;
+}
+
 export function refusedSignUp(
   providerId: string | null,
   email: string | null | undefined,

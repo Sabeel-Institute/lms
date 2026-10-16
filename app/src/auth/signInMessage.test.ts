@@ -1,8 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SIGN_UP_REFUSED } from '@sabeel/shared';
+import { SIGN_IN_REFUSED, SIGN_UP_REFUSED } from '@sabeel/shared';
 import { REFUSED_ACCOUNT, signInMessage } from './signInMessage';
 
 describe('the sign-in screen\'s words for a failure', () => {
+  it('reads a password sign-in refused at the door exactly as a wrong password, and says nothing of why', () => {
+    // What the browser SDK rejects with when a blocking function refuses.
+    const refused = {
+      code: 'auth/internal-error',
+      message: `Firebase: HTTP Cloud Function returned an error: {"error":{"message":"${SIGN_IN_REFUSED}","status":"PERMISSION_DENIED"}} (auth/internal-error).`,
+    };
+    expect(signInMessage(refused)).toBe(signInMessage({ code: 'auth/invalid-credential' }));
+    expect(signInMessage(refused)).toBe('That email and password do not match an account.');
+  });
+
   it('refuses a Google sign-in with no account without naming the website', () => {
     const text = signInMessage({ code: 'auth/no-account', message: 'No account for that sign-in.' });
     expect(text).toBe("This account isn't set up for the app yet. Contact your administrator.");

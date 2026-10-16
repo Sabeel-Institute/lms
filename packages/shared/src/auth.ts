@@ -10,6 +10,13 @@ export const ALLOWED_EMAIL_DOMAIN = 'oursabeel.com';
 export const SIGN_UP_REFUSED = 'SIGN_UP_REFUSED';
 
 /**
+ * The words a password sign-in refused by `beforeSignIn` carries, the same
+ * way: the sign-in screen shows its wrong-password sentence for it, and
+ * nothing that says why.
+ */
+export const SIGN_IN_REFUSED = 'SIGN_IN_REFUSED';
+
+/**
  * The one address `bootstrapAdmin` will promote, and the account the emulator
  * dev sign-in row mints for its first admin.
  *

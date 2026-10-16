@@ -146,7 +146,11 @@ Do not silently change any of these.
 - **Two auth populations.** Staff sign in with Google and must be on
   `oursabeel.com` *and* approved by an admin — the domain check is server-side, the
   client `hd` hint is UX only. Students use email/password accounts created by
-  staff. Managers are scoped **class by class**; cohort assignment grants nothing.
+  staff, and **only a student signs in with a password**: the blocking
+  `beforeSignIn` (`functions/src/signUpGate.ts`) refuses a password sign-in
+  to staff, admins and accounts with no role, and the screen reads it as a
+  wrong password. Password links go only to students. Managers are scoped
+  **class by class**; cohort assignment grants nothing.
 - **The phone apps never create an account, and must not learn how** (Android
   and iOS alike). Both
   stores require in-app account DELETION only if an app supports account

@@ -1,4 +1,4 @@
-import { SIGN_UP_REFUSED } from '@sabeel/shared';
+import { SIGN_IN_REFUSED, SIGN_UP_REFUSED } from '@sabeel/shared';
 import { errorText } from '../errors';
 
 /**
@@ -13,6 +13,9 @@ export const REFUSED_ACCOUNT = "That account can't sign in here. Staff use their
 
 /** A disabled account, at the door or signed out by it (`ended: 'disabled'` on the session). Staff are disabled the same way, and a manager has no teacher to ask. */
 export const DISABLED_ACCOUNT = 'That account has been disabled. Contact your teacher or an administrator.';
+
+/** A wrong address or password; and a password sign-in refused at the door, said the same way. */
+const NO_MATCH = 'That email and password do not match an account.';
 
 /**
  * The sentence the sign-in screen shows for a failed attempt.
@@ -33,7 +36,7 @@ export function signInMessage(e: unknown): string {
     case 'auth/user-not-found':
       // One message for all three: distinguishing them tells an attacker which
       // addresses are registered.
-      return 'That email and password do not match an account.';
+      return NO_MATCH;
     case 'auth/no-account':
       /*
        * NAMES NO WEBSITE, ON PURPOSE. The honest instruction — "sign in on the
@@ -61,10 +64,15 @@ export function signInMessage(e: unknown): string {
        * than join the two. "Try again in a moment" could never work.
        */
       return 'Students sign in with their email address and password above.';
-    case 'auth/internal-error':
-      // The sign-up gate's refusal travels inside this code's message; any
-      // other internal error is not a door, and says so in its own words.
-      return String((e as { message?: unknown }).message ?? '').includes(SIGN_UP_REFUSED) ? REFUSED_ACCOUNT : errorText(e);
+    case 'auth/internal-error': {
+      // The gates' refusals travel inside this code's message; any other
+      // internal error is not a door, and says so in its own words. A
+      // password sign-in refused because the account is not a student's
+      // (`beforeSignIn`) reads as a wrong password, and says nothing of why.
+      const message = String((e as { message?: unknown }).message ?? '');
+      if (message.includes(SIGN_IN_REFUSED)) return NO_MATCH;
+      return message.includes(SIGN_UP_REFUSED) ? REFUSED_ACCOUNT : errorText(e);
+    }
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a few minutes and try again.';
     case 'auth/network-request-failed':

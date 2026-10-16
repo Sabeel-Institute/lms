@@ -390,6 +390,25 @@ firebase deploy --only functions --force        # --force is always needed: see 
 firebase deploy --only hosting
 ```
 
+### The sign-in gates are registered with Identity Platform
+
+`beforeSignUp` and `beforeSignIn` (`functions/src/signUpGate.ts`) are
+blocking functions: Identity Platform calls them on every sign-up and
+sign-in, and they do nothing until registered as the project's triggers. A
+functions deploy that includes them registers them; check it afterwards
+(read-only):
+
+```bash
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token --account faisal.shah@oursabeel.com)" \
+  -H "x-goog-user-project: oursabeel-lms" \
+  https://identitytoolkit.googleapis.com/admin/v2/projects/oursabeel-lms/config | jq .blockingFunctions
+```
+
+Both `beforeCreate` and `beforeSignIn` must name the deployed functions.
+Without `beforeSignIn`, a password sign-in to a staff account (one that has
+come to have a password) goes through. A blocking function has 7 seconds,
+cold start included, and runs on every sign-in, Google ones too.
+
 ### `accountExists` must be LIVE before an APK that calls it ships
 
 The native Google door asks `accountExists` before it will exchange a credential,

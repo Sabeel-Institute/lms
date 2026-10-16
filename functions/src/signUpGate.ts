@@ -1,7 +1,7 @@
-import { beforeUserCreated, HttpsError } from 'firebase-functions/v2/identity';
+import { beforeUserCreated, beforeUserSignedIn, HttpsError } from 'firebase-functions/v2/identity';
 import { logger } from 'firebase-functions/v2';
-import { REGION, SIGN_UP_REFUSED } from '@sabeel/shared';
-import { refusedSignUp } from './provision';
+import { REGION, SIGN_IN_REFUSED, SIGN_UP_REFUSED, type TokenClaims } from '@sabeel/shared';
+import { refusedSignIn, refusedSignUp } from './provision';
 
 /**
  * REFUSED BEFORE THE ACCOUNT EXISTS (Faisal's choice, 2026-10-14). The auth
@@ -32,4 +32,28 @@ export const beforeSignUp = beforeUserCreated({ region: REGION }, (event) => {
   if (!refused) return;
   logger.warn('Refused sign-up', { reason: refused, email: event.data?.email ?? null });
   throw new HttpsError('permission-denied', `${SIGN_UP_REFUSED}: ${refused}`);
+});
+
+/**
+ * ONLY A STUDENT SIGNS IN WITH A PASSWORD (2026-10-16). Refused here, at the
+ * auth layer, so no client path and no future screen can open the students'
+ * door to staff: a password on a staff account, however it got there, signs
+ * nobody in (`refusedSignIn`). Students, the store reviewer among them, sign
+ * in as before; Google sign-ins are untouched.
+ *
+ * The refusal carries `SIGN_IN_REFUSED` and nothing else: the sign-in screen
+ * shows its wrong-password sentence for it, and the reason stays in the log,
+ * by account, never by address.
+ *
+ * Like `beforeSignUp`, it needs the project on Identity Platform, and works
+ * only once deployed and registered as the project's beforeSignIn trigger
+ * (`docs/DEPLOY.md`). It does not run for a sign-in with a custom token or
+ * on a token refresh, so a session already open is ended by disabling the
+ * account, as ever.
+ */
+export const beforeSignIn = beforeUserSignedIn({ region: REGION }, (event) => {
+  const refused = refusedSignIn(event.additionalUserInfo?.providerId ?? null, event.data?.customClaims as TokenClaims | undefined);
+  if (!refused) return;
+  logger.warn('Refused sign-in', { reason: refused, uid: event.data?.uid ?? null });
+  throw new HttpsError('permission-denied', SIGN_IN_REFUSED);
 });
