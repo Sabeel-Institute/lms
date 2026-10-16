@@ -1890,6 +1890,33 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-16 — **Password emails from the institute, and only students sign
+  in with a password** (branch `password-mail`, from `b08defb`; not
+  deployed). Every set-password and reset email is made by the server
+  (`generatePasswordResetLink`, continuing to the website) and sent from
+  `apps-noreply@` as text and HTML: at `createStudent`, staff's Resend
+  (audited; an admin, the account's maker, or a manager of a course the
+  student is in now), More → Change password, and the sign-in screen's
+  "Email me a password link", which answers every address with one
+  sentence without asking Auth, queues the request, and lets
+  `onPasswordLinkRequested` send only to an active student; 3 an hour per
+  address, 60 in all. The blocking `beforeSignIn` refuses a password
+  sign-in to any account that is not a student's, read on screen as a wrong
+  password. Production, read-only: 15 staff accounts, none with a password.
+  The rules screen says "never abuse another member. The institute
+  tolerates neither." The task queue and Eventarc emulators are pinned to
+  61308-61309: at their defaults this suite would not start beside a
+  sibling's. Shown red: a link sent to staff, a disabled student or an
+  unknown address; the sign-in answer asking Auth; each limit removed; any
+  staff sending; staff sent a link; the student scope removed from the
+  scope audit; the sign-in lock removed (staff, admin and roleless
+  passwords signed in); the port audit with the task queue unpinned. Unit
+  340 + 280 + 323 + 26, emulator 251 (+2 skipped) + 508, sweep 2162/2162,
+  e2e 282/282 (the run's first sign-in now waits a minute: both blocking
+  functions start cold in the emulator). The help films
+  `student-notifications` and `admin-audit` were recorded again with the
+  More sheet as it is now; not yet published to the bucket.
+
 - 2026-10-16 — **The institute's rules, and Report a problem** (branch
   `rules-and-report`, from `241301c`; not deployed). Store
   decision 4 (`docs/STORE-RELEASE.md`), decided by Faisal today. An active
