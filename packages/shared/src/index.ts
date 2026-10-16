@@ -18,3 +18,4 @@ export * from './xlsx';
 export * from './workbooks';
 export * from './documentShapes';
 export * from './helpVideos';
+export * from './conduct';
