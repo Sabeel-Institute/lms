@@ -322,6 +322,15 @@ describe('the table covers every call site', () => {
       'setStudentAccess',
       'updateCourse',
     ];
+    /*
+     * SCOPED BY THE STUDENT, not by one course: staff send a password link
+     * for a student they may manage, which is an admin, the account's maker,
+     * or a manager of any course the student is in now. Its handler calls
+     * `requireStudentScope`, and passwordLinks.integration.test.ts drives
+     * both sides of it: a manager of the student's course sends one, a
+     * manager of another course and one whose student has left send nothing.
+     */
+    const STUDENT_SCOPED = ['sendPasswordLink'];
     const scoped = new Set(SCOPED.map((row) => row.name));
     const dir = resolve(import.meta.dirname, '../../src');
     const seen: string[] = [];
@@ -334,7 +343,12 @@ describe('the table covers every call site', () => {
         const name = m[1];
         seen.push(name);
         if (scoped.has(name)) continue;
-        expect(ADMIN_ONLY, `${name} is neither in the scope table nor admin-only`).toContain(name);
+        if (STUDENT_SCOPED.includes(name)) {
+          const body = src.slice(m.index).split(/\nexport (?:const|function|async function) /)[0];
+          expect(body, `${name} is listed student-scoped but never calls requireStudentScope`).toMatch(/requireStudentScope\(/);
+          continue;
+        }
+        expect(ADMIN_ONLY, `${name} is neither in the scope table, student-scoped nor admin-only`).toContain(name);
         // The handler's own body: everything up to the next top-level
         // declaration, since a handler written over several lines closes with
         // `);` and a `});`-bounded slice ran on into the next function's guard.
@@ -348,6 +362,6 @@ describe('the table covers every call site', () => {
     // this test never placed.
     expect(seen.length).toBe(sites);
     expect(sites).toBeGreaterThan(15);
-    for (const name of ADMIN_ONLY) expect(seen, `${name} is no longer an audited callable`).toContain(name);
+    for (const name of [...ADMIN_ONLY, ...STUDENT_SCOPED]) expect(seen, `${name} is no longer an audited callable`).toContain(name);
   });
 });
