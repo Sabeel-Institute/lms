@@ -122,6 +122,12 @@
     "logging": {
       "port": 61306
     },
+    "tasks": {
+      "port": 61308
+    },
+    "eventarc": {
+      "port": 61309
+    },
     "singleProjectMode": true
   }
 }

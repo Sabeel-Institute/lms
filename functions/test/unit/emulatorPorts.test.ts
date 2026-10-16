@@ -155,6 +155,21 @@ describe('emulator ports agree across every file that states them', () => {
     }
   });
 
+  /*
+   * EVERY EMULATOR THE SUITE STARTS, pinned, including the two it starts by
+   * itself: the task queue (for `copyZoomFile`) and Eventarc (for the
+   * Firestore triggers). Left at their defaults, 9499 and 9299, they are the
+   * same ports every sibling repo's suite takes, and on 2026-10-16 this
+   * checkout's suite would not start while a sibling's ran
+   * ("EADDRINUSE 127.0.0.1:9499").
+   */
+  it('firebase.json pins every emulator the suite starts, the implicit ones too', () => {
+    const config = portsFromFirebaseJson();
+    for (const service of ['firestore', 'auth', 'functions', 'ui', 'hub', 'logging', 'tasks', 'eventarc']) {
+      expect(config[service], `firebase.json has no port for ${service}`).toBeTypeOf('number');
+    }
+  });
+
   it('the client bundle uses the same ports as the scripts', async () => {
     const { emulator } = await portsFromScripts();
     const client = portsFromClient();

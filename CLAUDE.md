@@ -204,8 +204,9 @@ Do not silently change any of these.
 
 - Unit: `npm test` (Vitest: shared, functions **and app** — the app's node-only
   suite covers its pure logic, the playback session and the work queue).
-- **This checkout owns emulator ports 61300-61306**, the local media store's
-  61307 (S3) and 61320-61326 (its internals), and web dev-server ports
+- **This checkout owns emulator ports 61300-61306**, 61308-61309 (the task
+  queue and Eventarc emulators the suite starts by itself), the local media
+  store's 61307 (S3) and 61320-61326 (its internals), and web dev-server ports
   61310 (sweep) / 61311 (`test:e2e`); the legacy `sabeel-recording-app` checkout
   owns 61100+, and the sibling repos own 61000+ and 61200+.
   Three projects share this machine and all three used to pin 8080/9099/5001/9199,

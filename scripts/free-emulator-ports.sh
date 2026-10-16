@@ -14,7 +14,7 @@
 # so the "cleanup" kills the caller — observed as a shell exiting with 144.
 set -uo pipefail
 
-PORTS=(61300 61301 61302 61303 61304 61305 61306 61307 61320 61321 61322 61323 61324 61325 61326)
+PORTS=(61300 61301 61302 61303 61304 61305 61306 61307 61308 61309 61320 61321 61322 61323 61324 61325 61326)
 CALLER_PIDS=" $$ $PPID "
 
 # Who holds a port: `ss` on Linux, `lsof` on macOS, which has no `ss`. Checked

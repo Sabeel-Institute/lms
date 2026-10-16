@@ -31,6 +31,11 @@ export const EMULATOR_PORTS = {
   ui: PORT_BASE + 4,
   hub: PORT_BASE + 5,
   logging: PORT_BASE + 6,
+  // Started by the suite on its own, for `copyZoomFile`'s task queue and the
+  // Firestore triggers; at their defaults (9499, 9299) they collided with a
+  // sibling repo's suite, and whichever started second failed to start.
+  tasks: PORT_BASE + 8,
+  eventarc: PORT_BASE + 9,
 };
 
 /**

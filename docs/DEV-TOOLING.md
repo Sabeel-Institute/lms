@@ -143,7 +143,8 @@ audit lie, and an audit that reports nothing is worse than no audit.
   QuickTime samples on first use, in the system temp directory. The e2e makes
   its own the same way (`scripts/lib/media-fixtures.mjs`). HEVC needs libx265;
   a distribution ffmpeg has it.
-> **This checkout owns emulator ports 61300-61306**, the local media store's
+> **This checkout owns emulator ports 61300-61306** and **61308-61309** (the
+> task queue and Eventarc, which the suite starts by itself), the local media store's
 > **61307** (S3) and **61320-61326** (SeaweedFS's own master, volume and filer
 > servers, pinned so it binds nothing else), and web dev-server ports
 > 61310 (sweep) / 61311 (`test:e2e`). The legacy `sabeel-recording-app` checkout
@@ -157,7 +158,10 @@ audit lie, and an audit that reports nothing is worse than no audit.
 > (`/proc/sys/net/ipv4/ip_local_port_range`) so nothing above it is handed out at
 > random, and Firebase's own defaults top out at 9499
 > (`firebase-tools/lib/emulator/constants.js`) so the block cannot collide with
-> something the CLI picks for itself.
+> something the CLI picks for itself. Those defaults are taken by every
+> sibling repo's suite, so every emulator this suite starts is pinned here,
+> the implicit ones included: left at 9499, the task queue's port stopped this
+> suite starting while a sibling's ran (2026-10-16).
 >
 > Five files state these numbers and cannot share a representation —
 > `firebase.json`, `app/src/env.ts` (inlined into the bundle),
