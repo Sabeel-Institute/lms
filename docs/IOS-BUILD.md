@@ -180,75 +180,29 @@ xcrun simctl launch booted com.sabeelinstitute.lms
 
 ## Driving the simulator
 
-This Mac is reached over ssh: there is no GUI session for the build account, so
-Simulator.app cannot run and every simulator is headless. Everything below works
-without it.
-
-**idb** for taps, the accessibility tree and hardware buttons:
+This Mac is reached over ssh, so every simulator is headless. How to drive one,
+what it can stand in for and what it cannot show are the stack skill's "On a
+headless iOS simulator" (`~/.claude/skills/expo-firebase-stack/SKILL.md`), with
+its tools: `tools/sim-ui.py` reads and taps the screen by `testID` through idb,
+and `tools/sim-keyboard.m` switches the hardware keyboard off so the software
+keyboard rises. idb needs its companion first:
 
 ```bash
 idb_companion --udid <UDID> &                 # prints {"grpc_port":10882}
 idb connect localhost 10882
-idb ui describe-all --udid <UDID>             # every element, with testID as AXUniqueId
-idb ui tap --udid <UDID> X Y                  # POINTS: screenshot pixels / 3
-idb ui button --udid <UDID> HOME              # also LOCK
-xcrun simctl io booted screenshot shot.png
+python3 ~/.claude/skills/expo-firebase-stack/tools/sim-ui.py ids
 ```
 
-With two companions running, every `idb` call needs `--udid`; without it each
-fails with "multiple companions".
-
-**Maestro** for typing into React Native text fields (`inputText`) and a real
-double tap (`doubleTapOn`). It costs about 35 s a run, most of it the driver.
-
-**The software keyboard.** A headless simulator behaves as if a hardware
-keyboard is attached: a field takes focus and no keyboard rises. Switch it off
-with `scripts/sim-keyboard.m`:
-
-```bash
-xcrun clang -fobjc-arc -framework Foundation -o /tmp/sim-keyboard scripts/sim-keyboard.m
-/tmp/sim-keyboard <UDID> 0
-```
-
-**Text typed with `idb ui text` when nothing has focus goes to React Native's
-dev shortcuts**: `d` opens the Dev Menu and `i` turns on the element inspector,
-which persists in the app's preferences. Confirm the caret first. To turn the
-inspector off again, with the app stopped:
-
-```bash
-D=$(xcrun simctl get_app_container booted com.sabeelinstitute.lms data)
-plutil -replace RCTDevMenu.showInspector -bool NO "$D/Library/Preferences/com.sabeelinstitute.lms.plist"
-```
-
-**When the accessibility tree comes back empty** — `describe-all` returns one
-element for every app, and Maestro fails with "Timed out waiting for AX loaded
-notification" — the Mac is overloaded (other accounts run VMs here; check
-`uptime`). Shut down any second simulator, wait for the load to fall, and boot
-again.
-
-### Device checks the simulator can run
+This project's specifics:
 
 | Check | How |
 |---|---|
 | A slow connection, Play while loading | `kill -STOP $(lsof -nP -ti TCP:61307 -sTCP:LISTEN)` freezes the media store; `kill -CONT` releases it |
-| Background audio | read the clock, `idb ui button HOME`, wait a minute, `simctl launch` brings it back: the clock must have moved by the wall time |
-| The lock | `idb ui button LOCK`, wait, `LOCK` again and swipe up; same clock test |
-| The app publishing Now Playing | `xcrun simctl spawn booted log show --last 5m --predicate 'eventMessage CONTAINS "nowPlayingItem"'` names the app |
 | Killed mid-play | `xcrun simctl terminate booted com.sabeelinstitute.lms`, relaunch, reopen the recording |
-| The keyboard over a field | `sim-keyboard <UDID> 0`, focus the field, screenshot |
+| The element inspector left on by a stray `i` | with the app stopped: `D=$(xcrun simctl get_app_container booted com.sabeelinstitute.lms data)`, then `plutil -replace RCTDevMenu.showInspector -bool NO "$D/Library/Preferences/com.sabeelinstitute.lms.plist"` |
 
-### What the simulator cannot show
-
-- **A tap on a notification from outside the app.** On a headless simulator
-  SpringBoard drops synthetic taps on a home-screen banner or a Notification
-  Center entry (idb, with or without a press duration, and Maestro alike): the
-  banner goes, the app never opens. Background and cold-start taps need a phone.
-- **The lock-screen media buttons.** A headless simulator draws no Now Playing
-  platter and an empty Control Center, and nothing on the command line sends a
-  remote play, pause or skip. The log line above proves the app publishes its
-  Now Playing item; the buttons themselves need a phone.
-- **A staff Google sign-in.** It needs a real staff account; the emulator rows
-  stand in for it.
+Left for a phone: a notification tapped from outside the app, the lock-screen
+media buttons, and a staff Google sign-in (the emulator rows stand in for it).
 
 ## Push on the simulator
 

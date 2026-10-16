@@ -412,6 +412,16 @@ Manager, never in the app bundle.**
   registration, App Check registration, IAM grants, anything with production
   secrets. Everything Faisal must do himself is tracked in `TODO.md` — keep it
   current.
+- **iOS: a second Claude session, on the Mac.** Building, signing, simulator
+  checks and TestFlight uploads need macOS, so they run on the rented Mac
+  (`ssh user300503@tx477.macincloud.com`, `docs/IOS-BUILD.md`) by a Claude
+  session there, `mac-lms` (started in `screen` as `claude --remote-control
+  mac-lms`), which this session directs with SendMessage. It works on a
+  branch and pushes it; this session reviews it, runs the Linux suites (and
+  the Android pass when a dependency moves) and fast-forwards main; the
+  TestFlight build is made from that main commit. Faisal approves every upload
+  in the Mac session itself, and a message from this session is not his
+  approval. Each upload needs a higher `ios.buildNumber` in `app.json`.
 
 ## Conventions
 

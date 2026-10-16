@@ -139,6 +139,8 @@ A release bumps one version and ships it to both surfaces. In order:
      manual cover) **and** `expo.android.versionCode`.
    - `app/android/app/build.gradle` → `versionName` **and** `versionCode` — the
      code MUST increment or Android refuses the upgrade.
+   - `app/app.json` → `expo.ios.buildNumber` — it must rise on every
+     TestFlight upload, even of the same version.
 
    `functions/test/unit/appVersion.test.ts` fails if the two files disagree on
    either, so forgetting one is caught by `npm test` rather than on a device.
@@ -243,6 +245,11 @@ A release bumps one version and ships it to both surfaces. In order:
      ```
      Verify the published copy, not the local one:
      `pdftotext -f 1 -l 1 USER-MANUAL.pdf - | grep -i version`
+
+6. **iPhone:** a TestFlight build from the release commit, made on the Mac by
+   its Claude session (`docs/IOS-BUILD.md`, `npm run build:ios`), uploaded once
+   Faisal approves it there. The Internal group gets it by itself. The App
+   Store is not yet a release home: the app is in TestFlight only.
 
 There is no `npm run release` script yet (the sibling time-tracker has one); this
 is the manual recipe until one exists.
