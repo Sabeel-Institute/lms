@@ -7,13 +7,17 @@ import { EMULATOR_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { putLocalObject } from './lib/media-store.mjs';
 import { AUDIO_FIXTURE, ensureAudioFixture, ensureSlideVideo } from './lib/media-fixtures.mjs';
-import { NEW_STAFF_ACCESS, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
+import { NEW_STAFF_ACCESS, RULES_VERSION, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
 process.env.FIRESTORE_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.auth}`;
 admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
 const auth=admin.auth(), db=admin.firestore();
 const now=Date.now(), day=86400000;
 const iso=(ms)=>new Date(ms).toISOString().slice(0,10);
+// The institute's rules, accepted long ago by every account the guide signs in
+// as: the manual's screens and the help films are of the app, which an account
+// in use reaches without the rules screen.
+const ACCEPTED={ rulesAcceptedAt:now-89*day, rulesVersion:RULES_VERSION };
 
 // ---- the admin the capture signs in as ----
 // PRE-PROVISIONED, so that every seeded change below is attributed to a real
@@ -27,7 +31,7 @@ const ADMIN_EMAIL='faisal.shah@oursabeel.com';
 const adminUser=await auth.createUser({ email:ADMIN_EMAIL, displayName:'Faisal Shah' });
 await new Promise(r=>setTimeout(r,300));
 await auth.setCustomUserClaims(adminUser.uid,{ role:'admin', status:'active' });
-await db.collection('staffUsers').doc(adminUser.uid).set({ email:ADMIN_EMAIL, displayName:'Faisal Shah', photoUrl:null, role:'admin', status:'active', createdAt:now-90*day, approvedAt:now-90*day });
+await db.collection('staffUsers').doc(adminUser.uid).set({ email:ADMIN_EMAIL, displayName:'Faisal Shah', photoUrl:null, role:'admin', status:'active', createdAt:now-90*day, approvedAt:now-90*day, ...ACCEPTED });
 const ADMIN=adminUser.uid;
 
 // ---- students ----
@@ -41,7 +45,7 @@ for (const name of NAMES){
   let u; try { u=await auth.getUserByEmail(email); } catch { u=await auth.createUser({ email, displayName:name }); }
   await new Promise(r=>setTimeout(r,300));
   await auth.setCustomUserClaims(u.uid,{ role:'student', status });
-  await db.collection('students').doc(u.uid).set({ email, displayName:name, role:'student', status, createdAt:now-40*day, createdBy:ADMIN });
+  await db.collection('students').doc(u.uid).set({ email, displayName:name, role:'student', status, createdAt:now-40*day, createdBy:ADMIN, ...ACCEPTED });
   students.push({ uid:u.uid, name, email });
 }
 // Fatima gets a password so she can be shown signing in for the STUDENT screenshots.

@@ -29,6 +29,7 @@ import { VIDEO_FIXTURE, ensureVideoFixture } from './media-fixtures.mjs';
 import {
   HELP_VARIANTS,
   INSTITUTE_TIMEZONE,
+  RULES_VERSION,
   deriveDurationSec,
   helpVideoKey,
   mediaFromSingleAudio,
@@ -190,6 +191,14 @@ export async function seedWorld({ db, auth, browser, base }) {
    * for it, then does what an admin's approval does — claims first, then the
    * mirror, in that order, because the token is what rules trust.
    */
+  /**
+   * THE INSTITUTE'S RULES, ALREADY ACCEPTED, as they are by every account in
+   * use: the tours are of the app, and each would otherwise meet the rules
+   * screen at its first sign-in. One student has not (`RULES_UNSEEN`), so the
+   * rules screen is toured too.
+   */
+  const ACCEPTED = { rulesAcceptedAt: now - 30 * DAY, rulesVersion: RULES_VERSION };
+
   async function provisionStaff(testId, email, role) {
     const staffDoc = async () => {
       const snap = await db.collection('staffUsers').where('email', '==', email).get();
@@ -223,7 +232,7 @@ export async function seedWorld({ db, auth, browser, base }) {
     }
     if (!uid) throw new Error(`${email} was never provisioned by onUserCreate`);
     await auth.setCustomUserClaims(uid, { role, status: 'active' });
-    await db.collection('staffUsers').doc(uid).update({ role, status: 'active', approvedAt: now });
+    await db.collection('staffUsers').doc(uid).update({ role, status: 'active', approvedAt: now, ...ACCEPTED });
     return uid;
   }
 
@@ -315,6 +324,8 @@ export async function seedWorld({ db, auth, browser, base }) {
     'Idris Abubakar',
   ];
   const STUDENT_PASSWORD = 'HikamStudent1';
+  /** The one active student who has not accepted the rules yet: Aminah Bello. */
+  const RULES_UNSEEN_AT = NAMES.length - 2;
   const students = [];
   for (const [i, name] of NAMES.entries()) {
     const email = `${name.toLowerCase().replace(/[^a-z]+/g, '.')}@example.com`;
@@ -344,6 +355,7 @@ export async function seedWorld({ db, auth, browser, base }) {
       status,
       createdAt: now - 40 * DAY,
       createdBy: adminUid,
+      ...(i === RULES_UNSEEN_AT ? {} : ACCEPTED),
     });
     students.push({ uid: u.uid, name, email, status });
   }
@@ -811,6 +823,8 @@ export async function seedWorld({ db, auth, browser, base }) {
     /** The long-named course, and an active student not in it: a row its roster's picker offers. */
     LONG_COURSE_NAME,
     UNENROLLED: students[4],
+    /** An active student who meets the institute's rules at their next sign-in. */
+    RULES_UNSEEN: students[RULES_UNSEEN_AT],
   };
 }
 

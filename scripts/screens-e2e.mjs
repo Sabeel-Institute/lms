@@ -288,7 +288,7 @@ const browser = await chromium.launch();
 const world = await seedWorld({ db, auth, browser, base: BASE });
 const {
   STUDENT, DISABLED_STUDENT, DELETED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived, LONG_COURSE_NAME, UNENROLLED,
-  HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE, TO_GRADE,
+  HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE, TO_GRADE, RULES_UNSEEN,
 } = world;
 
 /**
@@ -712,6 +712,9 @@ const escapes = (page) =>
       // A sheet is not a screen and has no header. Its exit is its own dismiss
       // button, which is as real an escape as a Back arrow.
       cancel: controls.some((e) => /^(cancel|close)$/i.test(label(e))),
+      // A gate stands in place of the whole app, so it has neither Back nor
+      // the bar: its way out is signing out.
+      signOut: controls.some((e) => /^sign out$/i.test(label(e))),
       // The persistent chrome. Every screen has it; only a tab root may rely on
       // it as its ONLY exit — and it has to be VISIBLE, like the others: a bar
       // rendered at zero height would otherwise satisfy "has a way out".
@@ -1004,6 +1007,7 @@ function visitor(page, tag, homeMarker, counter) {
     // behind it are unreachable while the modal is up, and are no longer what
     // this asks about. A tab root's exit is the bar; a pushed screen's is Back.
     const root = TAB_ROOTS.has(name);
+    const gate = GATE_SCREENS.has(name);
     /*
      * ONE ANSWER PER KIND OF SCREEN, and no substitutions.
      *
@@ -1020,12 +1024,14 @@ function visitor(page, tag, homeMarker, counter) {
      */
     check(
       `${tag} / ${name} has a way out`,
-      out.sheet ? out.cancel : root ? out.nav : out.back,
+      out.sheet ? out.cancel : gate ? out.signOut : root ? out.nav : out.back,
       out.sheet
         ? 'a sheet with nothing in it that dismisses the sheet'
-        : root
-          ? 'a tab root with no navigation bar'
-          : 'no Back in the header — an editor’s Cancel is not a way off the screen',
+        : gate
+          ? 'a gate with no Sign out'
+          : root
+            ? 'a tab root with no navigation bar'
+            : 'no Back in the header — an editor’s Cancel is not a way off the screen',
     );
 
     // The bar and the rail are the same on every screen of a population, so
@@ -1092,6 +1098,12 @@ const TAB_ROOTS = new Set([
   'miniplayer',
 ]);
 
+/**
+ * The screens that stand in place of the whole app until something is done:
+ * no Back, no bar, and Sign out as the way out.
+ */
+const GATE_SCREENS = new Set(['rules']);
+
 /*
  * SCREENS WITH NO CONTROL OF THEIR OWN, and it is a short list on purpose.
  *
@@ -1117,7 +1129,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 57;
+const STAFF_SCREENS = 58;
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
@@ -1525,6 +1537,8 @@ async function tourStaff(page, tag) {
     await more('more-help');
     await tap(byId(page, 'help-film-staff-today'));
   }, 'help-film');
+  // Report a problem: the field and Send, the same screen for both populations.
+  await visit('report', () => more('more-report'), 'report-text');
   await visit('audit', () => more('more-audit'), 'audit-list');
   /*
    * AN ADMIN'S NOTIFICATIONS SCREEN HAS NO SWITCHES.
@@ -1640,7 +1654,7 @@ async function tourManager(page, tag) {
     `${counter.seen}/${MANAGER_SCREENS}`);
 }
 
-const STUDENT_SCREENS = 15;
+const STUDENT_SCREENS = 16;
 
 async function tourStudent(page, tag) {
   const counter = { seen: 0 };
@@ -1724,6 +1738,10 @@ async function tourStudent(page, tag) {
   // A student's More is a different sheet: no audit row, and a password reset
   // staff do not get.
   await visit('more', () => tap(byId(page, 'tab-more')), 'more-password');
+  await visit('report', async () => {
+    await tap(byId(page, 'tab-more'));
+    await tap(byId(page, 'more-report'));
+  }, 'report-text');
   await visit('notifications', async () => {
     await tap(byId(page, 'tab-more'));
     await tap(byId(page, 'more-notifications'));
@@ -1753,12 +1771,36 @@ async function tourStudent(page, tag) {
     `${counter.seen}/${STUDENT_SCREENS}`);
 }
 
+const RULES_SCREENS = 1;
+
+/**
+ * THE INSTITUTE'S RULES, as an account that has not accepted them meets them:
+ * a gate in place of the whole app. Its home marker is the rules' own text,
+ * which `goHome` may click harmlessly; "I agree" is never pressed, so every
+ * width meets the same screen.
+ */
+async function tourRules(page, tag) {
+  const counter = { seen: 0 };
+  const visit = visitor(page, tag, 'rules-text', counter);
+  await visit('rules', async () => {}, 'rules-agree');
+  check(`${tag} the rules stand in place of the app: no bar, no rail`, !(await byId(page, 'tab-more').isVisible().catch(() => false)));
+  check(`${tag} toured as many rules screens as the tour lists`, counter.seen === RULES_SCREENS, `${counter.seen}/${RULES_SCREENS}`);
+}
+
 // ---- the sweep -------------------------------------------------------------
 
 async function signInStaff(page, testId, homeMarker) {
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
   await tap(byId(page, testId), 60_000);
   await byId(page, homeMarker).waitFor({ timeout: 60_000 });
+}
+
+async function signInRulesUnseen(page) {
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await byId(page, 'signin-email').fill(RULES_UNSEEN.email);
+  await byId(page, 'signin-password').fill(STUDENT_PASSWORD);
+  await tap(byId(page, 'signin-student'));
+  await byId(page, 'rules-agree').waitFor({ timeout: 60_000 });
 }
 
 async function signInStudent(page) {
@@ -1773,6 +1815,7 @@ const TOURS = [
   ['staff', (page) => signInStaff(page, 'dev-signin-first-admin', 'tab-today'), tourStaff],
   ['manager', (page) => signInStaff(page, 'dev-signin-manager', 'tab-today'), tourManager],
   ['student', signInStudent, tourStudent],
+  ['rules', signInRulesUnseen, tourRules],
 ];
 
 try {
@@ -1825,7 +1868,7 @@ console.log(`examined: ${controlsSeen} controls, ${fixedFormatSeen} fixed-format
 
 const failed = results.filter((r) => !r.ok);
 const viewports = WIDTHS.length + PROFILES.length;
-const screens = STAFF_SCREENS + MANAGER_SCREENS + STUDENT_SCREENS;
+const screens = STAFF_SCREENS + MANAGER_SCREENS + STUDENT_SCREENS + RULES_SCREENS;
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
 console.log(`shots/screens/ — ${viewports} viewports x ${screens} screens`);
 if (!FULL) console.log('SWEEP_FULL=1 adds real device profiles (DPR, touch, UA).');
