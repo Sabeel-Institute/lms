@@ -3,7 +3,7 @@
     "name": "Sabeel Institute LMS",
     "slug": "sabeel-institute-lms",
     "scheme": "sabeellms",
-    "version": "0.1.2",
+    "version": "0.2.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "platforms": [
@@ -18,7 +18,8 @@
       "supportsTablet": false,
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "CFBundleDisplayName": "Sabeel LMS"
+        "CFBundleDisplayName": "Sabeel LMS",
+        "CFBundleName": "Sabeel LMS"
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -104,7 +105,7 @@
     },
     "android": {
       "package": "com.sabeelinstitute.lms",
-      "versionCode": 37,
+      "versionCode": 38,
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
       "permissions": [
