@@ -19,6 +19,8 @@ export type RootStackParamList = {
   Help: undefined;
   /** One help film, by its id in `HELP_VIDEOS`. */
   HelpFilm: { id: string };
+  /** Report a problem: both populations, from More. */
+  Report: undefined;
   Students: undefined;
   /** The screen reads the student live, and their courses depend on who is
    *  looking (an admin queries; a manager walks their own courses). */

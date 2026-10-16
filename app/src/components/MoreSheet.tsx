@@ -84,6 +84,15 @@ export function MoreSheet({
         testID="more-help"
         onPress={() => onNavigate('Help')}
       />
+      {/* Where the institute's rules say it is, for staff and students alike:
+          the one way to tell the administrators about something or someone in
+          the app. Beside Help, where a person with a problem looks. */}
+      <SheetOption
+        label="Report a problem"
+        detail="Tell the administrators about something or someone"
+        testID="more-report"
+        onPress={() => onNavigate('Report')}
+      />
       <SheetOption
         label="Notifications"
         detail="Choose which messages this device receives"

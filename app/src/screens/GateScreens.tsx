@@ -1,7 +1,11 @@
+import { useState } from 'react';
 import { Linking, StyleSheet, Text } from 'react-native';
 import { APP_NAME, DOWNLOAD_PAGE_URL } from '@sabeel/shared';
 import { Button, Card, Notice, Screen } from '../components/ui';
 import { BUILD_LABEL } from '../buildInfo';
+import { acceptRules } from '../conduct';
+import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 import { signOut } from '../session';
 import { getTheme, spacing } from '../theme';
 
@@ -66,6 +70,66 @@ export function ProvisioningScreen() {
 }
 
 /**
+ * THE INSTITUTE'S RULES, once per account, before anything in the app.
+ *
+ * In place of the whole navigator, like the gates above it, so no screen —
+ * none of the places a person posts, and no URL to one — exists until the
+ * account has agreed. It comes after them: an account still waiting for
+ * approval has nothing to agree to yet. The server records the agreement on
+ * the account's own record (`acceptRules`), and the profile listener lifts
+ * this screen when it lands, on every device the account uses.
+ *
+ * The words are the institute's (decided 2026-10-16, `docs/STORE-RELEASE.md`
+ * decision 4). They state no minimum age, on purpose: an age above the one
+ * Apple calculates would force the rating up.
+ */
+export function RulesScreen() {
+  const { active, run } = useOneAtATime();
+  const [error, setError] = useState<string | null>(null);
+  // Held busy after the server has the agreement, until the listener swaps
+  // this screen out: an "I agree" that comes back to life reads as refused.
+  const [agreed, setAgreed] = useState(false);
+  return (
+    <Screen title="Before you continue">
+      <Card>
+        <Text style={styles.rules} testID="rules-text">
+          {APP_NAME} is for Sabeel Institute’s staff and students, and what you post is seen only by members of
+          your class. By continuing you agree to the institute’s rules: post only what belongs to your work or
+          class, and nothing abusive, harassing, hateful, sexual or otherwise objectionable. The institute does not
+          tolerate either. Administrators may remove content and suspend accounts that break these rules. To report
+          something or someone, use <Text style={styles.strong}>Report a problem</Text> in More; administrators
+          respond within 24 hours.
+        </Text>
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        <Button
+          testID="rules-agree"
+          label="I agree"
+          busy={active === 'agree' || agreed}
+          onPress={() =>
+            void run('agree', async () => {
+              setError(null);
+              try {
+                await acceptRules();
+                setAgreed(true);
+              } catch (e) {
+                setError(errorText(e));
+              }
+            })
+          }
+        />
+        <Button
+          testID="rules-sign-out"
+          label="Sign out"
+          variant="secondary"
+          disabled={agreed}
+          onPress={() => void run('signOut', signOut)}
+        />
+      </Card>
+    </Screen>
+  );
+}
+
+/**
  * A build the institute has retired.
  *
  * Shown before sign-in, in place of the whole app, so nothing behind it runs
@@ -100,4 +164,6 @@ export function UpdateScreen({ signedIn }: { signedIn: boolean }) {
 
 const styles = StyleSheet.create({
   build: { marginTop: spacing(3), fontSize: 12, color: t.text.secondary, textAlign: 'center' },
+  rules: { fontSize: 15, lineHeight: 23, color: t.text.primary, marginBottom: spacing(4) },
+  strong: { fontWeight: '600' },
 });

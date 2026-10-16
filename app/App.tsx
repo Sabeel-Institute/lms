@@ -16,12 +16,13 @@ import {
   getStateFromPath,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { APP_NAME, APP_SHORT_NAME, type Role } from '@sabeel/shared';
+import { APP_NAME, APP_SHORT_NAME, hasAcceptedRules, type Role } from '@sabeel/shared';
 import { useMinVersion } from './src/minVersion';
 import { isReady, useSession } from './src/session';
 import { liveDueDate, useMyAssignmentState } from './src/completion';
 import { SignInScreen } from './src/screens/SignInScreen';
-import { DisabledScreen, PendingScreen, ProvisioningScreen, UpdateScreen } from './src/screens/GateScreens';
+import { DisabledScreen, PendingScreen, ProvisioningScreen, RulesScreen, UpdateScreen } from './src/screens/GateScreens';
+import { ReportScreen } from './src/screens/ReportScreen';
 import { StaffScreen } from './src/screens/StaffScreen';
 import { StudentsScreen } from './src/screens/StudentsScreen';
 import { StudentDetailScreen } from './src/screens/StudentDetailScreen';
@@ -229,6 +230,10 @@ export default function App() {
           <ActivityIndicator size="large" color={t.accent.base} />
         </View>
       );
+    } else if (!hasAcceptedRules(profile.doc)) {
+      // The institute's rules, before any screen a person can post from — and
+      // before the navigator exists at all, so no URL reaches past it.
+      content = <RulesScreen />;
     } else {
       headerless = false;
       const role = claims.role as Role;
@@ -267,6 +272,11 @@ export default function App() {
               <Stack.Screen name="HelpFilm" options={screenOptions('HelpFilm', 'Help')}>
                 {() => <HelpFilm />}
               </Stack.Screen>
+              <Stack.Screen
+                name="Report"
+                component={ReportScreen}
+                options={screenOptions('Report', 'Report a problem')}
+              />
               {/* THE ROLE SPLIT IS THE BOUNDARY, not a tidy-up. A screen registered
                   here is addressable by URL, and a browser tab outlives the person
                   signed into it — see the note on the path tables above. Adding a

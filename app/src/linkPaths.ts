@@ -32,6 +32,8 @@ const SHARED_PATHS = {
   // server signs only those.
   Help: 'help',
   HelpFilm: 'help/:id',
+  // Both report problems, to the same administrators.
+  Report: 'report',
 } as const;
 
 /** Everything only staff may reach. "My courses" is one of them: it is the
