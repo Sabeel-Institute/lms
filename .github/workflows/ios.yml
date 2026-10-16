@@ -1,0 +1,172 @@
+name: iOS
+
+# The iPhone app, built on GitHub's macOS runners (free for a public repo).
+# Started by hand only — never by a push:
+#
+#   gh workflow run ios.yml                         # build an .ipa
+#   gh workflow run ios.yml -f testflight=true      # build, then upload to TestFlight
+#
+# or the Actions tab -> iOS -> Run workflow, or the REST API:
+#   POST /repos/Sabeel-Institute/lms/actions/workflows/ios.yml/dispatches
+#   {"ref": "main", "inputs": {"testflight": "true"}}
+#
+# BUILD and TESTFLIGHT are separate jobs. A build needs no new build number;
+# only the upload does, because Apple takes each number once per version. The
+# TestFlight job asks Apple first (scripts/testflight-check.mjs) and stops in
+# seconds if the number is used: raise expo.ios.buildNumber in app/app.json.
+#
+# Signing is MANUAL here (scripts/build-ios.sh, IOS_PROFILE_NAME): the one
+# Apple Distribution certificate and its App Store profile come from secrets.
+# Automatic signing on a fresh machine would mint a certificate every run.
+# Secrets and how to renew them: docs/IOS-BUILD.md, "Builds on GitHub".
+
+on:
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: "Upload to TestFlight after building (needs a build number Apple has not seen)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.ipa.outputs.version }}
+      build: ${{ steps.ipa.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: xcodebuild -version && pod --version
+
+      - run: npm ci
+
+      # The gitignored files a Mac keeps by hand, written from secrets.
+      - name: Build settings
+        env:
+          APP_ENV_LOCAL: ${{ secrets.APP_ENV_LOCAL }}
+          IOS_BUILD_ENV: ${{ secrets.IOS_BUILD_ENV }}
+          GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          printf '%s\n' "$APP_ENV_LOCAL" > app/.env.local
+          printf '%s\n' "$IOS_BUILD_ENV" > app/.env.sentry-build-plugin
+          printf '%s' "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > app/GoogleService-Info.plist
+
+      # A keychain of its own, unlocked for this job, holding the distribution
+      # identity; and the App Store profile where Xcode looks for profiles.
+      - name: Signing
+        env:
+          IOS_DIST_P12: ${{ secrets.IOS_DIST_P12 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$IOS_DIST_P12" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
+          security import "$RUNNER_TEMP/distribution.p12" -k "$KEYCHAIN" -P "$IOS_DIST_P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm "$RUNNER_TEMP/distribution.p12"
+          # Apple's intermediate, so the identity's chain is complete on any image.
+          curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o "$RUNNER_TEMP/wwdr.cer"
+          security import "$RUNNER_TEMP/wwdr.cer" -k "$KEYCHAIN" || true
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s "$KEYCHAIN"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+          PROFILE="$RUNNER_TEMP/app-store.mobileprovision"
+          printf '%s' "$IOS_PROFILE" | base64 --decode > "$PROFILE"
+          security cms -D -i "$PROFILE" > "$RUNNER_TEMP/profile.plist"
+          UUID="$(plutil -extract UUID raw "$RUNNER_TEMP/profile.plist")"
+          NAME="$(plutil -extract Name raw "$RUNNER_TEMP/profile.plist")"
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" \
+                     "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            cp "$PROFILE" "$dir/$UUID.mobileprovision"
+          done
+          echo "IOS_PROFILE_NAME=$NAME" >> "$GITHUB_ENV"
+          echo "profile: $NAME ($UUID), expires $(plutil -extract ExpirationDate raw "$RUNNER_TEMP/profile.plist")"
+
+      - name: Build
+        run: bash scripts/build-ios.sh --no-upload
+
+      - name: What was built
+        id: ipa
+        run: |
+          IPA="$(find build-artifacts/ios/export -maxdepth 1 -name '*.ipa' | head -1)"
+          [ -n "$IPA" ] || { echo "no .ipa was exported" >&2; exit 1; }
+          unzip -p "$IPA" 'Payload/*.app/Info.plist' > "$RUNNER_TEMP/Info.plist"
+          VERSION="$(plutil -extract CFBundleShortVersionString raw "$RUNNER_TEMP/Info.plist")"
+          BUILD="$(plutil -extract CFBundleVersion raw "$RUNNER_TEMP/Info.plist")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "### Built v$VERSION ($BUILD) from \`$(git rev-parse --short HEAD)\`" >> "$GITHUB_STEP_SUMMARY"
+          codesign -dvv "$(find build-artifacts/ios -path '*Products/Applications/*.app' -maxdepth 5 | head -1)" 2>&1 \
+            | grep -E '^(Authority|TeamIdentifier)=' | head -2
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: build-artifacts/ios/export/*.ipa
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Remove the keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+
+  testflight:
+    needs: build
+    if: inputs.testflight
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa
+          path: ipa
+
+      - name: App Store Connect key
+        env:
+          IOS_BUILD_ENV: ${{ secrets.IOS_BUILD_ENV }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          printf '%s\n' "$IOS_BUILD_ENV" > app/.env.sentry-build-plugin
+          . scripts/load-build-env.sh
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s\n' "$ASC_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          echo "ASC_KEY_ID=$ASC_KEY_ID" >> "$GITHUB_ENV"
+          echo "ASC_ISSUER_ID=$ASC_ISSUER_ID" >> "$GITHUB_ENV"
+
+      - name: Is the build number free?
+        run: |
+          IPA="$(find ipa -name '*.ipa' | head -1)"
+          unzip -p "$IPA" 'Payload/*.app/Info.plist' > "$RUNNER_TEMP/Info.plist"
+          BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw "$RUNNER_TEMP/Info.plist")"
+          node scripts/testflight-check.mjs "$BUNDLE_ID" \
+            "${{ needs.build.outputs.version }}" "${{ needs.build.outputs.build }}"
+
+      - name: Upload to TestFlight
+        run: |
+          IPA="$(find ipa -name '*.ipa' | head -1)"
+          xcrun altool --upload-app --type ios --file "$IPA" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          echo "### Uploaded v${{ needs.build.outputs.version }} (${{ needs.build.outputs.build }}) to TestFlight" >> "$GITHUB_STEP_SUMMARY"

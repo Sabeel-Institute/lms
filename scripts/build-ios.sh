@@ -5,9 +5,18 @@
 #   bash scripts/build-ios.sh --check      # run every gate, build nothing
 #   bash scripts/build-ios.sh --no-upload  # archive and export an .ipa, stop there
 #
-# Runs on the Mac. The build-machine values (Sentry, Apple team, App Store
-# Connect key ids) come from the gitignored app/.env.sentry-build-plugin;
-# nothing has to be exported by hand. docs/IOS-BUILD.md is the runbook.
+# Runs on the Mac, and on GitHub's macOS runners (.github/workflows/ios.yml).
+# The build-machine values (Sentry, Apple team, App Store Connect key ids) come
+# from the gitignored app/.env.sentry-build-plugin; nothing has to be exported
+# by hand. docs/IOS-BUILD.md is the runbook.
+#
+# Signing is AUTOMATIC by default: Xcode fetches what it needs through the App
+# Store Connect key, which suits a Mac that keeps its keychain. With
+# IOS_PROFILE_NAME set it is MANUAL: the app target signs with the Apple
+# Distribution identity already in the keychain and that App Store profile, and
+# nothing is minted. A fresh CI machine needs that: automatic signing there
+# creates a new certificate every run and throws its private key away, until
+# Apple's certificate limit stops the builds.
 #
 # Command line rather than the Xcode GUI because Xcode runs build phases in a
 # sanitised environment and, since Xcode 15, ignores the terminal that launched
@@ -49,6 +58,7 @@ A release built from here would point at the local emulators. Unset it (or use a
 
 VERSION="$(node -p "require('./app/app.json').expo.version")"
 BUILD_NUMBER="$(node -p "require('./app/app.json').expo.ios.buildNumber")"
+BUNDLE_ID="$(node -p "require('./app/app.json').expo.ios.bundleIdentifier")"
 
 # The iOS config: plist vs app.json, the Firebase project, the sign-in URL
 # scheme, background audio, the version pair, the icon, the privacy manifest,
@@ -109,6 +119,10 @@ ${UNLOCK_HELP}"
 # App Store Connect key. With one, sign a throwaway binary — the same mechanism
 # the archive uses, in a second.
 SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk '/^ *1\)/ {print $2}')"
+if [ -n "${IOS_PROFILE_NAME:-}" ] && [ -z "$SIGN_ID" ]; then
+  die "IOS_PROFILE_NAME is set (manual signing), but the keychain holds no signing identity.
+Import the Apple Distribution .p12 first."
+fi
 if [ -n "$SIGN_ID" ]; then
   PROBE_DIR="$(mktemp -d)"
   cp /bin/echo "${PROBE_DIR}/probe"
@@ -137,9 +151,10 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 fi
 
 echo
-echo "app          Sabeel Institute LMS (com.sabeelinstitute.lms)"
+echo "app          Sabeel Institute LMS (${BUNDLE_ID})"
 echo "version      ${VERSION}  (build ${BUILD_NUMBER}, commit ${COMMIT})"
 echo "team         ${IOS_TEAM_ID}"
+echo "signing      $([ -n "${IOS_PROFILE_NAME:-}" ] && echo "manual, profile \"${IOS_PROFILE_NAME}\"" || echo "automatic")"
 echo "symbols      ${SENTRY_PROJECT:-<none>}"
 echo "upload       $([ "$UPLOAD" = true ] && echo "yes, to App Store Connect" || echo "no (--no-upload)")"
 echo
@@ -174,19 +189,45 @@ SCHEME="$(xcodebuild -project "$PROJECT" -list -json | node -e '
 [ -n "$SCHEME" ] || die "could not determine the Xcode scheme from $PROJECT."
 echo "scheme       ${SCHEME}"
 
+# Manual signing for the APP TARGET ONLY. Passed on the xcodebuild command
+# line instead, PROVISIONING_PROFILE_SPECIFIER would reach every pod target too,
+# and each fails with "does not support provisioning profiles". The xcodeproj
+# gem ships with CocoaPods.
+if [ -n "${IOS_PROFILE_NAME:-}" ]; then
+  ruby -rxcodeproj -e '
+    project = Xcodeproj::Project.open(ARGV[0])
+    target = project.native_targets.find { |t| t.name == ARGV[1] } or abort("no target #{ARGV[1]} in #{ARGV[0]}")
+    target.build_configurations.select { |c| c.name == "Release" }.each do |c|
+      c.build_settings["CODE_SIGN_STYLE"] = "Manual"
+      c.build_settings["CODE_SIGN_IDENTITY"] = "Apple Distribution"
+      c.build_settings["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] = "Apple Distribution"
+      c.build_settings["PROVISIONING_PROFILE_SPECIFIER"] = ARGV[2]
+      c.build_settings["DEVELOPMENT_TEAM"] = ARGV[3]
+    end
+    attributes = (project.root_object.attributes["TargetAttributes"] ||= {})
+    (attributes[target.uuid] ||= {})["ProvisioningStyle"] = "Manual"
+    project.save
+  ' "$PROJECT" "$SCHEME" "$IOS_PROFILE_NAME" "$IOS_TEAM_ID"
+fi
+
 OUT="build-artifacts/ios"
 ARCHIVE="${OUT}/${SCHEME}-${VERSION}-${BUILD_NUMBER}.xcarchive"
 EXPORT_DIR="${OUT}/export"
 rm -rf "$ARCHIVE" "$EXPORT_DIR"
 mkdir -p "$OUT"
 
-# All three or none, and the file must exist.
+# All three or none, and the file must exist. Manual signing fetches nothing,
+# so it takes neither the key nor -allowProvisioningUpdates.
 AUTH=()
-if [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ] &&
-  [ -n "${ASC_KEY_PATH:-}" ] && [ -f "${ASC_KEY_PATH}" ]; then
-  AUTH=(-authenticationKeyPath "${ASC_KEY_PATH}"
-        -authenticationKeyID "${ASC_KEY_ID}"
-        -authenticationKeyIssuerID "${ASC_ISSUER_ID}")
+PROVISIONING=()
+if [ -z "${IOS_PROFILE_NAME:-}" ]; then
+  PROVISIONING=(-allowProvisioningUpdates)
+  if [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ] &&
+    [ -n "${ASC_KEY_PATH:-}" ] && [ -f "${ASC_KEY_PATH}" ]; then
+    AUTH=(-authenticationKeyPath "${ASC_KEY_PATH}"
+          -authenticationKeyID "${ASC_KEY_ID}"
+          -authenticationKeyIssuerID "${ASC_ISSUER_ID}")
+  fi
 fi
 # `${AUTH[@]+"${AUTH[@]}"}`, not `"${AUTH[@]}"`: macOS ships bash 3.2, where an
 # EMPTY array under `set -u` is an unbound variable.
@@ -196,7 +237,7 @@ xcodebuild -workspace "$WORKSPACE" \
   -configuration Release \
   -destination 'generic/platform=iOS' \
   -archivePath "$ARCHIVE" \
-  -allowProvisioningUpdates \
+  ${PROVISIONING[@]+"${PROVISIONING[@]}"} \
   ${AUTH[@]+"${AUTH[@]}"} \
   DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
   archive
@@ -208,6 +249,13 @@ xcodebuild -workspace "$WORKSPACE" \
 
 PLIST="${OUT}/ExportOptions.plist"
 DESTINATION=$([ "$UPLOAD" = true ] && echo upload || echo export)
+if [ -n "${IOS_PROFILE_NAME:-}" ]; then
+  SIGNING="<key>signingStyle</key><string>manual</string>
+  <key>signingCertificate</key><string>Apple Distribution</string>
+  <key>provisioningProfiles</key><dict><key>${BUNDLE_ID}</key><string>${IOS_PROFILE_NAME}</string></dict>"
+else
+  SIGNING="<key>signingStyle</key><string>automatic</string>"
+fi
 cat > "$PLIST" <<PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -216,7 +264,7 @@ cat > "$PLIST" <<PLISTEOF
   <key>method</key><string>app-store-connect</string>
   <key>destination</key><string>${DESTINATION}</string>
   <key>teamID</key><string>${IOS_TEAM_ID}</string>
-  <key>signingStyle</key><string>automatic</string>
+  ${SIGNING}
   <key>uploadSymbols</key><true/>
   <key>manageAppVersionAndBuildNumber</key><false/>
 </dict>
@@ -227,7 +275,7 @@ xcodebuild -exportArchive \
   -archivePath "$ARCHIVE" \
   -exportPath "$EXPORT_DIR" \
   -exportOptionsPlist "$PLIST" \
-  -allowProvisioningUpdates \
+  ${PROVISIONING[@]+"${PROVISIONING[@]}"} \
   ${AUTH[@]+"${AUTH[@]}"}
 
 echo
