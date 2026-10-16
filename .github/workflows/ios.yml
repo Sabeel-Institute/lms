@@ -61,6 +61,11 @@ jobs:
           IOS_BUILD_ENV: ${{ secrets.IOS_BUILD_ENV }}
           GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
         run: |
+          # GitHub masks a multi-line secret line by line ("NAME=value"), so a
+          # value printed on its own (a tool echoing the Sentry token) would
+          # show in this public log. Mask each value by itself too.
+          printf '%s\n' "$IOS_BUILD_ENV" "$APP_ENV_LOCAL" | sed -n 's/^[A-Za-z_][A-Za-z0-9_]*=//p' \
+            | while IFS= read -r value; do if [ -n "$value" ]; then echo "::add-mask::$value"; fi; done
           printf '%s\n' "$APP_ENV_LOCAL" > app/.env.local
           printf '%s\n' "$IOS_BUILD_ENV" > app/.env.sentry-build-plugin
           printf '%s' "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > app/GoogleService-Info.plist
@@ -127,6 +132,23 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      # What the bundle was made from: the JavaScript source map, and the pod
+      # versions this build resolved (app/ios is generated, so no Podfile.lock
+      # is committed). For comparing two builds, and reading a crash.
+      - name: Build record
+        run: |
+          mkdir -p "$RUNNER_TEMP/record"
+          cp app/ios/Podfile.lock "$RUNNER_TEMP/record/"
+          find "$HOME/Library/Developer/Xcode/DerivedData" -name main.jsbundle.map -path '*Release-iphoneos*' \
+            -exec cp {} "$RUNNER_TEMP/record/" \; -quit
+          ls -la "$RUNNER_TEMP/record"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-record
+          path: ${{ runner.temp }}/record
+          retention-days: 14
+
       - name: Remove the keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
@@ -149,6 +171,8 @@ jobs:
           IOS_BUILD_ENV: ${{ secrets.IOS_BUILD_ENV }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
+          printf '%s\n' "$IOS_BUILD_ENV" | sed -n 's/^[A-Za-z_][A-Za-z0-9_]*=//p' \
+            | while IFS= read -r value; do if [ -n "$value" ]; then echo "::add-mask::$value"; fi; done
           printf '%s\n' "$IOS_BUILD_ENV" > app/.env.sentry-build-plugin
           . scripts/load-build-env.sh
           mkdir -p "$HOME/.appstoreconnect/private_keys"
@@ -164,9 +188,15 @@ jobs:
           node scripts/testflight-check.mjs "$BUNDLE_ID" \
             "${{ needs.build.outputs.version }}" "${{ needs.build.outputs.build }}"
 
+      # The flags as `xcrun altool --help` spells them (Xcode 26). Its parser
+      # ignores a flag it does not know, so a misspelling would not fail here.
+      - name: Validate with Apple
+        run: |
+          IPA="$(find ipa -name '*.ipa' | head -1)"
+          xcrun altool --validate-app "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID"
+
       - name: Upload to TestFlight
         run: |
           IPA="$(find ipa -name '*.ipa' | head -1)"
-          xcrun altool --upload-app --type ios --file "$IPA" \
-            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          xcrun altool --upload-package "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID"
           echo "### Uploaded v${{ needs.build.outputs.version }} (${{ needs.build.outputs.build }}) to TestFlight" >> "$GITHUB_STEP_SUMMARY"

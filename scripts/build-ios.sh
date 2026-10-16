@@ -167,6 +167,10 @@ fi
 # ---------------------------------------------------------------- build
 
 export EXPO_PUBLIC_COMMIT="$COMMIT"
+# Sentry's build phase lists the npm modules a release contains, looking in
+# app/node_modules by default; npm workspaces install them at the repo root,
+# so without this the list was empty (the Mac) or missing (a runner).
+export MODULES_PATHS="${PWD}/node_modules"
 
 # Regenerate ios/. ALWAYS --platform ios: prebuild is clean by default, and a
 # bare one would delete the committed, hand-edited app/android/.
