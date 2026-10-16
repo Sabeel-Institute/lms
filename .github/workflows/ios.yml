@@ -213,10 +213,26 @@ jobs:
       - name: Validate with Apple
         run: |
           IPA="$(find ipa -name '*.ipa' | head -1)"
-          xcrun altool --validate-app "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID"
+          # App Store Connect can fail one call in five for hours (2026-10-16):
+          # retry a validation that never reached Apple; a real refusal stops at once.
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if xcrun altool --validate-app "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID" 2>&1 | tee altool.log; then break; fi
+            grep -q -E 'timed out|Did not receive a response|NSURLErrorDomain|"status" ?: ?"5[0-9][0-9]"' altool.log && [ "$attempt" -lt 3 ] || exit 1
+            echo "App Store Connect did not answer; trying again in $((attempt * 60)) s"
+            sleep $((attempt * 60))
+          done
 
       - name: Upload to TestFlight
         run: |
           IPA="$(find ipa -name '*.ipa' | head -1)"
-          xcrun altool --upload-package "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID"
+          # App Store Connect can fail one call in five for hours (2026-10-16):
+          # retry a upload that never reached Apple; a real refusal stops at once.
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if xcrun altool --upload-package "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID" 2>&1 | tee altool.log; then break; fi
+            grep -q -E 'timed out|Did not receive a response|NSURLErrorDomain|"status" ?: ?"5[0-9][0-9]"' altool.log && [ "$attempt" -lt 3 ] || exit 1
+            echo "App Store Connect did not answer; trying again in $((attempt * 60)) s"
+            sleep $((attempt * 60))
+          done
           echo "### Uploaded v${{ needs.build.outputs.version }} (${{ needs.build.outputs.build }}) to TestFlight" >> "$GITHUB_STEP_SUMMARY"
