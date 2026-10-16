@@ -13,11 +13,11 @@ cannot be minted against the emulator at all.
 
 ## The iPhone app (open)
 
-- [ ] **Back up `~/.config/sabeel-secrets/`** into your password manager
-      or other secure storage: every secret file of every Sabeel app, from
-      this machine and the Mac. Its README marks the irreplaceable ones (the
+- [ ] **Back up `~/.config/secrets-vault/`** into your password manager
+      or other secure storage: every secret file of your projects, Sabeel
+      and personal, from this machine and the Mac. Its README marks the irreplaceable ones (the
       LMS and time-tracker release keys, both Apple keys). Run
-      `bash ~/.config/sabeel-secrets/vault.sh verify` first; store it again
+      `bash ~/.config/secrets-vault/vault.sh verify` first; store it again
       whenever a secret changes.
 - [ ] **Approve the TestFlight upload** in the Mac session (mac-lms), and
       install the build from TestFlight on your iPhone when it arrives.

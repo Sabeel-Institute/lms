@@ -109,16 +109,17 @@ reinstall. Keep two copies off this machine: the password in a password
 manager, and the keystore file in that password manager as an attachment or on
 other storage.
 
-## The collected copy: `~/.config/sabeel-secrets/`
+## The collected copy: `~/.config/secrets-vault/`
 
-Every secret file of every Sabeel app, from this machine and the Mac, copied
-into one folder (mode 700) for Faisal to keep in a password manager:
-`apple/`, `google-play/`, and one folder per app (`lms/`, `kanban/`,
-`time-tracker/`, `recording-app/`), each with `android/` (signing keys) and
-`env/` (build and runtime settings). Its `README.md` says what each file is,
+Every secret file of Faisal's projects, from this machine and the Mac,
+copied into one folder (mode 700) for him to keep in a password manager.
+`sabeel/` holds `apple/`, `google-play/`, and one folder per app (`lms/`,
+`kanban/`, `time-tracker/`, `recording-app/`), each with `android/` (signing
+keys) and `env/` (build and runtime settings); `personal/` holds the SSH keys
+and his other projects. Its `README.md` says what each file is,
 which are irreplaceable, and how to replace the rest. The tools keep reading
 their own live copies; `sources.tsv` names each one, and
-`bash ~/.config/sabeel-secrets/vault.sh verify` proves the folder still matches
+`bash ~/.config/secrets-vault/vault.sh verify` proves the folder still matches
 them (`collect` refreshes it). A new secret file is added to `sources.tsv`
 the day it is made.
 
