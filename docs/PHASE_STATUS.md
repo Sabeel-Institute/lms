@@ -1890,6 +1890,20 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-15 — **iPhone builds run on GitHub** (`6295c84`–`627a1f6`).
+  `ios.yml`, started by hand or through the API, builds a signed `.ipa` on a
+  macOS runner and, as a separate job, uploads it to TestFlight. Build 3
+  (`fd4cf01`) was the first: Apple validated and processed it (VALID).
+  Signing is manual with one Apple Distribution certificate made through the
+  App Store Connect API (shared with Kanban), so no run mints one. Compared
+  with the Mac's build 2, the same Xcode and SDK, the same frameworks, and all
+  1,986 JavaScript sources identical; the compiled bundle differs by a few
+  bytes from the commit label alone. The pods were not identical: the Mac,
+  with a stale specs index and an old lock, had built AppCheckCore and
+  GoogleUtilities a patch older, so `app/Podfile.lock` now pins them on both
+  machines (`pod install --repo-update`). Every run's public log was scanned
+  for each secret value: none present. Next upload: build 4.
+
 - 2026-10-15 — **The iPhone app reaches TestFlight, and iPhones get
   notifications** (`fca6e0f`–`08a51a2`; functions and rules deployed). Build
   1 (v0.1.2, `6f2fce3`) is on TestFlight, made and uploaded from the Mac
