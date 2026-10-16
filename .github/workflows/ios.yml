@@ -111,19 +111,36 @@ jobs:
       - name: Build
         run: bash scripts/build-ios.sh --no-upload
 
+      # What a phone enforces exists only after the export, so it is asserted
+      # on the .ipa itself: the push entitlement, a store build's
+      # get-task-allow, the profile it was signed with, and this commit's
+      # label inside the JavaScript (EXPO_PUBLIC_COMMIT; a dirty tree's ends
+      # in "+").
       - name: What was built
         id: ipa
         run: |
           IPA="$(find build-artifacts/ios/export -maxdepth 1 -name '*.ipa' | head -1)"
-          [ -n "$IPA" ] || { echo "no .ipa was exported" >&2; exit 1; }
-          unzip -p "$IPA" 'Payload/*.app/Info.plist' > "$RUNNER_TEMP/Info.plist"
-          VERSION="$(plutil -extract CFBundleShortVersionString raw "$RUNNER_TEMP/Info.plist")"
-          BUILD="$(plutil -extract CFBundleVersion raw "$RUNNER_TEMP/Info.plist")"
+          [ -n "$IPA" ] || { echo "::error::no .ipa was exported"; exit 1; }
+          unzip -q "$IPA" -d "$RUNNER_TEMP/ipa"
+          APP="$(find "$RUNNER_TEMP/ipa/Payload" -maxdepth 1 -name '*.app' | head -1)"
+          VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP/Info.plist")"
+          BUILD="$(plutil -extract CFBundleVersion raw "$APP/Info.plist")"
+          COMMIT="$(git rev-parse --short HEAD)"
+          codesign -d --entitlements - --xml "$APP" > "$RUNNER_TEMP/entitlements.plist"
+          security cms -D -i "$APP/embedded.mobileprovision" > "$RUNNER_TEMP/embedded.plist"
+          codesign -dvv "$APP" 2>&1 | grep -E '^(Authority|TeamIdentifier)=' | head -2
+
+          wrong=""
+          [ "$(plutil -extract aps-environment raw "$RUNNER_TEMP/entitlements.plist")" = production ] || wrong="$wrong aps-environment"
+          [ "$(plutil -extract get-task-allow raw "$RUNNER_TEMP/entitlements.plist")" = false ] || wrong="$wrong get-task-allow"
+          [ "$(plutil -extract Name raw "$RUNNER_TEMP/embedded.plist")" = "$IOS_PROFILE_NAME" ] || wrong="$wrong profile"
+          grep -aq "$COMMIT" "$APP/main.jsbundle" || wrong="$wrong label"
+          ! grep -aq "${COMMIT}+" "$APP/main.jsbundle" || wrong="$wrong dirty-label"
+          [ -z "$wrong" ] || { echo "::error::the exported app is wrong:$wrong"; exit 1; }
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
-          echo "### Built v$VERSION ($BUILD) from \`$(git rev-parse --short HEAD)\`" >> "$GITHUB_STEP_SUMMARY"
-          codesign -dvv "$(find build-artifacts/ios -path '*Products/Applications/*.app' -maxdepth 5 | head -1)" 2>&1 \
-            | grep -E '^(Authority|TeamIdentifier)=' | head -2
+          echo "### Built v$VERSION ($BUILD) from \`$COMMIT\`, signed with \"$IOS_PROFILE_NAME\"" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:

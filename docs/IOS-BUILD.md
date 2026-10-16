@@ -304,6 +304,24 @@ the build number is free (`scripts/testflight-check.mjs`; if not, it stops in
 seconds: raise `expo.ios.buildNumber`, commit, run again), has Apple validate
 the `.ipa`, and uploads it. The Internal group gets it by itself.
 
+**What the build job checks.** Before compiling, `build-ios.sh` refuses a
+profile that is not installed, is for another app (Kanban's shares the
+certificate), has expired, or does not carry the certificate of the keychain's
+Apple Distribution identity. After exporting, the workflow refuses an `.ipa`
+without the production push entitlement, with `get-task-allow`, signed with
+another profile, or without this commit's label in its JavaScript.
+
+**The pods are pinned** by `app/Podfile.lock`, which `build-ios.sh` copies into
+the generated `app/ios/` before `pod install`, on the Mac and on GitHub alike.
+Without it every clean checkout resolved the third-party pods afresh, and the
+Mac, which kept an older lock, built other versions than GitHub from the same
+commit (AppCheckCore 11.3.1 and GoogleUtilities 8.1.2 against 11.3.2 and 8.1.5).
+If `pod install` resolves anything else, the build stops; when a native
+dependency changed on purpose, `cp app/ios/Podfile.lock app/Podfile.lock`,
+commit, and build again. Two builds of the same commit then differ only in
+their signatures, Xcode's per-build ids, and the commit label, which also
+shifts a few bytes of the compiled JavaScript.
+
 **Manual signing** (`IOS_PROFILE_NAME`, set by the workflow from the profile):
 the app target alone signs with the Apple Distribution identity and the App
 Store profile; nothing is fetched or minted. Automatic signing on a fresh

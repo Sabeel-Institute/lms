@@ -96,6 +96,34 @@ Put it in app/.env.sentry-build-plugin with ASC_ISSUER_ID. Use --no-upload to sk
 Put AuthKey_${ASC_KEY_ID}.p8 in ~/.appstoreconnect/private_keys, or set ASC_KEY_PATH."
 fi
 
+# Manual signing: the named profile must be installed, be for THIS app, and not
+# have expired. Xcode says each of these too, but only after prebuild and pod
+# install. Kanban signs with the same certificate, so its profile is the easy
+# one to install here by mistake.
+PROFILE_PLIST=""
+PROFILE_EXPIRES=""
+if [ -n "${IOS_PROFILE_NAME:-}" ]; then
+  PROFILE_PLIST="$(mktemp)"
+  trap 'rm -f "$PROFILE_PLIST"' EXIT
+  found=false
+  for f in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"/*.mobileprovision \
+    "$HOME/Library/MobileDevice/Provisioning Profiles"/*.mobileprovision; do
+    [ -f "$f" ] || continue
+    security cms -D -i "$f" >"$PROFILE_PLIST" 2>/dev/null || continue
+    if [ "$(plutil -extract Name raw "$PROFILE_PLIST")" = "$IOS_PROFILE_NAME" ]; then
+      found=true
+      break
+    fi
+  done
+  [ "$found" = true ] || die "IOS_PROFILE_NAME is \"${IOS_PROFILE_NAME}\", and no installed provisioning profile has that name.
+Xcode reads them from ~/Library/Developer/Xcode/UserData/Provisioning Profiles."
+  PROFILE_APP="$(plutil -extract Entitlements.application-identifier raw "$PROFILE_PLIST")"
+  [ "$PROFILE_APP" = "${IOS_TEAM_ID}.${BUNDLE_ID}" ] || die "Profile \"${IOS_PROFILE_NAME}\" is for ${PROFILE_APP}, not ${IOS_TEAM_ID}.${BUNDLE_ID}."
+  PROFILE_EXPIRES="$(plutil -extract ExpirationDate raw "$PROFILE_PLIST")"
+  [[ "$PROFILE_EXPIRES" > "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ]] || die "Profile \"${IOS_PROFILE_NAME}\" expired ${PROFILE_EXPIRES}.
+docs/IOS-BUILD.md, \"Builds on GitHub\", has how to renew it."
+fi
+
 # The signing keychain must be USABLE, and the only proof is signing something.
 # Over ssh the login keychain is locked (it unlocks at GUI login), while
 # `security find-identity` still lists valid identities — so the archive dies
@@ -115,13 +143,27 @@ security show-keychain-info "$KEYCHAIN" >/dev/null 2>&1 || die "The signing keyc
 
 ${UNLOCK_HELP}"
 
-# No identity is not an error: -allowProvisioningUpdates mints one through the
-# App Store Connect key. With one, sign a throwaway binary — the same mechanism
-# the archive uses, in a second.
-SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk '/^ *1\)/ {print $2}')"
-if [ -n "${IOS_PROFILE_NAME:-}" ] && [ -z "$SIGN_ID" ]; then
-  die "IOS_PROFILE_NAME is set (manual signing), but the keychain holds no signing identity.
-Import the Apple Distribution .p12 first."
+# Automatic signing: no identity is not an error, since -allowProvisioningUpdates
+# mints one through the App Store Connect key. Manual signing signs as "Apple
+# Distribution", so that identity must be here, and the profile must carry its
+# certificate: a renewed certificate needs a profile made on it, and installing
+# one without the other is the mistake to expect. Either way, sign a throwaway
+# binary: the same mechanism the archive uses, in a second.
+if [ -n "${IOS_PROFILE_NAME:-}" ]; then
+  SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Distribution: / {print $2; exit}')"
+  [ -n "$SIGN_ID" ] || die "IOS_PROFILE_NAME is set (manual signing), but the keychain holds no Apple Distribution identity.
+Import the distribution .p12 first."
+  carried=false
+  n="$(plutil -extract DeveloperCertificates raw "$PROFILE_PLIST")"
+  for ((i = 0; i < n; i++)); do
+    sha="$(plutil -extract "DeveloperCertificates.$i" raw "$PROFILE_PLIST" | base64 --decode | shasum -a 1 | awk '{print toupper($1)}')"
+    [ "$sha" != "$SIGN_ID" ] || carried=true
+  done
+  [ "$carried" = true ] || die "Profile \"${IOS_PROFILE_NAME}\" does not carry the certificate of the
+Apple Distribution identity in the keychain (${SIGN_ID}). Make a profile on that
+certificate, or import the certificate the profile was made on."
+else
+  SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk '/^ *1\)/ {print $2}')"
 fi
 if [ -n "$SIGN_ID" ]; then
   PROBE_DIR="$(mktemp -d)"
@@ -154,7 +196,7 @@ echo
 echo "app          Sabeel Institute LMS (${BUNDLE_ID})"
 echo "version      ${VERSION}  (build ${BUILD_NUMBER}, commit ${COMMIT})"
 echo "team         ${IOS_TEAM_ID}"
-echo "signing      $([ -n "${IOS_PROFILE_NAME:-}" ] && echo "manual, profile \"${IOS_PROFILE_NAME}\"" || echo "automatic")"
+echo "signing      $([ -n "${IOS_PROFILE_NAME:-}" ] && echo "manual, profile \"${IOS_PROFILE_NAME}\" (expires ${PROFILE_EXPIRES})" || echo "automatic")"
 echo "symbols      ${SENTRY_PROJECT:-<none>}"
 echo "upload       $([ "$UPLOAD" = true ] && echo "yes, to App Store Connect" || echo "no (--no-upload)")"
 echo
@@ -167,15 +209,22 @@ fi
 # ---------------------------------------------------------------- build
 
 export EXPO_PUBLIC_COMMIT="$COMMIT"
-# Sentry's build phase lists the npm modules a release contains, looking in
-# app/node_modules by default; npm workspaces install them at the repo root,
-# so without this the list was empty (the Mac) or missing (a runner).
-export MODULES_PATHS="${PWD}/node_modules"
 
 # Regenerate ios/. ALWAYS --platform ios: prebuild is clean by default, and a
 # bare one would delete the committed, hand-edited app/android/.
 (cd app && CI=1 npx expo prebuild --platform ios --no-install)
+# The pods this app ships, pinned by app/Podfile.lock. app/ios is generated
+# and gitignored, so without a committed lock every clean checkout resolves
+# the third-party pods afresh, and a Mac that kept an older lock builds other
+# versions than a runner (seen: AppCheckCore 11.3.1 and GoogleUtilities 8.1.2
+# on the Mac, 11.3.2 and 8.1.5 on GitHub, from the same commit).
+cp app/Podfile.lock app/ios/Podfile.lock
 (cd app/ios && pod install)
+pods_of() { sed -n '/^PODS:/,/^DEPENDENCIES:/p' "$1"; }
+if [ "$(pods_of app/Podfile.lock)" != "$(pods_of app/ios/Podfile.lock)" ]; then
+  die "pod install resolved other pods than app/Podfile.lock pins (a native dependency changed?).
+If that is intended: cp app/ios/Podfile.lock app/Podfile.lock, commit it, and build again."
+fi
 
 WORKSPACE="$(find app/ios -maxdepth 1 -name '*.xcworkspace' | head -1)"
 [ -n "$WORKSPACE" ] || die "no .xcworkspace under app/ios after prebuild + pod install."
