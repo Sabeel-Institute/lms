@@ -316,6 +316,9 @@ the generated `app/ios/` before `pod install`, on the Mac and on GitHub alike.
 Without it every clean checkout resolved the third-party pods afresh, and the
 Mac, which kept an older lock, built other versions than GitHub from the same
 commit (AppCheckCore 11.3.1 and GoogleUtilities 8.1.2 against 11.3.2 and 8.1.5).
+The install runs with `--repo-update`: the Mac's local specs index had gone
+stale (it knew no GoogleUtilities past 8.1.2), which is how it resolved older
+pods, and against the pin a plain `pod install` fails there.
 If `pod install` resolves anything else, the build stops; when a native
 dependency changed on purpose, `cp app/ios/Podfile.lock app/Podfile.lock`,
 commit, and build again. Two builds of the same commit then differ only in

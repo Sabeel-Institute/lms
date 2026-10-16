@@ -218,8 +218,14 @@ export EXPO_PUBLIC_COMMIT="$COMMIT"
 # the third-party pods afresh, and a Mac that kept an older lock builds other
 # versions than a runner (seen: AppCheckCore 11.3.1 and GoogleUtilities 8.1.2
 # on the Mac, 11.3.2 and 8.1.5 on GitHub, from the same commit).
+#
+# --repo-update, because a machine's local copy of the specs index goes stale:
+# the Mac's knew no GoogleUtilities past 8.1.2, which is how it resolved older
+# pods unpinned, and with the pin at 8.1.5 a plain `pod install` fails there
+# outright. It costs the Mac under a minute and a fresh runner nothing, and it
+# cannot move a version: the lock decides those.
 cp app/Podfile.lock app/ios/Podfile.lock
-(cd app/ios && pod install)
+(cd app/ios && pod install --repo-update)
 pods_of() { sed -n '/^PODS:/,/^DEPENDENCIES:/p' "$1"; }
 if [ "$(pods_of app/Podfile.lock)" != "$(pods_of app/ios/Podfile.lock)" ]; then
   die "pod install resolved other pods than app/Podfile.lock pins (a native dependency changed?).
