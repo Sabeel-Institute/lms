@@ -206,7 +206,7 @@ download page alongside the first Android release of
    that the move has happened.
    **Recreate the App Review world:** the seed wipes this project, and the
    store reviewers' account goes with it. Before the stores review anything
-   again, the reviewer account (app-review@oursabeel.com, a student, its
+   again, the reviewer account (apps-reviewer@oursabeel.com, a student, its
    password the one in the vault) must exist again as the only student of the
    "App Review" cohort, with its sample class, a session whose due date is in
    the future and on which the reviewer is marked excused, a published

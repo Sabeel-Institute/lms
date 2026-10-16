@@ -87,7 +87,7 @@ reviewer." No reviewer code exists in this repo.
 
 | | |
 |---|---|
-| Account | `app-review@oursabeel.com`, a **student**, display name "App Review", active. The address is reserved: never a Workspace user |
+| Account | `apps-reviewer@oursabeel.com`, a **student**, display name "App Review", active. The address is reserved: never a Workspace user |
 | Cohort | "App Review"; the reviewer is its only student |
 | Class | "Sample Class", the reviewer enrolled |
 | Session | "Session 1", the reviewer marked **excused**; due date **2027-02-12** |
@@ -110,7 +110,7 @@ account that does not expire, and every update is reviewed again.
 as an admin on the web:
 
 1. Cohorts: add "App Review"; in it, the class "Sample Class".
-2. Students: add `app-review@oursabeel.com`, name "App Review"; set its
+2. Students: add `apps-reviewer@oursabeel.com`, name "App Review"; set its
    password to the vault's from the set-password link.
 3. Enrol the reviewer in Sample Class.
 4. Add "Session 1" with a due date in the future, and mark the reviewer
@@ -322,7 +322,7 @@ sign-in screen) states the address, the process and what is retained.
   email address or account identifier. App Privacy must agree with the
   manifest, so settle one answer: Not Linked in both, or Linked in both.
 - **The reviewer's password on recreation.** Adding a student emails a
-  set-password link to `app-review@oursabeel.com`, which is not a Workspace
+  set-password link to `apps-reviewer@oursabeel.com`, which is not a Workspace
   user. Confirm where that address's mail is delivered before switchover day.
 - **The get-app page** (`app/public/get-app.html`) offers the Android APK and
   says the App Store is "Not yet available". It gets the App Store link and
