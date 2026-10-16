@@ -111,6 +111,17 @@ export function decideProvision(user: NewUser): ProvisionDecision {
  * The same verdicts as `decideProvision`, which stays behind the door for
  * anything that gets past it.
  */
+export function refusedSignUp(
+  providerId: string | null,
+  email: string | null | undefined,
+  emailVerified: boolean,
+): RejectReason | null {
+  if (providerId === 'password') return 'self-signup';
+  if (providerId !== 'google.com') return 'unsupported-provider';
+  if (!isAllowedStaffEmail(email, emailVerified)) return 'bad-domain';
+  return null;
+}
+
 /**
  * THE STUDENTS' DOOR TAKES STUDENTS: what the blocking `beforeUserSignedIn`
  * asks of every sign-in. A password sign-in is for a student, and for nobody
@@ -122,16 +133,5 @@ export function decideProvision(user: NewUser): ProvisionDecision {
  */
 export function refusedSignIn(providerId: string | null, claims: TokenClaims | undefined): 'not-a-student' | null {
   if (providerId === 'password' && claims?.role !== 'student') return 'not-a-student';
-  return null;
-}
-
-export function refusedSignUp(
-  providerId: string | null,
-  email: string | null | undefined,
-  emailVerified: boolean,
-): RejectReason | null {
-  if (providerId === 'password') return 'self-signup';
-  if (providerId !== 'google.com') return 'unsupported-provider';
-  if (!isAllowedStaffEmail(email, emailVerified)) return 'bad-domain';
   return null;
 }
