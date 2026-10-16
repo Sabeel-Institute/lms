@@ -246,10 +246,13 @@ A release bumps one version and ships it to both surfaces. In order:
      Verify the published copy, not the local one:
      `pdftotext -f 1 -l 1 USER-MANUAL.pdf - | grep -i version`
 
-6. **iPhone:** a TestFlight build from the release commit, made on the Mac by
-   its Claude session (`docs/IOS-BUILD.md`, `npm run build:ios`), uploaded once
-   Faisal approves it there. The Internal group gets it by itself. The App
-   Store is not yet a release home: the app is in TestFlight only.
+6. **iPhone:** a TestFlight build of the release commit, from GitHub:
+   `gh workflow run ios.yml --ref main -f testflight=true`
+   (`docs/IOS-BUILD.md`, "Builds on GitHub"). Its TestFlight job stops before
+   uploading if Apple already has the build number. The Mac's
+   `npm run build:ios` does the same from a Mac. The Internal group gets it by
+   itself. The App Store is not yet a release home: the app is in TestFlight
+   only.
 
 There is no `npm run release` script yet (the sibling time-tracker has one); this
 is the manual recipe until one exists.

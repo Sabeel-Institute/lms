@@ -15,6 +15,7 @@
 | Service account keys | **Yes** | Should not exist — see below |
 | Android **release signing key** and its password | **Yes** | `~/.config/sabeel-lms/release.keystore` and `keystore.properties`, outside the repo, mode 600 — see below |
 | R2 API keys (`R2_READ_*`, `R2_WRITE_*`) | **Yes** | Secret Manager |
+| Apple **Distribution certificate** for GitHub builds (`.p12`, its password, the App Store profiles) | **Yes** | `~/.config/sabeel-lms/ios-distribution/`, mode 600, and GitHub secrets `IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD`, `IOS_PROFILE` here and in the Kanban repo (`docs/IOS-BUILD.md`, "Builds on GitHub"). Expires 2027-10-16 |
 | Apple **push key** (APNs, `AuthKey_X5R8FL94BC.p8`) | **Yes** | Secret Manager as `APNS_KEY`, which the functions that send a notification bind (`functions/src/messaging.ts`); the file in `~/.config/sabeel-lms/`, mode 600. Its id and the team id are not secret and are in `functions/.env.oursabeel-lms` |
 
 The Firebase "apiKey" is not a credential. It identifies the project; access is

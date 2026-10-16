@@ -239,7 +239,9 @@ Do not silently change any of these.
   npm run test:emulator && npm run test:screens`. Trigger CI by hand before a
   release or when something must hold on a clean machine
   (`gh workflow run ci.yml --ref <branch>`); the trigger block to restore is at
-  the top of `ci.yml`. No deploys from CI.
+  the top of `ci.yml`. No deploys from CI, and nothing runs on a push; the
+  one exception is the hand-started iOS workflow (`ios.yml`), whose TestFlight
+  job uploads under the same go-ahead as any release (Faisal, 2026-10-15).
 - **If a suite fails, first ask whether it fails on stashed changes too.** A
   clean-HEAD repro means the cause is environmental — usually a leftover emulator
   (`npm run emulators:free`) — not your diff.
@@ -412,8 +414,10 @@ Manager, never in the app bundle.**
   registration, App Check registration, IAM grants, anything with production
   secrets. Everything Faisal must do himself is tracked in `TODO.md` — keep it
   current.
-- **iOS: a second Claude session, on the Mac.** Building, signing, simulator
-  checks and TestFlight uploads need macOS, so they run on the rented Mac
+- **iOS builds and TestFlight uploads run on GitHub** (`ios.yml`, started by
+  hand or through the API; `docs/IOS-BUILD.md`, "Builds on GitHub").
+- **iOS: a second Claude session, on the Mac**, for what needs a live Mac.
+  Simulator checks, and builds from a Mac when GitHub cannot, run on the rented Mac
   (`ssh user300503@tx477.macincloud.com`, `docs/IOS-BUILD.md`) by a Claude
   session there, `mac-lms` (started in `screen` as `claude --remote-control
   mac-lms`), which this session directs with SendMessage. It works on a

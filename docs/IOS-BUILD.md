@@ -279,6 +279,63 @@ with no alpha channel, the native DSN present, and the privacy manifest.
 - **The App Store Connect app record must exist** before an upload has anywhere
   to go. TestFlight is a tab inside it.
 
+## Builds on GitHub
+
+`.github/workflows/ios.yml` builds the app on GitHub's macOS runners, which
+are free and unlimited for a public repo. It runs only when started:
+
+```bash
+gh workflow run ios.yml                       # build a signed .ipa
+gh workflow run ios.yml -f testflight=true    # build it, then upload it to TestFlight
+gh run watch <run id>
+```
+
+or Actions -> iOS -> Run workflow, or the REST API:
+`POST /repos/Sabeel-Institute/lms/actions/workflows/ios.yml/dispatches` with
+`{"ref": "main", "inputs": {"testflight": "true"}}`.
+
+Two jobs. **build** installs, writes the gitignored files from secrets,
+imports the signing identity into a keychain of its own, installs the App
+Store profile, and runs `build-ios.sh --no-upload` with manual signing. It
+needs no new build number. Its artifacts, kept 14 days: the `.ipa`, and a
+build record (the JavaScript source map and the `Podfile.lock` it resolved).
+**testflight**, only with `testflight=true`, asks App Store Connect whether
+the build number is free (`scripts/testflight-check.mjs`; if not, it stops in
+seconds: raise `expo.ios.buildNumber`, commit, run again), has Apple validate
+the `.ipa`, and uploads it. The Internal group gets it by itself.
+
+**Manual signing** (`IOS_PROFILE_NAME`, set by the workflow from the profile):
+the app target alone signs with the Apple Distribution identity and the App
+Store profile; nothing is fetched or minted. Automatic signing on a fresh
+runner would create a new certificate every run and throw its private key
+away, until Apple's per-team certificate limit stopped every build.
+
+| Secret | What | From |
+|---|---|---|
+| `IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD` | The Apple Distribution certificate and private key, base64, and its password | `~/.config/sabeel-lms/ios-distribution/` on Faisal's machine |
+| `IOS_PROFILE` | The App Store profile "Sabeel LMS App Store CI", base64 | the same folder |
+| `ASC_KEY_P8` | The App Store Connect API key (Admin) | `~/.appstoreconnect/private_keys/AuthKey_W37AZSR3Q5.p8` |
+| `IOS_BUILD_ENV` | `app/.env.sentry-build-plugin`, its `NAME=value` lines only | the Mac's copy |
+| `APP_ENV_LOCAL` | `app/.env.local`, its `NAME=value` lines only | |
+| `GOOGLE_SERVICE_INFO_PLIST` | `app/GoogleService-Info.plist`, base64 | |
+
+Set one again with `gh secret set NAME -R Sabeel-Institute/lms < file`
+(`base64 -w0 file |` for the binary ones). Keep comment lines out of the
+multi-line secrets: GitHub masks a secret line by line, so a line of `#` in
+one turns every `#` in the log into `***`. The workflow also masks each value
+on its own, since a line mask does not cover a value printed by itself.
+Everything here is also in `~/.config/secrets-vault/sabeel/apple/`.
+
+**Renewal, before 16 October 2027**, when the certificate (id MQ8FC7CJVA) and
+both App Store profiles expire. Everything goes through the App Store Connect
+API, from Linux: a new private key and signing request with `openssl`; `POST
+/v1/certificates` with `certificateType` `DISTRIBUTION`; `POST /v1/profiles`
+(`IOS_APP_STORE`) for each app's bundle id with the new certificate; the key
+and certificate packed with `openssl pkcs12 -export -legacy`; the three
+secrets set again, here and in the Kanban repo, which shares the certificate;
+`vault.sh collect`. Then revoke the old certificate (`DELETE
+/v1/certificates/<id>`): a team may hold only a few.
+
 ## Open on iOS
 
 - **The update gate** compares `expo.android.versionCode` and sends an outdated
