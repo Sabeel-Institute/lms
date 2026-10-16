@@ -145,13 +145,18 @@ android {
      * for anyone unsure which to grab. x86_64 is kept because that is what the
      * Android emulator runs, so the build stays verifiable.
      *
-     * Distributed from GitHub releases, not Play, so the per-split versionCode
-     * offsets Play would require are deliberately omitted — they become
-     * mandatory only if this ever ships to Play.
+     * The splits are for the APKs on GitHub releases only. Google Play takes an
+     * app bundle (`bundleRelease`), one artifact carrying every ABI from which
+     * Play makes per-device splits itself, so the splits turn themselves off
+     * for bundle tasks: with both on, the bundle fails with "Multiple
+     * shrunk-resources files found". `-PabiSplits=` overrides either way.
+     * Mirrors the sibling kanban app.
      */
+    def isBundleBuild = gradle.startParameter.taskNames.any { it.toLowerCase().contains('bundle') }
+    def abiSplits = (findProperty('abiSplits') ?: (!isBundleBuild).toString()).toBoolean()
     splits {
         abi {
-            enable true
+            enable abiSplits
             reset()
             include 'armeabi-v7a', 'arm64-v8a', 'x86_64'
             universalApk true
