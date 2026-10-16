@@ -175,7 +175,9 @@ jobs:
     needs: build
     if: inputs.testflight
     runs-on: macos-26
-    timeout-minutes: 30
+    # Apple's validation takes a minute or two, and on a bad day twenty-five;
+    # the upload after it needs room too.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
