@@ -1,9 +1,10 @@
 # iOS — building and checking the iPhone app
 
 The app is one Expo codebase on three surfaces: web, Android and iOS. Linux
-builds web and Android; **iOS builds only on the Mac**, with Xcode. This file is
-the Mac's runbook, written for whoever is at it, including a Claude Code session
-that has none of the context of the one that set it up.
+builds web and Android; **iOS builds with Xcode**, on GitHub's macOS runners for
+every release ("Builds on GitHub") and on the Mac for simulator work. This file
+is the iPhone app's runbook, written for whoever builds it, including a Claude
+Code session that has none of the context of the one that set it up.
 
 Bundle id `com.sabeelinstitute.lms`, the same as the Android package
 (`functions/test/unit/projectIdentity.test.ts` holds them equal). Firebase
@@ -109,6 +110,14 @@ All gitignored. Without each, something builds and quietly does not work.
 `scripts/load-build-env.sh` reads `app/.env.sentry-build-plugin` (parsed, not
 sourced; a variable already in the environment wins). Never print or commit any
 of these values.
+
+## The Mac
+
+A rented Mac, reached over ssh: `ssh user300503@tx477.macincloud.com`. A
+Claude Code session there, `mac-lms`, runs inside `screen`
+(`claude --remote-control mac-lms`); `screen -ls` lists it and `screen -r`
+reattaches. It does the simulator checks and anything else that needs a live
+Mac, on a branch it pushes; release builds do not need it.
 
 ## The Mac's toolchain
 
@@ -243,7 +252,8 @@ opens the path. A tap from outside the app cannot be driven here (above).
 
 ## Releasing to TestFlight
 
-`scripts/build-ios.sh` archives, exports and uploads with no Xcode UI.
+`scripts/build-ios.sh` archives, exports and uploads with no Xcode UI. GitHub
+runs it for every release ("Builds on GitHub"); on the Mac it runs by hand.
 
 ```bash
 npm run build:ios -- --check        # every gate, builds nothing, two seconds
@@ -302,7 +312,8 @@ build record (the JavaScript source map and the `Podfile.lock` it resolved).
 **testflight**, only with `testflight=true`, asks App Store Connect whether
 the build number is free (`scripts/testflight-check.mjs`; if not, it stops in
 seconds: raise `expo.ios.buildNumber`, commit, run again), has Apple validate
-the `.ipa`, and uploads it. The Internal group gets it by itself.
+the `.ipa`, and uploads it. The Internal group gets it by itself ("TestFlight
+testers").
 
 **What the build job checks.** Before compiling, `build-ios.sh` refuses a
 profile that is not installed, is for another app (Kanban's shares the
@@ -357,10 +368,27 @@ secrets set again, here and in the Kanban repo, which shares the certificate;
 `vault.sh collect`. Then revoke the old certificate (`DELETE
 /v1/certificates/<id>`): a team may hold only a few.
 
+## TestFlight testers
+
+One group, **Internal** (`e3b4988f-87e3-448e-8d59-a5a91457c59b`), with
+automatic distribution: every build Apple has processed reaches its members
+with no step. An internal tester must be an App Store Connect user:
+
+1. App Store Connect, Users and Access: invite the person, with the Developer
+   role.
+2. They accept the emailed invitation; until then they are a pending
+   invitation and cannot be added to a group.
+3. TestFlight, Internal, Testers: add them. TestFlight emails them, and they
+   install the build through Apple's TestFlight app.
+
+There is no external group and no Beta App Review: the app reaches nobody
+outside the team through TestFlight.
+
 ## Open on iOS
 
 - **The update gate** compares `expo.android.versionCode` and sends an outdated
-  build to `DOWNLOAD_PAGE_URL`, the Android download page.
+  build to `DOWNLOAD_PAGE_URL`, the Android download page. What a store build
+  should do instead is decided in `docs/STORE-RELEASE.md`.
 - **The rich-text answer keeps the keyboard up.** Tapping outside the field
   does not close it on iOS (there is no Back key to do it), though the screen
   scrolls and Hand in stays reachable above it.

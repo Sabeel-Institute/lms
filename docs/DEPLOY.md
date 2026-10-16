@@ -13,6 +13,23 @@ notifications go to: empty (nobody) while the live site is bug-hunted, then
 `staff` (optionally with test accounts' email addresses) until switchover day,
 `everyone` after it. Empty or absent means nobody.
 
+## Access a releaser needs
+
+| Where | Access | For |
+|---|---|---|
+| GitHub `Sabeel-Institute/lms` | admin | tags and releases, Actions secrets, starting `ios.yml`, pushing to `main` |
+| GitHub `faisal-shah/faisal-shah.github.io` | write | the download page (step 5) |
+| Google Cloud `oursabeel-lms` | Owner, as an oursabeel.com account | deploys, Secret Manager, the production checks' token, IAM |
+| Cloudflare account of `oursabeel-lms-media` | member with Workers and R2 | the copier Worker and the bucket settings |
+| Sentry (the three `sabeel-recording-*` projects) | member | reading a release's issues (step 2) |
+| Google Play Console | release to testing tracks, manage testers | the internal track and the "Sabeel staff" list (step 6) |
+| App Store Connect | Admin or App Manager | TestFlight testers and the app record (`docs/IOS-BUILD.md`) |
+| `~/.config/secrets-vault/` | a copy | the release keystore, the Play publishing key, the Apple files (`docs/SECRETS.md`) |
+
+Builds need no Apple login: `ios.yml` signs and uploads with the secrets in
+GitHub. The Mac is needed only for simulator checks (`docs/IOS-BUILD.md`,
+"The Mac").
+
 ## The device pass, before any of it
 
 **Mandatory, and it comes first** — `CLAUDE.md` requires a real Android pass
@@ -134,7 +151,8 @@ A release bumps one version and ships it to both surfaces. In order:
    Run `check:documents` again after any migration of live data. See
    `docs/DEV-TOOLING.md`.
 
-1. **Bump the version in BOTH files, together:**
+1. **Bump the version in `app/app.json` and `app/android/app/build.gradle`,
+   together:**
    - `app/app.json` → `expo.version` (drives the sign-in build label and the
      manual cover) **and** `expo.android.versionCode`.
    - `app/android/app/build.gradle` → `versionName` **and** `versionCode` — the
@@ -211,6 +229,12 @@ A release bumps one version and ships it to both surfaces. In order:
        --title "vX.Y.Z — Android" --notes-file NOTES.md --latest \
        /tmp/sabeel-institute-lms-arm64-v8a.apk /tmp/sabeel-institute-lms-universal.apk
      ```
+     **`NOTES.md` is written for the release** and never committed (keep it in
+     a scratch directory): a first line saying it is a pre-release until the
+     institute moves, then plain-language lines under **For students** and
+     **For teachers**, drawn from the commits since the previous tag
+     (`git log --oneline v<previous>..HEAD`) and the decision log. The
+     download page's What's new (step 5) is the short form of the same list.
      **This clone holds the old recording app's tags, `v0.1.0`–`v0.7.1`**,
      from the history it carries, and they are not this repo's: `git tag
      vX.Y.Z` fails with "already exists" for a version the old app used, or a
@@ -241,7 +265,7 @@ A release bumps one version and ships it to both surfaces. In order:
      is invisible — the page keeps serving an older manual quite happily, and it
      had drifted three versions behind before anyone looked:
      ```bash
-     cp docs/USER-MANUAL.pdf ../faisal-shah/faisal-shah.github.io/sabeel-institute-lms/
+     cp docs/USER-MANUAL.pdf ../../faisal-shah/faisal-shah.github.io/sabeel-institute-lms/
      ```
      Verify the published copy, not the local one:
      `pdftotext -f 1 -l 1 USER-MANUAL.pdf - | grep -i version`
@@ -252,8 +276,7 @@ A release bumps one version and ships it to both surfaces. In order:
    EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) ./gradlew bundleRelease
    cd ../.. && npm run publish:play -- --check && npm run publish:play -- --internal
    ```
-   Everyone on the "Sabeel staff" tester list gets it from Play; the join link
-   never changes. `publish-play.mjs` refuses a debug-signed bundle, one that
+   `publish-play.mjs` refuses a debug-signed bundle, one that
    does not carry HEAD's commit (the same Gradle trap as step 3; it prints the
    40-second rebuild of the JS alone), and a versionCode Play reads differently
    from `build.gradle`. It puts the build up as a draft release no tester sees,
@@ -264,19 +287,38 @@ A release bumps one version and ships it to both surfaces. In order:
    and upload a key from Java keystore", with Google's PEPK tool), so a Play
    install and the APK from the GitHub release update each other. APKs Play
    generated before a key change stay signed with the old key, which is what
-   the check catches. Play keeps an app's first release a draft if the API may
-   not complete it: one "Start rollout" in Play Console sends it. The bundle
-   carries every ABI and Play cuts per-device APKs from it, so `build.gradle`
-   turns the APK splits off for bundle tasks. The publishing key:
-   `docs/SECRETS.md`.
+   the check catches. The bundle carries every ABI and Play cuts per-device
+   APKs from it, so `build.gradle` turns the APK splits off for bundle tasks.
+   The publishing key: `docs/SECRETS.md`.
+
+   **No Play release exists yet.** 0.1.2 (code 37) was processed before the
+   signing key changed, so the script refused it and it sits as a draft on the
+   internal track; the next upload replaces that draft. The first Play release
+   is the next version, and Play may keep it a draft until "Start rollout"
+   (Play Console, Internal testing); the script says so.
+
+   **Testers.** Play Console, Internal testing, Testers: the email list "Sabeel
+   staff" (20 staff) is ticked. To add someone, edit that list there and add
+   the address of their Google account. Each tester opens the join link once
+   (the same tab, "Copy link"; it never changes), accepts, and installs from
+   Play.
 
 7. **iPhone:** a TestFlight build of the release commit, from GitHub:
    `gh workflow run ios.yml --ref main -f testflight=true`
    (`docs/IOS-BUILD.md`, "Builds on GitHub"). Its TestFlight job stops before
    uploading if Apple already has the build number. The Mac's
    `npm run build:ios` does the same from a Mac. The Internal group gets it by
-   itself. The App Store is not yet a release home: the app is in TestFlight
-   only.
+   itself (`docs/IOS-BUILD.md`, "TestFlight testers"). The App Store is not yet
+   a release home: the app is in TestFlight only.
+
+   **Check it before and after the upload.** Before: the Mac session runs the
+   simulator loop on the release commit (`docs/IOS-BUILD.md`): a student signs
+   in, plays audio and video through Home and the lock, changes version and
+   speed, and keeps a bookmark and the place across a kill. After: install
+   the build from TestFlight on an iPhone and confirm the sign-in label reads
+   `v<version> · <commit>`. The lock-screen controls and a notification tapped
+   with the app closed have no simulator stand-in; they are checked on that
+   phone.
 
 There is no `npm run release` script yet (the sibling time-tracker has one); this
 is the manual recipe until one exists.
@@ -494,20 +536,22 @@ stack traces.
 
 ## Retiring old builds
 
-Every Android build from v0.7.0 reads `config/app.minVersionCode` before sign-in
-and shows an update screen — with the download page — when its own
-`versionCode` is below it. After a release that older builds can no longer run
-against (a rules change refusing a listener they still open is the case that
-made this exist), raise the floor by hand:
+Every Android and iPhone build reads `config/app.minVersionCode` before sign-in
+and shows an update screen — with the Android download page — when its own
+`expo.android.versionCode` (the iPhone build carries it too) is below it. On a
+Play or TestFlight install that screen still opens the download page; what a
+store build should do is decided in `docs/STORE-RELEASE.md`. After a release
+that older builds can no longer run against (a rules change refusing a
+listener they still open is the case that made this exist), raise the floor by
+hand:
 
 ```bash
-node scripts/set-min-version.mjs 33     # the versionCode of the oldest build to keep
+node scripts/set-min-version.mjs <versionCode>   # the versionCode of the oldest build to keep
 ```
 
 It is a decision, not a deploy step: nothing raises it for you. The floor is a
-`versionCode` (`app/android/app/build.gradle`), not a version name, and a build
-that predates the gate (anything before 0.7.0) cannot be reached by it —
-those need a person.
+`versionCode` (`app/android/app/build.gradle`), not a version name. Every build
+of `com.sabeelinstitute.lms` has the gate.
 
 ## After deploying
 

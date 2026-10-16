@@ -19,22 +19,27 @@ cannot be minted against the emulator at all.
       LMS and time-tracker release keys, both Apple keys). Run
       `bash ~/.config/secrets-vault/vault.sh verify` first; store it again
       whenever a secret changes.
-- [ ] **Approve the TestFlight upload** in the Mac session (mac-lms), and
-      install the build from TestFlight on your iPhone when it arrives.
+- [ ] **TestFlight testers.** 19 staff were invited to App Store Connect;
+      each is added to the Internal group once they accept
+      (`docs/IOS-BUILD.md`, "TestFlight testers").
+- [ ] **On your iPhone, from TestFlight:** install the current build, then
+      check what the simulator cannot show: the lock-screen media controls,
+      and a notification tapped with the app closed.
 
-## oursabeel-lms — Phase 0 (open)
+## oursabeel-lms (open)
 
-The institute's project. The sections after this one record the setup of the
-legacy project, `sabeel-class-recordings`, and are rewritten for the new one
-with the rest of the Phase 0 docs ([docs/plans/SWITCHOVER.md](docs/plans/SWITCHOVER.md)).
+The institute's project; its setup is Phase 0 of
+[docs/plans/SWITCHOVER.md](docs/plans/SWITCHOVER.md), done 2026-10-12. The
+sections marked DONE below record the setup of the legacy project,
+`sabeel-class-recordings`.
 
 - [ ] **Back up the release signing key.** Created 2026-10-12 in
       `~/.config/sabeel-lms/` on this machine; its SHA-1 is registered.
       Copy the password from `keystore.properties` into your password
       manager, and keep a copy of `release.keystore` there too (as an
-      attachment) or on other storage. Losing it means the Android app can
-      never be updated again. `docs/SECRETS.md` has the details and the
-      list of everything else on this machine worth backing up.
+      attachment) or on other storage. It is also Play's app signing and
+      upload key; losing it ends updates. `docs/SECRETS.md` has the details
+      and the list of everything else on this machine worth backing up.
 - [ ] **Password email subject and body.** `scripts/set-auth-email.mjs`
       holds the wording and applied the sender name ("Sabeel Institute") and
       reply-to (admin@oursabeel.com); Google refuses the subject and body
@@ -64,7 +69,8 @@ with the rest of the Phase 0 docs ([docs/plans/SWITCHOVER.md](docs/plans/SWITCHO
 - Notifications go to nobody while the live site is bug-hunted
   (`NOTIFY_AUDIENCE=` empty in `functions/.env.oursabeel-lms`), then to staff
   only (`staff`) until switchover day. Done: the Web Push key and the Android
-  app registration (debug SHA-1, `google-services.json` in place).
+  app registration (debug and release SHA-1s, `google-services.json` in
+  place).
 - `npm run check:queries` and `npm run check:push` take the oursabeel.com
   account's token through `CHECK_ACCESS_TOKEN` (`docs/DEPLOY.md`), because this
   machine's Application Default Credentials are the gmail account, which
@@ -294,8 +300,8 @@ on a fresh clone or the Android build fails. A signed release APK was built,
 verified against production (student sign-in + streaming) and shipped as a GitHub
 Release. Staff Google sign-in on-device should now work; students already did.
 
-Still for a PUBLIC release (Phase 9): a dedicated **release keystore** (the APK is
-currently debug-signed) and **its** SHA-1 registered.
+For `com.sabeelinstitute.lms`, the release key and its SHA-1: done 2026-10-12
+(`docs/SECRETS.md`).
 
 ### 5. Not blocking anything
 
@@ -340,9 +346,9 @@ If you want the second, say so and it changes in one place.
 ### 5b. The no-account-creation gate — DONE (2026-09-07)
 
 Nothing owed here; recorded so the next reader does not re-litigate it. The
-Android app can no longer bring an account into existence: `accountExists`
-verifies the Google token and `app/src/auth/google.ts` refuses before
-`signInWithCredential`, which is the line that would create one. That is what
+phone apps, Android and iOS, cannot bring an account into existence:
+`accountExists` verifies the Google token and `app/src/auth/google.ts` refuses
+before `signInWithCredential`, which is the line that would create one. That is what
 keeps Apple 5.1.1(v) and Play's deletion requirement disengaged, and it is worth
 knowing it is load-bearing before anyone "simplifies" the sign-in path.
 
@@ -357,8 +363,8 @@ Two consequences to expect rather than treat as bugs:
 
 - [ ] **FAISAL — the one check nobody has run, and the store claim rests on it.**
       Tests cover the callable and the ordering; only a device covers the round
-      trip. Kanban did the equivalent on 2026-08-18. On a phone, on the RELEASE
-      build (production, not emulators):
+      trip. On a phone, on a RELEASE build (production, not emulators): the
+      Android release APK, then the TestFlight build:
 
       1. Tap **Sign in with Google** and pick a personal Google account that has
          no account in this project.
@@ -366,11 +372,12 @@ Two consequences to expect rather than treat as bugs:
          administrator."* — and no sign-in.
       3. Then the assertion that actually matters, checked in Firebase rather
          than inferred from the screen. **Ask about the exact address you used**
-         — `auth/user-not-found` is the pass:
+         — `auth/user-not-found` is the pass (Application Default Credentials
+         of an `oursabeel-lms` owner):
 
          ```sh
          ADDR=you@gmail.com node -e "const a=require('firebase-admin');\
-         a.initializeApp({projectId:'sabeel-class-recordings'});\
+         a.initializeApp({projectId:'oursabeel-lms'});\
          a.auth().getUserByEmail(process.env.ADDR)\
          .then(u=>{console.log('FAIL — an account exists:',u.uid,u.providerData.map(p=>p.providerId));process.exit(1)})\
          .catch(e=>{console.log(e.code==='auth/user-not-found'?'PASS — no account was created':'unexpected: '+e.code);process.exit(0)})"
@@ -378,11 +385,10 @@ Two consequences to expect rather than treat as bugs:
 
          Do NOT check this by counting accounts on non-institute domains, which
          is the obvious thing and is wrong here: **students sign in with personal
-         addresses**, so production legitimately holds gmail.com accounts (six as
-         of 2026-09-07, all provider `password`). The sibling apps are staff-only
-         and can use that shortcut; this one cannot. A stray Google sign-in would
-         show up as an address carrying the **`google.com`** provider that is not
-         on `oursabeel.com`.
+         addresses**, so production legitimately holds gmail.com accounts, all
+         provider `password`. A stray Google sign-in would show up as an
+         address carrying the **`google.com`** provider that is not on
+         `oursabeel.com`.
 
       4. Then sign in with a Workspace account immediately afterwards and confirm
          it works — which also proves the Google account chooser was cleared, and
@@ -410,10 +416,8 @@ the ordering and that each destination exists; `npm run smoke:prod` fetches all
 three from the deployed site anonymously and checks the body is the page rather
 than the shell.
 
-The host is the web app's own domain, `sabeel-class-recordings.web.app`. The
-earlier guess, `recordings.oursabeel.com`, is attached to nothing, so the one
-link a reviewer is guaranteed to follow led nowhere. `PRIVACY_URL` now matches
-the rewrite, and a test asserts they agree.
+The host is the web app's own domain, `oursabeel-lms.web.app` (`WEB_APP_URL`).
+`PRIVACY_URL` matches the rewrite, and a test asserts they agree.
 
 - [ ] **FAISAL — create `privacy@oursabeel.com`.** All three pages name it as the
       address for deleting an account, asking what is held, and correcting it, and
@@ -457,15 +461,14 @@ class at import time — no auto-map by topic).
       the final "one real import" check; the whole job is built + emulator-tested
       against a fake Zoom first.
 
-## Before Phase 9 (release)
+## Before the store release
 
-- [ ] **Brand assets**: logo, app icon, splash. Phase 0 ships without them.
-- [ ] **Android release keystore + its SHA-1** registered — the release key
-      differs from the debug key and Google sign-in breaks without it.
+- [ ] **Splash screen.** The app icon is in place (`app/assets/icon.png`); no
+      splash is configured.
 - [ ] **Retention policy** decision. The brief says recordings are kept
-      indefinitely; a GCS lifecycle rule is cheap to add but the policy is
-      yours. Audio is affordable at any plausible bitrate — five years at
-      128 kbps is roughly 96 GiB, about $2/month.
+      indefinitely; an R2 lifecycle rule (`cloudflare/media-bucket/`) is cheap
+      to add but the policy is yours. Audio is affordable at any plausible
+      bitrate — five years at 128 kbps is roughly 96 GiB, about $2/month.
 
 ## Optional / whenever
 
@@ -486,17 +489,14 @@ from here.
       2026-09-16 (SABEEL-RECORDING-ANDROID-3); the gate below cannot reach a
       build that predates it, so this one is a message from a person.
 - ✅ **The minimum build number — decided and built, 2026-09-17.** `config/app`
-      carries `minVersionCode`, read by every Android build before sign-in
-      (`app/src/minVersion.ts`); a build below it shows the update screen with
+      carries `minVersionCode`, read by every Android and iPhone build before
+      sign-in (`app/src/minVersion.ts`); a build below it shows the update screen with
       the download page. Readable by anyone, written only by
       `scripts/set-min-version.mjs <versionCode>`, which is yours to run after
       a release older builds can no longer work against — see DEPLOY.md.
-- [ ] **Raise the floor — v0.7.0 is out (2026-09-17)**: `node scripts/set-min-version.mjs 33`
-      retires every build before it (0.3.0 through 0.6.4 do not have the
-      gate, so the floor reaches only builds from 0.7.0 on — it is for the
-      NEXT rules change, not this one). Note for later store builds: a
-      Play-distributed app may not point at a sideload page for the update,
-      so the screen would name Google Play once that exists.
+- [ ] **The update screen on store builds** opens the Android download page
+      on every native build, a Play or TestFlight install included. What it
+      should do there is decided in `docs/STORE-RELEASE.md`.
 
 ### 8. Decisions from the 2026-09-11 review
 
@@ -521,23 +521,9 @@ by"; the gate-screen poll cannot be carried by a previous sign-in; Play no
 longer raises the notification prompt; a withdrawn recording is not reported
 as a fault; four crash-in-the-middle states repair themselves. Left for you:
 
-- [ ] **The release APK is signed with the public debug keystore.**
-      `app/android/app/build.gradle` `release { signingConfig
-      signingConfigs.debug }` — the certificate is `CN=Android Debug`, the
-      SHA-1 registered with Firebase is the debug key's. Anyone with the
-      Android SDK holds that key, so an APK carrying this package name could
-      be built by anyone and would install OVER the real one as an update.
-      For a sideloaded, private-institute app this is a known deferral (the
-      note under item 4 above); before Play, or before the app is on any
-      phone you do not control, it needs: a keystore generated and kept
-      outside the repo (`keytool`, password in your password manager, the
-      file backed up — losing it means no update path ever again), the
-      release signing config reading it from the environment or a gitignored
-      `keystore.properties`, ITS SHA-1 added in the Firebase console (Google
-      sign-in breaks on the new key without it), and one round of
-      uninstall/reinstall for every current install, since Android refuses an
-      update signed with a different key. Say when, and whether now: it
-      forces the reinstall on every staff phone.
+- ✅ **Release signing — done 2026-10-12.** The app's own key, outside the
+      repo, its SHA-1 registered; also Play's app signing key
+      (`docs/SECRETS.md`).
 - ✅ **An archived recording leaves the course totals — decided 2026-09-11.**
       Closing a term is archiving the COURSE, which keeps every count. Archiving
       or unpublishing one recording withdraws it from the course card, the

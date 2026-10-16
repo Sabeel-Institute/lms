@@ -13,7 +13,7 @@
 | Sentry **auth token** (source-map upload) | **Yes** | Gitignored `app/android/sentry.properties` (`auth.token=`). An **org** token (org `devnull-ke`), shared across all the Sabeel Sentry projects; the web pipeline reads it via `SENTRY_PROPERTIES`, overriding the project to `sabeel-recording-web` |
 | Zoom account id / client id / client secret | **Yes** | Secret Manager, via `firebase functions:secrets:set` |
 | Service account keys | **Yes** | One exists, Play's publishing account — see below |
-| Android **release signing key** and its password | **Yes** | `~/.config/sabeel-lms/release.keystore` and `keystore.properties`, outside the repo, mode 600 — see below |
+| Android **release signing key** and its password | **Yes** | `~/.config/sabeel-lms/release.keystore` and `keystore.properties`, outside the repo, mode 600; also Play's app signing and upload key — see below |
 | R2 API keys (`R2_READ_*`, `R2_WRITE_*`) | **Yes** | Secret Manager |
 | Apple **Distribution certificate** for GitHub builds (`.p12`, its password, the App Store profiles) | **Yes** | `~/.config/sabeel-lms/ios-distribution/`, mode 600, and GitHub secrets `IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD`, `IOS_PROFILE` here and in the Kanban repo (`docs/IOS-BUILD.md`, "Builds on GitHub"). Expires 2027-10-16 |
 | Apple **push key** (APNs, `AuthKey_X5R8FL94BC.p8`) | **Yes** | Secret Manager as `APNS_KEY`, which the functions that send a notification bind (`functions/src/messaging.ts`); the file in `~/.config/sabeel-lms/`, mode 600. Its id and the team id are not secret and are in `functions/.env.oursabeel-lms` |
@@ -112,21 +112,30 @@ and would let anyone build an APK that installs over the real app.
 Both SHA-1s, this one and the debug key's, are registered on the Firebase
 Android app, which is what Google sign-in on the phone checks.
 
-**Losing the key means the app can never be updated again**: Android refuses an
-update signed with a different key, so every phone would have to uninstall and
-reinstall. Keep two copies off this machine: the password in a password
-manager, and the keystore file in that password manager as an attachment or on
-other storage.
+**It is also Play's key**, since 2026-10-16: the app signing key Play signs
+every install with (uploaded with Play Console's "Export and upload a key
+from Java keystore", PEPK), and the upload key that signs the bundle
+`publish:play` sends. So a Play install and a GitHub APK update each other,
+and the Firebase registration above covers both.
+
+**Losing the key ends updates.** Android refuses an update signed with a
+different key, so every phone with a GitHub APK would have to uninstall and
+reinstall. Play takes no new bundle until Play Console resets the upload key
+to a new one (Google keeps its copy of the app signing key), and its installs
+then update only from Play. Keep two copies off this machine: the password in
+a password manager, and the keystore file in that password manager as an
+attachment or on other storage.
 
 ## The collected copy: `~/.config/secrets-vault/`
 
 Every secret file of Faisal's projects, from this machine and the Mac,
 copied into one folder (mode 700) for him to keep in a password manager.
-`sabeel/` holds `apple/`, `google-play/`, and one folder per app (`lms/`,
-`kanban/`, `time-tracker/`, `recording-app/`), each with `android/` (signing
-keys) and `env/` (build and runtime settings); `personal/` holds the SSH keys
-and his other projects. Its `README.md` says what each file is,
-which are irreplaceable, and how to replace the rest. The tools keep reading
+`sabeel/` holds `apple/`, `google-play/`, `review/` (the store review
+account's password, held nowhere else; `docs/STORE-RELEASE.md`), and one
+folder per app (`lms/`, `kanban/`, `time-tracker/`, `recording-app/`), each
+with `android/` (signing keys) and `env/` (build and runtime settings);
+`personal/` holds the SSH keys and his other projects. Its `README.md` says
+what each file is, which are irreplaceable, and how to replace the rest. The tools keep reading
 their own live copies; `sources.tsv` names each one, and
 `bash ~/.config/secrets-vault/vault.sh verify` proves the folder still matches
 them (`collect` refreshes it). A new secret file is added to `sources.tsv`
@@ -139,7 +148,9 @@ or only with effort:
 
 | File | Holds | If lost |
 |---|---|---|
-| `~/.config/sabeel-lms/release.keystore` + `keystore.properties` | Android release key and password | **No updates to the app, ever.** Back up both. |
+| `~/.config/sabeel-lms/release.keystore` + `keystore.properties` | Android release key and password; also Play's app signing and upload key | **No updates to a GitHub install, ever; none on Play until an upload key reset** (above). Back up both. |
+| `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` | App Store Connect API key (Admin): signs and uploads iPhone builds; also GitHub secret `ASC_KEY_P8` | Apple lets it be downloaded once. Make a new key in App Store Connect (Users and Access, Integrations), set `ASC_KEY_P8` and the `ASC_KEY_ID` in `IOS_BUILD_ENV` again, revoke the old one |
+| `~/.config/sabeel-lms/ios-distribution/` | Apple Distribution certificate and private key (`.p12`, its password) and the App Store profiles; also GitHub secrets | Renew early, as `docs/IOS-BUILD.md` ("Builds on GitHub", Renewal) does: new certificate, profiles and secrets |
 | `app/.env.local` | Sentry client DSNs | Copy again from Sentry project settings |
 | `app/android/sentry.properties` | Sentry org auth token | Create a new token in Sentry |
 | `~/.config/sabeel-lms/AuthKey_X5R8FL94BC.p8` | Apple push key (also in Secret Manager as `APNS_KEY`) | Apple never lets it be downloaded again. Make a new key in the developer portal, set `APNS_KEY` to it and `APNS_KEY_ID` to its id, redeploy the functions. Back it up |

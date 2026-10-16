@@ -94,7 +94,12 @@ try {
 } catch {
   // jarsigner exits non-zero on an unsigned jar; the empty signer says so below.
 }
-if (!signer) die(`${AAB} is not signed. app/android/keystore.properties is missing (docs/SECRETS.md).`);
+if (!signer) {
+  die(
+    `${AAB} is not signed. The release key's ~/.config/sabeel-lms/keystore.properties\n` +
+      '(or the path in SABEEL_LMS_KEYSTORE_PROPERTIES) is missing (docs/SECRETS.md).',
+  );
+}
 if (/CN=Android Debug/i.test(signer)) die(`${AAB} is signed with the DEBUG key (${signer}).`);
 
 // Hermes keeps string literals readable, so the commit label is findable in

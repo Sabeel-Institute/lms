@@ -73,8 +73,8 @@ class NoAccountError extends Error {
  * does, and "sign in on the website first" is the second of those two triggers
  * stated almost verbatim. The real instruction belongs in the onboarding email,
  * out of band, where it does not count — at the cost of one support question per
- * new colleague. Read `sabeel-institute-kanban/docs/STORE-RELEASE.md` before
- * adding anything friendlier here.
+ * new colleague. Read `docs/STORE-RELEASE.md` before adding anything
+ * friendlier here.
  *
  * This file is the NATIVE half of the seam. `google.web.ts` is the web half and
  * keeps creating accounts, which is why nothing here has to detect a platform.

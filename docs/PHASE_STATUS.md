@@ -30,10 +30,10 @@ and commit messages, and renaming them would strand every one of those.
 | A | Excused-only access, with a deadline | **complete** (2026-08-14) |
 | B | The student's own attendance record | **complete** (2026-08-14) |
 | C | Assignments and grades (`docs/plans/ASSIGNMENTS.md`) | **complete** (2026-10-13: A1–A7; v0.1.0 released from `30fbac0`) |
-| 6 | Zoom import | **built** — waiting on institute credentials and its first live import |
+| 6 | Zoom import | **live** (2026-10-12: first import on `oursabeel-lms`, through the copier Worker) |
 | 7 | Notifications | **complete** (2026-08-15: delivered to an Android device end to end; web delivery still a browser check) |
 | 8 | Admin backend stats | not started |
-| 9 | Deploy, manual, release | **complete** (2026-10-11: v0.7.1 deployed, device pass on tb_emu, published to both release homes and the download page) |
+| 9 | Deploy, manual, release | **complete** (2026-10-15: v0.1.2 deployed, device pass on tb_emu, published to the GitHub release and the download page; iPhone on TestFlight, build 3; Play internal testing ready, its first release is the next version) |
 
 ## Decision log
 
@@ -757,10 +757,10 @@ and commit messages, and renaming them would strand every one of those.
 - 2026-09-07 — **The app can no longer create an account, which is what keeps it
   off the hook for in-app account deletion.**
 
-  The decision is not this app's — it is
-  `sabeel-institute-kanban/docs/STORE-RELEASE.md`, taken 2026-08-18 for all three
-  apps — but only half of it had been implemented here. `CAN_CREATE_ACCOUNTS`
-  already kept "Add a student" off the Android build. What was missing is the
+  The decision, taken 2026-08-18 for all three Sabeel apps, is the
+  `sabeel-app-stores` skill's first; how this app keeps it is in
+  `docs/STORE-RELEASE.md`. Only half of it had been implemented here.
+  `CAN_CREATE_ACCOUNTS` already kept "Add a student" off the Android build. What was missing is the
   half that matters more: **staff Google sign-in still created an account for
   anybody**, and relied on the auth trigger to delete it again a moment later.
   Creation followed by cleanup is still creation, and it is exactly the state
@@ -772,7 +772,7 @@ and commit messages, and renaming them would strand every one of those.
   the app". Satisfy neither and neither requirement is engaged. What that avoids
   is not a button: it is having to decide what happens to a student's academic
   record when they delete themselves, on a product whose whole subject is
-  retained records. FERPA gives a right to inspect and amend, never to erase.
+  retained records, kept on institutional and contractual grounds.
 
   `accountExists` verifies **Google's** ID token — not Firebase's, which is a
   different issuer and the confusing part — pins the audience to the web OAuth

@@ -62,7 +62,7 @@ the first line.
 
 ## Phase 0: the project, and the code pointing at it
 
-Nothing in this repo may be deployed until this phase is done.
+Done on 2026-10-12, with the first deploy (Agent, item 6).
 
 ### Faisal (consoles and credentials)
 
@@ -99,11 +99,10 @@ Android app `com.sabeelinstitute.lms` registered by the agent from the CLI
 (app id `1:226338267845:android:a85d5935fb8f4555cac6ac`) with the debug key's
 SHA-1, its `google-services.json` in place (gitignored).
 
-Still to do (steps in `TODO.md`):
-
-1. The release signing key, whose SHA-1 joins the same registration.
-2. Nothing for Workers: spike M1 showed the Free plan is enough
-   ([MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md#the-worker-cloudflaremedia-copier)).
+Also done: the release signing key (2026-10-12), its SHA-1 on the same
+registration (`docs/SECRETS.md`). Workers need nothing: spike M1 showed the
+Free plan is enough
+([MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md#the-worker-cloudflaremedia-copier)).
 
 ### Agent (code)
 
@@ -118,10 +117,9 @@ Still to do (steps in `TODO.md`):
    `app.json`, Gradle and the Kotlin sources, launcher label "Sabeel LMS",
    link scheme `sabeellms`. The download page is
    `faisal-shah.github.io/sabeel-institute-lms/` (pre-release until
-   switchover), and the APKs are release assets on `Sabeel-Institute/lms`.
-   Still open: the release signing key (the legacy build signs release APKs
-   with the debug keystore; the new app gets its own, kept out of git like
-   every other secret).
+   switchover), and the APKs are release assets on `Sabeel-Institute/lms`,
+   signed with the app's own release key, kept out of git
+   (`docs/SECRETS.md`).
 3. **Notifications go to staff only until switchover.** Done:
    `NOTIFY_AUDIENCE=staff` in `functions/.env.oursabeel-lms`; empty or absent
    means nobody, which is its value while the live site is bug-hunted.
@@ -206,6 +204,13 @@ download page alongside the first Android release of
    `sabeel-recording-app/` page at `sabeel-institute-lms/`, which is already
    listed on Faisal's site index with live links, for testers, and say on it
    that the move has happened.
+   **Recreate the App Review world:** the seed wipes this project, and the
+   store reviewers' account goes with it. Before the stores review anything
+   again, the reviewer account (app-review@oursabeel.com, a student, its
+   password the one in the vault) must exist again as the only student of the
+   "App Review" cohort, with its sample class, a session whose due date is in
+   the future and on which the reviewer is marked excused, a published
+   recording and an assignment. The shape is in `docs/STORE-RELEASE.md`.
 4. **Retire the legacy Android app** with a final update whose only screen
    says the app has moved and links to the new one. This is allowed by the
    store rule in `CLAUDE.md`: it points to an app, not to a sign-up flow.

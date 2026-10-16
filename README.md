@@ -2,13 +2,13 @@
 
 The learning management system for Sabeel Institute's adult classes:
 attendance, class recordings, assignments and grades. Built today: attendance
-registers, audio recordings that students who missed a class listen to, and an
-accountability ledger for staff. Planned: video and several recordings per
-session, and assignments with grades (`docs/plans/`, `docs/proposals/`).
+registers, class recordings (audio and video, in parts and versions) that
+students who missed a class play in the app, assignments with grades, and an
+accountability ledger for staff.
 
-One Expo codebase targets **Android and web**, with the architecture kept ready
-for a later iOS build. Backend is Firebase: Firestore and Cloud Functions; media
-moves to Cloudflare R2 (`docs/plans/MEDIA-ON-CLOUDFLARE.md`).
+One Expo codebase targets **Android, iOS and web**. Backend is Firebase:
+Firestore and Cloud Functions; media is in Cloudflare R2
+(`docs/plans/MEDIA-ON-CLOUDFLARE.md`).
 
 ## Status
 
@@ -20,10 +20,11 @@ imported, published, and opened to whoever was marked excused; students stream
 them, mark their own completion, and staff read the accountability ledger and
 export it. Everything consequential is audited.
 
-Not started: admin backend stats and the release itself. Zoom import is built
-and toured end to end, and is waiting on institute credentials and its first
-live run. See [`docs/PHASE_STATUS.md`](docs/PHASE_STATUS.md) for live
-status and [`PLAN.md`](PLAN.md) for the build order.
+Zoom recordings are imported through a Cloudflare Worker. Released: the web
+app, Android APKs on this repo's GitHub releases, the iPhone app on TestFlight,
+and Google Play internal testing. Not started: admin backend stats. See
+[`docs/PHASE_STATUS.md`](docs/PHASE_STATUS.md) for live status and
+[`PLAN.md`](PLAN.md) for the build order.
 
 ## Documentation
 
@@ -34,7 +35,10 @@ status and [`PLAN.md`](PLAN.md) for the build order.
 | [Phase status](docs/PHASE_STATUS.md) | Live build status, decision log, verification log |
 | [Brand](docs/BRAND.md) | Option 1 palette, accessibility cuts, single light theme |
 | [Dev tooling](docs/DEV-TOOLING.md) | What each script guards against; expected output |
-| [Deploy](docs/DEPLOY.md) | Deploy order and first-deploy traps |
+| [Deploy](docs/DEPLOY.md) | Deploy order, the release recipe, first-deploy traps |
+| [iOS build](docs/IOS-BUILD.md) | The iPhone app: GitHub builds, TestFlight, the Mac |
+| [Store release](docs/STORE-RELEASE.md) | This app's App Store and Play answers, the review account, what is left before submitting |
+| [Plans](docs/plans/) | Switchover, media on Cloudflare, video and parts |
 | [Secrets](docs/SECRETS.md) | What is and is not a secret; key names only |
 | [TODO](TODO.md) | Everything needing a human with console access |
 | [User manual](docs/USER-MANUAL.md) | The app as students, staff and admins meet it |
@@ -71,7 +75,7 @@ cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo run:android
 ## Layout
 
 ```
-app/               Expo app (Android + web via react-native-web)
+app/               Expo app (Android, iOS, and web via react-native-web)
 functions/         Cloud Functions (TS, nodejs22, us-central1)
 packages/shared/   Types and constants shared by app, functions and tests
 firestore.rules    Scoped reads; every structural write goes through a callable

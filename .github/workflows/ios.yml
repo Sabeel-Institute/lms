@@ -150,8 +150,9 @@ jobs:
           if-no-files-found: error
 
       # What the bundle was made from: the JavaScript source map, and the pod
-      # versions this build resolved (app/ios is generated, so no Podfile.lock
-      # is committed). For comparing two builds, and reading a crash.
+      # versions this build resolved (app/Podfile.lock, copied into the
+      # generated app/ios by build-ios.sh). For comparing two builds, and
+      # reading a crash.
       - name: Build record
         run: |
           mkdir -p "$RUNNER_TEMP/record"

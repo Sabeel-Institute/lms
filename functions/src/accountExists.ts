@@ -8,15 +8,14 @@ import { reportedCall } from './reported';
 /**
  * Does an account already exist for the holder of this Google token?
  *
- * THE ANDROID APP MUST NEVER CREATE AN ACCOUNT. Not a preference: both stores
+ * THE PHONE APPS MUST NEVER CREATE AN ACCOUNT. Not a preference: both stores
  * require in-app account DELETION only if an app *supports account creation* —
  * Apple 5.1.1(v), and Play, which also triggers if the app "directs the user to
  * an app account creation flow outside of the app". Satisfy neither trigger and
  * neither requirement is engaged, which is what lets this app ship without a
  * deletion flow that would have to decide what happens to a student's academic
- * record when they delete themselves. Records are retained; FERPA gives a right
- * to inspect and amend, never to erase. `sabeel-institute-kanban/docs/
- * STORE-RELEASE.md` is the decision record for all three apps.
+ * record when they delete themselves. Records are retained, on institutional
+ * and contractual grounds. `docs/STORE-RELEASE.md` is the decision record.
  *
  * `signInWithCredential` is the line that creates an account, so the native
  * sign-in path asks this first and never reaches that line for an identity with

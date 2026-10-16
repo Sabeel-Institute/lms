@@ -22,7 +22,6 @@ import { Platform } from 'react-native';
  * and an admin should still be able to cut off a departing colleague from a
  * phone. Do not strip what is allowed to stay.
  *
- * See `sabeel-institute-kanban/docs/STORE-RELEASE.md`, which is the shared
- * decision record for all three apps.
+ * See `docs/STORE-RELEASE.md`, the decision record.
  */
 export const CAN_CREATE_ACCOUNTS = Platform.OS === 'web';
