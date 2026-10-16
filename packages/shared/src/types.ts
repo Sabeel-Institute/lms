@@ -1,5 +1,6 @@
 import type { Role, UserStatus } from './auth';
 import type { Stretch } from './membership';
+import type { RulesAcceptance } from './conduct';
 
 /**
  * Document shapes. Timestamps are epoch milliseconds everywhere — one
@@ -7,8 +8,11 @@ import type { Stretch } from './membership';
  * whether a given field is a Firestore Timestamp or a number.
  */
 
-/** A staff member. Document id is the Firebase Auth uid. */
-export interface StaffUserDoc {
+/**
+ * A staff member. Document id is the Firebase Auth uid. `rulesAcceptedAt` and
+ * `rulesVersion` are absent until the account accepts the institute's rules.
+ */
+export interface StaffUserDoc extends RulesAcceptance {
   displayName: string;
   /** Null once the account is deleted: the name stays with the record, the address goes. */
   email: string | null;
@@ -21,8 +25,8 @@ export interface StaffUserDoc {
   approvedBy?: string;
 }
 
-/** A student. Document id is the Firebase Auth uid. */
-export interface StudentDoc {
+/** A student. Document id is the Firebase Auth uid. Accepts the rules as staff do. */
+export interface StudentDoc extends RulesAcceptance {
   displayName: string;
   /** Null once the account is deleted: the name stays with the record, the address goes. */
   email: string | null;

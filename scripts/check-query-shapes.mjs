@@ -126,6 +126,11 @@ const shapes = [
         .where('attendanceSubmittedAt', '==', null)
         .where('date', '<=', ID),
   ],
+  // ---- Report a problem: the hourly limit (server-side, reportProblem) ----
+  [
+    "reports — one account's in the last hour",
+    () => db.collection('reports').where('uid', '==', ID).where('createdAt', '>', 0),
+  ],
   [
     "completions — a student's own (home join)",
     () => db.collection('completions').where('studentUid', '==', ID),

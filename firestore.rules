@@ -821,6 +821,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---- Reports ----
+    // What people send with "Report a problem". The server keeps each one and
+    // emails it to the administrators (`reportProblem`), who answer by email;
+    // nobody reviews reports in the app. So no client reads or writes one, the
+    // sender included: a report names who it is about, and a client that
+    // could write here could also skip the hourly limit and the email.
+    // Stated rather than left to the catch-all below, so it cannot be opened
+    // by accident when that changes.
+    match /reports/{reportId} {
+      allow read, write: if false;
+    }
+
     // ---- Everything else ----
     // The backend-stats collection stays denied until it is opened deliberately
     // with its consumer.

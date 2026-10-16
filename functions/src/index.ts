@@ -53,6 +53,7 @@ export { onRecordingWritten, onSessionWritten } from './assignmentsTrigger';
 export { onCourseworkTallied, onGradeTallied, onSubmissionTallied } from './courseworkTallies';
 export { onAssignmentWritten, onDeviceRegistered, onMorning } from './notifyTrigger';
 export { overrideCompletion, clearCompletionOverride } from './overrides';
+export { acceptRules, reportProblem } from './conduct';
 
 /**
  * `bootstrapAdmin` exists ONLY against the emulator.

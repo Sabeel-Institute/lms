@@ -80,6 +80,10 @@ export const COLLECTIONS = {
   /** Institute-wide settings the app reads before anyone signs in: today one
    *  document, `config/app`, carrying the oldest build still allowed to run. */
   config: 'config',
+  /** What people sent with "Report a problem": who, what, and whether the
+   *  email to the administrators went. Server-written; no client reads or
+   *  writes it (`reportProblem`). */
+  reports: 'reports',
 } as const;
 
 /** The one document under `config`. */

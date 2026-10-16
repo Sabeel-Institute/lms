@@ -113,6 +113,8 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     createdAt: 'required',
     approvedAt: 'optional',
     approvedBy: 'optional',
+    rulesAcceptedAt: 'optional',
+    rulesVersion: 'optional',
   },
   students: {
     displayName: 'required',
@@ -121,6 +123,8 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     status: 'required',
     createdAt: 'required',
     createdBy: 'required',
+    rulesAcceptedAt: 'optional',
+    rulesVersion: 'optional',
   },
   cohorts: { name: 'required', archived: 'required', createdAt: 'required', createdBy: 'required' },
   courses: {

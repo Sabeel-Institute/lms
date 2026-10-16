@@ -7,7 +7,7 @@ import {
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
-import { COLLECTIONS, EMULATOR_PROJECT_ID } from '@sabeel/shared';
+import { COLLECTIONS, EMULATOR_PROJECT_ID, RULES_VERSION } from '@sabeel/shared';
 
 /**
  * Rules for the two auth populations.
@@ -145,6 +145,37 @@ describe('staffUsers', () => {
     await assertFails(
       updateDoc(doc(pending(), COLLECTIONS.staffUsers, PENDING), { status: 'active' }),
     );
+  });
+});
+
+/*
+ * ACCEPTING THE INSTITUTE'S RULES IS THE SERVER'S RECORD. The app shows the
+ * rules screen to an account whose record says it has not accepted, and only
+ * `acceptRules` writes that it has, with the server's time. An account that
+ * could write the two fields itself could skip the screen without ever seeing
+ * the rules, or back-date its agreement.
+ */
+describe("the institute's rules, accepted", () => {
+  const accepted = { rulesAcceptedAt: 1_760_000_000_000, rulesVersion: RULES_VERSION };
+
+  it('cannot be written onto a record by the account it belongs to, student or staff', async () => {
+    await assertFails(updateDoc(doc(student(), COLLECTIONS.students, STUDENT), accepted));
+    await assertFails(setDoc(doc(student(), COLLECTIONS.students, STUDENT), accepted, { merge: true }));
+    await assertFails(updateDoc(doc(manager(), COLLECTIONS.staffUsers, MANAGER), accepted));
+    await assertFails(updateDoc(doc(admin(), COLLECTIONS.staffUsers, ADMIN), accepted));
+  });
+
+  it('cannot be written onto anyone else’s record either, by an admin included', async () => {
+    await assertFails(updateDoc(doc(admin(), COLLECTIONS.students, STUDENT), accepted));
+    await assertFails(updateDoc(doc(admin(), COLLECTIONS.staffUsers, MANAGER), accepted));
+  });
+
+  it('leaves the records as they were', async () => {
+    await assertFails(updateDoc(doc(student(), COLLECTIONS.students, STUDENT), accepted));
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const rec = (await getDoc(doc(ctx.firestore(), COLLECTIONS.students, STUDENT))).data();
+      if (rec?.rulesVersion !== undefined) throw new Error('the student’s record says they accepted');
+    });
   });
 });
 

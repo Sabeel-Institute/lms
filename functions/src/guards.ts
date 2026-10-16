@@ -1,7 +1,7 @@
 import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { COLLECTIONS, type TokenClaims } from '@sabeel/shared';
+import { COLLECTIONS, type Role, type TokenClaims } from '@sabeel/shared';
 
 /**
  * The account behind the token is still live — checked against the user
@@ -70,6 +70,21 @@ function requireActive(req: CallableRequest): string {
     throw new HttpsError('permission-denied', 'Account is not active.');
   }
   return uid;
+}
+
+/**
+ * Any active account, staff or student, acting for themselves: accepting the
+ * institute's rules, reporting a problem. Pending and disabled accounts get
+ * nothing, and neither does a token with no role, which no account of either
+ * population carries once it is set up.
+ */
+export function requireMember(req: CallableRequest): { uid: string; role: Role } {
+  const uid = requireActive(req);
+  const role = claims(req).role;
+  if (role !== 'student' && role !== 'manager' && role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Account is not active.');
+  }
+  return { uid, role };
 }
 
 /** An active student, acting on their own work. */
