@@ -1890,6 +1890,18 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-16 — **Play signs the LMS with its own key** (`965cb04`). Play
+  Console had given the app a Google-generated signing key when it was
+  created; it was replaced with the LMS release key (Change key, Export and
+  upload a key from Java keystore), and the certificate Play Console now
+  shows is the release key's (SHA-1 `F6:F1:F1:17…`). The first bundle
+  (0.1.2, code 37) had been processed before the change and its APKs stay
+  Google-signed, so `publish:play` now completes a release only when the APKs
+  Play generates carry the bundle's own certificate. Against Play, that
+  bundle was refused and left an unreleased draft; the same code released
+  the time tracker's next build, signed with its own key. The LMS's first
+  Play release is therefore its next version.
+
 - 2026-10-15 — **Play publishing from the command line, and the sign-in
   form's keyboard keys** (`99c65e9`, and the commit after it).
   `npm run publish:play` puts the release bundle on Play's internal testing
