@@ -34,6 +34,7 @@
     "check:push": "node scripts/check-push.mjs",
     "check:ios": "node scripts/check-ios-config.mjs",
     "build:ios": "bash scripts/build-ios.sh",
+    "publish:play": "node scripts/publish-play.mjs",
     "students:report": "node scripts/students-report.mjs"
   },
   "devDependencies": {

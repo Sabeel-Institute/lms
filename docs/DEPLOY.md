@@ -246,7 +246,23 @@ A release bumps one version and ships it to both surfaces. In order:
      Verify the published copy, not the local one:
      `pdftotext -f 1 -l 1 USER-MANUAL.pdf - | grep -i version`
 
-6. **iPhone:** a TestFlight build of the release commit, from GitHub:
+6. **Google Play, internal testing:** the same commit as an App Bundle, from
+   `app/android`, then up to Play:
+   ```bash
+   EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) ./gradlew bundleRelease
+   cd ../.. && npm run publish:play -- --check && npm run publish:play -- --internal
+   ```
+   Everyone on the "Sabeel staff" tester list gets it from Play; the join link
+   never changes. `publish-play.mjs` refuses a debug-signed bundle, one that
+   does not carry HEAD's commit (the same Gradle trap as step 3; it prints the
+   40-second rebuild of the JS alone), and a versionCode Play reads differently
+   from `build.gradle`. It never makes an app's first release: that one is
+   made in Play Console, where the app's signing key is chosen (the LMS's own
+   release key, uploaded with Google's PEPK tool). The bundle carries every
+   ABI and Play cuts per-device APKs from it, so `build.gradle` turns the APK
+   splits off for bundle tasks. The publishing key: `docs/SECRETS.md`.
+
+7. **iPhone:** a TestFlight build of the release commit, from GitHub:
    `gh workflow run ios.yml --ref main -f testflight=true`
    (`docs/IOS-BUILD.md`, "Builds on GitHub"). Its TestFlight job stops before
    uploading if Apple already has the build number. The Mac's

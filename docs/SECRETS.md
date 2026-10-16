@@ -12,7 +12,7 @@
 | Sentry **functions** DSN | **Yes** | Secret Manager as `SENTRY_DSN` (server-side, never shipped to a client) |
 | Sentry **auth token** (source-map upload) | **Yes** | Gitignored `app/android/sentry.properties` (`auth.token=`). An **org** token (org `devnull-ke`), shared across all the Sabeel Sentry projects; the web pipeline reads it via `SENTRY_PROPERTIES`, overriding the project to `sabeel-recording-web` |
 | Zoom account id / client id / client secret | **Yes** | Secret Manager, via `firebase functions:secrets:set` |
-| Service account keys | **Yes** | Should not exist — see below |
+| Service account keys | **Yes** | One exists, Play's publishing account — see below |
 | Android **release signing key** and its password | **Yes** | `~/.config/sabeel-lms/release.keystore` and `keystore.properties`, outside the repo, mode 600 — see below |
 | R2 API keys (`R2_READ_*`, `R2_WRITE_*`) | **Yes** | Secret Manager |
 | Apple **Distribution certificate** for GitHub builds (`.p12`, its password, the App Store profiles) | **Yes** | `~/.config/sabeel-lms/ios-distribution/`, mode 600, and GitHub secrets `IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD`, `IOS_PROFILE` here and in the Kanban repo (`docs/IOS-BUILD.md`, "Builds on GitHub"). Expires 2027-10-16 |
@@ -56,10 +56,18 @@ holds `SENTRY_DSN=disabled` and placeholder `R2_*` values so the emulator does
 not probe Secret Manager; reporting stays off in tests, and the media store uses
 the local SeaweedFS keys instead (`docs/DEV-TOOLING.md`).
 
-## No service account key files
+## One service account key file: Play publishing
 
 A key file in a repo or a CI variable is a permanent credential with no
-rotation story, and nothing here needs one.
+rotation story, so there is one, and only on this machine:
+`~/keys/sabeel-play-publisher.json`, the key of
+`sabeel-play-publisher@sabeel-institute-kanban.iam.gserviceaccount.com`. Google
+Play's publishing API takes nothing else. One account publishes every Sabeel
+app; Play Console gives it "Release apps to testing tracks" app by app, and
+`scripts/publish-play.mjs` reads it (or the path in `PLAY_KEY`). If it leaks or
+is lost, delete that key in the Google Cloud console (project
+`sabeel-institute-kanban`, IAM, Service Accounts) and make a new JSON key
+there.
 
 ## The R2 keys
 
@@ -139,6 +147,7 @@ or only with effort:
 | `app/google-services.json`, `app/android/app/google-services.json` | Firebase Android config | `firebase apps:sdkconfig ANDROID 1:226338267845:android:a85d5935fb8f4555cac6ac` |
 | `app/GoogleService-Info.plist` | Firebase iOS config | `firebase apps:sdkconfig IOS 1:226338267845:ios:13ce4f7992ecd4decac6ac --out app/GoogleService-Info.plist` |
 | `~/.config/.wrangler/config/default.toml` | Cloudflare login | Log in again (`docs/DEV-TOOLING.md`) |
+| `~/keys/sabeel-play-publisher.json` | Play publishing key (all Sabeel apps) | Make a new key for the same service account (above) |
 
 Server secrets live in Secret Manager and are not on this machine.
 
