@@ -14,7 +14,7 @@ and ship: [DEPLOY.md](DEPLOY.md) and [IOS-BUILD.md](IOS-BUILD.md).
 | | |
 |---|---|
 | **iPhone** | TestFlight only. Builds 1, 2 and 3 of v0.1.2 are VALID; the group **Internal** gets every build automatically (`IOS-BUILD.md`, "TestFlight testers"); 19 staff invited to App Store Connect, not yet accepted. Next `expo.ios.buildNumber`: 4. App Store Connect app 6823374038, SKU `sabeel-lms`, bundle id `com.sabeelinstitute.lms`. Nothing submitted for review |
-| **Android, Play** | App `com.sabeelinstitute.lms`. Play signs it with the LMS's own release key since 2026-10-16. No Play release yet: 0.1.2 (code 37) was refused, because Play generated its APKs with Google's earlier key, and sits as a draft on the internal track. The next version is the first Play release. Testers: the email list "Sabeel staff", ticked on Internal testing → Testers (`DEPLOY.md`, step 6) |
+| **Android, Play** | App `com.sabeelinstitute.lms`. Play signs it with the LMS's own release key since 2026-10-16. No Play release yet: 0.1.2 (code 37) was refused, because Play generated its APKs with Google's earlier key, and sits as a draft on the internal track. The next version is the first Play release. Testers: the email list "Sabeel staff", ticked on Internal testing → Testers on 2026-10-16 (`DEPLOY.md`, step 6); staff get the join link from that page once a release is there |
 | **Android, APK** | v0.1.2 on this repo's GitHub releases, linked from the download page `https://faisal-shah.github.io/sabeel-institute-lms/` |
 | **Web** | `https://oursabeel-lms.web.app`, v0.1.2. Where accounts are made |
 
