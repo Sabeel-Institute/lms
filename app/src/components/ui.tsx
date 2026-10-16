@@ -11,6 +11,7 @@ import {
   type ComponentProps,
   type ReactElement,
   type ReactNode,
+  type Ref,
 } from 'react';
 import {
   ActivityIndicator,
@@ -575,6 +576,10 @@ export function Field({
   keyboardType,
   multiline,
   testID,
+  ref,
+  returnKeyType,
+  onSubmitEditing,
+  autoComplete,
 }: {
   label: string;
   value: string;
@@ -583,6 +588,15 @@ export function Field({
   secureTextEntry?: boolean;
   autoCapitalize?: 'none' | 'words';
   keyboardType?: 'email-address' | 'default';
+  ref?: Ref<TextInput>;
+  /**
+   * The keyboard's action key, and what it does: `next` keeps the keyboard up
+   * for the field `onSubmitEditing` focuses, `go` runs the form's action.
+   */
+  returnKeyType?: 'next' | 'go';
+  onSubmitEditing?: () => void;
+  /** What a password manager may fill in, on every platform. */
+  autoComplete?: 'email' | 'current-password';
   /**
    * A paragraph, not a value. The field grows and wraps instead of scrolling a
    * single line sideways — a session's notes run to several sentences and were
@@ -633,6 +647,14 @@ export function Field({
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
         keyboardType={keyboardType}
+        ref={ref}
+        returnKeyType={returnKeyType}
+        submitBehavior={returnKeyType === 'next' ? 'submit' : undefined}
+        onSubmitEditing={onSubmitEditing}
+        autoComplete={autoComplete}
+        textContentType={
+          autoComplete === 'email' ? 'username' : autoComplete === 'current-password' ? 'password' : undefined
+        }
         multiline={multiline}
         // Four, to agree with `inputMultiline`'s minHeight. Android sizes the
         // box from this and web from the style; disagreeing gives the same

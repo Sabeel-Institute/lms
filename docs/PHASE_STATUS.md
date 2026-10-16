@@ -1890,6 +1890,21 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-15 — **Play publishing from the command line, and the sign-in
+  form's keyboard keys** (`99c65e9`, and the commit after it).
+  `npm run publish:play` puts the release bundle on Play's internal testing
+  track; against Play, a fresh bundle passed every gate, the publishing
+  account opened an edit, and the script refused to make the app's first
+  release (that one is made in Play Console, where the signing key is
+  chosen). Its commit gate caught a real stale bundle on its first run:
+  Gradle had reused yesterday's JS after a commit that changed none.
+  Students' email field now has Next and the password field Go, so a phone
+  keyboard covering Sign in no longer matters. The e2e signs one student in
+  by the keyboard alone (two checks, each shown red with its handler
+  removed); on the AVD, a release build against production moved focus with
+  the on-screen Next and signed a test student in from Go. e2e 258, sweep
+  2087, unit 909.
+
 - 2026-10-15 — **iPhone builds run on GitHub** (`6295c84`–`627a1f6`).
   `ios.yml`, started by hand or through the API, builds a signed `.ipa` on a
   macOS runner and, as a separate job, uploads it to TestFlight. Build 3

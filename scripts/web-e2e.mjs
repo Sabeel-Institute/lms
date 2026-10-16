@@ -2105,11 +2105,21 @@ const noteHas = (page, text) =>
   page
     .waitForFunction((t) => document.querySelector('[data-testid="work-note"]')?.textContent.includes(t), text, { timeout: 20000 })
     .then(() => true, () => false);
+// This sign-in goes by the keyboard alone, as on a phone whose keyboard covers
+// the button: Enter in the email field moves to the password, Enter there signs in.
 const secondDevice = await newSession('student-second-device');
 await secondDevice.getByTestId('signin-email').fill('fatima@example.com');
-await secondDevice.getByTestId('signin-password').fill('StudentPass123!');
-await tap(secondDevice, 'signin-student');
-await secondDevice.getByTestId('tab-classes').waitFor({ timeout: 30000 });
+await secondDevice.getByTestId('signin-email').press('Enter');
+check(
+  "the email field's Enter moves to the password field",
+  await secondDevice.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'signin-password'),
+);
+await secondDevice.keyboard.type('StudentPass123!');
+await secondDevice.keyboard.press('Enter');
+check(
+  "the password field's Enter signs the student in",
+  await secondDevice.getByTestId('tab-classes').waitFor({ timeout: 30000 }).then(() => true, () => false),
+);
 await secondDevice.goto(`${WEB}${pushPaths.work(cwId)}`, { waitUntil: 'domcontentloaded' });
 await noteHas(secondDevice, 'not on what I did.');
 await student.getByTestId('work-note').click();

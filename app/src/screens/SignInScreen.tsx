@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { APP_NAME, FIRST_ADMIN_LOCAL_PART } from '@sabeel/shared';
 import { auth } from '../firebase';
@@ -47,6 +47,10 @@ export function SignInScreen({ ended }: { ended: SessionEnd | null }) {
     };
   }, []);
 
+  // The keyboard's Next takes the email field to this one, and its Go signs
+  // in, so nobody has to reach the button under the keyboard.
+  const passwordField = useRef<TextInput>(null);
+
   // `fn` is called inside the press, before any await, so the Google popup
   // still opens from the tap that asked for it.
   const run = (kind: 'google' | 'student' | 'reset' | 'dev', fn: () => Promise<void>) =>
@@ -58,6 +62,11 @@ export function SignInScreen({ ended }: { ended: SessionEnd | null }) {
       } catch (e) {
         setError(signInMessage(e));
       }
+    });
+
+  const studentSignIn = () =>
+    run('student', async () => {
+      await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
     });
 
   return (
@@ -77,24 +86,29 @@ export function SignInScreen({ ended }: { ended: SessionEnd | null }) {
           onChangeText={setEmail}
           placeholder="you@example.com"
           keyboardType="email-address"
+          autoComplete="email"
+          returnKeyType="next"
+          onSubmitEditing={() => passwordField.current?.focus()}
         />
         <Field
           testID="signin-password"
+          ref={passwordField}
           label="Password"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          autoComplete="current-password"
+          returnKeyType="go"
+          onSubmitEditing={() => {
+            if (email.trim() && password) void studentSignIn();
+          }}
         />
         <Button
           testID="signin-student"
           label="Sign in"
           busy={busy === 'student'}
           disabled={busy !== null || !email.trim() || !password}
-          onPress={() =>
-            void run('student', async () => {
-              await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-            })
-          }
+          onPress={() => void studentSignIn()}
         />
         {/* A LINK, not a second button the size of Sign in: on an empty form
             the two were identical grey bars. Muted until there is an address
