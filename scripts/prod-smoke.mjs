@@ -109,8 +109,13 @@ const page = await browser.newPage();
 
 const errors = [];
 const hosts = new Set();
+// The provoked sign-in below is refused with a 400, which the browser logs as
+// a failed resource load. That one is expected; any other error is not.
+const PROBE_SIGN_IN = /^https:\/\/identitytoolkit\.googleapis\.com\/v1\/accounts:signInWithPassword\b/;
 page.on('console', (m) => {
-  if (m.type() === 'error') errors.push(m.text());
+  if (m.type() !== 'error') return;
+  if (PROBE_SIGN_IN.test(m.location().url) && m.text().startsWith('Failed to load resource')) return;
+  errors.push(m.text());
 });
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('request', (r) => {
@@ -162,14 +167,19 @@ check(label === expectedLabel, `build label reads ${expectedLabel} (saw "${label
  * flag still set looks completely normal until someone tries to sign in — and
  * an idle sign-in screen makes NO Auth request at all (`connectAuthEmulator`
  * only sets config), so "no emulator host contacted" was true of every bundle.
- * Provoke one request the way a person would, with no side effect: a password
- * link for an address that exists nowhere sends nothing (enumeration
- * protection), but the SDK still has to talk to SOMEBODY, and which host that
- * is decides the question.
+ * Provoke one request the way a person would, with no side effect: a student
+ * sign-in for an address that exists nowhere is refused, but the SDK still has
+ * to talk to SOMEBODY, and which host that is decides the question. (Not the
+ * password link: that is a callable now, and queues a request.)
  */
 await page.getByTestId('signin-email').fill('smoke-probe@invalid.example');
-await page.getByRole('button', { name: /password link/i }).click();
+await page.getByTestId('signin-password').fill('smoke-probe-password');
+await page.getByTestId('signin-student').click();
 await page.waitForTimeout(4000);
+check(
+  (await page.getByText('That email and password do not match an account.').count()) > 0,
+  'the probe sign-in was refused as a wrong password',
+);
 const authHosts = [...hosts].filter((h) => /identitytoolkit\.googleapis\.com|securetoken\.googleapis\.com/.test(h));
 check(authHosts.length > 0, `Auth request went to Google (${authHosts.join(', ') || 'no Auth request seen'})`);
 const localHosts = [...hosts].filter((h) => /127\.0\.0\.1|localhost|10\.0\.2\.2/.test(h));
