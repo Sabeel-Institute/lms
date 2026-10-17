@@ -299,8 +299,10 @@ A release bumps one version and ships it to both surfaces. In order:
    **Testers.** Play Console, Internal testing, Testers: the email list "Sabeel
    staff" (20 staff) is ticked. To add someone, edit that list there and add
    the address of their Google account. Each tester opens the join link once
-   (the same tab, "Copy link"; it never changes), accepts, and installs from
-   Play.
+   (`https://play.google.com/apps/internaltest/4701751467577150757`, also on
+   `/get-app`; it never changes), accepts, and installs from Play. A Play
+   install and the GitHub release's APK are signed with the same key, so
+   either updates the other.
 
 7. **iPhone:** a TestFlight build of the release commit, from GitHub:
    `gh workflow run ios.yml --ref main -f testflight=true`
