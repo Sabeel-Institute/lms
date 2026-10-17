@@ -9,6 +9,7 @@ import { IS_DEV } from '../env';
 import { getTheme, spacing } from '../theme';
 import type { RootStackParamList } from '../nav';
 import { errorText } from '../errors';
+import { useOneAtATime } from '../oneAtATime';
 
 const t = getTheme();
 
@@ -46,6 +47,7 @@ export function MoreSheet({
 }) {
   const [sent, setSent] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const { active, run } = useOneAtATime();
   const isStudent = role === 'student';
   const isAdmin = role === 'admin';
 
@@ -106,7 +108,15 @@ export function MoreSheet({
           offering to change something this app does not own. */}
       {isStudent ? (
         <SheetOption
-          label={resetError ? 'Could not send the link' : sent ? 'Reset link sent' : 'Change password'}
+          label={
+            active === 'password'
+              ? 'Sending the link…'
+              : resetError
+                ? 'Could not send the link'
+                : sent
+                  ? 'Reset link sent'
+                  : 'Change password'
+          }
           detail={
             resetError ?? (sent ? `Check ${email}` : 'We email you a link to set a new one')
           }
@@ -116,11 +126,15 @@ export function MoreSheet({
             // Reported only once it has actually gone. Saying "sent" the instant
             // the button is pressed says it whether or not anything was sent,
             // and the person then waits for an email that is not coming.
-            setSent(false);
-            setResetError(null);
-            void sendMyPasswordReset()
-              .then(() => setSent(true))
-              .catch((e) => setResetError(errorText(e)));
+            // One at a time: the email takes seconds, and a second tap would
+            // send a second link and spend one of the hour's three.
+            void run('password', async () => {
+              setSent(false);
+              setResetError(null);
+              await sendMyPasswordReset()
+                .then(() => setSent(true))
+                .catch((e) => setResetError(errorText(e)));
+            });
           }}
         />
       ) : null}

@@ -4023,9 +4023,13 @@ await selfLink.getByTestId('signin-password').fill('StudentPass123!');
 await tap(selfLink, 'signin-student');
 await onToDo(selfLink);
 const beforeSelf = await linksFor('fatima@example.com');
-await more(selfLink, 'more-password');
+// A double tap, as a hurried hand makes it: one link, not two (each spends
+// one of the address's three an hour).
+await tap(selfLink, 'tab-more');
+await selfLink.getByTestId('more-password').filter({ visible: true }).first().dblclick();
 const selfSaid = await selfLink.getByText('Reset link sent', { exact: true }).filter({ visible: true }).first().waitFor({ timeout: 20000 }).then(() => true, () => false);
-check('More → Change password sends the student a link for their own account', selfSaid && (await linksFor('fatima@example.com')) === beforeSelf + 1);
+await selfLink.waitForTimeout(3000);
+check('More → Change password sends the student one link for their own account, however hurried the tap', selfSaid && (await linksFor('fatima@example.com')) === beforeSelf + 1);
 await selfLink.context().close();
 
 // Staff resend from the student's page, and the student's history says so.
