@@ -1890,6 +1890,39 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-16 — **v0.2.0 released** (`6756ef3`; GitHub release, website,
+  download page and manual, Play internal testing, TestFlight build 4). The
+  first Play release: the script put it up as a draft, Play generated its
+  APKs signed with the LMS's own key, and the script completed it. Before
+  release: `check:queries`, `check:documents`, `check:push`, `smoke:prod`
+  on the live site; no new Sentry issues. The device pass on the AVD (the
+  APKs and the bundle built at 16:43–16:45, before a power cut, and not
+  rebuilt). Each carries 6756ef3 and 0.2.0 (38), signed with the release
+  key; `publish:play --check` passed every gate. The release APK against
+  production, as a test student: Next moved to the password and Go signed
+  in; the rules came first, I agree let them in, and neither a force-stop
+  nor a reinstall brought them back (`rulesVersion` 1 on the record). One
+  report sent from More, the keyboard clear of the field and Back with
+  unsent text asking first (`mail.status: sent`); Change password said the
+  link went. The 56-minute recording minted and played; 45 s behind Home
+  and 60 s asleep it advanced by the wall clock; the media session's and
+  the shade's pause, play, skip and scrub answered; 1.5× survived a scrub;
+  killed at 14:57.9 it reopened at 14:57; video frames advanced. Real FCM
+  pushes arrived in `sabeel-alerts` with the app's icon and opened their
+  recordings from the background and from a killed process (a force-stop
+  drops FCM, as Android intends). The debug build on the seeded world:
+  completed offline, "Pending sync" until the network came back, then
+  written; Today, not recorded and back, the attendance report both ways,
+  a manager's switch off and on; the answer editor and the session notes
+  above the keyboard; the long names wrap; the audit log read 22:16 for a
+  22:16 entry with the device moved to Asia/Karachi. Found: Change
+  password showed nothing for the six seconds it takes and was not behind
+  `useOneAtATime` (fixed after the release, for the next one); the system
+  media controls still skip 10 s (keys 5/15). Once, the first playback
+  request after the reboot never reached Cloud Run (no request logged) and
+  failed after 70 s; Try again minted in 2.8 s and it did not recur. Not
+  run: the Zoom picker's AM/PM (staff Google sign-in).
+
 - 2026-10-16 — **Password emails from the institute, and only students sign
   in with a password** (branch `password-mail`, from `b08defb`; not
   deployed). Every set-password and reset email is made by the server

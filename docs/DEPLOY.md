@@ -291,11 +291,10 @@ A release bumps one version and ships it to both surfaces. In order:
    APKs from it, so `build.gradle` turns the APK splits off for bundle tasks.
    The publishing key: `docs/SECRETS.md`.
 
-   **No Play release exists yet.** 0.1.2 (code 37) was processed before the
-   signing key changed, so the script refused it and it sits as a draft on the
-   internal track; the next upload replaces that draft. The first Play release
-   is the next version, and Play may keep it a draft until "Start rollout"
-   (Play Console, Internal testing); the script says so.
+   **The first Play release was 0.2.0 (code 38),** completed by the script
+   with no Play Console step. 0.1.2 (code 37), processed before the signing
+   key changed and so signed with Google's key, never went out; its draft was
+   removed from the internal track.
 
    **Testers.** Play Console, Internal testing, Testers: the email list "Sabeel
    staff" (20 staff) is ticked. To add someone, edit that list there and add
