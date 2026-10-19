@@ -54,6 +54,14 @@ function runsInCi(ci: string, suite: string): boolean {
 }
 
 describe('CI e2e coverage', () => {
+  it('installs ffmpeg before unit tests generate media samples', () => {
+    const ci = ciYaml();
+    const install = ci.indexOf('name: Install ffmpeg');
+    const tests = ci.indexOf('name: Unit tests');
+    expect(install).toBeGreaterThan(-1);
+    expect(tests).toBeGreaterThan(install);
+  });
+
   it('runs every scripts/*-e2e.mjs suite', () => {
     const ci = ciYaml();
     const onDisk = suitesOnDisk();
