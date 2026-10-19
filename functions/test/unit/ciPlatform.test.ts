@@ -142,5 +142,6 @@ describe('platform build and deployment safety', () => {
     }
     expect(workflow('ios.yml')).toContain("if: github.event_name == 'workflow_dispatch' && inputs.testflight");
     expect(workflow('android.yml')).not.toMatch(/publish:play|publish-play|upload_to_play_store/);
+    expect(workflow('android.yml')).toContain('packages: platform-tools');
   });
 });
