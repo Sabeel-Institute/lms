@@ -8,7 +8,7 @@ import { environmentValues, hostingConfig, treeHashes } from '../../../scripts/c
 const script = resolve(import.meta.dirname, '../../../scripts/ci-platform.mjs');
 const root = resolve(import.meta.dirname, '../../..');
 const commit = 'a'.repeat(40);
-const fixtures: string[] = [];
+const fixtures = [];
 
 afterEach(() => {
   for (const directory of fixtures.splice(0)) rmSync(directory, { recursive: true, force: true });
@@ -17,11 +17,11 @@ afterEach(() => {
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), 'ci-platform-'));
   fixtures.push(directory);
-  const put = (path: string, value: string, mode = 0o600) => {
+  const put = (path, value, mode = 0o600) => {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     writeFileSync(join(directory, path), value, { mode });
   };
-  const run = (task: string, env: Record<string, string> = {}) => execFileSync(process.execPath, [script, task], {
+  const run = (task, env = {}) => execFileSync(process.execPath, [script, task], {
     cwd: directory, encoding: 'utf8', stdio: 'pipe',
     env: {
       ...process.env, RUNNER_TEMP: directory, GITHUB_ENV: join(directory, 'github-env'),
@@ -131,7 +131,7 @@ describe('platform build and deployment safety', () => {
   });
 
   it('keeps publication manual and platform builds automatic', () => {
-    const workflow = (name: string) => readFileSync(join(root, '.github/workflows', name), 'utf8');
+    const workflow = (name) => readFileSync(join(root, '.github/workflows', name), 'utf8');
     const deploy = workflow('web-deploy.yml');
     expect(deploy).toContain('workflow_dispatch:');
     expect(deploy).not.toMatch(/^ {2}(push|pull_request|workflow_run):/m);
