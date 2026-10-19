@@ -13,9 +13,9 @@
     "bucket-config": "wrangler r2 bucket cors set oursabeel-lms-media --file ../media-bucket/cors.json --force && wrangler r2 bucket lifecycle set oursabeel-lms-media --file ../media-bucket/lifecycle.json --force"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "@cloudflare/vitest-pool-workers": "0.23.0",
     "vitest": "^4.1.11",
-    "wrangler": "4.142.0"
+    "wrangler": "4.151.1"
   },
   "dependencies": {
     "jose": "6.2.12"

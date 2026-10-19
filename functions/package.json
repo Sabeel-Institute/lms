@@ -15,19 +15,19 @@
     "serve": "npm run build && firebase emulators:start --only functions"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1141.0",
-    "@aws-sdk/s3-request-presigner": "3.1141.0",
+    "@aws-sdk/client-s3": "3.1152.0",
+    "@aws-sdk/s3-request-presigner": "3.1152.0",
     "@sentry/node": "^10.67.0",
     "@tokenizer/range": "0.13.1",
     "file-type": "22.2.0",
     "firebase-admin": "^13.10.0",
-    "firebase-functions": "^7.2.5",
+    "firebase-functions": "^7.4.0",
     "google-auth-library": "^10.9.0",
     "music-metadata": "11.16.1"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "firebase": "^12.15.0",
     "vitest": "^4.1.10"
   }
