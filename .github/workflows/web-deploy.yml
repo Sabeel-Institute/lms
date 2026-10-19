@@ -42,6 +42,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-platform.mjs resolve-build
+      - name: Preserve current release safeguards
+        run: |
+          mkdir -p "$RUNNER_TEMP/hosting-release"
+          cp scripts/ci-platform.mjs scripts/ci-hosting-smoke.mjs "$RUNNER_TEMP/hosting-release/"
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.build.outputs.sha }}
@@ -53,7 +57,9 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/hosting-artifact
       - name: Verify artifact hashes and isolate Hosting configuration
-        run: node scripts/ci-platform.mjs deploy-config
+        run: |
+          node "$RUNNER_TEMP/hosting-release/ci-platform.mjs" deploy-config
+          node "$RUNNER_TEMP/hosting-release/ci-hosting-smoke.mjs" --preflight
       - run: npm install --global firebase-tools@^15
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
@@ -62,7 +68,10 @@ jobs:
           service_account: ${{ vars.GCP_HOSTING_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
       - name: Validate Hosting identity without publishing
-        run: node scripts/ci-platform.mjs validate-auth
+        run: node "$RUNNER_TEMP/hosting-release/ci-platform.mjs" validate-auth
       - name: Publish the selected artifact to live Hosting
         if: inputs.deploy
         run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/firebase-hosting.json" --non-interactive
+      - name: Read-only post-deployment checks
+        if: inputs.deploy
+        run: node "$RUNNER_TEMP/hosting-release/ci-hosting-smoke.mjs"

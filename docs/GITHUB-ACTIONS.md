@@ -70,9 +70,25 @@ The central vault is `~/.config/secrets-vault/`. Existing local keys and
 secret files remain authoritative and must not be deleted without express
 approval. CI does not generate replacement signing keys.
 
-## Additional checks
+## Security and independent checks
 
-Keep the existing integration and browser suites rather than duplicating them
-in every platform build. Dependency-update automation and CodeQL are useful
-next additions; broad production smoke tests and backend deployments should
-remain separate, explicitly approved operations.
+- Secret scanning and push protection are enabled. Dependabot alerts and
+  security-update pull requests are enabled.
+- Dependabot checks npm workspaces and GitHub Actions weekly. Minor/patch npm
+  updates and security fixes are grouped separately; major upgrades require
+  explicit review. Updates never auto-merge or deploy.
+- CodeQL scans JavaScript/TypeScript on main pushes, pull requests and weekly,
+  without native builds or production credentials.
+- CI has separate workflow-validation, quality/unit, emulator-integration and
+  browser jobs. Failed jobs can be rerun without repeating successful jobs.
+  The final `build-test` gate requires every CI job to succeed; releases still
+  require the complete CI workflow to pass on the exact build commit.
+- Workflow validation uses checksum-pinned actionlint with ShellCheck for
+  embedded shell commands. It runs on the same pushes and PRs as CI.
+- After an explicitly requested web deployment, read-only smoke checks compare
+  the public home page, entry JavaScript/styles, privacy/support pages and
+  optional push worker against the selected artifact's hashes. Requests use
+  only unauthenticated GETs to this app's default `web.app` host. They do not
+  sign in, call backend APIs or write data. Transient propagation failures are
+  retried; a mismatch fails the workflow without automatically rolling back.
+  Authentication-only runs do not perform post-deployment checks.
