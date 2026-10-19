@@ -47,6 +47,9 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Validate standalone backend dependency lock
+        working-directory: functions
+        run: npm ci --dry-run --ignore-scripts --omit=dev --workspaces=false --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
       - name: Dead-code audit

@@ -83,6 +83,8 @@ approval. CI does not generate replacement signing keys.
   browser jobs. Failed jobs can be rerun without repeating successful jobs.
   The final `build-test` gate requires every CI job to succeed; releases still
   require the complete CI workflow to pass on the exact build commit.
+  Quality checks also validate the functions directory's standalone production
+  install so its deployment lockfile stays consistent with its manifest.
 - Workflow validation uses checksum-pinned actionlint with ShellCheck for
   embedded shell commands. It runs on the same pushes and PRs as CI.
 - After an explicitly requested web deployment, read-only smoke checks compare
