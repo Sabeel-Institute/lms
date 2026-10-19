@@ -69,3 +69,4 @@ __pycache__/
 # (docs/IOS-BUILD.md).
 app/ios/
 gha-creds-*.json
+app/android/keystore.properties

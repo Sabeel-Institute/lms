@@ -36,7 +36,10 @@
 - New uploads require an unused Android versionCode. Bump the version and build
   a new AAB before publishing an update; uploading an already-used version is
   not a way to release new code. Existing draft-resume and Play-signing checks
-  in the local publisher remain in force.
+  in the local publisher remain in force. Where draft resume is supported,
+  Play's SHA-256 must match the selected AAB exactly.
+- Dirty-marked AABs cannot be published. Permission-check mode may inspect one
+  to validate credentials, but a clean Android build is required for release.
 - The local `npm run publish:play -- --internal` command remains available.
   Android builds never upload to Play automatically.
 
@@ -60,6 +63,8 @@ The `play-internal` environment also permits main only and holds the encrypted
 available only to the manual Play job, not ordinary builds or pull requests.
 Its temporary runner copy is removed when the publisher finishes; original
 local and vault credentials are unchanged.
+The current main-branch release validators and publisher are retained when
+checking out the selected build commit, so old artifacts use current safeguards.
 
 The central vault is `~/.config/secrets-vault/`. Existing local keys and
 secret files remain authoritative and must not be deleted without express

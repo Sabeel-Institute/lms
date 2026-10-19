@@ -28,6 +28,7 @@ jobs:
     timeout-minutes: 45
     env:
       BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      PUBLISH_PLAY: ${{ inputs.publish }}
       ANDROID_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +45,7 @@ jobs:
       - name: Preserve current release validators
         run: |
           mkdir -p "$RUNNER_TEMP/play-release"
-          cp scripts/ci-platform.mjs scripts/ci-play.mjs "$RUNNER_TEMP/play-release/"
+          cp scripts/ci-platform.mjs scripts/ci-play.mjs scripts/publish-play.mjs "$RUNNER_TEMP/play-release/"
       - name: Verify Android build provenance and successful CI
         id: build
         env:
@@ -70,9 +71,10 @@ jobs:
       - name: Verify AAB checksum, signature, package, version and commit
         run: node "$RUNNER_TEMP/play-release/ci-play.mjs" verify
       - run: npm ci
+        if: inputs.publish
       - name: Check Play access or publish to internal testing
         env:
-          PUBLISH_PLAY: ${{ inputs.publish }}
           PLAY_PUBLISHER_JSON: ${{ secrets.PLAY_PUBLISHER_JSON }}
           PLAY_PUBLISHER_ACCOUNT: ${{ vars.PLAY_PUBLISHER_ACCOUNT }}
+          PLAY_PUBLISHER_SCRIPT: ${{ runner.temp }}/play-release/publish-play.mjs
         run: node "$RUNNER_TEMP/play-release/ci-play.mjs" release

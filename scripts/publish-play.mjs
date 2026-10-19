@@ -42,7 +42,7 @@
  * "Release apps to testing tracks" per app.
  */
 import { execFileSync } from 'node:child_process';
-import { createSign } from 'node:crypto';
+import { createHash, createSign } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -208,7 +208,12 @@ try {
   // 1. Up as a draft no tester sees.
   await inEdit(async (id, commit) => {
     const { bundles = [] } = await api('GET', `/edits/${id}/bundles`);
-    if (bundles.some((b) => b.versionCode === versionCode)) {
+    const existing = bundles.find((bundle) => bundle.versionCode === versionCode);
+    if (existing) {
+      const localHash = createHash('sha256').update(readFileSync(AAB)).digest('hex');
+      if (existing.sha256?.toLowerCase() !== localHash) {
+        throw new Error('This versionCode already belongs to a different Play bundle. Bump the version and build a new AAB.');
+      }
       console.log(`\nPlay already has ${versionName} (${versionCode}); not uploading it again.`);
     } else {
       console.log('\nUploading...');

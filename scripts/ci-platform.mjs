@@ -100,6 +100,7 @@ function android() {
   }
   const javascript = command('unzip', ['-p', bundle, 'base/assets/index.android.bundle']);
   if (!javascript.includes(Buffer.from(commit))) throw new Error('AAB does not carry the build commit');
+  if (javascript.includes(Buffer.from(commit + '+'))) throw new Error('AAB is marked as built from uncommitted changes');
   const artifact = join(required('RUNNER_TEMP'), 'android-artifact');
   mkdirSync(artifact, { recursive: true });
   copyFileSync(bundle, join(artifact, 'app-release.aab'));
