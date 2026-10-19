@@ -2,6 +2,22 @@
 
 ## Checks and builds
 
+- **Pre-merge Builds** runs on every main-targeting PR, including Dependabot,
+  and can also be run manually. It checks Expo SDK dependency ranges and the
+  standalone backend production install, exports production web JavaScript,
+  compiles an unsigned arm64 Android release AAB and archives an unsigned iOS
+  device app in Release mode. Native builds use synthetic Firebase config and
+  disable symbol uploads; no signing, publishing or deployment credentials are
+  available. Test products are neither uploaded nor accepted as release artifacts.
+- SDK recommendations permit same-minor native patch updates; supported caret
+  ranges remain supported. Changing React/React Native families, unsupported
+  SDK dependencies or pinned iOS pods fails validation rather than rewriting
+  lockfiles. Native dependency PRs must include any intended Podfile.lock update.
+- The required `premerge-builds` gate fails if any constituent job fails,
+  skips or is cancelled. It is required alongside CI (`build-test`) and CodeQL
+  (`analyze`) on main, with up-to-date branches and no status-check bypasses.
+  Green checks validate compilation and tested behavior, not every possible
+  runtime behavior or a dependency vendor's privacy defaults.
 - **CI** runs lint, type checks, unit tests, Firebase-emulator integration tests
   and browser regressions on main pushes and pull requests. New PR pushes cancel
   superseded CI runs. No production deployment credentials are used.
