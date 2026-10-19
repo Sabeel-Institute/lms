@@ -123,21 +123,21 @@ function web() {
   record('web', artifact, { files: hashes });
 }
 
-function resolveBuild() {
+function resolveBuild(platform = 'web') {
   const id = required('BUILD_RUN_ID');
   if (!/^\d+$/.test(id)) throw new Error('Build run ID must be numeric');
   const repo = required('GITHUB_REPOSITORY');
   const api = (path) => JSON.parse(command('gh', ['api', path]).toString());
   const run = api(`repos/${repo}/actions/runs/${id}`);
-  const workflow = api(`repos/${repo}/actions/workflows/web.yml`);
+  const workflow = api(`repos/${repo}/actions/workflows/${platform}.yml`);
   if (run.workflow_id !== workflow.id || run.status !== 'completed' || run.conclusion !== 'success'
     || run.head_branch !== 'main' || String(run.head_repository.id) !== required('GITHUB_REPOSITORY_ID')
     || !['push', 'workflow_dispatch'].includes(run.event) || !/^[a-f0-9]{40}$/.test(run.head_sha)) {
-    throw new Error('Choose a successful Web build from this repository main branch');
+    throw new Error(`Choose a successful ${platform === 'web' ? 'Web' : 'Android'} build from this repository main branch`);
   }
   const checks = api(`repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${run.head_sha}&status=completed&per_page=50`);
   if (!checks.workflow_runs.some((check) => check.conclusion === 'success' && ['push', 'workflow_dispatch'].includes(check.event))) {
-    throw new Error('CI must pass on the exact web build commit before deployment');
+    throw new Error('CI must pass on the exact build commit before deployment');
   }
   appendFileSync(required('GITHUB_OUTPUT'), `sha=${run.head_sha}\nrun_id=${id}\n`);
 }
@@ -183,6 +183,7 @@ if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
   else if (task === 'android') android();
   else if (task === 'web') web();
   else if (task === 'resolve-build') resolveBuild();
+  else if (task === 'resolve-android-build') resolveBuild('android');
   else if (task === 'deploy-config') deployConfig();
   else if (task === 'validate-auth') await validateAuthentication();
   else throw new Error('Unknown CI platform task');

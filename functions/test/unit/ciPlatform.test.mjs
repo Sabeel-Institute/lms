@@ -42,7 +42,7 @@ function fixture() {
 const fs = require('node:fs');
 const data = JSON.parse(fs.readFileSync('responses.json', 'utf8'));
 const path = process.argv[3];
-process.stdout.write(JSON.stringify(path.includes('ci.yml/runs') ? data.checks : path.endsWith('web.yml') ? data.workflow : data.run));
+process.stdout.write(JSON.stringify(path.includes('ci.yml/runs') ? data.checks : path.endsWith('.yml') ? data.workflow : data.run));
 `, 0o700);
   };
   put('bin/git', `#!/usr/bin/env node\nprocess.stdout.write('${commit}');\n`, 0o700);
@@ -109,6 +109,15 @@ describe('platform build and deployment safety', () => {
     data.run.head_repository.id = 999;
     writeFileSync(path, JSON.stringify(data));
     expect(() => test.run('resolve-build')).toThrow(/this repository main branch/);
+  });
+
+  it('resolves Android builds with the same exact-commit CI gate', () => {
+    const test = fixture();
+    test.api();
+    test.run('resolve-android-build');
+    expect(readFileSync(join(test.directory, 'github-output'), 'utf8')).toContain(`sha=${commit}`);
+    test.api(false);
+    expect(() => test.run('resolve-android-build')).toThrow(/CI must pass/);
   });
 
   it('verifies downloaded artifacts before creating a Hosting-only configuration', () => {

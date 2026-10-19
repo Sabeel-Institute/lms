@@ -1,0 +1,78 @@
+name: Publish Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Android workflow run ID from main
+        required: true
+        type: string
+      publish:
+        description: Release to Play internal testing (false checks permissions without uploading)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: play-internal
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository_owner == 'Sabeel-Institute'
+    environment: play-internal
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      ANDROID_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Preserve current release validators
+        run: |
+          mkdir -p "$RUNNER_TEMP/play-release"
+          cp scripts/ci-platform.mjs scripts/ci-play.mjs "$RUNNER_TEMP/play-release/"
+      - name: Verify Android build provenance and successful CI
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/play-release/ci-platform.mjs" resolve-android-build
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.build.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-aab-${{ steps.build.outputs.sha }}
+          run-id: ${{ steps.build.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/play-artifact
+      - name: Install checksum-pinned Google bundletool
+        env:
+          BUNDLETOOL_JAR: ${{ runner.temp }}/bundletool.jar
+        run: |
+          curl --fail --silent --show-error --location --retry 3 https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar --output "$BUNDLETOOL_JAR"
+          echo "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29  $BUNDLETOOL_JAR" | sha256sum --check
+          echo "BUNDLETOOL_JAR=$BUNDLETOOL_JAR" >> "$GITHUB_ENV"
+      - name: Verify AAB checksum, signature, package, version and commit
+        run: node "$RUNNER_TEMP/play-release/ci-play.mjs" verify
+      - run: npm ci
+      - name: Check Play access or publish to internal testing
+        env:
+          PUBLISH_PLAY: ${{ inputs.publish }}
+          PLAY_PUBLISHER_JSON: ${{ secrets.PLAY_PUBLISHER_JSON }}
+          PLAY_PUBLISHER_ACCOUNT: ${{ vars.PLAY_PUBLISHER_ACCOUNT }}
+        run: node "$RUNNER_TEMP/play-release/ci-play.mjs" release

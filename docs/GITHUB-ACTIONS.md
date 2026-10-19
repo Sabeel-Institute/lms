@@ -26,9 +26,19 @@
   while they remain available.
 - **iOS** uploads to TestFlight only after a manual run with `testflight=true`.
   Automatic pushes never run its publishing job.
-- Play publishing remains a separately authorized local
-  `npm run publish:play -- --internal` operation. Android builds never upload
-  to Play automatically.
+- **Publish Android** runs manually from main. Supply a successful **Android**
+  run ID with passing CI on the same commit. It verifies the downloaded AAB's
+  provenance, checksum, upload certificate, embedded commit, package and native
+  version, then reuses the existing Play publisher without rebuilding.
+- The default `publish=false` checks Play permissions by creating and discarding
+  an edit; it uploads no bundle and changes no track. Select `publish=true` to
+  release to internal testing only. There is no production-track input.
+- New uploads require an unused Android versionCode. Bump the version and build
+  a new AAB before publishing an update; uploading an already-used version is
+  not a way to release new code. Existing draft-resume and Play-signing checks
+  in the local publisher remain in force.
+- The local `npm run publish:play -- --internal` command remains available.
+  Android builds never upload to Play automatically.
 
 ## Credentials and trust
 
@@ -43,6 +53,13 @@ this organization's numeric repository IDs, main, and manually invoked
 `web-deploy.yml` workflows. Each deployment identity has Hosting permissions
 only on its own project; there is no exported Google service-account key.
 The production environment allows deployments only from main.
+
+The `play-internal` environment also permits main only and holds the encrypted
+`PLAY_PUBLISHER_JSON` secret, a copy of the existing Play publisher credential.
+`PLAY_PUBLISHER_ACCOUNT` identifies the expected account. This credential is
+available only to the manual Play job, not ordinary builds or pull requests.
+Its temporary runner copy is removed when the publisher finishes; original
+local and vault credentials are unchanged.
 
 The central vault is `~/.config/secrets-vault/`. Existing local keys and
 secret files remain authoritative and must not be deleted without express
