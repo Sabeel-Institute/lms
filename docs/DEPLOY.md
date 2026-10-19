@@ -1,5 +1,8 @@
 # Deploy
 
+Automatic platform builds and manual release controls are documented in
+[GitHub Actions](GITHUB-ACTIONS.md).
+
 Production uses Firebase project `oursabeel-lms`, owned by Sabeel Institute
 under `oursabeel.com`, and repository `Sabeel-Institute/lms`. The local clone is
 `/home/faisal/repos/Sabeel-Institute/lms`. Android testers use Play internal

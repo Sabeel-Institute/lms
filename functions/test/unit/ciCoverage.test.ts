@@ -15,14 +15,6 @@ import { resolve } from 'node:path';
  * run), so the list cannot be globbed and has to be kept in step by hand. This
  * is what keeps it honest.
  *
- * NOTE, 2026-08-28: automatic CI is off — `ci.yml` is `workflow_dispatch` only
- * while the repo is in heavy development. So this now proves the step EXISTS,
- * not that it ran. That is a weaker guarantee and worth stating rather than
- * letting the name imply the stronger one: the suite cannot be silently dropped
- * from the job, but nothing here notices if the job is never triggered. The
- * local loop is what covers it meanwhile (`npm run test:screens`), and this test
- * goes back to meaning what it says the moment the triggers are restored.
- *
  * Lives in `functions/test/unit` because that is this repo's workspace with a
  * test runner wired up, and beside `firestoreIndexes.test.ts`, which is likewise
  * a test that asserts about repo FILES rather than about the functions.

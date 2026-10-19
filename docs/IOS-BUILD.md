@@ -292,7 +292,7 @@ with no alpha channel, the native DSN present, and the privacy manifest.
 ## Builds on GitHub
 
 `.github/workflows/ios.yml` builds the app on GitHub's macOS runners, which
-are free and unlimited for a public repo. It runs only when started:
+are free and unlimited for a public repo. Builds run automatically on main pushes. To build manually or upload to TestFlight:
 
 ```bash
 gh workflow run ios.yml                       # build a signed .ipa

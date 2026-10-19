@@ -68,3 +68,4 @@ __pycache__/
 # hand-edited and not committed. Everything that must persist is in app/app.json
 # (docs/IOS-BUILD.md).
 app/ios/
+gha-creds-*.json

@@ -1,5 +1,8 @@
 # Sabeel Institute LMS
 
+Automatic platform builds and manual release controls are documented in
+[GitHub Actions](docs/GITHUB-ACTIONS.md).
+
 The learning management system for Sabeel Institute's adult classes:
 attendance, class recordings, assignments and grades. Built today: attendance
 registers, class recordings (audio and video, in parts and versions) that

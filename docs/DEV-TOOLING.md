@@ -335,20 +335,17 @@ SWEEP_WIDTHS=320 npm run test:screens   # one width, for a tight loop
 SWEEP_FULL=1 npm run test:screens       # + iPhone SE / Pixel 7 / iPad Mini profiles
 ```
 
-**Automatic CI is OFF (2026-08-28) — run this locally.** `ci.yml` is
-`workflow_dispatch` only while the repo is in heavy development: the job runs
-around ten minutes, most of it this sweep, and it duplicates what you can run on
-the machine you are changing. The full local equivalent is
+**CI runs on main pushes and non-draft pull requests.** The screens sweep is
+part of CI. The full local equivalent is
 
 ```bash
 npm run lint && npm run typecheck && npm run knip && npm test \
   && npm run test:emulator && npm run test:screens
 ```
 
-Trigger the job by hand when it earns its time — before a release, or when
-something has to hold on a clean machine rather than this one:
-`gh workflow run ci.yml --ref <branch>`. The trigger block to restore is written
-out at the top of `ci.yml`.
+To run the job manually, use `gh workflow run ci.yml --ref <branch>`.
+Platform artifacts and manual releases are documented in
+[GitHub Actions](GITHUB-ACTIONS.md).
 
 **Scale and cost, measured 2026-09-11:** 1168 checks over 5 viewports x 49
 screens, **~7m wall clock** (including the shared/functions build, Metro's cold

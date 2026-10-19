@@ -1,34 +1,18 @@
 name: CI
 
-# AUTOMATIC CI IS OFF while this repo is in heavy development (2026-08-28).
-#
-# Not because it was failing — it is green — but because it is about ten minutes
-# a run and duplicates work already done locally:
-# `npm run lint && npm run typecheck && npm run knip && npm test &&
-# npm run test:emulator && npm run test:screens` covers everything below and
-# more, on the machine where the change is being made. Waiting on a slower copy of a check you already ran is the whole cost.
-#
-# The job is intact and still runnable on demand — Actions tab -> CI -> Run
-# workflow, or `gh workflow run ci.yml --ref <branch>`. Worth doing before a
-# release, and before anything that has to hold on a clean machine (the sweep in
-# particular has only ever been proven on this box and one GitHub runner).
-#
-# TO TURN IT BACK ON, restore:
-#
-#   on:
-#     push:
-#       branches: [main]
-#     pull_request:
-#
-#   concurrency:
-#     group: ci-${{ github.workflow }}-${{ github.ref }}
-#     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-#
-# That is the narrowed form — a branch with no PR ran nothing, a draft PR ran
-# nothing, repeated pushes to a PR cancelled the superseded run. It replaced a
-# bare `push:` + `pull_request:` that billed TWO full jobs for every commit.
 on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-test:

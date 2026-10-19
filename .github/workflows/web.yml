@@ -1,0 +1,40 @@
+name: Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.repository_owner == 'Sabeel-Institute'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Restore production build configuration
+        env:
+          APP_ENV_LOCAL: ${{ secrets.APP_ENV_LOCAL }}
+        run: node scripts/ci-platform.mjs prepare-web
+      - run: npm ci
+      - name: Build and checksum Hosting artifact
+        run: node scripts/ci-platform.mjs web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-hosting-${{ github.sha }}
+          path: ${{ runner.temp }}/web-artifact
+          if-no-files-found: error
+          retention-days: 14

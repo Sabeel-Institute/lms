@@ -1,0 +1,68 @@
+name: Deploy Web
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Web workflow run ID from main
+        required: true
+        type: string
+      deploy:
+        description: Publish to live Firebase Hosting (false validates authentication only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: production-hosting
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository_owner == 'Sabeel-Institute'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify build provenance and successful CI
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-platform.mjs resolve-build
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.build.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-hosting-${{ steps.build.outputs.sha }}
+          run-id: ${{ steps.build.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/hosting-artifact
+      - name: Verify artifact hashes and isolate Hosting configuration
+        run: node scripts/ci-platform.mjs deploy-config
+      - run: npm install --global firebase-tools@^15
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_HOSTING_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+      - name: Validate Hosting identity without publishing
+        run: node scripts/ci-platform.mjs validate-auth
+      - name: Publish the selected artifact to live Hosting
+        if: inputs.deploy
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/firebase-hosting.json" --non-interactive
