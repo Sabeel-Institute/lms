@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { appScheme, compatibleVersion, firebaseFixtures, podVersions, sdkProblems } from '../../../scripts/ci-premerge.mjs';
+import { appScheme, firebaseFixtures, podVersions } from '../../../scripts/ci-premerge.mjs';
+import { compatibleVersion, sdkProblems } from '../../../app/ci-sdk.mjs';
 
 const root = new URL('../../../', import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), 'utf8');
