@@ -130,15 +130,7 @@ export const SIGNED_URL_REFRESH_MS = 60 * 60 * 1000;
 export const WEB_APP_URL = `https://${FIREBASE_PROJECT_ID}.web.app/`;
 export const PRIVACY_URL = `${WEB_APP_URL}privacy`;
 
-/**
- * Where the Android build is downloaded from — the app's page on Faisal's
- * GitHub Pages site, which `docs/DEPLOY.md` updates on every release. The APKs
- * themselves are assets on this repo's GitHub Releases. The update gate opens
- * it, and `app/public/get-app.html` links to it (`hostingPages.test.ts` holds
- * the two together). Allowed under the store rule the sign-in screen lives by:
- * it points at the APP, not at a way to get an account.
- */
-export const DOWNLOAD_PAGE_URL = 'https://faisal-shah.github.io/sabeel-institute-lms/';
+export const DOWNLOAD_PAGE_URL = 'https://play.google.com/apps/internaltest/4701751467577150757';
 
 /**
  * The oldest Android build still allowed to run, read from `config/app` at

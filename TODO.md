@@ -471,7 +471,7 @@ no minimum-version check, so every rules change since has broken that phone
 silently. Sentry attaches no identity by design, so the person cannot be named
 from here.
 
-- [ ] Tell students to install the current build from the download page. The
+- [ ] Tell students to install the current build through Play internal testing. The
       staff who last signed in on 2026-09-10 (Israa, Khadija, Rukaiya) can pass
       it on. Sentry saw the same phone (Galaxy S25, Houston) still on 0.3.0 on
       2026-09-16 (SABEEL-RECORDING-ANDROID-3); the gate below cannot reach a
@@ -479,10 +479,10 @@ from here.
 - ✅ **The minimum build number — decided and built, 2026-09-17.** `config/app`
       carries `minVersionCode`, read by every Android and iPhone build before
       sign-in (`app/src/minVersion.ts`); a build below it shows the update screen with
-      the download page. Readable by anyone, written only by
+      Google Play. Readable by anyone, written only by
       `scripts/set-min-version.mjs <versionCode>`, which is yours to run after
       a release older builds can no longer work against — see DEPLOY.md.
-- [ ] **The update screen on store builds** opens the Android download page
+- [ ] **The update screen on store builds** opens the Play internal testing track
       on every native build, a Play or TestFlight install included. What it
       should do there is decided in `docs/STORE-RELEASE.md`.
 

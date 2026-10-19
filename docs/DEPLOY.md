@@ -1,11 +1,10 @@
 # Deploy
 
-**`oursabeel-lms` was first deployed on 2026-10-12** (Worker, rules,
-indexes, functions, hosting) after a copy of the legacy data
-([plans/SWITCHOVER.md](plans/SWITCHOVER.md)); `npm run smoke:prod` passed and
-a real playback and Zoom import were checked against it. It records the order, the traps, and
-the versioned release cycle so a deploy is never improvised. (The Android build
-ships separately — see "Cutting a release".)
+Production uses Firebase project `oursabeel-lms`, owned by Sabeel Institute
+under `oursabeel.com`, and repository `Sabeel-Institute/lms`. The local clone is
+`/home/faisal/repos/Sabeel-Institute/lms`. Android testers use Play internal
+testing; iPhone testers use TestFlight. Secret files are backed up in
+`~/.config/secrets-vault/`.
 
 **Function parameters** (not secrets) are in `functions/.env.<projectId>`, which
 `firebase deploy` reads for that project. `NOTIFY_AUDIENCE` decides who push
@@ -18,11 +17,10 @@ notifications go to: empty (nobody) while the live site is bug-hunted, then
 | Where | Access | For |
 |---|---|---|
 | GitHub `Sabeel-Institute/lms` | admin | tags and releases, Actions secrets, starting `ios.yml`, pushing to `main` |
-| GitHub `faisal-shah/faisal-shah.github.io` | write | the download page (step 5) |
 | Google Cloud `oursabeel-lms` | Owner, as an oursabeel.com account | deploys, Secret Manager, the production checks' token, IAM |
 | Cloudflare account of `oursabeel-lms-media` | member with Workers and R2 | the copier Worker and the bucket settings |
 | Sentry (the three `sabeel-recording-*` projects) | member | reading a release's issues (step 2) |
-| Google Play Console | release to testing tracks, manage testers | the internal track and the "Sabeel staff" list (step 6) |
+| Google Play Console | release to testing tracks, manage testers | the internal track and the "Sabeel staff" list (step 5) |
 | App Store Connect | Admin or App Manager | TestFlight testers and the app record (`docs/IOS-BUILD.md`) |
 | `~/.config/secrets-vault/` | a copy | the release keystore, the Play publishing key, the Apple files (`docs/SECRETS.md`) |
 
@@ -213,64 +211,22 @@ A release bumps one version and ships it to both surfaces. In order:
    installing: `unzip -p app/build/outputs/apk/release/app-x86_64-release.apk
    assets/index.android.bundle | grep -ao "$(git rev-parse --short HEAD)"`.
 
-4. **Publish the APKs to BOTH release homes** (never commit an APK — `*.apk` is
-   gitignored; committed APKs bloated the sibling pages history and had to be
-   rewritten out):
-   - **This (source) repo — the versioned archive.** Tag the build commit and cut
-     a matching GitHub Release, or the repo's own release history falls behind the
-     shipped version (easy to forget, because the public download comes from the
-     pages repo — do NOT skip it):
-     ```bash
-     git tag vX.Y.Z <build-commit> && git push origin vX.Y.Z   # tag first
-     out=app/android/app/build/outputs/apk/release
-     cp $out/app-arm64-v8a-release.apk /tmp/sabeel-institute-lms-arm64-v8a.apk
-     cp $out/app-universal-release.apk /tmp/sabeel-institute-lms-universal.apk
-     gh release create vX.Y.Z -R Sabeel-Institute/lms \
-       --title "vX.Y.Z — Android" --notes-file NOTES.md --latest \
-       /tmp/sabeel-institute-lms-arm64-v8a.apk /tmp/sabeel-institute-lms-universal.apk
-     ```
-     **`NOTES.md` is written for the release** and never committed (keep it in
-     a scratch directory): a first line saying it is a pre-release until the
-     institute moves, then plain-language lines under **For students** and
-     **For teachers**, drawn from the commits since the previous tag
-     (`git log --oneline v<previous>..HEAD`) and the decision log. The
-     download page's What's new (step 5) is the short form of the same list.
-     **This clone holds the old recording app's tags, `v0.1.0`–`v0.7.1`**,
-     from the history it carries, and they are not this repo's: `git tag
-     vX.Y.Z` fails with "already exists" for a version the old app used, or a
-     local tag points at an old-app commit. Publishing a release whose tag does
-     not exist on GitHub yet creates it there at the release's target; then
-     `git fetch origin --tags --force` brings the local tags in line. The old
-     app keeps its own copies in its own repository.
-     **The latest release, never a pre-release.** The download page links
-     through `releases/latest`, which skips a pre-release, so a build published
-     as one answers its download link with a 404.
-     **Copied under the published names, not labelled.** `gh`'s `file#label`
-     sets only a display label: the asset keeps the file's own name, and the
-     download URL is the name. The repo is public, so these assets ARE the
-     public download: the unversioned names make
-     `https://github.com/Sabeel-Institute/lms/releases/latest/download/sabeel-institute-lms-<abi>.apk`
-     always the newest release. (`gh release create --target <sha>` on a
-     not-yet-tagged release 422s; create and push the tag first, then the
-     release.)
+4. **Publish versioned assets in the Institute repository.** Tag the verified
+   commit and attach APKs and the manual without committing binaries:
+   ```bash
+   git tag vX.Y.Z <build-commit> && git push origin vX.Y.Z
+   out=app/android/app/build/outputs/apk/release
+   cp "$out/app-arm64-v8a-release.apk" /tmp/sabeel-institute-lms-arm64-v8a.apk
+   cp "$out/app-universal-release.apk" /tmp/sabeel-institute-lms-universal.apk
+   gh release create vX.Y.Z -R Sabeel-Institute/lms \
+     --title "vX.Y.Z — Android" --notes-file NOTES.md --latest \
+     /tmp/sabeel-institute-lms-arm64-v8a.apk /tmp/sabeel-institute-lms-universal.apk \
+     docs/USER-MANUAL.pdf
+   ```
+   Write release notes for students and teachers. No personal-site upload or
+   Pages update is part of a release.
 
-5. **Update the download page** in `faisal-shah.github.io/sabeel-institute-lms/`
-   (`DOWNLOAD_PAGE_URL`) and push. The download links never change, but three
-   things do:
-   - the **version and publish date** in `index.html`;
-   - the **What's new** list — a handful of plain-language lines, no jargon. This
-     is the only release note most people ever read;
-   - **`USER-MANUAL.pdf`**, copied from `docs/USER-MANUAL.pdf`. It is a SEPARATE
-     COPY, not a link, so it does not follow the repo automatically. Skipping this
-     is invisible — the page keeps serving an older manual quite happily, and it
-     had drifted three versions behind before anyone looked:
-     ```bash
-     cp docs/USER-MANUAL.pdf ../../faisal-shah/faisal-shah.github.io/sabeel-institute-lms/
-     ```
-     Verify the published copy, not the local one:
-     `pdftotext -f 1 -l 1 USER-MANUAL.pdf - | grep -i version`
-
-6. **Google Play, internal testing:** the same commit as an App Bundle, from
+5. **Google Play, internal testing:** the same commit as an App Bundle, from
    `app/android`, then up to Play:
    ```bash
    EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) ./gradlew bundleRelease
@@ -304,7 +260,7 @@ A release bumps one version and ships it to both surfaces. In order:
    install and the GitHub release's APK are signed with the same key, so
    either updates the other.
 
-7. **iPhone:** a TestFlight build of the release commit, from GitHub:
+6. **iPhone:** a TestFlight build of the release commit, from GitHub:
    `gh workflow run ios.yml --ref main -f testflight=true`
    (`docs/IOS-BUILD.md`, "Builds on GitHub"). Its TestFlight job stops before
    uploading if Apple already has the build number. The Mac's
@@ -604,9 +560,9 @@ stack traces.
 ## Retiring old builds
 
 Every Android and iPhone build reads `config/app.minVersionCode` before sign-in
-and shows an update screen — with the Android download page — when its own
+and shows an update screen — with the Play internal testing track — when its own
 `expo.android.versionCode` (the iPhone build carries it too) is below it. On a
-Play or TestFlight install that screen still opens the download page; what a
+Play or TestFlight install that screen opens Google Play; what a
 store build should do is decided in `docs/STORE-RELEASE.md`. After a release
 that older builds can no longer run against (a rules change refusing a
 listener they still open is the case that made this exist), raise the floor by
@@ -646,6 +602,6 @@ two-hour meeting.
 
 ## Android
 
-No EAS. Local Gradle builds with a committed `android/` directory. The APK ships
-as a **GitHub Release asset**, never committed to any repo — per-release APKs
-bloated the sibling pages repo's history and had to be rewritten out.
+No EAS. Local Gradle builds use the committed `android/` directory. APKs are
+versioned GitHub Release assets in `Sabeel-Institute/lms`, never committed
+binaries. Testers install and receive updates through Play internal testing.

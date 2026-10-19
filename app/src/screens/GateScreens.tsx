@@ -133,9 +133,7 @@ export function RulesScreen() {
  * A build the institute has retired.
  *
  * Shown before sign-in, in place of the whole app, so nothing behind it runs
- * on rules it no longer matches. The download page is the app's own — the
- * store rule that keeps every screen from naming a way to get an ACCOUNT does
- * not cover pointing at the app itself. Sign out is offered because the
+ * on rules it no longer matches. Sign out is offered because the
  * person may be signed in already and on a shared phone.
  */
 export function UpdateScreen({ signedIn }: { signedIn: boolean }) {
@@ -148,7 +146,7 @@ export function UpdateScreen({ signedIn }: { signedIn: boolean }) {
         </Notice>
         <Button
           testID="update-open-download"
-          label="Open the download page"
+          label="Open Google Play"
           onPress={() => void Linking.openURL(DOWNLOAD_PAGE_URL)}
         />
         {signedIn ? (

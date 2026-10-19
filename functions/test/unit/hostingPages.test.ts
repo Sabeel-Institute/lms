@@ -110,12 +110,13 @@ describe('the static pages the stores need', () => {
     expect(new URL(PRIVACY_URL).pathname).toBe('/privacy');
   });
 
-  it('sends /get-app to the same download page the update screen opens', () => {
+  it('sends /get-app to the same Play track the update screen opens', () => {
     // Two copies of one address: the update gate imports the constant, the
     // static page cannot. A stale one sends a person to the retired app.
     const getApp = readFileSync(resolve(ROOT, 'app', 'public', 'get-app.html'), 'utf8');
-    const links = [...getApp.matchAll(/href="(https:\/\/[^"]*github\.io[^"]*)"/g)].map((m) => m[1]);
+    const links = [...getApp.matchAll(/href="(https:\/\/play\.google\.com\/apps\/internaltest\/[^"]*)"/g)].map((m) => m[1]);
     expect(links).toEqual([DOWNLOAD_PAGE_URL]);
+    expect(getApp).not.toContain('faisal-shah.github.io');
   });
 
   it('keeps the app from naming a way to get an account', () => {

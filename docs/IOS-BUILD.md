@@ -387,7 +387,7 @@ outside the team through TestFlight.
 ## Open on iOS
 
 - **The update gate** compares `expo.android.versionCode` and sends an outdated
-  build to `DOWNLOAD_PAGE_URL`, the Android download page. What a store build
+  build to `DOWNLOAD_PAGE_URL`, the Play internal testing track. What a store build
   should do instead is decided in `docs/STORE-RELEASE.md`.
 - **The rich-text answer keeps the keyboard up.** Tapping outside the field
   does not close it on iOS (there is no Back key to do it), though the screen
