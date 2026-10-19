@@ -31,10 +31,10 @@ jobs:
       FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
       BUILD_RUN_ID: ${{ inputs.build_run_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Verify build provenance and successful CI
@@ -46,11 +46,11 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/hosting-release"
           cp scripts/ci-platform.mjs scripts/ci-hosting-smoke.mjs "$RUNNER_TEMP/hosting-release/"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.build.outputs.sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: web-hosting-${{ steps.build.outputs.sha }}
           run-id: ${{ steps.build.outputs.run_id }}
