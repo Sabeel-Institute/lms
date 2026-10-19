@@ -1,0 +1,115 @@
+name: Pre-merge Builds
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: premerge-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "1"
+  EXPO_NO_TELEMETRY: "1"
+  EXPO_NO_DOTENV: "1"
+  SENTRY_DISABLE_AUTO_UPLOAD: "true"
+
+jobs:
+  compatibility:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate SDK dependency compatibility
+        run: node scripts/ci-premerge.mjs sdk
+      - name: Validate standalone backend production install
+        working-directory: functions
+        run: npm ci --dry-run --ignore-scripts --omit=dev --workspaces=false --no-audit --no-fund
+
+  web:
+    if: github.event.pull_request.draft != true
+    needs: compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Compile production web export
+        run: npm run web:export -w @sabeel/app
+
+  android:
+    if: github.event.pull_request.draft != true
+    needs: compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare public test configuration and disable signing
+        run: node scripts/ci-premerge.mjs prepare
+      - run: npm ci
+      - name: Compile and verify unsigned release AAB
+        run: node scripts/ci-premerge.mjs android
+
+  ios:
+    if: github.event.pull_request.draft != true
+    needs: compatibility
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Prepare public test configuration
+        run: node scripts/ci-premerge.mjs prepare
+      - run: npm ci
+      - name: Compile and verify unsigned device Release archive
+        run: node scripts/ci-premerge.mjs ios
+
+  premerge-builds:
+    if: always() && github.event.pull_request.draft != true
+    needs: [compatibility, web, android, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every pre-merge validation job
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e 'const jobs = Object.values(JSON.parse(process.env.JOB_RESULTS)); if (jobs.length !== 4 || jobs.some(job => job.result !== "success")) process.exit(1);'
