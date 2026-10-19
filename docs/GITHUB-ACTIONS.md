@@ -108,3 +108,12 @@ approval. CI does not generate replacement signing keys.
   sign in, call backend APIs or write data. Transient propagation failures are
   retried; a mismatch fails the workflow without automatically rolling back.
   Authentication-only runs do not perform post-deployment checks.
+
+Dependency updates keep Expo-managed native packages in the current SDK family.
+Dependabot proposes patches; native package updates must also keep the committed
+iOS pod versions synchronized. SDK-family upgrades are coordinated separately.
+All workspaces use the patched Vitest 4 test runner; grouped security updates do
+not require a Vitest major upgrade.
+
+Server-side Sentry explicitly retains restrictive data collection on v11.
+Unit tests cover the initialization policy, disabled reporting, and exception flushing.

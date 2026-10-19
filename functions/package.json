@@ -17,7 +17,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.1152.0",
     "@aws-sdk/s3-request-presigner": "3.1152.0",
-    "@sentry/node": "^10.67.0",
+    "@sentry/node": "^11.8.0",
     "@tokenizer/range": "0.13.1",
     "file-type": "22.2.0",
     "firebase-admin": "^13.10.0",
@@ -29,6 +29,6 @@
     "@firebase/rules-unit-testing": "^5.0.1",
     "esbuild": "^0.28.2",
     "firebase": "^12.15.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }
