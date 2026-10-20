@@ -21,7 +21,24 @@ function started(): Promise<typeof SentryNode> | null {
   // Sentry.init (which throws on a malformed DSN).
   if (!dsn || !dsn.startsWith('https://')) return null;
   sentry ??= import('@sentry/node').then((S) => {
-    S.init({ dsn, tracesSampleRate: 0 });
+    S.init({
+      dsn,
+      tracesSampleRate: 0,
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: {
+          request: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+          response: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+        },
+        httpBodies: [],
+        urlQueryParams: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+        genAI: { inputs: false, outputs: false },
+        databaseQueryData: false,
+        queues: false,
+        graphQL: { document: false, variables: false },
+      },
+    });
     return S;
   });
   return sentry;
