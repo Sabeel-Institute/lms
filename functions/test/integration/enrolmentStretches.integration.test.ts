@@ -47,15 +47,16 @@ const DAY = 86_400_000;
 const START = Date.now();
 const at = (days: number) => START + days * DAY;
 const dayOf = (days: number) => todayInZone(INSTITUTE_TIMEZONE, at(days));
-const realNow = Date.now.bind(Date);
-const clock = (days: number) => vi.spyOn(Date, 'now').mockReturnValue(at(days));
+const clock = (days: number) => vi.setSystemTime(at(days));
 
 beforeEach(async () => {
   for (const c of [COLLECTIONS.cohorts, COLLECTIONS.courses, COLLECTIONS.enrollments, COLLECTIONS.students, COLLECTIONS.sessions, COLLECTIONS.recordings, COLLECTIONS.assignments]) {
     await db().recursiveDelete(db().collection(c));
   }
+  vi.useFakeTimers({ toFake: ['Date'] });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -96,7 +97,7 @@ describe('an enrolment through two removals', () => {
     await applyEnrollmentActive({ studentUid: STUDENT, courseId, active: false });
     clock(32);
     await applyEnrollmentActive({ studentUid: STUDENT, courseId, active: true });
-    vi.spyOn(Date, 'now').mockImplementation(realNow);
+    vi.useRealTimers();
     expect((await grant())?.active).toBe(false);
 
     // The export, from what is stored, on day 40.

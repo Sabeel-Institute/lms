@@ -120,3 +120,6 @@ Unit tests cover the initialization policy, disabled reporting, and exception fl
 
 Metro retains hierarchical dependency lookup so each package resolves its own
 compatible dependency version.
+
+Date-driven emulator tests advance the Date constructor and Date.now together,
+while keeping network timers real so RPC deadlines use a consistent clock.

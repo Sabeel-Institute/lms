@@ -48,15 +48,16 @@ const DAY = 86_400_000;
 const START = Date.now();
 const at = (days: number) => START + days * DAY;
 const dayOf = (days: number) => todayInZone(INSTITUTE_TIMEZONE, at(days));
-const realNow = Date.now.bind(Date);
-const clock = (days: number) => vi.spyOn(Date, 'now').mockReturnValue(at(days));
+const clock = (days: number) => vi.setSystemTime(at(days));
 
 beforeEach(async () => {
   for (const c of [COLLECTIONS.cohorts, COLLECTIONS.courses, COLLECTIONS.enrollments, COLLECTIONS.students, COLLECTIONS.sessions, COLLECTIONS.recordings, COLLECTIONS.assignments]) {
     await db().recursiveDelete(db().collection(c));
   }
+  vi.useFakeTimers({ toFake: ['Date'] });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -80,7 +81,7 @@ async function term(then: (ids: { cohortId: string; courseId: string }) => Promi
   await db().collection(COLLECTIONS.sessions).doc('last').set(session);
   await reconcileCourseAssignments(db(), courseId);
   await then({ cohortId, courseId });
-  vi.spyOn(Date, 'now').mockImplementation(realNow);
+  vi.useRealTimers();
 
   // What every view reads, on day 10, from what is stored.
   const read = async <T>(c: string) => (await db().collection(c).where('courseId', '==', courseId).get()).docs.map((d) => ({ id: d.id, ...(d.data() as T) }));
