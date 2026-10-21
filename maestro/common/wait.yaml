@@ -1,0 +1,7 @@
+# Let time pass: wait for something that never appears, without failing.
+appId: com.sabeelinstitute.lms
+---
+- extendedWaitUntil:
+    visible: "this text never appears"
+    timeout: ${SECONDS}000
+    optional: true

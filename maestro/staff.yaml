@@ -1,0 +1,37 @@
+# Staff on Android: the emulator sign-in row, the day's queue, a session's
+# register, and the institute's lists. Seeded by
+# scripts/seed-emulator-world.mjs; run by scripts/native-e2e.sh.
+appId: com.sabeelinstitute.lms
+name: Staff work through the day
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Emulator sign-in \\(dev only\\)"
+    timeout: 180000
+- tapOn: "as faisal.shah \\(first admin\\)"
+- extendedWaitUntil:
+    visible: "ATTENDANCE NOT TAKEN.*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Not now"
+    commands:
+      - tapOn: "Not now"
+- takeScreenshot: 01-today
+
+- tapOn: "Session 5 — Reliance and Trust"
+- extendedWaitUntil:
+    visible: "ATTENDANCE"
+    timeout: 30000
+- assertVisible: ".*Present"
+- takeScreenshot: 02-register
+- tapOn: "Navigate up"
+
+- tapOn: "Courses"
+- assertVisible: "Add a cohort"
+- tapOn: "People"
+- assertVisible: "STUDENTS.*"
+- tapOn: "More"
+- assertVisible: "Audit history"
+- takeScreenshot: 03-more
