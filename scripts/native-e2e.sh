@@ -94,7 +94,7 @@ bash scripts/free-emulator-ports.sh
 (
   # shellcheck source=scripts/lib/jdk21.sh
   . scripts/lib/jdk21.sh
-  exec node scripts/with-media-store.mjs firebase emulators:start \
+  NO_COLOR=1 exec node scripts/with-media-store.mjs firebase emulators:start \
     --project demo-sabeel-recordings --only firestore,auth,functions
 ) >"$LOGS/emulators.log" 2>&1 &
 FB_PID=$!
