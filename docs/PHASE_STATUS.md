@@ -1903,9 +1903,16 @@ and commit messages, and renaming them would strand every one of those.
   native crash (SIGSEGV in `MountingCoordinator::pullTransaction`) right
   after Metro pushed a one-module update to a freshly launched debug build;
   the same happened once to the Time Tracker's debug build. Native code is
-  unchanged since 0.2.0, and a release build has no Metro. Not run: the
-  release-only rows against production (a test student's credentials are
-  Faisal's), the staff Google sign-in, and the iOS simulator loop.
+  unchanged since 0.2.0, and a release build has no Metro. The release APK
+  (`f66ae31`, 0.2.1 (39), the LMS release key) booted five times in a row on
+  the AVD with no crash, no emulator sign-in row and `v0.2.1 · f66ae31`. Not
+  run: the release-only rows against production (a test student's
+  credentials are Faisal's), the staff Google sign-in, and the iOS simulator
+  loop. **Released**, tag `v0.2.1` at `f66ae31`: GitHub release with the
+  APKs and manual; Play internal testing 0.2.1 (39) through the Publish
+  Android workflow, from the Android workflow's AAB; TestFlight build 5 from
+  the tag; hosting through Deploy Web, then `smoke:prod` passed on the live
+  site.
 
 - 2026-10-16 — **v0.2.0 released** (`6756ef3`; GitHub release, website,
   download page and manual, Play internal testing, TestFlight build 4). The
