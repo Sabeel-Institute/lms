@@ -14,7 +14,7 @@
     "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "com.sabeelinstitute.lms",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "supportsTablet": false,
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
