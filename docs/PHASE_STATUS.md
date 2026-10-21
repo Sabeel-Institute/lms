@@ -1890,6 +1890,23 @@ and commit messages, and renaming them would strand every one of those.
 
 ## Verification log
 
+- 2026-10-21 — **v0.2.1, dependency and security maintenance** (no
+  feature change beyond Change password's one-at-a-time fix, already on the
+  web). The backend (functions only, all 67) and the web went out the same
+  day from `db9fa11`; this release brings Android and iPhone to the same
+  code. Before release: `check:queries`, `check:documents`, `check:push`
+  passed; `smoke:prod` passed on the live site; no new Sentry issues. The
+  debug build on the seeded world, on the AVD: a student signed in with a
+  password, Home, a recording played (0:00 to 0:07), Classes, and Change
+  password said "Reset link sent"; staff signed in through the emulator
+  row: Today, a session's attendance, Courses, People, More. Found: one
+  native crash (SIGSEGV in `MountingCoordinator::pullTransaction`) right
+  after Metro pushed a one-module update to a freshly launched debug build;
+  the same happened once to the Time Tracker's debug build. Native code is
+  unchanged since 0.2.0, and a release build has no Metro. Not run: the
+  release-only rows against production (a test student's credentials are
+  Faisal's), the staff Google sign-in, and the iOS simulator loop.
+
 - 2026-10-16 — **v0.2.0 released** (`6756ef3`; GitHub release, website,
   download page and manual, Play internal testing, TestFlight build 4). The
   first Play release: the script put it up as a draft, Play generated its
