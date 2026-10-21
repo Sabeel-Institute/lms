@@ -11,6 +11,7 @@ on:
       - scripts/seed-emulator-world.mjs
       - scripts/ci-avd.sh
       - scripts/install-maestro.sh
+      - scripts/ios-sim-build.sh
       - .github/workflows/native.yml
   workflow_dispatch:
 
@@ -79,4 +80,57 @@ jobs:
         with:
           name: native-${{ github.sha }}
           path: shots/native/
+          retention-days: 14
+
+  ios:
+    if: github.repository_owner == 'Sabeel-Institute' && (startsWith(github.ref, 'refs/tags/v') || github.event_name != 'push')
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Placeholder Firebase app configuration
+        run: node scripts/ci-premerge.mjs prepare
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@^15
+      - name: Install ffmpeg
+        run: brew install --quiet ffmpeg
+      - name: Install SeaweedFS
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/weed.tgz" https://github.com/seaweedfs/seaweedfs/releases/download/4.47/darwin_arm64.tar.gz
+          echo "3ad466db33e83d0b103f90a06997feeb1cc42fd536e6cbdcdded975778f64fda  $RUNNER_TEMP/weed.tgz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/seaweedfs"
+          tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
+          echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
+      - name: Emulator secret placeholders
+        run: |
+          printf '%s\n' SENTRY_DSN=disabled R2_READ_KEY_ID=unused-in-emulator \
+            R2_READ_SECRET=unused-in-emulator R2_WRITE_KEY_ID=unused-in-emulator \
+            R2_WRITE_SECRET=unused-in-emulator APNS_KEY=unused-in-emulator \
+            > functions/.secret.local
+      - name: Install Chromium for the seed
+        run: npx playwright install chromium
+      - name: Install Maestro
+        run: bash scripts/install-maestro.sh
+      - name: Native flows on the iOS simulator
+        run: bash scripts/native-e2e.sh --ios
+      - name: Screens, Maestro's report and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-ios-${{ github.sha }}
+          path: |
+            shots/native/
+            !shots/native/ios-build/
           retention-days: 14

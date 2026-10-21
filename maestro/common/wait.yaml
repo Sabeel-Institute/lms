@@ -1,5 +1,5 @@
 # Let time pass: wait for something that never appears, without failing.
-appId: com.sabeelinstitute.lms
+appId: ${APP_ID}
 ---
 - extendedWaitUntil:
     visible: "this text never appears"
