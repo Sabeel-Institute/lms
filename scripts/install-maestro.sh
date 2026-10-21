@@ -15,7 +15,12 @@ if [ ! -x "$HOME_DIR/maestro/bin/maestro" ]; then
   mkdir -p "$HOME_DIR"
   curl --fail --silent --show-error --location --retry 3 --output "$HOME_DIR/maestro.zip" \
     "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$VERSION/maestro.zip"
-  echo "$SHA256  $HOME_DIR/maestro.zip" | sha256sum --check --quiet
+  actual=$( (sha256sum "$HOME_DIR/maestro.zip" 2>/dev/null || shasum -a 256 "$HOME_DIR/maestro.zip") | cut -d' ' -f1)
+  if [ "$actual" != "$SHA256" ]; then
+    rm -f "$HOME_DIR/maestro.zip"
+    echo "install-maestro.sh: maestro.zip does not match its pinned checksum" >&2
+    exit 1
+  fi
   unzip -q -o "$HOME_DIR/maestro.zip" -d "$HOME_DIR"
   rm "$HOME_DIR/maestro.zip"
 fi
