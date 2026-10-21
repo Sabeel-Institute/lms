@@ -5,7 +5,7 @@
  *
  *     node scripts/with-media-store.mjs <command> [args…]
  *
- * Used by `test-emulator.sh`, `screens-e2e.sh` and `npm run emulators`, each of
+ * Used by `test-emulator.sh`, `e2e-stack.sh` and `npm run emulators`, each of
  * which wraps `firebase emulators:exec|start` in it. The command's exit status
  * is this script's exit status.
  *
