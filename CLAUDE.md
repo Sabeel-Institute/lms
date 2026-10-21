@@ -341,7 +341,9 @@ Plus **before a release**, and whenever Faisal asks. That pre-release pass is
 mandatory, not optional.
 
 **Run the device pass yourself; never hand Faisal a checklist the AVD can
-run.** Nearly every "test it on a phone" step has a stand-in here, at
+run.** `bash scripts/native-e2e.sh` already runs part of its debug half as
+Maestro flows, on every main push in CI too (`docs/DEV-TOOLING.md`, "Native
+flows"). Nearly every "test it on a phone" step has a stand-in here, at
 conditions a phone at home cannot give: a slow connection (a throttling proxy —
 the emulator ignores its own speed setting), the lock screen and its
 controls, an app killed mid-play, offline, a second device beside a browser,
