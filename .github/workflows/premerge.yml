@@ -79,6 +79,8 @@ jobs:
       - name: Prepare public test configuration and disable signing
         run: node scripts/ci-premerge.mjs prepare
       - run: npm ci
+      - name: Android SDK packages, with retries
+        run: bash scripts/ci-android-sdk.sh
       - name: Compile and verify unsigned release AAB
         run: node scripts/ci-premerge.mjs android
 
