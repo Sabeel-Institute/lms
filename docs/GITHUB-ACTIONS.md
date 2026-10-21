@@ -36,6 +36,10 @@
   (`docs/DEV-TOOLING.md`). Its screens and logs are the `native-<sha>` artifact.
 - **Android**, **Web** and **iOS** build automatically on main pushes and can
   also be started manually. They do not run on untrusted pull requests.
+- Every Android build (Android, the pre-merge build and Native) first installs
+  the NDK and build tools React Native's version catalog names, retrying a bad
+  download (`scripts/ci-android-sdk.sh`); Gradle would fetch them once and fail
+  the build on a truncated file.
 - Android uploads a signed AAB and build record; Web uploads checksummed static
   files and a build record; iOS uploads its signed IPA and build record.
   Artifacts are retained for 14 days. The AAB uses the existing release/upload

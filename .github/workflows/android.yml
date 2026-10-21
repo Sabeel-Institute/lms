@@ -41,6 +41,8 @@ jobs:
           ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
         run: node scripts/ci-platform.mjs prepare-android
       - run: npm ci
+      - name: Android SDK packages, with retries
+        run: bash scripts/ci-android-sdk.sh
       - name: Build and verify signed Play bundle
         env:
           ANDROID_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}

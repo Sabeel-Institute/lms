@@ -44,6 +44,8 @@ jobs:
           cache: gradle
       - name: Install dependencies
         run: npm ci
+      - name: Android SDK packages, with retries
+        run: bash scripts/ci-android-sdk.sh
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@^15
       - name: Placeholder Firebase app configuration
