@@ -48,8 +48,8 @@ describe('the release build check', () => {
 
   it('reads texts and content descriptions out of a uiautomator dump', () => {
     const xml = '<hierarchy><node text="Sign in with Google" content-desc="" /><node text="" content-desc="Privacy policy" />'
-      + '<node text="Arabic I &amp; Qur&#10;anic" /></hierarchy>';
-    expect(screenTexts(xml)).toEqual(['Sign in with Google', 'Privacy policy', 'Arabic I & Qur\nanic']);
+      + '<node text="Arabic I &amp; Qur&#10;anic" /><node text="a literal &amp;lt;" /></hierarchy>';
+    expect(screenTexts(xml)).toEqual(['Sign in with Google', 'Privacy policy', 'Arabic I & Qur\nanic', 'a literal &lt;']);
   });
 });
 

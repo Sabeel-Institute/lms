@@ -55,15 +55,17 @@ export function devRowShown(texts) {
  * Matched on the whole package, so a `.debug` build beside it never counts.
  */
 export function crashLines(logcat, pkg) {
-  const id = pkg.replace(/\./g, '\\.');
-  const crash = new RegExp(`>>> ${id} <<<|Process: ${id}(?:,|\\s|$)|ANR in ${id}(?:\\s|$)`);
-  return logcat.split('\n').filter((line) => crash.test(line));
+  const named = (line) => [/>>> (\S+) <<</, /Process: ([^,\s]+)/, /ANR in (\S+)/]
+    .some((pattern) => pattern.exec(line)?.[1] === pkg);
+  return logcat.split('\n').filter(named);
 }
+
+const ENTITIES = { '#10': '\n', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' };
 
 /** Every text and content description in a uiautomator dump. */
 export function screenTexts(xml) {
-  return [...xml.matchAll(/(?:text|content-desc)="([^"]+)"/g)].map((m) => m[1]
-    .replace(/&#10;/g, '\n').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
+  return [...xml.matchAll(/(?:text|content-desc)="([^"]+)"/g)]
+    .map((m) => m[1].replace(/&(#10|amp|quot|apos|lt|gt);/g, (_, entity) => ENTITIES[entity]));
 }
 
 const output = (program, args, options = {}) =>
