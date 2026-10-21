@@ -60,7 +60,7 @@ npm ci
 npm run lint && npm run typecheck && npm run knip && npm test
 npm run test:emulator        # needs JDK 21
 
-# End-to-end (needs the emulators AND the web dev server running — see docs)
+# End-to-end flow walkthrough — starts its own emulators and dev server
 npm run test:e2e
 
 # Layout sweep: every screen, both populations, five widths — starts its own
