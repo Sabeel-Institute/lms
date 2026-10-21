@@ -592,9 +592,10 @@ refuses a held 8081 or 61311.
 - **`maestro/staff.yaml`**: the emulator sign-in row, Today, a session's
   register, Courses, People and More.
 - **A debug build's warning toast takes taps.** "Open debugger to view
-  warnings" sits over the tab bar whenever the app logs a warning;
-  `maestro/common/dismiss-dev-warnings.yaml` closes it. Shared steps live in
-  `maestro/common/`, which Maestro does not run as flows of their own.
+  warnings" sits over the tab bar whenever the app logs a warning, so the
+  runner starts Metro with `EXPO_PUBLIC_E2E=1` and `app/index.ts` then tells
+  LogBox to ignore warnings; they still reach `logs/metro.log`. Shared steps
+  live in `maestro/common/`, which Maestro does not run as flows of their own.
 
 They are the debug half of the device pass for the rows a script can reach;
 the lock screen, a notification and the release-only rows stay with the pass

@@ -120,7 +120,7 @@ WEB_PID=
 adb reverse tcp:61307 tcp:61307 >/dev/null
 
 # The debug build loads its JavaScript from 10.0.2.2:8081 at launch.
-( cd app && CI=1 EXPO_PUBLIC_USE_EMULATORS=1 exec npx expo start --port "$METRO_PORT" --clear \
+( cd app && CI=1 EXPO_PUBLIC_USE_EMULATORS=1 EXPO_PUBLIC_E2E=1 exec npx expo start --port "$METRO_PORT" --clear \
     >"$LOGS/metro.log" 2>&1 ) &
 METRO_PID=$!
 wait_for "http://127.0.0.1:${METRO_PORT}/status" Metro 60

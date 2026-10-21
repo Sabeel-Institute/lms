@@ -18,7 +18,6 @@ name: Staff work through the day
       visible: "Not now"
     commands:
       - tapOn: "Not now"
-- runFlow: common/dismiss-dev-warnings.yaml
 - takeScreenshot: 01-today
 
 - tapOn: "Session 5 — Reliance and Trust"
@@ -29,7 +28,6 @@ name: Staff work through the day
 - takeScreenshot: 02-register
 - tapOn: "Navigate up"
 
-- runFlow: common/dismiss-dev-warnings.yaml
 - tapOn: "Courses"
 - assertVisible: "Add a cohort"
 - tapOn: "People"

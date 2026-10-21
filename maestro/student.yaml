@@ -22,7 +22,6 @@ name: Student signs in, listens, and changes the password
       visible: "Not now"
     commands:
       - tapOn: "Not now"
-- runFlow: common/dismiss-dev-warnings.yaml
 - takeScreenshot: 01-home
 
 # Playback reaches the audio, and keeps time behind Home.
@@ -50,7 +49,6 @@ name: Student signs in, listens, and changes the password
 - tapOn: "Navigate up"
 
 # The classes, and Change password reports what really happened.
-- runFlow: common/dismiss-dev-warnings.yaml
 - tapOn: "Classes"
 - assertVisible: "Your classes"
 - tapOn: "More"

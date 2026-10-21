@@ -8,8 +8,9 @@ const runner = read('scripts/native-e2e.sh');
 const appId = /^APP_ID=(\S+)$/m.exec(runner)?.[1];
 
 /** Every flow file, top level and shared, with the app it drives. */
-const flows = ['maestro', 'maestro/common'].flatMap((dir) =>
-  readdirSync(new URL(`${dir}/`, root)).filter((f) => f.endsWith('.yaml')).map((f) => `${dir}/${f}`));
+const flows = readdirSync(new URL('maestro/', root), { recursive: true })
+  .filter((f) => f.endsWith('.yaml'))
+  .map((f) => `maestro/${f}`);
 
 describe('the native flows', () => {
   it('run on every main push and release tag, all of them, and keep what they saw', () => {
@@ -21,7 +22,7 @@ describe('the native flows', () => {
 
   it('each drive the app the runner installs', () => {
     expect(appId).toMatch(/^com\.sabeelinstitute\./);
-    expect(flows.filter((f) => f.startsWith('maestro/') && !f.includes('/common/')).length).toBeGreaterThan(0);
+    expect(flows.filter((f) => !f.slice('maestro/'.length).includes('/')).length).toBeGreaterThan(0);
     for (const flow of flows) expect(read(flow).split('\n'), flow).toContain(`appId: ${appId}`);
   });
 });
