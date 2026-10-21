@@ -22,6 +22,6 @@ describe('the native flows', () => {
   it('each drive the app the runner installs', () => {
     expect(appId).toMatch(/^com\.sabeelinstitute\./);
     expect(flows.filter((f) => f.startsWith('maestro/') && !f.includes('/common/')).length).toBeGreaterThan(0);
-    for (const flow of flows) expect(read(flow), flow).toMatch(new RegExp(`^appId: ${appId.replace(/\./g, '\\.')}$`, 'm'));
+    for (const flow of flows) expect(read(flow).split('\n'), flow).toContain(`appId: ${appId}`);
   });
 });
