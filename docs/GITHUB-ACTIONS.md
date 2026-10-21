@@ -23,6 +23,11 @@
 - **CI** runs lint, type checks, unit tests, Firebase-emulator integration tests
   and browser regressions on main pushes and pull requests. New PR pushes cancel
   superseded CI runs. No production deployment credentials are used.
+- **Native** runs the Maestro flows (`maestro/`) on an Android emulator on the
+  runner, against the debug build, the Firebase emulators and the local media
+  store, on main pushes, release tags, pull requests that change the flows or
+  their scripts, and by hand: `bash scripts/native-e2e.sh`, as locally
+  (`docs/DEV-TOOLING.md`). Its screens and logs are the `native-<sha>` artifact.
 - **Android**, **Web** and **iOS** build automatically on main pushes and can
   also be started manually. They do not run on untrusted pull requests.
 - Android uploads a signed AAB and build record; Web uploads checksummed static

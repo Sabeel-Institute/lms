@@ -1,0 +1,61 @@
+# A student on Android: a password sign-in, a recording that keeps playing in
+# the background and resumes its place, the class list and Change password.
+# Seeded by scripts/seed-emulator-world.mjs; run by scripts/native-e2e.sh.
+appId: com.sabeelinstitute.lms
+name: Student signs in, listens, and changes the password
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Emulator sign-in \\(dev only\\)"
+    timeout: 180000
+- tapOn: "you@example.com"
+- inputText: "abd.al.rahman.ibn.muhammad.al.shinqiti@example.com"
+- pressKey: Enter
+- inputText: "HikamStudent1"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "NEXT UP"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Not now"
+    commands:
+      - tapOn: "Not now"
+- runFlow: common/dismiss-dev-warnings.yaml
+- takeScreenshot: 01-home
+
+# Playback reaches the audio, and keeps time behind Home.
+- tapOn: "Play Session 2 — Knowledge and Certainty"
+- extendedWaitUntil:
+    visible: "Bookmark this place"
+    timeout: 30000
+- tapOn: "Play"
+- extendedWaitUntil:
+    visible: "0:0[3-9]"
+    timeout: 30000
+- takeScreenshot: 02-playing
+- pressKey: Home
+- runFlow:
+    file: common/wait.yaml
+    env:
+      SECONDS: 15
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "0:(1[5-9]|[2-5][0-9])"
+    timeout: 15000
+- tapOn: "Pause"
+- takeScreenshot: 03-after-background
+- tapOn: "Navigate up"
+
+# The classes, and Change password reports what really happened.
+- runFlow: common/dismiss-dev-warnings.yaml
+- tapOn: "Classes"
+- assertVisible: "Your classes"
+- tapOn: "More"
+- tapOn: "Change password"
+- extendedWaitUntil:
+    visible: "Reset link sent"
+    timeout: 30000
+- takeScreenshot: 04-password-link

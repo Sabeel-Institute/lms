@@ -566,6 +566,37 @@ promote (409 = already an admin, fine).
   `adb logcat -d | grep -i deprecated` for the actual warning rather than trusting
   the toast — and it never appears in a release build.
 
+### Native flows: `scripts/native-e2e.sh`
+
+`bash scripts/native-e2e.sh` runs the Maestro flows in `maestro/` against the
+debug build: it builds and installs the APK, starts the emulators and the media
+store, seeds the world the device pass uses (`seed-emulator-world.mjs`, through
+a web dev server on 61311 that runs for the seed alone), maps the media store's
+port into the emulator (`adb reverse tcp:61307`), serves the JavaScript from
+Metro on 8081 with `EXPO_PUBLIC_USE_EMULATORS=1`, and runs every flow, or the
+one you name (`bash scripts/native-e2e.sh maestro/student.yaml`). It needs one
+booted emulator (`scripts/emulator.sh headless`) and installs the pinned Maestro
+itself (`scripts/install-maestro.sh`). Screenshots, Maestro's JUnit report and
+the emulator, web, Metro, seed and device logs land in `shots/native/`. It
+refuses a held 8081 or 61311.
+
+- **`maestro/student.yaml`**: a password sign-in with Next and Go, a recording
+  that plays, keeps time for 15 s behind Home and is still playing when the app
+  comes back, Classes, and Change password reporting "Reset link sent".
+- **`maestro/staff.yaml`**: the emulator sign-in row, Today, a session's
+  register, Courses, People and More.
+- **A debug build's warning toast takes taps.** "Open debugger to view
+  warnings" sits over the tab bar whenever the app logs a warning;
+  `maestro/common/dismiss-dev-warnings.yaml` closes it. Shared steps live in
+  `maestro/common/`, which Maestro does not run as flows of their own.
+
+They are the debug half of the device pass for the rows a script can reach;
+the lock screen, a notification and the release-only rows stay with the pass
+below. The **Native** workflow runs the same command on GitHub's emulator
+(`scripts/ci-avd.sh`) on every main push, every release tag, every pull request
+that changes the flows or their scripts, and by hand, and keeps `shots/native/`
+as the `native-<sha>` artifact.
+
 ### The device pass on the AVD
 
 Run it here before asking anyone to hold a phone; the stack skill's "Device
