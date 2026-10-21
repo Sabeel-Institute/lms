@@ -57,6 +57,16 @@
   No rebuilding occurs during deployment; functions, rules, indexes and data
   are not deployed. Older successful artifacts can be selected for rollback
   while they remain available.
+- **Deploy Functions** only runs manually from main, on a commit CI has passed.
+  The default `deploy=false` builds the bundle, checks the deploy identity and
+  compares the bundle's functions with the live ones; `deploy=true` deploys
+  them with `firebase deploy --only functions --force`. A deploy that would
+  delete a live function stops before deploying anything: delete one by hand
+  once nothing calls it. Afterwards every callable must answer an
+  unauthenticated call with its own JSON error (not Cloud Run's 403), and the
+  functions must have logged no errors since the deploy began, apart from the
+  scanners that GET every new revision. `scripts/ci-functions.mjs` runs the same
+  checks from a terminal (`docs/DEPLOY.md`).
 - **iOS** uploads to TestFlight only after a manual run with `testflight=true`.
   Automatic pushes never run its publishing job.
 - **Publish Android** runs manually from main. Supply a successful **Android**
@@ -89,6 +99,15 @@ this organization's numeric repository IDs, main, and manually invoked
 `web-deploy.yml` workflows. Each deployment identity has Hosting permissions
 only on its own project; there is no exported Google service-account key.
 The production environment allows deployments only from main.
+
+Functions deploy as their own identity, `GCP_FUNCTIONS_SERVICE_ACCOUNT`, through
+the `github-functions` pool's provider (`GCP_FUNCTIONS_WORKLOAD_IDENTITY_PROVIDER`).
+The provider accepts only this repository's `functions-deploy.yml` on main,
+started by hand by the organization owner's GitHub account, so a collaborator
+who can start the workflow still gets no credentials. The identity can deploy
+and read functions, schedules, task queues, triggers and logs in this project,
+and act as the functions' runtime accounts; it cannot change data, rules or
+Hosting. The `functions` environment permits main only.
 
 The `play-internal` environment also permits main only and holds the encrypted
 `PLAY_PUBLISHER_JSON` secret, a copy of the existing Play publisher credential.

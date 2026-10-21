@@ -350,6 +350,19 @@ firebase deploy --only functions --force        # --force is always needed: see 
 firebase deploy --only hosting
 ```
 
+Functions deploy from GitHub too, and that is the usual way: **Deploy
+Functions** (`functions-deploy.yml`, `docs/GITHUB-ACTIONS.md`) deploys main
+after CI has passed on it, refuses a deploy that would delete a live function,
+and afterwards checks every callable and the error logs. It needs no local
+Google login. The same guards run here:
+
+```bash
+export FIREBASE_PROJECT_ID=oursabeel-lms
+node scripts/ci-functions.mjs require-ci && node scripts/ci-functions.mjs plan
+firebase deploy --only functions --force
+node scripts/ci-functions.mjs verify --since <the time the deploy started, ISO>
+```
+
 ### The sign-in gates are registered with Identity Platform
 
 `beforeSignUp` and `beforeSignIn` (`functions/src/signUpGate.ts`) are

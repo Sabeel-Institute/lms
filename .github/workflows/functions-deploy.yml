@@ -1,0 +1,70 @@
+name: Deploy Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy main's functions to production (false checks access and plans the deploy only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: production-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository_owner == 'Sabeel-Institute'
+    environment: functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Require a successful CI run on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-functions.mjs require-ci
+      - name: Install dependencies
+        run: npm ci
+      - run: npm install --global firebase-tools@^15
+      - name: Functions environment kept out of the repository
+        env:
+          PROBE_TOKEN: ${{ secrets.PROBE_TOKEN }}
+        run: |
+          if [ -n "$PROBE_TOKEN" ]; then
+            printf 'PROBE_TOKEN=%s\n' "$PROBE_TOKEN" > functions/.env
+          fi
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_FUNCTIONS_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_FUNCTIONS_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+      - name: Plan the deploy; never delete a live function
+        run: node scripts/ci-functions.mjs plan
+      - name: Check the deploy without changing anything
+        if: ${{ !inputs.deploy }}
+        run: firebase deploy --only functions --project "$FIREBASE_PROJECT_ID" --non-interactive --dry-run
+      - name: Deploy the functions
+        if: inputs.deploy
+        run: |
+          echo "DEPLOY_STARTED=$(date -u +%FT%TZ)" >> "$GITHUB_ENV"
+          firebase deploy --only functions --project "$FIREBASE_PROJECT_ID" --non-interactive --force
+      - name: Post-deployment checks
+        if: inputs.deploy && !cancelled() && env.DEPLOY_STARTED != ''
+        env:
+          PROBE_TOKEN: ${{ secrets.PROBE_TOKEN }}
+        run: node scripts/ci-functions.mjs verify --since "$DEPLOY_STARTED"
