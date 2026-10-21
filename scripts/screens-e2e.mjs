@@ -3,9 +3,9 @@
  * THE visual/layout regression sweep. Every screen, every width, looked at AND
  * checked.
  *
- *   bash scripts/screens-e2e.sh                       # the CI set
- *   SWEEP_WIDTHS=320 bash scripts/screens-e2e.sh      # one width, tight loop
- *   SWEEP_FULL=1 bash scripts/screens-e2e.sh          # + real device profiles
+ *   bash scripts/e2e-stack.sh screens                   # the CI set
+ *   SWEEP_WIDTHS=320 bash scripts/e2e-stack.sh screens  # one width, tight loop
+ *   SWEEP_FULL=1 bash scripts/e2e-stack.sh screens      # + real device profiles
  *
  * A TOUR THAT CANNOT FAIL IS A SCREENSHOT GENERATOR. This one exits non-zero,
  * and `functions/test/unit/ciCoverage.test.ts` fails if CI ever stops running
@@ -100,7 +100,7 @@ const admin = require('firebase-admin');
 import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
 import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { backButton, byId, byName, resetEmulators, seedWorld, tap } from './lib/seed-world.mjs';
-// The built workspace package — `screens-e2e.sh` builds it before this runs.
+// The built workspace package — `e2e-stack.sh` builds it before this runs.
 import { PUSH_DEVICE_MESSAGE, addDays } from '@sabeel/shared';
 
 const BASE = process.env.E2E_BASE ?? `http://127.0.0.1:${WEB_PORTS.sweep}/`;

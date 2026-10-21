@@ -15,13 +15,13 @@ emulator — not your diff.
 | `npm run typecheck` | Builds `@sabeel/shared` first, then typechecks every workspace — **including the functions tests** (`functions/tsconfig.test.json`) |
 | `npm test` | Vitest unit tests (shared, functions and app), no emulators needed |
 | `npm run test:emulator` | Two passes: the rules suites (`test:rules`) against Firestore + Auth alone, then the integration suites against Firestore + Auth + Functions and the local media store (SeaweedFS) |
-| `npm run emulators` | The same emulators and media store, long-running, for `test:e2e`, `seed:emulators` and a device pass |
+| `npm run emulators` | The same emulators and media store, long-running, for `node scripts/web-e2e.mjs`, `seed:emulators` and a device pass |
 | `node scripts/with-media-store.mjs <cmd…>` | Runs a command with SeaweedFS up on 127.0.0.1:61307 and stops it after; what the runners above wrap themselves in |
 | `npm run knip` | Dead-code audit — fails on unused files, exports and dependencies |
 | `npm run emulators:free` | Kills whatever is squatting on the emulator ports |
 | `npm run build` | Builds shared, then bundles functions with esbuild |
-| `npm run test:e2e` | Playwright walkthrough against the web dev server (see below) |
-| `npm run test:screens` | The multi-width layout sweep — starts its own emulators and dev server (see below) |
+| `npm run test:e2e` | The Playwright flow walkthrough — starts its own emulators and dev server (see below) |
+| `npm run test:screens` | The multi-width layout sweep — the same runner (see below) |
 | `npm run web:export -w @sabeel/app` | The web bundle that actually ships |
 | `scripts/emulator.sh headless` | Boots the `tb_emu` AVD with no window |
 | `npm run check:queries` | **Against the REAL project.** Every query shape the app sends, checked for a missing composite index. With `CHECK_ACCESS_TOKEN` set it runs over REST as that user token instead of Application Default Credentials (see `docs/DEPLOY.md`) |
@@ -165,7 +165,7 @@ audit lie, and an audit that reports nothing is worse than no audit.
 > Five files state these numbers and cannot share a representation —
 > `firebase.json`, `app/src/env.ts` (inlined into the bundle),
 > `scripts/lib/ports.mjs`, the `PORTS=(…)` array in `free-emulator-ports.sh` and
-> the `WEB_PORT` default in `screens-e2e.sh`.
+> the `WEB_PORT`s in `e2e-stack.sh`.
 > `functions/test/unit/emulatorPorts.test.ts` asserts they agree, that every port
 > is inside the block, and that the kill list contains **nothing this checkout
 > does not own**. Never widen that array past the block.
@@ -269,17 +269,24 @@ test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
 
 ## The e2e harness
 
-`npm run test:e2e` needs TWO things already running:
+`npm run test:e2e` (`scripts/e2e-stack.sh web` → `scripts/web-e2e.mjs`) needs
+nothing running: the runner frees the emulator ports, starts the emulators, the
+media store and an Expo web dev server on **61311**, runs the walkthrough and
+stops them all. CI's browser job runs the same command.
+
+For a tight loop against a stack you keep up, start the two yourself and run
+the script directly:
 
 ```bash
 npm run emulators      # Firestore, Auth, Functions and the local media store
 cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61311 --clear
+node scripts/web-e2e.mjs
 ```
 
-**`npm run test:emulator` will kill that emulator suite.** It runs
-`free-emulator-ports.sh` first, by design — so the two cannot be used at once,
-and after running the unit-style emulator suite you must restart the long-lived
-one before the e2e will work. The symptom is every e2e check failing at once.
+**`npm run test:emulator`, `test:e2e` and `test:screens` all kill that emulator
+suite.** Each runs `free-emulator-ports.sh` first, by design — so after one of
+them you must restart the long-lived suite before the direct run will work. The
+symptom is every e2e check failing at once.
 
 **Its media is generated, not committed.** `scripts/lib/media-fixtures.mjs`
 makes the twelve-minute M4A, the same twelve minutes as a tiny MP4, and the
@@ -320,14 +327,13 @@ Two more things that cost time here:
 
 ## The screens sweep
 
-`npm run test:screens` (`scripts/screens-e2e.sh` → `scripts/screens-e2e.mjs`) is
-the layout regression harness: every screen of both populations at five widths,
-**asserted**, and it exits non-zero.
+`npm run test:screens` (`scripts/e2e-stack.sh screens` →
+`scripts/screens-e2e.mjs`) is the layout regression harness: every screen of
+both populations at five widths, **asserted**, and it exits non-zero.
 
 **It needs nothing running.** The runner starts the emulator suite and its own
 Expo web dev server on port **61310** (not `test:e2e`'s 61311) and kills both on
-the way out. That is the whole reason it is in CI and `test:e2e` is not — it
-never touches a world somebody else built.
+the way out, and it never touches a world somebody else built.
 
 ```bash
 npm run test:screens                    # the CI set: 320, 390, 720, 1024, 1440

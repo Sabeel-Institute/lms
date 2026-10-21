@@ -9,7 +9,8 @@
  *   node scripts/repro-stale-scope.mjs none      # control: nothing changed
  *
  * Needs the emulator suite and the e2e dev server running (the same two
- * `npm run test:e2e` needs — see docs/DEV-TOOLING.md). It RESETS the emulators.
+ * `node scripts/web-e2e.mjs` needs — see docs/DEV-TOOLING.md). It RESETS the
+ * emulators.
  *
  * The mechanism: the shell builds the queue's `in` scope from the FIRST
  * courses snapshot, which on a cold load with IndexedDB persistence comes from
