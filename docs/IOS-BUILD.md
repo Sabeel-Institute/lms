@@ -351,7 +351,7 @@ away, until Apple's per-team certificate limit stopped every build.
 | `APP_ENV_LOCAL` | `app/.env.local`, its `NAME=value` lines only | |
 | `GOOGLE_SERVICE_INFO_PLIST` | `app/GoogleService-Info.plist`, base64 | |
 
-Set one again with `gh secret set NAME -R Sabeel-Institute/lms < file`
+Set one again with `gh secret set NAME --env release-build -R Sabeel-Institute/lms < file`
 (`base64 -w0 file |` for the binary ones). Keep comment lines out of the
 multi-line secrets: GitHub masks a secret line by line, so a line of `#` in
 one turns every `#` in the log into `***`. The workflow also masks each value

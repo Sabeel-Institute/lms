@@ -17,7 +17,9 @@
   lockfiles. Native dependency PRs must include any intended Podfile.lock update.
 - The required `premerge-builds` gate fails if any constituent job fails,
   skips or is cancelled. It is required alongside CI (`build-test`) and CodeQL
-  (`analyze`) on main, with up-to-date branches and no status-check bypasses.
+  (`analyze`) on main, with no status-check bypasses. A branch need not be up
+  to date with main to merge: main's own CI runs on every merge, and no
+  release workflow accepts a commit it has not passed.
   Green checks validate compilation and tested behavior, not every possible
   runtime behavior or a dependency vendor's privacy defaults.
 - **CI** runs lint, type checks, unit tests, Firebase-emulator integration tests
@@ -63,7 +65,10 @@
 - Only the organization owner (Faisal) can merge. The ruleset "main: only the
   owner merges" restricts updates to `main` and exempts the owner for pull
   requests only; "main: verified pre-merge builds" requires the three checks
-  above on an up-to-date branch.
+  above.
+- Release tags (`v*`) are created, moved and deleted by the owner alone (the
+  tag ruleset "release tags: only the owner"): the signing environment
+  below admits them.
 
 ## Manual releases
 
@@ -106,16 +111,29 @@
 
 ## Credentials and trust
 
-GitHub holds `APP_ENV_LOCAL`, the existing iOS signing secrets,
-`ANDROID_KEYSTORE` and `ANDROID_KEYSTORE_PROPERTIES`. LMS also needs
+Every release workflow (Deploy Web, Deploy Functions, Publish Android and the
+TestFlight upload) first checks that the organization owner started it and,
+when it is re-run, re-ran it: the organization variables `RELEASE_OWNER_ID`
+and `RELEASE_OWNER_LOGIN`, which only organization admins can change.
+
+The `release-build` environment holds `APP_ENV_LOCAL`, the existing iOS
+signing secrets (`IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD`, `IOS_PROFILE`,
+`IOS_BUILD_ENV`, `ASC_KEY_P8`), `ANDROID_KEYSTORE` and
+`ANDROID_KEYSTORE_PROPERTIES`. It admits main and `v*` tags only, and only the
+jobs that build a release enter it (Android, Web, iOS and its TestFlight
+upload), so a workflow on any other branch reads none of them; repository
+secrets would reach a workflow on any branch a collaborator pushes.
+`functions/test/unit/releaseAccess.test.mjs` fails if a job reads one
+outside that environment. Set one again from the vault with
+`gh secret set NAME --env release-build -R <repo>`. LMS also needs
 `ANDROID_GOOGLE_SERVICES_JSON`. The certificate fingerprint is stored in
 `ANDROID_SIGNING_CERT_SHA256`; builds verify it before uploading an AAB.
 
 Hosting uses `FIREBASE_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER` and
 `GCP_HOSTING_SERVICE_ACCOUNT` repository variables. Federation is limited to
 this organization's numeric repository IDs, main, and manually invoked
-`web-deploy.yml` workflows. Each deployment identity has Hosting permissions
-only on its own project; there is no exported Google service-account key.
+`web-deploy.yml` workflows, started by the owner's GitHub account. Each
+deployment identity has Hosting permissions only on its own project; there is no exported Google service-account key.
 The production environment allows deployments only from main.
 
 Functions deploy as their own identity, `GCP_FUNCTIONS_SERVICE_ACCOUNT`, through

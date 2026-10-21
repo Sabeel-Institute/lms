@@ -973,6 +973,33 @@ async function goHome(page, homeMarker) {
  * which on a 320px phone is most of the app. The screenshot is taken between the
  * two, so a failure always has a picture of what was measured beside it.
  */
+/**
+ * A LOADING SCREEN IS NOT THE SCREEN. Every placeholder the app shows while it
+ * reads ("Counting the work…", "Checking your courses…", "Loading…") is a verb
+ * ending in an ellipsis, and the sweep once photographed and measured a course
+ * screen with its assignments still "Counting the work…" — the layout checked
+ * was not the one a teacher sees. Wait for every visible placeholder to go;
+ * return the ones still showing after 15 s, which is a screen stuck loading.
+ */
+const PLACEHOLDER = /^(Loading|Checking|Counting|Saving|Sending|Uploading|Waiting)\b.*…$/;
+async function settled(page) {
+  const showing = () => page.evaluate((source) => {
+    const pattern = new RegExp(source);
+    const seen = new Set();
+    for (const node of document.querySelectorAll('body *')) {
+      if (node.children.length || !node.offsetParent) continue;
+      const text = node.textContent.trim();
+      if (pattern.test(text)) seen.add(text);
+    }
+    return [...seen];
+  }, PLACEHOLDER.source);
+  for (let waited = 0; waited < 15_000; waited += 250) {
+    if (!(await showing()).length) return [];
+    await page.waitForTimeout(250);
+  }
+  return showing();
+}
+
 function visitor(page, tag, homeMarker, counter) {
   /*
    * `anchor` IS WHAT SAYS THE TOUR ARRIVED.
@@ -1000,6 +1027,8 @@ function visitor(page, tag, homeMarker, counter) {
       );
     }
     await page.waitForTimeout(450);
+    const stillLoading = await settled(page);
+    check(`${tag} / ${name} finished loading`, stillLoading.length === 0, `still showing ${stillLoading.join('; ')}`);
 
     const readOnly = READ_ONLY_SCREENS.has(name);
     const top = await layoutFaults(page, readOnly);
