@@ -30,7 +30,14 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger --name-match=kvm
 
 yes | "$TOOLS/sdkmanager" --licenses >/dev/null || true
-"$TOOLS/sdkmanager" --install emulator platform-tools "$IMAGE" >/dev/null
+# Google's SDK downloads sometimes arrive truncated ("Error on ZipFile unknown
+# archive"); a second fetch has always been whole.
+for attempt in 1 2 3; do
+  "$TOOLS/sdkmanager" --install emulator platform-tools "$IMAGE" >/dev/null && break
+  [ "$attempt" -lt 3 ] || { echo "The emulator or its system image would not install" >&2; exit 1; }
+  echo "SDK install failed (attempt $attempt); retrying" >&2
+  sleep 10
+done
 echo no | "$TOOLS/avdmanager" create avd --name ci --package "$IMAGE" --device pixel_6 --force
 emulator -list-avds | grep -qx ci || { echo "avdmanager made no AVD named ci in $ANDROID_AVD_HOME" >&2; exit 1; }
 
