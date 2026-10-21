@@ -16,7 +16,7 @@ import { resolve } from 'node:path';
  *   app/src/env.ts              TS     inlined into the client bundle
  *   scripts/lib/ports.mjs       ESM    read by scripts/*.mjs
  *   free-emulator-ports.sh      shell  the kill list
- *   screens-e2e.sh              shell  the sweep's web dev-server port
+ *   e2e-stack.sh                shell  the browser suites' web dev-server ports
  *
  * So the goal is not one copy, it is copies that cannot drift. A mismatch is
  * otherwise silent until something connects to a port nobody is serving — or,
@@ -69,7 +69,7 @@ function projectFromShared(): string {
 /** Every `--project` flag in the shell runners. */
 function projectsFromShell(): { file: string; value: string }[] {
   const out: { file: string; value: string }[] = [];
-  for (const f of ['scripts/test-emulator.sh', 'scripts/screens-e2e.sh']) {
+  for (const f of ['scripts/test-emulator.sh', 'scripts/e2e-stack.sh']) {
     for (const m of read(f).matchAll(/--project\s+(\S+)/g)) {
       out.push({ file: f, value: m[1] });
     }
@@ -99,11 +99,13 @@ function portsFromShell(): number[] {
   return line.trim().split(/\s+/).map(Number);
 }
 
-/** The sweep's web port, defaulted in shell before Node ever sees it. */
-function sweepWebPortFromShell(): number {
-  const m = read('scripts/screens-e2e.sh').match(/WEB_PORT="\$\{SWEEP_WEB_PORT:-(\d+)\}"/);
-  if (!m) throw new Error('WEB_PORT default not found in scripts/screens-e2e.sh');
-  return Number(m[1]);
+/** The browser suites' web ports, set in shell before Node ever sees them. */
+function webPortsFromShell(): { sweep: number; e2e: number } {
+  const sh = read('scripts/e2e-stack.sh');
+  const sweep = sh.match(/^\s*screens\) WEB_PORT="\$\{SWEEP_WEB_PORT:-(\d+)\}"/m);
+  const e2e = sh.match(/^\s*web\) WEB_PORT=(\d+);/m);
+  if (!sweep || !e2e) throw new Error('a WEB_PORT for screens or web not found in scripts/e2e-stack.sh');
+  return { sweep: Number(sweep[1]), e2e: Number(e2e[1]) };
 }
 
 /**
@@ -201,9 +203,11 @@ describe('emulator ports agree across every file that states them', () => {
     }
   });
 
-  it('the sweep script and the sweep runner agree on the web port', async () => {
+  it('the suites and their runner agree on the web ports', async () => {
     const { web } = await portsFromScripts();
-    expect(sweepWebPortFromShell(), 'screens-e2e.sh WEB_PORT vs WEB_PORTS.sweep').toBe(web.sweep);
+    const shell = webPortsFromShell();
+    expect(shell.sweep, 'e2e-stack.sh screens WEB_PORT vs WEB_PORTS.sweep').toBe(web.sweep);
+    expect(shell.e2e, 'e2e-stack.sh web WEB_PORT vs WEB_PORTS.e2e').toBe(web.e2e);
   });
 });
 

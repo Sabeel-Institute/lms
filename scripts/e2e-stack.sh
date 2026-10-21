@@ -2,55 +2,66 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Runner for the multi-width screens sweep: emulators + an Expo web dev server,
-# both started here and both torn down on exit.
+# Runner for the browser suites: emulators + an Expo web dev server, both
+# started here and both torn down on exit. CI runs exactly these commands.
 #
-# THIS IS WHY THE SWEEP CAN BE IN CI AND `test:e2e` CANNOT. `npm run test:e2e`
-# expects a long-lived emulator suite and a dev server that somebody else
-# started, and it wipes Firestore and Auth out from under them. This script owns
-# both processes for the length of one run, seeds its own world under ids nobody
-# else uses, and deletes nothing — so it composes with a fresh CI runner instead
-# of fighting a developer's desk.
+#   bash scripts/e2e-stack.sh screens                   # the multi-width sweep
+#   SWEEP_WIDTHS=320 bash scripts/e2e-stack.sh screens  # one width, tight loop
+#   SWEEP_FULL=1 bash scripts/e2e-stack.sh screens      # + real device profiles
+#   bash scripts/e2e-stack.sh web                       # the flow walkthrough
 #
-#   bash scripts/screens-e2e.sh                     # the CI set
-#   SWEEP_WIDTHS=320 bash scripts/screens-e2e.sh    # one width, for a tight loop
-#   SWEEP_FULL=1 bash scripts/screens-e2e.sh        # + real device profiles
+# It owns both processes for the length of one run, so a suite composes with a
+# fresh CI runner instead of fighting a developer's desk. The sweep seeds its
+# own world under ids nobody else uses; the walkthrough wipes Firestore and Auth
+# as it goes, which is harmless here because the emulators are this run's own.
+# To drive the walkthrough against a stack you already started (`npm run
+# emulators` and a dev server on 61311), run `node scripts/web-e2e.mjs`.
+
+SUITE="${1:-}"
+case "$SUITE" in
+  screens) WEB_PORT="${SWEEP_WEB_PORT:-61310}"; SUITE_SCRIPT=scripts/screens-e2e.mjs ;;
+  web) WEB_PORT=61311; SUITE_SCRIPT=scripts/web-e2e.mjs ;;
+  *)
+    echo "usage: bash scripts/e2e-stack.sh screens|web" >&2
+    exit 2
+    ;;
+esac
 
 # shellcheck source=scripts/lib/jdk21.sh
 source "$(dirname "$0")/lib/jdk21.sh"
 
-# 61310, not the 61311 `test:e2e` uses. Two suites that grab the same port cannot
-# be run side by side, and the failure mode is not "port busy" — see the stale
-# server note below.
-WEB_PORT="${SWEEP_WEB_PORT:-61310}"
+# The sweep on 61310 and the walkthrough on 61311 (`WEB_PORTS` in
+# scripts/lib/ports.mjs). Two suites that grab the same port cannot be run side
+# by side, and the failure mode is not "port busy" — see the stale server note
+# below.
 
 # Repo-local, not /tmp. Three sibling checkouts share this machine and all three
 # used the same generic /tmp log names, so a concurrent run overwrote the log
 # this one is grepping for readiness — and the readiness grep below is what
-# decides whether the sweep proceeds against a stale server. `shots/` is
+# decides whether the suite proceeds against a stale server. `shots/` is
 # gitignored and is where this run's output already goes.
 # ABSOLUTE: the dev server is started from a subshell that cd's into app/,
 # while the readiness grep below runs from the repo root. A relative path
 # would mean two different files and a readiness check that never matches.
-WEB_LOG="$PWD/shots/expo-screens-e2e.log"
+WEB_LOG="$PWD/shots/expo-${SUITE}-e2e.log"
 mkdir -p "$(dirname "$WEB_LOG")"
 : > "$WEB_LOG"
-export E2E_BASE="http://127.0.0.1:${WEB_PORT}/"
+export E2E_BASE="http://127.0.0.1:${WEB_PORT}/" E2E_WEB="http://127.0.0.1:${WEB_PORT}/"
 
 bash scripts/free-emulator-ports.sh
 
 # The functions emulator loads the BUILT bundle (functions/lib, per `main`), not
-# the TypeScript — see the same note in test-emulator.sh. The sweep needs
+# the TypeScript — see the same note in test-emulator.sh. Both suites need
 # `getPlaybackUrl` for the player screen and `onUserCreate` to provision the
-# staff accounts it signs in as, so a stale lib here is a screen that renders an
-# error instead of a layout.
+# staff accounts they sign in as, so a stale lib here is a screen that renders
+# an error instead of a layout.
 npm run build -w @sabeel/shared
 npm run build -w functions
 
 # Kill anything already on the web port. A LEFTOVER dev server is the nastiest
 # failure here: the new `expo start` cannot bind, exits quietly, and the
 # readiness poll below gets a cheerful 200 from the stale process — so the whole
-# sweep runs against OLD code and reports layout failures for a diff that never
+# suite runs against OLD code and reports failures for a diff that never
 # reached the browser. Kill by port, never `pkill -f "expo start"`: that pattern
 # also matches the agent shell that spawned this and takes the caller with it.
 # Owners of a port, by port. `ss`, not `lsof`: lsof is NOT on the default
@@ -96,7 +107,7 @@ trap cleanup EXIT
 
 echo "Starting Expo web dev server on ${WEB_PORT}…"
 # The DEV server, not an export: `expo export` sets __DEV__ false, which
-# correctly strips the emulator dev sign-in row this sweep drives to reach any
+# correctly strips the emulator dev sign-in row both suites drive to reach any
 # authenticated screen at all. `--clear` because Metro will otherwise serve a
 # bundle built under different EXPO_PUBLIC_* values.
 ( cd app && CI=1 EXPO_PUBLIC_USE_EMULATORS=1 \
@@ -106,7 +117,7 @@ WEB_PID=$!
 ready=""
 for _ in $(seq 1 120); do
   if grep -qi "is being used by another process" "$WEB_LOG" 2>/dev/null; then
-    echo "Another process grabbed port ${WEB_PORT}; refusing to sweep stale code." >&2
+    echo "Another process grabbed port ${WEB_PORT}; refusing to test stale code." >&2
     exit 1
   fi
   if curl -sf -o /dev/null "http://127.0.0.1:${WEB_PORT}/"; then
@@ -131,4 +142,4 @@ fi
 node scripts/with-media-store.mjs firebase emulators:exec \
   --project demo-sabeel-recordings \
   --only firestore,auth,functions \
-  "node scripts/screens-e2e.mjs"
+  "node ${SUITE_SCRIPT}"
