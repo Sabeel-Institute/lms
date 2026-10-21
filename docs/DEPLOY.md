@@ -19,7 +19,7 @@ notifications go to: empty (nobody) while the live site is bug-hunted, then
 
 | Where | Access | For |
 |---|---|---|
-| GitHub `Sabeel-Institute/lms` | admin | tags and releases, Actions secrets, starting `ios.yml`, pushing to `main` |
+| GitHub `Sabeel-Institute/lms` | admin (organization owner) | tags and releases, Actions secrets, starting `ios.yml`, merging pull requests into `main` |
 | Google Cloud `oursabeel-lms` | Owner, as an oursabeel.com account | deploys, Secret Manager, the production checks' token, IAM |
 | Cloudflare account of `oursabeel-lms-media` | member with Workers and R2 | the copier Worker and the bucket settings |
 | Sentry (the three `sabeel-recording-*` projects) | member | reading a release's issues (step 2) |
