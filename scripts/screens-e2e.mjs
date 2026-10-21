@@ -92,7 +92,8 @@
  */
 import { chromium, devices } from 'playwright';
 import { createRequire } from 'node:module';
-import { mkdir, readFile } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
@@ -184,7 +185,7 @@ async function checkDeviceState(page, tag) {
 }
 
 function check(name, ok, detail = '') {
-  results.push({ name, ok });
+  results.push({ name, ok, ...(ok ? {} : { detail }) });
   // The detail describes the FAILURE, so it prints only when there is one.
   // Appended to a passing line it reads as the opposite of what happened.
   console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name}${!ok && detail ? ` — ${detail}` : ''}`);
@@ -271,7 +272,11 @@ const PROFILES = FULL
     ]
   : [];
 
+// A clean folder, so the report (scripts/screens-report.mjs) shows this run's
+// screens and no other's, and the checks beside them however the run ends.
+await rm(SHOTS, { recursive: true, force: true });
 await mkdir(SHOTS, { recursive: true });
+process.on('exit', () => writeFileSync(join(SHOTS, 'results.json'), JSON.stringify(results, null, 1)));
 admin.initializeApp({ projectId: PROJECT });
 const db = admin.firestore();
 const auth = admin.auth();
