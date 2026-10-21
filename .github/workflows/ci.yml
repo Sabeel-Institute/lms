@@ -100,6 +100,10 @@ jobs:
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [screens, web]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -133,14 +137,18 @@ jobs:
             > functions/.secret.local
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Screens sweep
-        run: bash scripts/screens-e2e.sh
-      - name: Screens from the sweep
+      - name: Browser suite
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: bash scripts/e2e-stack.sh "$SUITE"
+      - name: Screens and logs from the suite
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: screens-sweep
-          path: shots/screens/
+          name: browser-${{ matrix.suite }}
+          path: |
+            shots/
+            e2e-shots/
           retention-days: 7
 
   build-test:

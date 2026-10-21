@@ -22,35 +22,41 @@ import { resolve } from 'node:path';
 
 /**
  * Suites CI cannot run, with the reason. Everything else must have a CI step;
- * see the test below.
- *
- * `web-e2e.mjs` needs a long-lived emulator suite AND a Metro dev server that
- * something else started, and it WIPES Firestore and Auth on every run.
- * `test:emulator` frees those same ports by design, so the two cannot share a
- * job, and a suite that resets the world cannot be handed a world it did not
- * build. `screens-e2e.sh` is in CI precisely because it does not inherit that
- * constraint: it starts both processes itself and owns them for one run.
+ * see the test below. Empty: `scripts/e2e-stack.sh` starts the emulators and a
+ * dev server for one run and owns them, so even the walkthrough, which wipes
+ * Firestore and Auth as it goes, runs on a fresh runner.
  */
-const LOCAL_ONLY = new Map([
-  ['web-e2e.mjs', 'needs a pre-started emulator suite + Metro, and resets Firestore/Auth'],
-]);
+const LOCAL_ONLY = new Map<string, string>();
 
 const repo = () => resolve(import.meta.dirname, '../../..');
 const ciYaml = () => readFileSync(resolve(repo(), '.github/workflows/ci.yml'), 'utf8');
 const suitesOnDisk = () =>
   readdirSync(resolve(repo(), 'scripts')).filter((f) => f.endsWith('-e2e.mjs'));
 
+/** The suites `e2e-stack.sh` runs, by the name it is given: `web) … SUITE_SCRIPT=scripts/web-e2e.mjs`. */
+function stackSuites(): Map<string, string> {
+  const sh = readFileSync(resolve(repo(), 'scripts/e2e-stack.sh'), 'utf8');
+  return new Map(
+    [...sh.matchAll(/^\s*(\w+)\)[^\n]*SUITE_SCRIPT=scripts\/(\S+-e2e\.mjs)/gm)].map((m) => [m[1], m[2]]),
+  );
+}
+
+/** The names CI's browser matrix hands `e2e-stack.sh`, or none if CI does not call it. */
+function stackRunsInCi(ci: string): string[] {
+  if (!ci.includes('bash scripts/e2e-stack.sh')) return [];
+  const list = ci.match(/^\s*suite:\s*\[([^\]]*)\]/m)?.[1] ?? '';
+  return list.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
 /**
- * A suite counts as run if CI names the script OR the runner beside it.
- *
- * `screens-e2e.mjs` is invoked as `bash scripts/screens-e2e.sh`, because it needs
- * emulators and a dev server wrapped around it. Demanding the literal `.mjs`
- * path would fail a suite that CI genuinely runs, and the cure for that is
- * always to weaken the check.
+ * A suite counts as run if CI names the script, or hands its name to
+ * `e2e-stack.sh`, which wraps the emulators and a dev server around it.
+ * Demanding the literal `.mjs` path would fail a suite that CI genuinely runs,
+ * and the cure for that is always to weaken the check.
  */
 function runsInCi(ci: string, suite: string): boolean {
-  const stem = suite.replace(/\.mjs$/, '');
-  return ci.includes(`scripts/${suite}`) || ci.includes(`scripts/${stem}.sh`);
+  const stack = stackSuites();
+  return ci.includes(`scripts/${suite}`) || stackRunsInCi(ci).some((name) => stack.get(name) === suite);
 }
 
 describe('CI e2e coverage', () => {
@@ -106,5 +112,11 @@ describe('CI e2e coverage', () => {
   it('runs the multi-width screens sweep', () => {
     expect(suitesOnDisk()).toContain('screens-e2e.mjs');
     expect(runsInCi(ciYaml(), 'screens-e2e.mjs')).toBe(true);
+  });
+
+  /** The flow walkthrough, by name, for the same reason. */
+  it('runs the flow walkthrough', () => {
+    expect(suitesOnDisk()).toContain('web-e2e.mjs');
+    expect(runsInCi(ciYaml(), 'web-e2e.mjs')).toBe(true);
   });
 });

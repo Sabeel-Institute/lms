@@ -5,7 +5,7 @@
  * Several files have to agree and cannot share a representation: this one (ESM),
  * `firebase.json` (JSON, what the emulators bind), `app/src/env.ts` (TS, inlined
  * into the client bundle at build time), the `PORTS=(…)` array in
- * `free-emulator-ports.sh` and the `WEB_PORT` default in `screens-e2e.sh`
+ * `free-emulator-ports.sh` and the `WEB_PORT`s in `e2e-stack.sh`
  * (shell). The copies are unavoidable; the copies drifting is not.
  * `functions/test/unit/emulatorPorts.test.ts` asserts they agree, so a change to
  * one of them fails the unit suite in seconds rather than surfacing later as an
@@ -56,9 +56,8 @@ export const MEDIA_STORE_PORTS = {
 };
 
 /**
- * Expo web dev-server ports. Deliberately two: the screenshot sweep and
- * `test:e2e` must be able to run at the same time, and two suites that grab the
- * same port cannot.
+ * Expo web dev-server ports. Deliberately two, one per browser suite, so a
+ * stale server left by one suite is never mistaken for the other's.
  */
 export const WEB_PORTS = {
   sweep: PORT_BASE + 10,

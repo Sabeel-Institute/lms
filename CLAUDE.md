@@ -225,13 +225,14 @@ Do not silently change any of these.
   Needs JDK 21 and SeaweedFS (`docs/DEV-TOOLING.md`). The functions sign real URLs against SeaweedFS, which
   checks signatures and expiry like R2, so the production signing path runs
   locally.
-- Browser e2e: `npm run test:e2e`. Needs a live Metro dev server **and** the
-  emulator suite already running, and it resets Firestore and Auth on every run —
-  which is why it is a local pre-commit check and deliberately **not** in CI.
+- Browser e2e: `npm run test:e2e`. The flow walkthrough; it resets Firestore and
+  Auth as it goes. `scripts/e2e-stack.sh` starts the emulators and a dev server
+  for the run and stops them after, so it needs nothing running, and CI runs the
+  same command. Against a stack you started yourself: `node scripts/web-e2e.mjs`.
 - Layout sweep: `npm run test:screens`. Every screen of both populations at five
   widths straddling the content-column cap, **asserted**, not just photographed.
-  It starts its own emulators and its own dev server, which is exactly why it
-  **is** in CI where `test:e2e` cannot be. `SWEEP_WIDTHS=320` for a tight loop.
+  Same runner, same CI job (the browser matrix). `SWEEP_WIDTHS=320` for a tight
+  loop.
 - Web: `npx expo start --web` in `app/`, or `npm run web:export -w @sabeel/app`
   for the bundle that actually ships.
 - Android: `scripts/emulator.sh headless` (AVD `tb_emu`), then `npx expo
@@ -306,10 +307,8 @@ sweeps every screen of both populations at five widths — between them they cov
 almost everything, and they are faster and far more repeatable than a human on an
 emulator. That is the default for layout, flows, rules, data and copy.
 
-**`npm run test:screens` is the sweep, and it is the one browser suite CI can
-run** — `test:e2e` resets the emulators, so it cannot. With CI on
-`workflow_dispatch` it runs when you run it; run it before every commit that
-touches a screen. Every screen of both populations at five widths straddling
+**`npm run test:screens` is the sweep**, and CI runs it beside `test:e2e` on
+every pull request; run it before every commit that touches a screen. Every screen of both populations at five widths straddling
 `CONTENT_MAX_WIDTH` — which it reads out of `app/src/theme/index.ts` rather than
 restating — asserting that the
 page never scrolls sideways, that nothing is clipped by the right edge, that no

@@ -16,11 +16,12 @@
  * "catch-up" concept — a student enrolled after a session's attendance snapshot
  * is simply never in it (enrollment-onward).
  *
- * Prerequisites (see docs/DEV-TOOLING.md):
+ * Run it with `npm run test:e2e`, which starts the emulators, the local media
+ * store and the dev server for the run (scripts/e2e-stack.sh), as CI does. To
+ * drive a stack you keep up instead (see docs/DEV-TOOLING.md):
  *   npm run emulators          # the emulators and the local media store
  *   cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61311 --clear
- *
- * Then: npm run test:e2e
+ *   node scripts/web-e2e.mjs
  *
  * SCOPE: this exercises real user FLOWS end to end. It is not a security suite —
  * most screens only query what the user may see, so a widened rule can leave
