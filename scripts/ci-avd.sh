@@ -65,5 +65,9 @@ done
 for setting in window_animation_scale transition_animation_scale animator_duration_scale; do
   adb shell settings put global "$setting" 0
 done
+# A runner's emulator is slow enough that the system's own apps (the launcher)
+# raise "isn't responding" dialogs over the app under test. Hide them; the
+# checks read crashes from the device log, never from a dialog.
+adb shell settings put global hide_error_dialogs 1
 adb shell input keyevent 82
 echo "Emulator booted: $(adb shell getprop ro.build.version.release | tr -d '\r'), $(adb shell wm size | tr -d '\r')"
