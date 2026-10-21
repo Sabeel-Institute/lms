@@ -32,6 +32,7 @@
     "check:queries": "node scripts/check-query-shapes.mjs",
     "check:documents": "node scripts/check-documents.mjs",
     "check:push": "node scripts/check-push.mjs",
+    "check:release": "node scripts/check-release.mjs",
     "check:ios": "node scripts/check-ios-config.mjs",
     "build:ios": "bash scripts/build-ios.sh",
     "publish:play": "node scripts/publish-play.mjs",

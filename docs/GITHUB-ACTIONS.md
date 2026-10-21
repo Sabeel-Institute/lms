@@ -38,6 +38,15 @@
   also be started manually. They do not run on untrusted pull requests.
 - Android uploads a signed AAB and build record; Web uploads checksummed static
   files and a build record; iOS uploads its signed IPA and build record.
+- Android then checks that AAB on an emulator it boots on the runner
+  (`device-check`, `scripts/ci-avd.sh`): `npm run check:release` installs a
+  universal APK made from the bundle and cold-starts it five times. Each start
+  must reach the sign-in screen and stay up, its label must read
+  `v<version> · <commit>` for this commit, the emulator-only sign-in row must be
+  absent, and the device log must hold no crash or ANR for the app. Screens and
+  device logs are kept as the `release-check-<sha>` artifact, pass or fail. A
+  failed check fails the Android run, and Publish Android accepts only a
+  successful one.
   Artifacts are retained for 14 days. The AAB uses the existing release/upload
   key and is ready for a separately authorized Play upload.
 - Build records identify the source commit and workflow run. Web artifacts
