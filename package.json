@@ -2,7 +2,7 @@
   "name": "sabeel-institute-lms",
   "version": "0.0.0",
   "private": true,
-  "description": "Sabeel Institute LMS \u2014 attendance, class recordings, assignments and grades (Android, iOS and web from one Expo codebase, Firebase backend)",
+  "description": "Sabeel Institute LMS — attendance, class recordings, assignments and grades (Android, iOS and web from one Expo codebase, Firebase backend)",
   "workspaces": [
     "packages/*",
     "functions",
@@ -45,7 +45,9 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
     "knip": "^5.88.1",
+    "pixelmatch": "^8.0.0",
     "playwright": "^1.64.1",
+    "pngjs": "^7.0.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.2"
   }
