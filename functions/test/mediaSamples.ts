@@ -71,6 +71,10 @@ const SPECS = {
   ],
   /** A picture, as a phone's photo of a worksheet would arrive after shrinking. */
   png: ['-f', 'lavfi', '-i', 'testsrc=size=320x240:duration=1', '-frames:v', '1', 'page.png'],
+  /** The same page as a phone camera saves it. */
+  jpg: ['-f', 'lavfi', '-i', 'testsrc=size=320x240:duration=1', '-frames:v', '1', 'page.jpg'],
+  /** And as Android's share sheet often hands it on. */
+  webp: ['-f', 'lavfi', '-i', 'testsrc=size=320x240:duration=1', '-frames:v', '1', 'page.webp'],
   /** Sixteen minutes of audio, over a teacher's 15-minute limit. 8 kHz WAV:
    *  no encoder to wait for, and still under the 25 MB attachment cap. */
   longAudio: ['-f', 'lavfi', '-i', 'sine=duration=960:sample_rate=8000', '-c:a', 'pcm_u8', '-ac', '1', 'long.wav'],
