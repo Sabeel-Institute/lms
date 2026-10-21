@@ -1912,7 +1912,23 @@ and commit messages, and renaming them would strand every one of those.
   APKs and manual; Play internal testing 0.2.1 (39) through the Publish
   Android workflow, from the Android workflow's AAB; TestFlight build 5 from
   the tag; hosting through Deploy Web, then `smoke:prod` passed on the live
-  site.
+  site. After release, the release APK against production on the AVD, as the
+  App Review student (`docs/STORE-RELEASE.md`): email, Next, password, Go
+  signed in; the rules came first and I agree recorded `rulesVersion` 1.
+  Session 1's Audio only minted and played; 45 s behind Home and 60 s with
+  the screen off it advanced by the wall clock; the media session's pause
+  and play answered, and next skipped ahead; Forward 30 and Back 15 moved
+  it; 1.5× played at 1.5× and survived Back 15; killed at about 2:12 it
+  reopened at 2:13; the video version's frames advanced. Found: the media
+  session's previous restarts the recording from 0:00 (expo-video's
+  session, unchanged since 0.2.0); and Sample Class shows Assignments (0),
+  because the reviewer has no `submissions` record for `app-review-cw1`.
+  The class has no audit entries, so its setup was written directly, and
+  neither enrolment nor posting made the record; nobody has handed it in
+  as the reviewer. Not run: a real push (only a staff action in the
+  reviewer's class sends one). Afterwards the reviewer was signed out,
+  `rulesAcceptedAt` and `rulesVersion` removed again, and the listening
+  progress the check wrote deleted.
 
 - 2026-10-16 — **v0.2.0 released** (`6756ef3`; GitHub release, website,
   download page and manual, Play internal testing, TestFlight build 4). The
