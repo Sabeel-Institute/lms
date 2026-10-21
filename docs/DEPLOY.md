@@ -201,10 +201,13 @@ A release bumps one version and ships it to both surfaces. In order:
 3. **Android:** from `app/android`,
    `EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) ./gradlew assembleRelease`
    — default **JDK 17** (not the emulator's JDK 21), and NO emulator flag (it must
-   point at production). `BUILD SUCCESSFUL` is not proof: install
-   `app-x86_64-release.apk` on the AVD, launch, and confirm `versionName`, the
-   `v<version> · <commit>` label, and — crucially — that the dev sign-in panel is
-   **absent** (which proves it is a production build, not an emulator one).
+   point at production). `BUILD SUCCESSFUL` is not proof:
+   `npm run check:release -- app/android/app/build/outputs/apk/release/app-x86_64-release.apk`
+   installs it on the AVD (booting it if none is attached) and cold-starts it
+   five times, failing unless the `v<version> · <commit>` label is this
+   commit's, the dev sign-in panel is **absent** (which proves it is a
+   production build, not an emulator one) and the device log shows no crash.
+   The Android workflow runs the same check on the AAB it builds.
 
    **`EXPO_PUBLIC_COMMIT` is not a Gradle input.** A rebuild after a commit
    that changed no JS (a manifest fix, say) reports
