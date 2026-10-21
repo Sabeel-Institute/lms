@@ -331,6 +331,13 @@ Two more things that cost time here:
 `scripts/screens-e2e.mjs`) is the layout regression harness: every screen of
 both populations at five widths, **asserted**, and it exits non-zero.
 
+**A screen is checked once it has finished loading.** Before measuring or
+photographing one, the sweep waits for every placeholder the app shows while it
+reads ("Counting the work…", "Checking your courses…", "Loading…": a verb ending
+in an ellipsis) to go, and fails `<screen> finished loading` if one is still
+there after 15 s. It once photographed and measured the course screen with its
+assignments still being counted.
+
 **It needs nothing running.** The runner starts the emulator suite and its own
 Expo web dev server on port **61310** (not `test:e2e`'s 61311) and kills both on
 the way out, and it never touches a world somebody else built.
