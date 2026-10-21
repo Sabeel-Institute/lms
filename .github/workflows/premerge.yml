@@ -35,9 +35,8 @@ jobs:
       - run: npm ci
       - name: Validate SDK dependency compatibility
         run: node scripts/ci-premerge.mjs sdk
-      - name: Validate standalone backend production install
-        working-directory: functions
-        run: npm ci --dry-run --ignore-scripts --omit=dev --workspaces=false --no-audit --no-fund
+      - name: Install and load the backend as Cloud Build does
+        run: node scripts/ci-premerge.mjs backend
 
   web:
     if: github.event.pull_request.draft != true

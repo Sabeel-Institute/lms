@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { appScheme, firebaseFixtures, podVersions } from '../../../scripts/ci-premerge.mjs';
+import { appScheme, backendEndpoints, firebaseFixtures, podVersions } from '../../../scripts/ci-premerge.mjs';
 import { compatibleVersion, sdkProblems } from '../../../app/ci-sdk.mjs';
 
 const root = new URL('../../../', import.meta.url);
@@ -84,7 +84,7 @@ describe('mandatory build and deployment contracts', () => {
     expect(gate).toContain('if: always()');
     expect(gate).toContain('jobs.length !== 4');
     expect(gate).toContain('job.result !== "success"');
-    expect(workflow).toContain('npm ci --dry-run --ignore-scripts --omit=dev --workspaces=false');
+    expect(workflow).toContain('node scripts/ci-premerge.mjs backend');
     expect(workflow).toContain('npm run web:export -w @sabeel/app');
   });
   it('validates release-mode native application products without release credentials', () => {
@@ -94,6 +94,15 @@ describe('mandatory build and deployment contracts', () => {
       'base/assets/index.android.bundle', '_CodeSignature']) expect(helper).toContain(required);
     expect(helper).not.toContain('allowProvisioningUpdates');
     expect(helper).not.toContain('-exportArchive');
+  });
+  it('installs the backend from its own lock, without dev packages, before loading it', () => {
+    const helper = read('scripts/ci-premerge.mjs');
+    for (const required of ["'functions', file", "'ci', '--omit=dev'", 'require("./lib/index.js")'])
+      expect(helper).toContain(required);
+  });
+  it('fails a backend bundle that registers no functions', () => {
+    expect(backendEndpoints({ acceptRules: { __endpoint: true }, helper: {} })).toEqual(['acceptRules']);
+    expect(() => backendEndpoints({ helper: {} })).toThrow('no functions');
   });
   it('keeps the standalone deployment manifest and lock metadata synchronized', () => {
     const manifest = JSON.parse(read('functions/package.json'));

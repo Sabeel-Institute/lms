@@ -5,6 +5,7 @@ import type { CallableRequest } from 'firebase-functions/v2/https';
 import {
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
+  attachmentContentType,
   INSTITUTE_TIMEZONE,
   addDays,
   submissionId,
@@ -33,6 +34,7 @@ import {
 import { idTokenFor } from './emulatorToken';
 import { clearPrefix, objectExists } from './mediaObjects';
 import { PDF, TEXT, sample } from '../mediaSamples';
+import { OFFICE_97, SPREADSHEET, WORD } from '../documentSamples';
 
 beforeAll(() => {
   if (getApps().length === 0) initializeApp({ projectId: EMULATOR_PROJECT_ID });
@@ -157,6 +159,27 @@ describe('a file is what its bytes say, not what its name says', () => {
     await expect(attach(AMINAH, 'student', 'notes.txt', sample('png'))).rejects.toThrow(/not the document/);
     const txt = await attach(AMINAH, 'student', 'notes.txt', TEXT);
     expect(txt.contentType).toBe('text/plain');
+  });
+
+  it.each([
+    ['Week 2 notes.docx', () => WORD],
+    ['Register.xlsx', () => SPREADSHEET],
+    ['Old handout.doc', () => OFFICE_97],
+    ['Worksheet.jpg', () => sample('jpg')],
+    ['Worksheet.webp', () => sample('webp')],
+  ])('%s is taken, stored as the type its name gives', async (name, bytes) => {
+    const file = await attach(AMINAH, 'student', name, bytes());
+    expect(file.contentType).toBe(attachmentContentType(name));
+    expect(Object.keys((await draft(AMINAH))?.files ?? {})).toEqual([file.id]);
+  });
+
+  it.each([
+    ['a Word file named as an old Excel file', 'Register.xls', () => WORD],
+    ['an old Office file named as a new one', 'Week 2 notes.docx', () => OFFICE_97],
+    ['a JPEG named as a PNG', 'Worksheet.png', () => sample('jpg')],
+  ])('%s is refused', async (_what, name, bytes) => {
+    await expect(attach(AMINAH, 'student', name, bytes())).rejects.toThrow(/not the (document|image)/);
+    expect((await draft(AMINAH))?.files ?? {}).toEqual({});
   });
 
   it('a PDF that is not a PDF is refused', async () => {

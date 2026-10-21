@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkSdk } from '../app/ci-sdk.mjs';
@@ -84,6 +84,34 @@ function android() {
   console.log('Unsigned arm64 release AAB and bundled production JavaScript verified; nothing uploaded');
 }
 
+export function backendEndpoints(exported) {
+  const names = Object.keys(exported).filter((name) => exported[name]?.__endpoint);
+  if (!names.length) throw new Error('The backend bundle registers no functions');
+  return names;
+}
+
+// Cloud Build installs functions/ on its own, from functions/package-lock.json,
+// with none of the workspace's hoisted packages beside it. Do the same in an
+// empty directory, then load the bundle there: a lock the workspace masks, or a
+// runtime import that only a dev or hoisted package satisfied, fails here.
+function backend() {
+  const directory = join(temporary(), 'pr-backend');
+  run('npm', ['run', 'build'], { cwd: 'functions' });
+  rmSync(directory, { recursive: true, force: true });
+  mkdirSync(directory);
+  for (const file of ['package.json', 'package-lock.json']) copyFileSync(join('functions', file), join(directory, file));
+  cpSync('functions/lib', join(directory, 'lib'), { recursive: true });
+  run('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: directory });
+  const project = 'demo-sabeel-ci';
+  const listed = run(process.execPath, ['-e',
+    'const m = require("./lib/index.js"); console.log(JSON.stringify(Object.fromEntries('
+    + 'Object.entries(m).map(([name, value]) => [name, { __endpoint: Boolean(value?.__endpoint) }]))))'],
+  { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'],
+    env: { ...process.env, GCLOUD_PROJECT: project, FIREBASE_CONFIG: JSON.stringify({ projectId: project }) } });
+  const names = backendEndpoints(JSON.parse(listed.trim().split('\n').at(-1)));
+  console.log('Standalone production install loads the backend bundle: ' + names.length + ' functions');
+}
+
 export function podVersions(lock) {
   const match = /^PODS:\n[\s\S]*?(?=^DEPENDENCIES:)/m.exec(lock);
   if (!match) throw new Error('Pod lockfile has no dependency versions');
@@ -137,6 +165,7 @@ function ios() {
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
   const task = process.argv[2];
   if (task === 'sdk') checkSdk();
+  else if (task === 'backend') backend();
   else if (task === 'prepare') prepare();
   else if (task === 'android') android();
   else if (task === 'ios') ios();

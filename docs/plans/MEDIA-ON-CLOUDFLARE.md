@@ -23,7 +23,7 @@ object key, so the layout is the items' business, not the store's. Built so far:
 - The copier Worker, `cloudflare/media-copier` (an npm workspace): one
   streamed put per file, Google ID token checked with `jose`, Zoom-only
   sources with redirects refused, recording audio keys only, never
-  overwriting. Its tests run inside workerd (`@cloudflare/vitest-pool-workers`).
+  overwriting. Its tests run inside workerd (`@cloudflare/vitest-plugin`).
   `functions/src/mediaCopier.ts` resolves Zoom's file link and calls it; the
   Function no longer touches the bytes. Not deployed yet. Under the emulator
   Zoom import is driven by a fake client, since the Worker writes to R2, not
@@ -385,7 +385,7 @@ behaviour is checked against the real thing, not assumed.
 - `scripts/test-emulator.sh`, `screens-e2e.sh` and `web-e2e.mjs` start it
   with a throwaway data dir and a generated access key, create the bucket,
   apply the same CORS file, and stop it after. It is ready in under a second.
-- The Worker has its own tests with `@cloudflare/vitest-pool-workers`
+- The Worker has its own tests with `@cloudflare/vitest-plugin`
   (Miniflare's local R2): token verification (forged, expired, wrong
   audience, wrong service account), host allowlist, key pattern, size
   mismatch, overwrite refusal, a dropped connection retried after `head`.

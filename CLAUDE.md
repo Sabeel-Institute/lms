@@ -248,15 +248,15 @@ Do not silently change any of these.
   dependencies — which is why infrastructure is added **with its first consumer**,
   not ahead of it. Suppressing knip to keep unused scaffolding would make the audit
   lie, and an audit that reports nothing is worse than no audit.
-- **CI is OFF** (2026-08-28, heavy development): `ci.yml` is `workflow_dispatch`
-  only. The job runs about ten minutes and duplicates the local loop, so run that
-  instead — `npm run lint && npm run typecheck && npm run knip && npm test &&
-  npm run test:emulator && npm run test:screens`. Trigger CI by hand before a
-  release or when something must hold on a clean machine
-  (`gh workflow run ci.yml --ref <branch>`); the trigger block to restore is at
-  the top of `ci.yml`. No deploys from CI, and nothing runs on a push; the
-  one exception is the hand-started iOS workflow (`ios.yml`), whose TestFlight
-  job uploads under the same go-ahead as any release (Faisal, 2026-10-15).
+- **CI runs on every push to main and every pull request** (`ci.yml`), with
+  CodeQL and the pre-merge builds (`premerge.yml`) beside it; all three gate a
+  merge (`docs/GITHUB-ACTIONS.md`). Run the local loop before pushing a branch
+  rather than waiting on CI for it — `npm run lint && npm run typecheck && npm
+  run knip && npm test && npm run test:emulator && npm run test:screens`.
+  Nothing deploys on its own: Functions, Hosting and the Play upload are
+  started by hand, from this machine or the manual workflows, and the iOS
+  workflow's TestFlight job uploads only when started by hand, under the same
+  go-ahead as any release (Faisal, 2026-10-15).
 - **If a suite fails, first ask whether it fails on stashed changes too.** A
   clean-HEAD repro means the cause is environmental — usually a leftover emulator
   (`npm run emulators:free`) — not your diff.
@@ -437,17 +437,21 @@ Manager, never in the app bundle.**
   (started in `screen` as `claude --remote-control mac-lms`), which this
   session directs with SendMessage. It works on a branch and pushes it; this
   session reviews it, runs the Linux suites (and the Android pass when a
-  dependency moves) and fast-forwards main. TestFlight builds are made from
-  main by `ios.yml` and upload under the same go-ahead as any release. Each
-  upload needs a higher `ios.buildNumber` in `app.json`.
+  dependency moves) and opens the pull request into main. TestFlight builds
+  are made from main by `ios.yml` and upload under the same go-ahead as any
+  release. Each upload needs a higher `ios.buildNumber` in `app.json`.
 
 ## Conventions
 
-- **`main` takes changes by pull request only**, approved by the code owner
-  (`.github/CODEOWNERS`: Faisal); force-push and deletion are blocked. The
-  GitHub ruleset "main: pull requests only" lets admins (only Faisal) push
-  directly, which is how the agent's commits, made with his account, land.
-  Other collaborators branch and open a PR.
+- **`main` takes changes by pull request only, and only Faisal merges.**
+  Nobody pushes to `main` directly, admins included; force-push and deletion
+  are blocked. The ruleset "main: only the owner merges" lets the
+  organization owner (Faisal) update `main` through a pull request and no
+  other way, and "main: verified pre-merge builds" requires CI, CodeQL and the
+  pre-merge builds to pass on an up-to-date branch. The agent's commits, made
+  with his account, go on a branch and land through a pull request like
+  anyone else's. Collaborators' pull requests also need the code owner's
+  approval (`.github/CODEOWNERS`).
 - **Commit at phase boundaries** (see `docs/PHASE_STATUS.md`); work autonomously
   within a phase. Before ANY significant install (global/system/major framework),
   ask first; routine project-local npm deps of the locked stack are fine.

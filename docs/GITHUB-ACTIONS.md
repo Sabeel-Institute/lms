@@ -3,8 +3,10 @@
 ## Checks and builds
 
 - **Pre-merge Builds** runs on every main-targeting PR, including Dependabot,
-  and can also be run manually. It checks Expo SDK dependency ranges and the
-  standalone backend production install, exports production web JavaScript,
+  and can also be run manually. It checks Expo SDK dependency ranges; builds the
+  backend bundle, installs its production dependencies from
+  `functions/package-lock.json` alone in an empty directory, as Cloud Build
+  does, and loads the bundle there; exports production web JavaScript,
   compiles an unsigned arm64 Android release AAB and archives an unsigned iOS
   device app in Release mode. Native builds use synthetic Firebase config and
   disable symbol uploads; no signing, publishing or deployment credentials are
@@ -29,6 +31,15 @@
   key and is ready for a separately authorized Play upload.
 - Build records identify the source commit and workflow run. Web artifacts
   contain neither source maps nor environment files.
+
+## Who changes main
+
+- Every change reaches `main` through a pull request; nobody pushes to it
+  directly, admins included, and force-pushes and deletion are blocked.
+- Only the organization owner (Faisal) can merge. The ruleset "main: only the
+  owner merges" restricts updates to `main` and exempts the owner for pull
+  requests only; "main: verified pre-merge builds" requires the three checks
+  above on an up-to-date branch.
 
 ## Manual releases
 
@@ -114,6 +125,10 @@ Dependabot proposes patches; native package updates must also keep the committed
 iOS pod versions synchronized. SDK-family upgrades are coordinated separately.
 All workspaces use the patched Vitest 4 test runner; grouped security updates do
 not require a Vitest major upgrade.
+The copier Worker's tests run in workerd through `@cloudflare/vitest-plugin`,
+the maintained successor of `@cloudflare/vitest-pool-workers`. Its Miniflare
+pins `sharp` and `undici` exactly, so keep the plugin and the Worker's
+`wrangler` on the same release line: a mismatch installs a second toolchain.
 
 Server-side Sentry explicitly retains restrictive data collection on v11.
 Unit tests cover the initialization policy, disabled reporting, and exception flushing.
