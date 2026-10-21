@@ -23,7 +23,11 @@
 - **CI** runs lint, type checks, unit tests, Firebase-emulator integration tests
   and both browser suites (the flow walkthrough and the multi-width sweep,
   `npm run test:e2e` and `npm run test:screens`) on main pushes and pull
-  requests. New PR pushes cancel
+  requests. Every sweep, pass or fail, leaves a `screens-report` artifact: a
+  page of every screen at every width with the failed checks beside them and
+  what changed against main's latest sweep, before / after / difference. The
+  run page's summary lists the failed checks and changed screens and the
+  `gh run download` command for the page (`docs/DEV-TOOLING.md`). New PR pushes cancel
   superseded CI runs. No production deployment credentials are used.
 - **Android**, **Web** and **iOS** build automatically on main pushes and can
   also be started manually. They do not run on untrusted pull requests.

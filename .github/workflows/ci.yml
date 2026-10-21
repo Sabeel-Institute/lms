@@ -100,6 +100,9 @@ jobs:
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -141,6 +144,18 @@ jobs:
         env:
           SUITE: ${{ matrix.suite }}
         run: bash scripts/e2e-stack.sh "$SUITE"
+      - name: Screens report, compared with main
+        if: always() && matrix.suite == 'screens'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/screens-report.mjs shots/screens --baseline-from-main --out "$RUNNER_TEMP/screens-report"
+      - name: Keep the screens report
+        if: always() && matrix.suite == 'screens'
+        uses: actions/upload-artifact@v7
+        with:
+          name: screens-report
+          path: ${{ runner.temp }}/screens-report
+          retention-days: 30
       - name: Screens and logs from the suite
         if: failure()
         uses: actions/upload-artifact@v7
