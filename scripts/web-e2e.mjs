@@ -3464,8 +3464,8 @@ console.log('\nThe two workbooks');
  * archived at this point, so it is withdrawn from the totals: the Sessions
  * tab says so, and the grids have no column for it.)
  */
-const readDownload = async (page, testId) => {
-  const [download] = await Promise.all([page.waitForEvent('download'), tap(page, testId)]);
+const readDownload = async (page, testId, timeout = 30000) => {
+  const [download] = await Promise.all([page.waitForEvent('download', { timeout }), tap(page, testId)]);
   return { name: download.suggestedFilename(), sheets: readXlsx(new Uint8Array(readFileSync(await download.path()))) };
 };
 const tabOf = (book, name) => book.sheets.find((s) => s.name === name);
@@ -3486,7 +3486,18 @@ const exportRefused = await admin
   .then(() => true, () => false);
 await admin.context().setOffline(false);
 check('an export taken offline says it needs a connection, rather than saving what was cached', exportRefused);
-const courseBook = await readDownload(admin, 'course-export');
+/*
+ * BACK ONLINE IS NOT RECONNECTED. Firestore reconnects in its own time, and an
+ * export started before it has is refused again, rightly; on a slow CI runner
+ * the first try after going online sometimes was. So try three times.
+ */
+let courseBook;
+for (let attempt = 1; !courseBook; attempt += 1) {
+  courseBook = await readDownload(admin, 'course-export', 20000).catch((error) => {
+    if (attempt === 3) throw error;
+    return null;
+  });
+}
 check(
   'the course workbook is named for the course and the term',
   courseBook.name === 'Hikam Foundations — Autumn 2026.xlsx',
