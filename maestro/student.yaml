@@ -11,7 +11,11 @@ name: Student signs in, listens, and changes the password
     timeout: 180000
 - tapOn: "you@example.com"
 - inputText: "abd.al.rahman.ibn.muhammad.al.shinqiti@example.com"
+# Next moves the focus to the password; on iOS Maestro can type before the
+# focus lands there, so the flow puts it there itself. Go signs in.
 - pressKey: Enter
+- tapOn:
+    id: "signin-password"
 - inputText: "HikamStudent1"
 - pressKey: Enter
 # A card's texts are one accessibility label on iOS, and Maestro matches the
