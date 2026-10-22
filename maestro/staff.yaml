@@ -20,7 +20,7 @@ name: Staff work through the day
       - tapOn: "Not now"
 - takeScreenshot: 01-today
 
-- tapOn: "Session 5 — Reliance and Trust"
+- tapOn: ".*Session 5 — Reliance and Trust.*"
 - extendedWaitUntil:
     visible: "ATTENDANCE"
     timeout: 30000
@@ -33,5 +33,5 @@ name: Staff work through the day
 - tapOn: "People"
 - assertVisible: "STUDENTS.*"
 - tapOn: "More"
-- assertVisible: "Audit history"
+- assertVisible: "Audit history.*"
 - takeScreenshot: 03-more
