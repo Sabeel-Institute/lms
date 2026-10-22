@@ -2666,7 +2666,20 @@ const openRows = await admin
   .locator('[data-testid^="grade-list-"][aria-current="true"]')
   .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-testid')));
 const gradedName = await screenTitle(admin);
+/*
+ * ONE FORM AT EVERY WIDTH. Crossing the desk breakpoint rebuilt the grade
+ * form, so what was typed and not yet stored went with it, and a return
+ * straight after sent the stored grade without the feedback just typed. A
+ * grade that does not fit is never stored, so it shows the loss every time,
+ * not only on a slow machine.
+ */
+const pointsBox = () => admin.getByTestId('grade-points').filter({ visible: true }).first();
+await pointsBox().fill('11');
 await admin.setViewportSize({ width: 390, height: 844 });
+await admin.locator('[data-testid^="grade-list-"]').first().waitFor({ state: 'hidden', timeout: 15000 });
+const keptAcross = await pointsBox().inputValue();
+check('a grade typed at a desk is still on the form once the window narrows', keptAcross === '11', keptAcross);
+await pointsBox().fill('9');
 check(
   'the grading form names its feedback box, announces its saves, and marks whose work is open',
   feedbackNamed >= 1 && statusLive === 'polite' && openRows.length === 1 && openRows[0] === `grade-list-${gradedName}`,
