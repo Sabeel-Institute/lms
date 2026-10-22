@@ -88,16 +88,20 @@ export async function signInWithGoogle(): Promise<void> {
     const idToken = response.data.idToken;
     if (!idToken) throw new Error('Google returned no ID token.');
 
-    const { data } = await accountExists({ idToken });
-    if (!data.exists) {
+    try {
+      const { data } = await accountExists({ idToken });
+      if (!data.exists) throw new NoAccountError();
+      await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+    } catch (e) {
       // Google still remembers the chosen account, and `signIn()` would silently
-      // reuse it — so somebody who picked the wrong one could never switch.
-      // Clear it, or the refusal is a dead end rather than a retry.
+      // reuse it. After any failed exchange the next tap must open the chooser
+      // again: somebody who picked the wrong account could otherwise never
+      // switch, and somebody whose sign-in the server could not answer would
+      // retry into the same failure with no chooser to show the tap did
+      // anything (2026-10-22, when every function stopped starting).
       await googleSignOut();
-      throw new NoAccountError();
+      throw e;
     }
-
-    await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
   } catch (e) {
     const code = (e as { code?: string }).code;
     // Cancelling is not an error — see the web sibling for why this matters.
