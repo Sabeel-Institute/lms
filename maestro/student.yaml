@@ -17,7 +17,7 @@ name: Student signs in, listens, and changes the password
 # A card's texts are one accessibility label on iOS, and Maestro matches the
 # whole label, so texts inside a card or a row are matched as part of one.
 - extendedWaitUntil:
-    visible: "Play Session 2 — Knowledge and Certainty.*"
+    visible: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
     timeout: 60000
 - runFlow:
     when:
@@ -27,7 +27,7 @@ name: Student signs in, listens, and changes the password
 - takeScreenshot: 01-home
 
 # Playback reaches the audio, and keeps time behind Home.
-- tapOn: "Play Session 2 — Knowledge and Certainty.*"
+- tapOn: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
 - extendedWaitUntil:
     visible: "Bookmark this place"
     timeout: 30000
@@ -54,8 +54,8 @@ name: Student signs in, listens, and changes the password
 - tapOn: "Classes"
 - assertVisible: "Your classes"
 - tapOn: "More"
-- tapOn: "Change password.*"
+- tapOn: "Change password[\\s\\S]*"
 - extendedWaitUntil:
-    visible: "Reset link sent.*"
+    visible: "Reset link sent[\\s\\S]*"
     timeout: 30000
 - takeScreenshot: 04-password-link

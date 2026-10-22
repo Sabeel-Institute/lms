@@ -178,6 +178,19 @@ if [ "$PLATFORM" = android ]; then
     adb logcat -d >"$LOGS/logcat.txt" 2>&1 || true
   fi
 else
+  # Maestro's iOS driver sometimes loses an element it is snapshotting while
+  # the screen changes, and reports the device unreachable: the driver failed,
+  # not the app. Run the flows once more when that is the failure.
+  if [ "$rc" -ne 0 ] && grep -q 'DeviceUnreachableException' "$OUT/report.xml" 2>/dev/null; then
+    echo "native-e2e.sh: Maestro lost its iOS driver; running the flows once more" >&2
+    mv "$OUT/report.xml" "$OUT/report-first-try.xml"
+    rc=0
+    run_flows || rc=$?
+  fi
   xcrun simctl spawn "$DEVICE" log show --last 30m --style compact 2>/dev/null | tail -n 20000 >"$LOGS/device.txt" || true
+fi
+# What Maestro could see when the flows failed: the labels to match against.
+if [ "$rc" -ne 0 ]; then
+  maestro ${DEVICE:+--device "$DEVICE"} hierarchy >"$LOGS/hierarchy-at-failure.json" 2>/dev/null || true
 fi
 exit "$rc"

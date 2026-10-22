@@ -11,7 +11,7 @@ name: Staff work through the day
     timeout: 180000
 - tapOn: "as faisal.shah \\(first admin\\)"
 - extendedWaitUntil:
-    visible: "ATTENDANCE NOT TAKEN.*"
+    visible: "ATTENDANCE NOT TAKEN[\\s\\S]*"
     timeout: 60000
 - runFlow:
     when:
@@ -20,18 +20,18 @@ name: Staff work through the day
       - tapOn: "Not now"
 - takeScreenshot: 01-today
 
-- tapOn: ".*Session 5 — Reliance and Trust.*"
+- tapOn: "[\\s\\S]*Session 5 — Reliance and Trust[\\s\\S]*"
 - extendedWaitUntil:
     visible: "ATTENDANCE"
     timeout: 30000
-- assertVisible: ".*Present"
+- assertVisible: "[\\s\\S]*Present"
 - takeScreenshot: 02-register
 - runFlow: common/back.yaml
 
 - tapOn: "Courses"
 - assertVisible: "Add a cohort"
 - tapOn: "People"
-- assertVisible: "STUDENTS.*"
+- assertVisible: "STUDENTS[\\s\\S]*"
 - tapOn: "More"
-- assertVisible: "Audit history.*"
+- assertVisible: "Audit history[\\s\\S]*"
 - takeScreenshot: 03-more
