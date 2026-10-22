@@ -15,8 +15,8 @@
  *
  * Every film starts from a freshly seeded guide world (`seed-guide.mjs`), so
  * what one film changes — a register submitted, an assignment posted — is not
- * in the next. What only a development build draws is hidden — the emulator
- * sign-in panel, the build's "dev" label, More's Design tokens; a touch is
+ * in the next. What only a development build draws is hidden — the dev
+ * sign-in row, the build's "dev" label, More's Design tokens; a touch is
  * drawn as a ripple and, on the computer, the pointer as a dot that moves to
  * what it clicks.
  */
@@ -143,10 +143,10 @@ function overlay(showPointer) {
       setTimeout(() => r.remove(), 700);
     }, true);
     const hide = () => {
+      // The dev sign-in row, by its testID.
+      const devRow = document.querySelector('[data-testid="dev-sign-in"]');
+      if (devRow) devRow.style.display = 'none';
       for (const el of document.querySelectorAll('div')) {
-        if (el.childElementCount === 0 && el.textContent === 'Emulator sign-in (dev only)' && el.parentElement) {
-          el.parentElement.style.display = 'none';
-        }
         // The build label, on the sign-in screen and at the foot of More.
         if (el.childElementCount === 0 && /(^|· )v\d+\.\d+\.\d+ · dev$/.test(el.textContent ?? '')) el.style.visibility = 'hidden';
         // More's development-only row, which nobody outside development is offered.

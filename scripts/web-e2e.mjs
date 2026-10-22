@@ -492,7 +492,7 @@ const outsiderTold = await outsider
   .then(() => true, () => false);
 check(
   'an off-domain sign-in is refused at the door, and told which account to use',
-  outsiderTold && (await bodyText(outsider)).includes('Emulator sign-in'),
+  outsiderTold && (await shows(outsider, 'dev-sign-in')),
   (await bodyText(outsider)).slice(0, 200),
 );
 // The promise itself: no account was made. Looked up as the Admin SDK would;

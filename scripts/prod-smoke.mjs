@@ -189,9 +189,10 @@ check(
 );
 
 // Grepping the bundle for this proves nothing — strings survive minification.
-// It has to be shown not to RENDER. The rows are `dev-signin-<who>`; an exact
-// `dev-signin` matched nothing in any bundle, so this passed on all of them.
-const devRows = await page.getByTestId(/^dev-signin/).count();
+// It has to be shown not to RENDER: the row is `dev-sign-in` and its buttons
+// `dev-signin-<who>`. An exact `dev-signin` matched nothing in any bundle, so
+// it passed on all of them; the pattern takes both.
+const devRows = await page.getByTestId(/^dev-sign-?in/).count();
 check(devRows === 0, 'dev sign-in row absent');
 
 const googleButtons = await page.getByRole('button', { name: /google/i }).count();

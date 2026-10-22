@@ -171,7 +171,10 @@ export function SignInScreen({ ended }: { ended: SessionEnd | null }) {
  *
  * Gated on IS_DEV *and* the emulator flag. Grepping the bundle proves nothing —
  * strings survive minification; `npm run smoke:prod` proves it does not RENDER
- * on the live site (no `dev-signin-*` rows).
+ * on the live site (no `dev-sign-in` row and no `dev-signin-*` buttons).
+ * Headed "Dev sign-in (emulator only)", as in every Sabeel app, so the release
+ * check (`sabeel-ci check-release`) and a person reading a screenshot both know
+ * it on sight.
  */
 function DevRow({ busy, run }: { busy: boolean; run: (fn: () => Promise<void>) => void }) {
   // Through the screen's own `run`, as the Google door is: one press at a
@@ -180,8 +183,8 @@ function DevRow({ busy, run }: { busy: boolean; run: (fn: () => Promise<void>) =
   // the top of the page unhandled.
   const as = (localPart: string) => () => run(() => devSignIn(localPart).then(() => undefined));
   return (
-    <View style={styles.devRow}>
-      <Text style={styles.devLabel}>Emulator sign-in (dev only)</Text>
+    <View style={styles.devRow} testID="dev-sign-in">
+      <Text style={styles.devLabel}>Dev sign-in (emulator only)</Text>
       <Button
         testID="dev-signin-first-admin"
         label={`as ${FIRST_ADMIN_LOCAL_PART} (first admin)`}

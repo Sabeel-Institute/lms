@@ -1,13 +1,13 @@
 # A student on Android: a password sign-in, a recording that keeps playing in
 # the background and resumes its place, the class list and Change password.
-# Seeded by scripts/seed-emulator-world.mjs; run by scripts/native-e2e.sh.
+# Seeded by scripts/seed-emulator-world.mjs; run by `npx sabeel-ci native-e2e`.
 appId: ${APP_ID}
 name: Student signs in, listens, and changes the password
 ---
 - launchApp:
     clearState: true
 - extendedWaitUntil:
-    visible: "Emulator sign-in \\(dev only\\)"
+    visible: "Dev sign-in \\(emulator only\\)"
     timeout: 180000
 - tapOn: "you@example.com"
 - inputText: "abd.al.rahman.ibn.muhammad.al.shinqiti@example.com"
