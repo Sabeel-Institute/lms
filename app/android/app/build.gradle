@@ -6,6 +6,43 @@ apply plugin: "com.google.gms.google-services"
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 /**
+ * The app version has ONE source of truth: app.json → expo.version. Nothing
+ * here carries its own copy — two copies desync silently, and the symptom is
+ * every release reporting the same version to Sentry.
+ *
+ * versionCode gives each field three digits. Two digits collide (0.1.100 and
+ * 0.2.0 both give 200), and Android refuses to install an APK whose versionCode
+ * is not greater than the installed one — so that release simply never goes out.
+ * Widening the multipliers later is safe; narrowing them never is.
+ *
+ * These checks are also `npx sabeel-ci check-version` (ci-tools'
+ * lib/version.mjs) on purpose: that one must catch a web-only release that never
+ * runs Gradle, and this one must fail even when nobody ran it — which is exactly
+ * the case where a hole here matters. The regex below must stay
+ * CHARACTER-IDENTICAL to the one there.
+ *
+ * It rejects leading zeros, which the naive /^\d+\.\d+\.\d+$/ accepts:
+ * `2026.07.01` is three dot-separated integers, but 07 and 7 are the same
+ * number, so 2026.07.01 and 2026.7.1 compute the SAME versionCode.
+ */
+def expoVersion = new groovy.json.JsonSlurper()
+    .parse(file("$projectRoot/app.json")).expo.version
+if (!expoVersion.matches(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/)) {
+    throw new GradleException(
+        "app.json version '${expoVersion}' must be exactly three integers (X.Y.Z) " +
+        "with no leading zeros — no pre-release suffix, no fourth component, no " +
+        "date-style components. See npx sabeel-ci check-version.")
+}
+def (vMajor, vMinor, vPatch) = expoVersion.tokenize('.').collect { it.toInteger() }
+// Major at most 2100 keeps the sum below Integer.MAX_VALUE before it is compared.
+if (vMinor > 999 || vPatch > 999 || vMajor > 2100 || vMajor * 1000000 + vMinor * 1000 + vPatch > 2100000000) {
+    throw new GradleException(
+        "app.json version '${expoVersion}' overflows the versionCode scheme " +
+        "(minor and patch at most 999, the code at most 2100000000, Play's limit).")
+}
+def computedVersionCode = vMajor * 1000000 + vMinor * 1000 + vPatch
+
+/**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
@@ -93,8 +130,8 @@ android {
         applicationId 'com.sabeelinstitute.lms'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 39
-        versionName "0.2.1"
+        versionCode computedVersionCode
+        versionName expoVersion
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -105,13 +142,13 @@ android {
      * Android SDK — so a release signed with it could be rebuilt by anyone and
      * installed OVER the real app as an update. The release key lives outside
      * the repo, in `~/.config/sabeel-lms/` (or wherever
-     * SABEEL_LMS_KEYSTORE_PROPERTIES points), and docs/SECRETS.md says what it
-     * is and how it is backed up. Without that file the release signing config
+     * SABEEL_KEYSTORE_PROPERTIES points, as ci-tools' `ci-platform` sets it in
+     * CI), and docs/SECRETS.md says what it is and how it is backed up. Without that file the release signing config
      * stays empty and Gradle refuses to package a release: fail closed, never
      * fall back to the debug key. Debug builds are unaffected.
      */
     def releaseKeyProps = new Properties()
-    def releaseKeyFile = file(System.getenv('SABEEL_LMS_KEYSTORE_PROPERTIES')
+    def releaseKeyFile = file(System.getenv('SABEEL_KEYSTORE_PROPERTIES')
         ?: "${System.getProperty('user.home')}/.config/sabeel-lms/keystore.properties")
     if (releaseKeyFile.exists()) {
         releaseKeyFile.withInputStream { releaseKeyProps.load(it) }

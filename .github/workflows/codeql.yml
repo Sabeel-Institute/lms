@@ -1,3 +1,5 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/codeql.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: CodeQL
 
 on:

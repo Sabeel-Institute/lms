@@ -25,23 +25,29 @@
  * has not yet confirmed is expected, and re-tried once it is — all three must
  * render the queue and report NO refusal, and the exit code says so.
  */
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
+import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { createRequire } from 'node:module';
 import { chromium } from 'playwright';
 import { resetEmulators, seedWorld } from './lib/seed-world.mjs';
-import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
-import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
+
+// The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
+const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
+const PORTS = ports(STACK);
+const EMULATOR_PROJECT_ID = STACK.emulators.project;
 
 // Resolved from the functions workspace, which already depends on the Admin
 // SDK — the same arrangement as `check-query-shapes.mjs`.
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 
-process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.firestore}`;
-process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.auth}`;
+process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${PORTS.firestore}`;
+process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${PORTS.auth}`;
 admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
 const db = admin.firestore();
 const auth = admin.auth();
-const BASE = process.env.E2E_WEB ?? `http://127.0.0.1:${WEB_PORTS.e2e}/`;
+const BASE = process.env.E2E_WEB ?? `http://127.0.0.1:${PORTS.web}/`;
 const MODE = process.argv[2] ?? 'delete';
 if (!['delete', 'remove', 'none'].includes(MODE)) {
   console.error(`usage: repro-stale-scope.mjs delete|remove|none (got ${MODE})`);

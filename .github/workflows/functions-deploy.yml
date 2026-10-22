@@ -1,3 +1,5 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/functions-deploy.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: Deploy Functions
 
 on:
@@ -44,10 +46,23 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - name: Require a successful CI run on this commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/ci-functions.mjs require-ci
+        run: sabeel-ci ci-functions require-ci
       - name: Install dependencies
         run: npm ci
       - run: npm install --global firebase-tools@^15
@@ -65,7 +80,7 @@ jobs:
           service_account: ${{ vars.GCP_FUNCTIONS_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
       - name: Plan the deploy; never delete a live function
-        run: node scripts/ci-functions.mjs plan
+        run: sabeel-ci ci-functions plan
       - name: Check the deploy without changing anything
         if: ${{ !inputs.deploy }}
         run: firebase deploy --only functions --project "$FIREBASE_PROJECT_ID" --non-interactive --dry-run
@@ -78,4 +93,4 @@ jobs:
         if: inputs.deploy && !cancelled() && env.DEPLOY_STARTED != ''
         env:
           PROBE_TOKEN: ${{ secrets.PROBE_TOKEN }}
-        run: node scripts/ci-functions.mjs verify --since "$DEPLOY_STARTED"
+        run: sabeel-ci ci-functions verify --since "$DEPLOY_STARTED"

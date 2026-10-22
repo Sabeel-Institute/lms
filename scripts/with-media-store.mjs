@@ -5,9 +5,11 @@
  *
  *     node scripts/with-media-store.mjs <command> [args…]
  *
- * Used by `test-emulator.sh`, `e2e-stack.sh` and `npm run emulators`, each of
- * which wraps `firebase emulators:exec|start` in it. The command's exit status
- * is this script's exit status.
+ * Every run of the Functions emulator goes through it: `e2e-stack.sh` wraps
+ * `firebase emulators:exec` in it, and `sabeel-ci test-emulator`, `emulators`
+ * and `native-e2e` do the same, as ci-tools.json's
+ * `emulators.functionsWrapper`. The command's exit status is this script's
+ * exit status.
  *
  * Signals are forwarded to the command and the store is stopped on the way out:
  * a store left running holds the S3 port, and the next run would then sign URLs

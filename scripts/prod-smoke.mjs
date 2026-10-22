@@ -13,7 +13,7 @@
  * DEPLOY check, not a security suite; rules are covered by the emulator tests.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { FIREBASE_PROJECT_ID as PROJECT_ID, WEB_APP_URL } from '@sabeel/shared';
 
@@ -189,9 +189,10 @@ check(
 );
 
 // Grepping the bundle for this proves nothing — strings survive minification.
-// It has to be shown not to RENDER. The rows are `dev-signin-<who>`; an exact
-// `dev-signin` matched nothing in any bundle, so this passed on all of them.
-const devRows = await page.getByTestId(/^dev-signin/).count();
+// It has to be shown not to RENDER: the row is `dev-sign-in` and its buttons
+// `dev-signin-<who>`. An exact `dev-signin` matched nothing in any bundle, so
+// it passed on all of them; the pattern takes both.
+const devRows = await page.getByTestId(/^dev-sign-?in/).count();
 check(devRows === 0, 'dev sign-in row absent');
 
 const googleButtons = await page.getByRole('button', { name: /google/i }).count();
@@ -270,7 +271,8 @@ check(
   `every callable answers for itself, ${callables.length} asked${unanswered.length ? `; Cloud Run refused ${unanswered.join(', ')}` : ''}`,
 );
 
-await page.screenshot({ path: 'e2e-shots/prod-01-signin.png', fullPage: true });
+mkdirSync('shots/prod', { recursive: true });
+await page.screenshot({ path: 'shots/prod/01-signin.png', fullPage: true });
 await browser.close();
 
 console.log(fails.length ? `\n${fails.length} check(s) FAILED` : '\nall production checks passed');

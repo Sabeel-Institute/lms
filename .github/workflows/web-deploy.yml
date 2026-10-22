@@ -1,3 +1,5 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/web-deploy.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: Deploy Web
 
 on:
@@ -48,15 +50,24 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - name: Verify build provenance and successful CI
         id: build
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/ci-platform.mjs resolve-build
-      - name: Preserve current release safeguards
-        run: |
-          mkdir -p "$RUNNER_TEMP/hosting-release"
-          cp scripts/ci-platform.mjs scripts/ci-hosting-smoke.mjs "$RUNNER_TEMP/hosting-release/"
+        run: sabeel-ci ci-platform resolve-build
       - uses: actions/checkout@v7
         with:
           ref: ${{ steps.build.outputs.sha }}
@@ -69,8 +80,8 @@ jobs:
           path: ${{ runner.temp }}/hosting-artifact
       - name: Verify artifact hashes and isolate Hosting configuration
         run: |
-          node "$RUNNER_TEMP/hosting-release/ci-platform.mjs" deploy-config
-          node "$RUNNER_TEMP/hosting-release/ci-hosting-smoke.mjs" --preflight
+          sabeel-ci ci-platform deploy-config
+          sabeel-ci ci-hosting-smoke --preflight
       - run: npm install --global firebase-tools@^15
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
@@ -79,10 +90,10 @@ jobs:
           service_account: ${{ vars.GCP_HOSTING_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
       - name: Validate Hosting identity without publishing
-        run: node "$RUNNER_TEMP/hosting-release/ci-platform.mjs" validate-auth
+        run: sabeel-ci ci-platform validate-auth
       - name: Publish the selected artifact to live Hosting
         if: inputs.deploy
         run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/firebase-hosting.json" --non-interactive
       - name: Read-only post-deployment checks
         if: inputs.deploy
-        run: node "$RUNNER_TEMP/hosting-release/ci-hosting-smoke.mjs"
+        run: sabeel-ci ci-hosting-smoke

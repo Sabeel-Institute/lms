@@ -22,8 +22,8 @@ import { AUDIT_ACTION_LABELS } from '@sabeel/shared';
  * `AUDIT_ACTION_LABELS` in @sabeel/shared, which `check:documents` also holds
  * every stored entry to.
  *
- * Lives in `functions/test/unit` because that workspace is the only one here
- * with a runner wired up — same reasoning as `emulatorPorts.test.ts` next door.
+ * Lives in `functions/test/unit` because that workspace runs the repo's tests
+ * about files outside any one workspace (`ciCoverage.test.ts` is another).
  */
 const REPO = resolve(import.meta.dirname, '../../..');
 

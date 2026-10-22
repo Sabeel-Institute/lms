@@ -1,3 +1,5 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/android.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: Android
 
 on:
@@ -26,6 +28,19 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -40,14 +55,14 @@ jobs:
           ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
           ANDROID_KEYSTORE_PROPERTIES: ${{ secrets.ANDROID_KEYSTORE_PROPERTIES }}
           ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
-        run: node scripts/ci-platform.mjs prepare-android
+        run: sabeel-ci ci-platform prepare-android
       - run: npm ci
       - name: Android SDK packages, with retries
-        run: bash scripts/ci-android-sdk.sh
+        run: sabeel-ci ci-android-sdk
       - name: Build and verify signed Play bundle
         env:
           ANDROID_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
-        run: node scripts/ci-platform.mjs android
+        run: sabeel-ci ci-platform android
       - uses: actions/upload-artifact@v7
         with:
           name: android-aab-${{ github.sha }}
@@ -66,6 +81,19 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -75,9 +103,9 @@ jobs:
           name: android-aab-${{ github.sha }}
           path: ${{ runner.temp }}/android-artifact
       - name: Boot an Android emulator
-        run: bash scripts/ci-avd.sh
+        run: sabeel-ci ci-avd
       - name: The release bundle starts cleanly, five cold starts
-        run: node scripts/check-release.mjs "$RUNNER_TEMP/android-artifact/app-release.aab" --commit "$GITHUB_SHA" --out "$RUNNER_TEMP/release-check"
+        run: sabeel-ci check-release "$RUNNER_TEMP/android-artifact/app-release.aab" --commit "$GITHUB_SHA" --out "$RUNNER_TEMP/release-check"
       - name: Screens and device logs
         if: always()
         uses: actions/upload-artifact@v7

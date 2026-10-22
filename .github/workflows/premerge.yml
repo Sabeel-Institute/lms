@@ -1,3 +1,5 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/premerge.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: Pre-merge Builds
 
 on:
@@ -32,11 +34,24 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - run: npm ci
       - name: Validate SDK dependency compatibility
-        run: node scripts/ci-premerge.mjs sdk
+        run: sabeel-ci ci-premerge sdk
       - name: Install and load the backend as Cloud Build does
-        run: node scripts/ci-premerge.mjs backend
+        run: sabeel-ci ci-premerge backend
 
   web:
     if: github.event.pull_request.draft != true
@@ -68,6 +83,19 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -77,12 +105,12 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Prepare public test configuration and disable signing
-        run: node scripts/ci-premerge.mjs prepare
+        run: sabeel-ci ci-premerge prepare
       - run: npm ci
       - name: Android SDK packages, with retries
-        run: bash scripts/ci-android-sdk.sh
+        run: sabeel-ci ci-android-sdk
       - name: Compile and verify unsigned release AAB
-        run: node scripts/ci-premerge.mjs android
+        run: sabeel-ci ci-premerge android
 
   ios:
     if: github.event.pull_request.draft != true
@@ -97,11 +125,24 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - name: Prepare public test configuration
-        run: node scripts/ci-premerge.mjs prepare
+        run: sabeel-ci ci-premerge prepare
       - run: npm ci
       - name: Compile and verify unsigned device Release archive
-        run: node scripts/ci-premerge.mjs ios
+        run: sabeel-ci ci-premerge ios
 
   premerge-builds:
     if: always() && github.event.pull_request.draft != true

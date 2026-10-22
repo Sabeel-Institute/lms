@@ -480,7 +480,7 @@ from here.
       carries `minVersionCode`, read by every Android and iPhone build before
       sign-in (`app/src/minVersion.ts`); a build below it shows the update screen with
       Google Play. Readable by anyone, written only by
-      `scripts/set-min-version.mjs <versionCode>`, which is yours to run after
+      `scripts/set-min-version.mjs <X.Y.Z>`, which is yours to run after
       a release older builds can no longer work against — see DEPLOY.md.
 - [ ] **The update screen on store builds** opens the Play internal testing track
       on every native build, a Play or TestFlight install included. What it

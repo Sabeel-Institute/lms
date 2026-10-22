@@ -17,7 +17,7 @@
 | R2 API keys (`R2_READ_*`, `R2_WRITE_*`) | **Yes** | Secret Manager |
 | Apple **Distribution certificate** for GitHub builds (`.p12`, its password, the App Store profiles) | **Yes** | `~/.config/sabeel-lms/ios-distribution/`, mode 600, and GitHub secrets `IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD`, `IOS_PROFILE` here and in the Kanban repo (`docs/IOS-BUILD.md`, "Builds on GitHub"). Expires 2027-10-16 |
 | The **mail sender** (`apps-noreply@oursabeel.com`, for Report a problem and password links) | **No secret exists** | No password and no key: the functions sign a delegation token with IAM as `report-mailer@oursabeel-lms.iam.gserviceaccount.com`, an address in `functions/.env.oursabeel-lms`, which only an account granted Token Creator on it can use (`docs/DEPLOY.md`, "Report a problem sends mail"). Never make a key for `report-mailer@`: with domain-wide delegation, a key would send mail as the institute from anywhere |
-| Apple **push key** (APNs, `AuthKey_X5R8FL94BC.p8`) | **Yes** | Secret Manager as `APNS_KEY`, which the functions that send a notification bind (`functions/src/messaging.ts`); the file in `~/.config/sabeel-lms/`, mode 600. Its id and the team id are not secret and are in `functions/.env.oursabeel-lms` |
+| Apple **push key** (APNs, `AuthKey_X5R8FL94BC.p8`) | **Yes** | Secret Manager as `APNS_KEY`, which the functions that send a notification bind (`functions/src/messaging.ts`) and `npm run check:push` reads; the file in `~/.config/sabeel-lms/`, mode 600, and in `~/.apns/`, where `npx sabeel-ci send-test-push --apple` reads it. Its id and the team id are not secret and are in `functions/.env.oursabeel-lms` |
 
 The Firebase "apiKey" is not a credential. It identifies the project; access is
 controlled by security rules and App Check. Treating it as a secret leads people
@@ -65,8 +65,8 @@ rotation story, so there is one, and only on this machine:
 `sabeel-play-publisher@sabeel-institute-kanban.iam.gserviceaccount.com`. Google
 Play's publishing API takes nothing else. One account publishes every Sabeel
 app; Play Console gives it "Release apps to testing tracks" app by app, and
-`scripts/publish-play.mjs` reads it (or the path in `PLAY_KEY`). If it leaks or
-is lost, delete that key in the Google Cloud console (project
+`npx sabeel-ci publish-play` reads it (or the file `PLAY_KEY` names). If it
+leaks or is lost, delete that key in the Google Cloud console (project
 `sabeel-institute-kanban`, IAM, Service Accounts) and make a new JSON key
 there.
 
@@ -104,11 +104,13 @@ Every release APK of `com.sabeelinstitute.lms` is signed with one key, created
 | SHA-1 | `F6:F1:F1:17:15:2C:32:BF:4D:B0:B5:16:F8:8C:3F:AB:E2:AB:C4:D2` |
 | SHA-256 | `E8:C3:7E:B6:5E:BA:D0:C9:DF:57:D4:58:68:58:D4:59:F9:7F:A4:7E:FB:5D:28:D3:06:0A:79:E9:11:00:FF:D5` |
 
-The fingerprints are public (they are in every APK); the keystore and its
+The fingerprints are public (they are in every APK, and the SHA-256 is
+`release.appSigningCertificate` in `ci-tools.json`); the keystore and its
 password are not. `app/android/app/build.gradle` reads `keystore.properties`
-from that path, or from the path in `SABEEL_LMS_KEYSTORE_PROPERTIES`. Without
-it a release build fails; it never falls back to the debug key, which is public
-and would let anyone build an APK that installs over the real app.
+from that path, or from the path in `SABEEL_KEYSTORE_PROPERTIES` (the one name
+every Sabeel app reads, and where CI puts its copy). Without it a release
+build fails; it never falls back to the debug key, which is public and would
+let anyone build an APK that installs over the real app.
 
 Both SHA-1s, this one and the debug key's, are registered on the Firebase
 Android app, which is what Google sign-in on the phone checks.
@@ -116,8 +118,8 @@ Android app, which is what Google sign-in on the phone checks.
 **It is also Play's key**, since 2026-10-16: the app signing key Play signs
 every install with (uploaded with Play Console's "Export and upload a key
 from Java keystore", PEPK), and the upload key that signs the bundle
-`publish:play` sends. So a Play install and a GitHub APK update each other,
-and the Firebase registration above covers both.
+`npx sabeel-ci publish-play` sends. So a Play install and a GitHub APK update
+each other, and the Firebase registration above covers both.
 
 **Losing the key ends updates.** Android refuses an update signed with a
 different key, so every phone with a GitHub APK would have to uninstall and

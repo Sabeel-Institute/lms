@@ -154,6 +154,19 @@ export function isBuildOutdated(versionCode: number, minVersionCode: number | nu
 }
 
 /**
+ * The versionCode of an app version (X.Y.Z): major * 1000000 + minor * 1000 +
+ * patch, the number build.gradle stamps into the APK and the iPhone build
+ * carries as its build number. The scheme is ci-tools' (lib/version.mjs, which
+ * also refuses a version it cannot code); `appVersion.test.ts` holds this to it,
+ * because the update gate compares this number with the floor
+ * `set-min-version` writes from ci-tools' own.
+ */
+export function versionCodeOf(version: string): number {
+  const [major, minor, patch] = version.split('.').map(Number);
+  return major * 1000000 + minor * 1000 + patch;
+}
+
+/**
  * How many courses the staff work queue may span in one query, per role.
  *
  * TWO DIFFERENT CEILINGS, because the two roles pay different prices for the

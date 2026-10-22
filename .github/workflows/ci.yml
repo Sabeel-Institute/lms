@@ -1,3 +1,5 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/ci.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: CI
 
 on:
@@ -43,8 +45,23 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - name: Install dependencies
         run: npm ci
+      - name: What ci-tools assumes of the app
+        run: sabeel-ci check-app
       - name: Lint
         run: npm run lint
       - name: Typecheck
@@ -87,11 +104,10 @@ jobs:
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
       - name: Emulator secret placeholders
+        env:
+          SECRETS: '{"SENTRY_DSN":"disabled","R2_READ_KEY_ID":"unused-in-emulator","R2_READ_SECRET":"unused-in-emulator","R2_WRITE_KEY_ID":"unused-in-emulator","R2_WRITE_SECRET":"unused-in-emulator","APNS_KEY":"unused-in-emulator"}'
         run: |
-          printf '%s\n' SENTRY_DSN=disabled R2_READ_KEY_ID=unused-in-emulator \
-            R2_READ_SECRET=unused-in-emulator R2_WRITE_KEY_ID=unused-in-emulator \
-            R2_WRITE_SECRET=unused-in-emulator APNS_KEY=unused-in-emulator \
-            > functions/.secret.local
+          node -e 'const secrets = JSON.parse(process.env.SECRETS); require("node:fs").writeFileSync("functions/.secret.local", Object.entries(secrets).map(([name, value]) => name + "=" + value + "\n").join(""))'
       - name: Emulator integration tests
         run: npm run test:emulator
 
@@ -105,8 +121,9 @@ jobs:
       actions: read
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
-        suite: [screens, web]
+        suite: ["test:screens","test:e2e"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -115,6 +132,19 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - name: Install dependencies
         run: npm ci
       - uses: actions/setup-java@v6
@@ -133,24 +163,23 @@ jobs:
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
       - name: Emulator secret placeholders
+        env:
+          SECRETS: '{"SENTRY_DSN":"disabled","R2_READ_KEY_ID":"unused-in-emulator","R2_READ_SECRET":"unused-in-emulator","R2_WRITE_KEY_ID":"unused-in-emulator","R2_WRITE_SECRET":"unused-in-emulator","APNS_KEY":"unused-in-emulator"}'
         run: |
-          printf '%s\n' SENTRY_DSN=disabled R2_READ_KEY_ID=unused-in-emulator \
-            R2_READ_SECRET=unused-in-emulator R2_WRITE_KEY_ID=unused-in-emulator \
-            R2_WRITE_SECRET=unused-in-emulator APNS_KEY=unused-in-emulator \
-            > functions/.secret.local
+          node -e 'const secrets = JSON.parse(process.env.SECRETS); require("node:fs").writeFileSync("functions/.secret.local", Object.entries(secrets).map(([name, value]) => name + "=" + value + "\n").join(""))'
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Browser suite
         env:
           SUITE: ${{ matrix.suite }}
-        run: bash scripts/e2e-stack.sh "$SUITE"
+        run: npm run "$SUITE"
       - name: Screens report, compared with main
-        if: always() && matrix.suite == 'screens'
+        if: always() && matrix.suite == 'test:screens'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/screens-report.mjs shots/screens --baseline-from-main --out "$RUNNER_TEMP/screens-report"
+        run: sabeel-ci screens-report shots/screens --baseline-from-main --out "$RUNNER_TEMP/screens-report"
       - name: Keep the screens report
-        if: always() && matrix.suite == 'screens'
+        if: always() && matrix.suite == 'test:screens'
         uses: actions/upload-artifact@v7
         with:
           name: screens-report
@@ -160,10 +189,8 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: browser-${{ matrix.suite }}
-          path: |
-            shots/
-            e2e-shots/
+          name: browser-${{ strategy.job-index }}
+          path: shots/
           retention-days: 7
 
   build-test:

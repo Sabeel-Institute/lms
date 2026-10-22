@@ -16,8 +16,8 @@ import { resolve } from 'node:path';
  * of labour `app/src/theme/layout.test.ts` describes for the column caps —
  * measurement in the sweep, argument in a unit test — and this is the argument.
  *
- * Lives in `functions/test/unit` because that workspace is the only one here
- * with a runner and node types — same reasoning as `emulatorPorts.test.ts`.
+ * Lives in `functions/test/unit` because that workspace runs the repo's tests
+ * about files outside any one workspace, with node types.
  */
 const REPO = resolve(import.meta.dirname, '../../..');
 const read = (p: string) => readFileSync(resolve(REPO, p), 'utf8');

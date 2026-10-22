@@ -110,7 +110,7 @@ cannot mint, so `seedWorld` drives the app's own dev sign-in row and lets
 port to `run:android`:
 
 ```sh
-scripts/emulator.sh headless &                                  # the AVD
+npx sabeel-ci emulator headless &                               # the AVD
 npm run emulators             # frees the ports, builds, starts the emulators + media store; leave running
 
 ( cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 8081 --clear ) &
@@ -118,12 +118,12 @@ npm run seed:emulators        # prints the student's credentials and the fixture
 kill %2                       # release 8081 (job 2: the AVD is job 1, the dev server job 2)
 
 ( cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo run:android )   # its own Metro
-adb reverse tcp:61307 tcp:61307                                  # the audio, see below
+adb reverse tcp:61327 tcp:61327                                  # the audio, see below
 ```
 
 The emulators bind loopback, which the AVD reaches as `10.0.2.2` — already wired
 in `app/src/env.ts`. **Media is the exception:** playback and upload URLs are
-signed for the local media store at `127.0.0.1:61307`, and the host is part of
+signed for the local media store at `127.0.0.1:61327`, and the host is part of
 the signature, so it cannot be rewritten to `10.0.2.2`; on the AVD that address
 is the AVD itself. Without the `adb reverse`
 above every recording fails with "Source error" the moment it is opened
@@ -132,19 +132,25 @@ adds the Metro mapping itself; this one is yours. And `adb root` drops every
 `adb reverse` mapping, so avoid it while a debug build is attached, or restore
 both afterwards.
 
-## Cutting a release (versioned Android + web)
+## Cutting a release (Android, web and iPhone)
 
-A release bumps one version and ships it to both surfaces. In order:
+A release is one version on every surface, from one commit, through a pull
+request. The version is written once, `expo.version` in `app/app.json`;
+Android's versionCode and the iPhone build number both follow from it,
+`major * 1000000 + minor * 1000 + patch` (0.2.2 is 2002), so each version
+reaches Play and TestFlight once. The tool is ci-tools' `release`, the same in
+every Sabeel app. In order:
 
 0. **Run the three production checks**, which nothing else runs — they
    authenticate against the live project, so neither CI nor the emulator suite
    can: `npm run check:queries` (every query shape the app sends, against the
    real indexes), `npm run check:documents` (every live document the app reads,
    against the fields its type requires — a failure is data to migrate before
-   the release, not code to bend around it) and `npm run check:push` (FCM
-   credentials and the VAPID key). This machine's Application Default
-   Credentials belong to another Google account, so run them with the owner's
-   token:
+   the release, not code to bend around it) and `npm run check:push` (FCM and
+   both of Apple's services accept a message from this project, and refuse a
+   dead token with an answer the functions prune on). This machine's
+   Application Default Credentials belong to another Google account, so run
+   them with the owner's token:
    ```sh
    export CHECK_ACCESS_TOKEN="$(gcloud auth print-access-token --account=faisal.shah@oursabeel.com)"
    npm run check:queries && npm run check:documents && npm run check:push
@@ -152,39 +158,100 @@ A release bumps one version and ships it to both surfaces. In order:
    Run `check:documents` again after any migration of live data. See
    `docs/DEV-TOOLING.md`.
 
-1. **Bump the version in `app/app.json` and `app/android/app/build.gradle`,
-   together:**
-   - `app/app.json` → `expo.version` (drives the sign-in build label and the
-     manual cover) **and** `expo.android.versionCode`.
-   - `app/android/app/build.gradle` → `versionName` **and** `versionCode` — the
-     code MUST increment or Android refuses the upgrade.
-   - `app/app.json` → `expo.ios.buildNumber` — it must rise on every
-     TestFlight upload, even of the same version.
+1. **Write the release notes**, for students and teachers, in a file, as the
+   version's deploy-log entry: headed `### <YYYY-MM-DD> — <summary> — vX.Y.Z`,
+   then the notes (`docs/PHASE_STATUS.md`, "Deploy log", has the earlier
+   ones). The summary titles the pull request and the GitHub release, and the
+   notes describe both.
 
-   `functions/test/unit/appVersion.test.ts` fails if the two files disagree on
-   either, so forgetting one is caught by `npm test` rather than on a device.
-   Bump the line under the manual's title too (`docs/USER-MANUAL.md`):
-   `render-manual.py` refuses to render while it disagrees with `app.json`,
-   and a render chained to a copy step then ships the previous PDF.
+2. **Open the release pull request:**
+   ```sh
+   npx sabeel-ci release X.Y.Z --notes <entry.md> --dry-run   # shows the change, leaves nothing behind
+   npx sabeel-ci release X.Y.Z --notes <entry.md>
+   ```
+   It works from origin/main in a worktree of its own, leaving this checkout
+   as it is: the version and the iOS build number in `app.json`, the line
+   under the manual's title (`docs/USER-MANUAL.md`) and `docs/USER-MANUAL.pdf`
+   rendered with it, and the entry added to the deploy log, committed as
+   `chore(release): vX.Y.Z` on `release/vX.Y.Z`, pushed, and the pull request
+   into main opened. It refuses a version that is not X.Y.Z, or whose code is
+   not above main's and every released tag's: Android refuses an upgrade that
+   does not increase, and Play takes each code once. Faisal merges it once its
+   checks pass.
 
-   Commit the bump **first**, so the build carries that commit: the sign-in label
-   is `v<version> · <commit>`, injected from `EXPO_PUBLIC_COMMIT` (the
-   `web:export` / `android` npm scripts inject it; the release gradle build takes
-   it from the environment — see below).
+3. **Ship it from main**, on this machine, once merged:
+   ```sh
+   git switch main && git pull --ff-only
+   npx sabeel-ci release --ship
+   ```
+   It refuses anything but a clean main that matches origin, then:
+   - builds the signed Play bundle (`sabeel-ci build-aab`: the version check,
+     a deploy-log entry for the version, the native Sentry DSN in
+     `app/.env.local`, the build stamp, `gradlew bundleRelease`, and no
+     unsigned or debug-signed bundle), with the default **JDK 17** and no
+     emulator flag in the shell;
+   - runs every gate of `sabeel-ci publish-play --check`, Play's permission
+     included;
+   - makes the arm64-v8a and universal APKs from the same commit, signed with
+     the bundle's key;
+   - cold-starts the universal APK five times on the AVD (`sabeel-ci
+     check-release`, which boots `tb_emu` if nothing is attached: check who
+     owns it first, `CLAUDE.md`): each start must reach the sign-in screen
+     with the label `v<version> · <commit>` for this commit, no dev sign-in
+     row, and no crash or ANR in the device log;
+   - creates the GitHub release `vX.Y.Z` at that commit, titled and described
+     by the deploy-log entry, with `sabeel-institute-lms-arm64-v8a.apk`,
+     `sabeel-institute-lms-universal.apk` and the manual. Creating it creates
+     the tag, which only Faisal may (the tag ruleset);
+   - last, because it reaches every tester's phone by itself, publishes to
+     Play internal testing (`sabeel-ci publish-play --internal`): the build
+     goes up as a draft release no tester sees, Play generates its APKs, and
+     the release completes only if they are signed with the LMS's own key
+     (`release.appSigningCertificate` in `ci-tools.json`). If that step fails
+     the GitHub release stands; fix the cause and run `npx sabeel-ci
+     publish-play --internal` alone.
 
-2. **Web:** `firebase deploy --only hosting`. The predeploy
-   (`scripts/web-release.mjs`) exports the production bundle with the commit
-   injected, uploads source maps to Sentry, and strips the `.map` files. It
-   refuses to run with `EXPO_PUBLIC_USE_EMULATORS` set in the shell (that
-   ships an emulator bundle), refuses a bundle that does not carry HEAD's
-   commit, and refuses to finish with a `.map` still in the deploy dir. Then
-   verify against the LIVE site (not "Deploy complete") with
-   `npm run smoke:prod`, which asserts on the deployed page:
+   It needs the release keystore (`docs/SECRETS.md`), the Play publishing key
+   and `gh` signed in as Faisal. It ends by printing the two runs that put the
+   same commit on the web and on iPhones.
+
+   **The first Play release was 0.2.0 (code 38),** completed by the publisher
+   with no Play Console step. 0.1.2 (code 37), processed before the signing
+   key changed and so signed with Google's key, never went out; its draft was
+   removed from the internal track. Play Console gives every new app a
+   Google-generated signing key when it is created; the LMS's was replaced
+   with its own (App integrity, App signing, "Change key", "Export and upload
+   a key from Java keystore", with Google's PEPK tool), so a Play install and
+   the APK from the GitHub release update each other. The bundle carries every
+   ABI and Play cuts per-device APKs from it, so `build.gradle` turns the APK
+   splits off for bundle tasks.
+
+   **Testers.** Play Console, Internal testing, Testers: the email list "Sabeel
+   staff" (20 staff) is ticked. To add someone, edit that list there and add
+   the address of their Google account. Each tester opens the join link once
+   (`https://play.google.com/apps/internaltest/4701751467577150757`, also on
+   `/get-app`; it never changes), accepts, and installs from Play. A Play
+   install and the GitHub release's APK are signed with the same key, so
+   either updates the other.
+
+4. **Web:** Deploy Web, with the Web workflow's build of the same commit, as
+   `--ship` prints it:
+   `gh workflow run web-deploy.yml -f build_run_id=<the Web run> -f deploy=true`
+   (`docs/GITHUB-ACTIONS.md`). From this machine instead, `firebase deploy
+   --only hosting`: the predeploy (`scripts/web-release.mjs`) exports the
+   production bundle with source maps (`sabeel-ci build-web --source-maps`,
+   which checks the version, stamps the build and refuses an export that does
+   not carry the stamped commit), uploads the maps to Sentry, and strips the
+   `.map` files. It refuses to run with `EXPO_PUBLIC_USE_EMULATORS` set in the
+   shell or in `app/.env*` (that ships an emulator bundle), and refuses to
+   finish with a `.map` still in the deploy dir. Then verify against the LIVE
+   site (not "Deploy complete") with `npm run smoke:prod`, which asserts on the
+   deployed page:
    - the sign-in label reads `v<version> · <commit>` for THIS checkout's
      `app.json` and HEAD (`SMOKE_EXPECT_COMMIT=<sha>` when checking a deploy
      made from elsewhere);
    - a provoked Auth request goes to Google and no emulator host is contacted
-     — the emulator path is compiled out, so the dev sign-in rows cannot render;
+     — the emulator path is compiled out, so the dev sign-in row cannot render;
    - the bundle's `.map` URL answers `text/html` (the SPA rewrite for a stripped
      file), not a served map — the CONTENT-TYPE, since the status is 200 either
      way.
@@ -198,81 +265,13 @@ A release bumps one version and ships it to both surfaces. In order:
    projects (the alert "Every new or returning issue: Sabeel recordings and
    LMS"), but a release is not finished until someone has looked.
 
-3. **Android:** from `app/android`,
-   `EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) ./gradlew assembleRelease`
-   — default **JDK 17** (not the emulator's JDK 21), and NO emulator flag (it must
-   point at production). `BUILD SUCCESSFUL` is not proof:
-   `npm run check:release -- app/android/app/build/outputs/apk/release/app-x86_64-release.apk`
-   installs it on the AVD (booting it if none is attached) and cold-starts it
-   five times, failing unless the `v<version> · <commit>` label is this
-   commit's, the dev sign-in panel is **absent** (which proves it is a
-   production build, not an emulator one) and the device log shows no crash.
-   The Android workflow runs the same check on the AAB it builds.
-
-   **`EXPO_PUBLIC_COMMIT` is not a Gradle input.** A rebuild after a commit
-   that changed no JS (a manifest fix, say) reports
-   `createBundleReleaseJsAndAssets UP-TO-DATE` and ships the previous bundle
-   with the previous commit in its label — an 11-second `BUILD SUCCESSFUL`
-   is the tell. Rebuild with `--rerun-tasks`, and check the bundle before
-   installing: `unzip -p app/build/outputs/apk/release/app-x86_64-release.apk
-   assets/index.android.bundle | grep -ao "$(git rev-parse --short HEAD)"`.
-
-4. **Publish versioned assets in the Institute repository.** Tag the verified
-   commit and attach APKs and the manual without committing binaries:
-   ```bash
-   git tag vX.Y.Z <build-commit> && git push origin vX.Y.Z
-   out=app/android/app/build/outputs/apk/release
-   cp "$out/app-arm64-v8a-release.apk" /tmp/sabeel-institute-lms-arm64-v8a.apk
-   cp "$out/app-universal-release.apk" /tmp/sabeel-institute-lms-universal.apk
-   gh release create vX.Y.Z -R Sabeel-Institute/lms \
-     --title "vX.Y.Z — Android" --notes-file NOTES.md --latest \
-     /tmp/sabeel-institute-lms-arm64-v8a.apk /tmp/sabeel-institute-lms-universal.apk \
-     docs/USER-MANUAL.pdf
-   ```
-   Write release notes for students and teachers. No personal-site upload or
-   Pages update is part of a release.
-
-5. **Google Play, internal testing:** the same commit as an App Bundle, from
-   `app/android`, then up to Play:
-   ```bash
-   EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) ./gradlew bundleRelease
-   cd ../.. && npm run publish:play -- --check && npm run publish:play -- --internal
-   ```
-   `publish-play.mjs` refuses a debug-signed bundle, one that
-   does not carry HEAD's commit (the same Gradle trap as step 3; it prints the
-   40-second rebuild of the JS alone), and a versionCode Play reads differently
-   from `build.gradle`. It puts the build up as a draft release no tester sees,
-   waits for the APKs Play generates from it, and completes the release only
-   if they are signed with the LMS's own release key. Play Console gives every
-   new app a Google-generated signing key when it is created; the LMS's was
-   replaced with its own (App integrity, App signing, "Change key", "Export
-   and upload a key from Java keystore", with Google's PEPK tool), so a Play
-   install and the APK from the GitHub release update each other. APKs Play
-   generated before a key change stay signed with the old key, which is what
-   the check catches. The bundle carries every ABI and Play cuts per-device
-   APKs from it, so `build.gradle` turns the APK splits off for bundle tasks.
-   The publishing key: `docs/SECRETS.md`.
-
-   **The first Play release was 0.2.0 (code 38),** completed by the script
-   with no Play Console step. 0.1.2 (code 37), processed before the signing
-   key changed and so signed with Google's key, never went out; its draft was
-   removed from the internal track.
-
-   **Testers.** Play Console, Internal testing, Testers: the email list "Sabeel
-   staff" (20 staff) is ticked. To add someone, edit that list there and add
-   the address of their Google account. Each tester opens the join link once
-   (`https://play.google.com/apps/internaltest/4701751467577150757`, also on
-   `/get-app`; it never changes), accepts, and installs from Play. A Play
-   install and the GitHub release's APK are signed with the same key, so
-   either updates the other.
-
-6. **iPhone:** a TestFlight build of the release commit, from GitHub:
-   `gh workflow run ios.yml --ref main -f testflight=true`
-   (`docs/IOS-BUILD.md`, "Builds on GitHub"). Its TestFlight job stops before
-   uploading if Apple already has the build number. The Mac's
-   `npm run build:ios` does the same from a Mac. The Internal group gets it by
-   itself (`docs/IOS-BUILD.md`, "TestFlight testers"). The App Store is not yet
-   a release home: the app is in TestFlight only.
+5. **iPhone:** a TestFlight build of the release tag, from GitHub:
+   `gh workflow run ios.yml --ref vX.Y.Z -f testflight=true`
+   (`docs/IOS-BUILD.md`, "Builds on GitHub"). Its TestFlight job refuses a
+   commit that is not the one tagged `vX.Y.Z` and a build number Apple has
+   already taken. Nothing uploads from a Mac. The Internal group gets it by
+   itself (`docs/IOS-BUILD.md`, "TestFlight testers"). The App Store is not
+   yet a release home: the app is in TestFlight only.
 
    **Check it before and after the upload.** Before: the Mac session runs the
    simulator loop on the release commit (`docs/IOS-BUILD.md`): a student signs
@@ -282,9 +281,6 @@ A release bumps one version and ships it to both surfaces. In order:
    `v<version> · <commit>`. The lock-screen controls and a notification tapped
    with the app closed have no simulator stand-in; they are checked on that
    phone.
-
-There is no `npm run release` script yet (the sibling time-tracker has one); this
-is the manual recipe until one exists.
 
 ## Demo data in the live project
 
@@ -361,9 +357,9 @@ Google login. The same guards run here:
 
 ```bash
 export FIREBASE_PROJECT_ID=oursabeel-lms
-node scripts/ci-functions.mjs require-ci && node scripts/ci-functions.mjs plan
+npx sabeel-ci ci-functions require-ci && npx sabeel-ci ci-functions plan
 firebase deploy --only functions --force
-node scripts/ci-functions.mjs verify --since <the time the deploy started, ISO>
+npx sabeel-ci ci-functions verify --since <the time the deploy started, ISO>
 ```
 
 ### The sign-in gates are registered with Identity Platform
@@ -532,9 +528,10 @@ hit on 2026-10-12 and all apply to any new project here (a test project too):
   runtime service account access, then redeploy.
 - **Rules pass locally, queries fail in production.** Emulator rules evaluation
   is not identical; test the real queries after deploying rules.
-- **Stale config baked into the web bundle.** `web:export` always passes
-  `--clear`: Metro's transform cache can serve a bundle built under different
-  `EXPO_PUBLIC_*` values, and an emulator-mode bundle must never ship.
+- **Stale config baked into the web bundle.** `web:export` (`sabeel-ci
+  build-web`) always passes `--clear`: Metro's transform cache can serve a
+  bundle built under different `EXPO_PUBLIC_*` values, and an emulator-mode
+  bundle must never ship.
 
 ## Hosting
 
@@ -580,20 +577,21 @@ stack traces.
 
 Every Android and iPhone build reads `config/app.minVersionCode` before sign-in
 and shows an update screen — with the Play internal testing track — when its own
-`expo.android.versionCode` (the iPhone build carries it too) is below it. On a
-Play or TestFlight install that screen opens Google Play; what a
+versionCode (its version's code; the iPhone build carries the same number) is
+below it. On a Play or TestFlight install that screen opens Google Play; what a
 store build should do is decided in `docs/STORE-RELEASE.md`. After a release
 that older builds can no longer run against (a rules change refusing a
 listener they still open is the case that made this exist), raise the floor by
 hand:
 
 ```bash
-node scripts/set-min-version.mjs <versionCode>   # the versionCode of the oldest build to keep
+node scripts/set-min-version.mjs <X.Y.Z>   # the oldest version to keep
 ```
 
-It is a decision, not a deploy step: nothing raises it for you. The floor is a
-`versionCode` (`app/android/app/build.gradle`), not a version name. Every build
-of `com.sabeelinstitute.lms` has the gate.
+It is a decision, not a deploy step: nothing raises it for you. The floor is
+stored as the version's code, the number `build.gradle` computes. Builds made
+before the version scheme (0.2.1 and earlier, codes up to 39) are below every
+floor it writes. Every build of `com.sabeelinstitute.lms` has the gate.
 
 ## After deploying
 

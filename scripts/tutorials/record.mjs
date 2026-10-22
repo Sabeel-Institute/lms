@@ -6,32 +6,38 @@
  *        [--only film-id,film-id] [--variant phone|computer]
  *
  * Needs, as the browser suites do, the emulator suite running (`npm run
- * emulators`) and a dev server for it on the e2e port — not an export; see
+ * emulators`) and a dev server for it on the `web` port — not an export; see
  * "The help films" in docs/DEV-TOOLING.md for why neither kind will do:
- *   cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61311
+ *   cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port "$(npx sabeel-ci ports web)"
  * and the narration rendered first (`tts.py`), because each step lasts as long
  * as its line: the action runs while the line is said, and the next step waits
  * for the line to end.
  *
  * Every film starts from a freshly seeded guide world (`seed-guide.mjs`), so
  * what one film changes — a register submitted, an assignment posted — is not
- * in the next. What only a development build draws is hidden — the emulator
- * sign-in panel, the build's "dev" label, More's Design tokens; a touch is
+ * in the next. What only a development build draws is hidden — the dev
+ * sign-in row, the build's "dev" label, More's Design tokens; a touch is
  * drawn as a ripple and, on the computer, the pointer as a dot that moves to
  * what it clicks.
  */
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
+import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { HELP_VARIANTS, HELP_VIDEOS } from '@sabeel/shared';
-import { EMULATOR_PORTS, WEB_PORTS } from '../lib/ports.mjs';
-import { EMULATOR_PROJECT_ID } from '../lib/project.mjs';
 import { backButton } from '../lib/seed-world.mjs';
 import { TUTORIALS } from './tutorials.mjs';
 import { lineId } from './lines.mjs';
 
-const WEB = `http://127.0.0.1:${WEB_PORTS.e2e}/`;
+// The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
+const STACK = config(fileURLToPath(new URL('../..', import.meta.url)));
+const PORTS = ports(STACK);
+const EMULATOR_PROJECT_ID = STACK.emulators.project;
+
+const WEB = `http://127.0.0.1:${PORTS.web}/`;
 const REPO = resolve(new URL('../..', import.meta.url).pathname);
 /** Breath between one line and the next. */
 const GAP_MS = 450;
@@ -86,8 +92,8 @@ const seconds = (path) =>
  * starts, and the seed then meets an account half gone.
  */
 async function reseed() {
-  const fs = `http://127.0.0.1:${EMULATOR_PORTS.firestore}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents`;
-  const auth = `http://127.0.0.1:${EMULATOR_PORTS.auth}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/accounts`;
+  const fs = `http://127.0.0.1:${PORTS.firestore}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents`;
+  const auth = `http://127.0.0.1:${PORTS.auth}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/accounts`;
   for (let attempt = 1; ; attempt++) {
     for (const url of [fs, auth]) {
       const r = await fetch(url, { method: 'DELETE' });
@@ -137,10 +143,10 @@ function overlay(showPointer) {
       setTimeout(() => r.remove(), 700);
     }, true);
     const hide = () => {
+      // The dev sign-in row, by its testID.
+      const devRow = document.querySelector('[data-testid="dev-sign-in"]');
+      if (devRow) devRow.style.display = 'none';
       for (const el of document.querySelectorAll('div')) {
-        if (el.childElementCount === 0 && el.textContent === 'Emulator sign-in (dev only)' && el.parentElement) {
-          el.parentElement.style.display = 'none';
-        }
         // The build label, on the sign-in screen and at the foot of More.
         if (el.childElementCount === 0 && /(^|· )v\d+\.\d+\.\d+ · dev$/.test(el.textContent ?? '')) el.style.visibility = 'hidden';
         // More's development-only row, which nobody outside development is offered.

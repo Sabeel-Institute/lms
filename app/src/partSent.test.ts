@@ -17,7 +17,7 @@ describe('a part sent, or a sentence saying why not', () => {
   it('a dropped connection reads as one, not as the Java exception the phone throws', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const dropped = partSent(new AbortController().signal, async () => {
-      throw new TypeError('fetch failed: java.net.ConnectException: Failed to connect to /127.0.0.1:61307');
+      throw new TypeError('fetch failed: java.net.ConnectException: Failed to connect to /127.0.0.1:61327');
     });
     await expect(dropped).rejects.toThrow(SEND_DROPPED);
   });

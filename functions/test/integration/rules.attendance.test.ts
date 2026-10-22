@@ -65,7 +65,7 @@ const CLASS_MINE = 'classMine';
 const CLASS_THEIRS = 'classTheirs';
 /*
  * IDS THIS FILE ALONE USES. The rules pass runs with no Functions emulator
- * (scripts/test-emulator.sh), so a session another file wipes fires no
+ * (`npm run test:emulator`), so a session another file wipes fires no
  * reconcile into this file's attendance records.
  */
 const SESS_MINE = 'attSessMine';

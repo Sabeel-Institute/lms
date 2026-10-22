@@ -15,25 +15,33 @@ cd "$(dirname "$0")/.."
 # own world under ids nobody else uses; the walkthrough wipes Firestore and Auth
 # as it goes, which is harmless here because the emulators are this run's own.
 # To drive the walkthrough against a stack you already started (`npm run
-# emulators` and a dev server on 61311), run `node scripts/web-e2e.mjs`.
+# emulators` and a dev server on the `web` port), run `node scripts/web-e2e.mjs`.
+#
+# Ports, the emulator project and the JDK come from ci-tools
+# (`npx sabeel-ci ports`, ci-tools.json, `npx sabeel-ci jdk21`); no port is
+# stated here.
 
 SUITE="${1:-}"
 case "$SUITE" in
-  screens) WEB_PORT="${SWEEP_WEB_PORT:-61310}"; SUITE_SCRIPT=scripts/screens-e2e.mjs ;;
-  web) WEB_PORT=61311; SUITE_SCRIPT=scripts/web-e2e.mjs ;;
+  screens) PORT_NAME=sweep; SUITE_SCRIPT=scripts/screens-e2e.mjs ;;
+  web) PORT_NAME=web; SUITE_SCRIPT=scripts/web-e2e.mjs ;;
   *)
     echo "usage: bash scripts/e2e-stack.sh screens|web" >&2
     exit 2
     ;;
 esac
 
-# shellcheck source=scripts/lib/jdk21.sh
-source "$(dirname "$0")/lib/jdk21.sh"
+# The sweep on the block's `sweep` port and the walkthrough on its `web` port.
+# Two suites that grab the same port cannot be run side by side, and the
+# failure mode is not "port busy" — see the stale server note below.
+WEB_PORT=$(npx --no sabeel-ci ports "$PORT_NAME")
+if [ "$SUITE" = screens ] && [ -n "${SWEEP_WEB_PORT:-}" ]; then WEB_PORT=$SWEEP_WEB_PORT; fi
+PROJECT=$(node -p "require('./ci-tools.json').emulators.project")
 
-# The sweep on 61310 and the walkthrough on 61311 (`WEB_PORTS` in
-# scripts/lib/ports.mjs). Two suites that grab the same port cannot be run side
-# by side, and the failure mode is not "port busy" — see the stale server note
-# below.
+# The Firebase emulators need JDK 21 or later; the Android build keeps 17 as
+# the default `java`, so only this run is pointed at 21.
+JAVA_HOME=$(npx --no sabeel-ci jdk21)
+export JAVA_HOME PATH="$JAVA_HOME/bin:$PATH"
 
 # Repo-local, not /tmp. Three sibling checkouts share this machine and all three
 # used the same generic /tmp log names, so a concurrent run overwrote the log
@@ -48,10 +56,11 @@ mkdir -p "$(dirname "$WEB_LOG")"
 : > "$WEB_LOG"
 export E2E_BASE="http://127.0.0.1:${WEB_PORT}/" E2E_WEB="http://127.0.0.1:${WEB_PORT}/"
 
-bash scripts/free-emulator-ports.sh
+npx --no sabeel-ci free-emulator-ports
 
 # The functions emulator loads the BUILT bundle (functions/lib, per `main`), not
-# the TypeScript — see the same note in test-emulator.sh. Both suites need
+# the TypeScript, and the tests would pass against yesterday's triggers without
+# this. Both suites need
 # `getPlaybackUrl` for the player screen and `onUserCreate` to provision the
 # staff accounts they sign in as, so a stale lib here is a screen that renders
 # an error instead of a layout.
@@ -69,9 +78,9 @@ npm run build -w functions
 # missing lsof is indistinguishable from "no listener", and BOTH the stale-server
 # kill and the cleanup trap become silent no-ops. That is the two safety
 # mechanisms in this script switching off with nothing to show for it. Measured:
-# `lsof -ti:61310 ... | wc -l` returns 0 without the toolchain env sourced while
-# a server is demonstrably bound. `scripts/free-emulator-ports.sh` already uses
-# `ss` for this; deviating from it was the mistake.
+# `lsof -ti:<port> ... | wc -l` returns 0 without the toolchain env sourced
+# while a server is demonstrably bound. `sabeel-ci free-emulator-ports` uses `ss`
+# for this on Linux too.
 pids_on_port() {
   ss -lptn "sport = :$1" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u
 }
@@ -92,7 +101,7 @@ cleanup() {
   # starts happily — then a later one dies partway with a connection refused
   # against its own dev server. Sweeping here means an interrupted run cleans up
   # after itself instead of taxing the next one.
-  bash "$(dirname "$0")/free-emulator-ports.sh" >/dev/null 2>&1 || true
+  npx --no sabeel-ci free-emulator-ports >/dev/null 2>&1 || true
 }
 # EXIT alone, and NOT `EXIT INT TERM` — which is the opposite of the usual
 # advice and was measured rather than reasoned. Bash defers a TRAPPED signal
@@ -140,6 +149,6 @@ fi
 # status, and now the trap actually fires. The reference implementation this was
 # modelled on has the same bug.
 node scripts/with-media-store.mjs firebase emulators:exec \
-  --project demo-sabeel-recordings \
+  --project "$PROJECT" \
   --only firestore,auth,functions \
   "node ${SUITE_SCRIPT}"

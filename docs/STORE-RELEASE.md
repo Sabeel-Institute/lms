@@ -13,7 +13,7 @@ and ship: [DEPLOY.md](DEPLOY.md) and [IOS-BUILD.md](IOS-BUILD.md).
 
 | | |
 |---|---|
-| **iPhone** | TestFlight only. Builds 1, 2 and 3 of v0.1.2 are VALID; the group **Internal** gets every build automatically (`IOS-BUILD.md`, "TestFlight testers"); 19 staff invited to App Store Connect, not yet accepted. Next `expo.ios.buildNumber`: 4. App Store Connect app 6823374038, SKU `sabeel-lms`, bundle id `com.sabeelinstitute.lms`. Nothing submitted for review |
+| **iPhone** | TestFlight only. Builds 1, 2 and 3 of v0.1.2 are VALID; the group **Internal** gets every build automatically (`IOS-BUILD.md`, "TestFlight testers"); 19 staff invited to App Store Connect, not yet accepted. The build number is the version's code (0.2.1 is `"2001"`), which `npx sabeel-ci release` writes with the version. App Store Connect app 6823374038, SKU `sabeel-lms`, bundle id `com.sabeelinstitute.lms`. Nothing submitted for review |
 | **Android, Play** | App `com.sabeelinstitute.lms`. Play signs it with the LMS's own release key since 2026-10-16. No Play release yet: 0.1.2 (code 37) was refused, because Play generated its APKs with Google's earlier key, and sits as a draft on the internal track. The next version is the first Play release. Testers: the email list "Sabeel staff", ticked on Internal testing → Testers on 2026-10-16 (`DEPLOY.md`, step 6); staff get the join link from that page once a release is there |
 | **Android, APK** | v0.1.2 on this repo's GitHub releases, linked through Play internal testing `https://play.google.com/apps/internaltest/4701751467577150757` |
 | **Web** | `https://oursabeel-lms.web.app`, v0.1.2. Where accounts are made |
@@ -260,7 +260,7 @@ state no minimum age.
 Play's app signing key and upload key are both the LMS release key
 (`docs/SECRETS.md`), set on 2026-10-16 with Change key → "Export and upload a
 key from Java keystore" (PEPK). A Play install and the GitHub APK update each
-other. `npm run publish:play` completes a release only when the APKs Play
+other. `npx sabeel-ci publish-play` completes a release only when the APKs Play
 generated carry that key's certificate, which is why 0.1.2 (code 37) stays a
 draft.
 

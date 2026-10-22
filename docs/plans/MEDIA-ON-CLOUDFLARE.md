@@ -377,14 +377,16 @@ behaviour is checked against the real thing, not assumed.
 - Installed at `~/opt/seaweedfs-4.47/weed` (release asset checksum verified),
   found the same way as `~/opt/jdk-21`; documented in `docs/DEV-TOOLING.md`
   and the shared skill's bootstrap script when the harness first uses it.
-- The S3 API takes port **61307** (the Storage emulator's slot in this
-  checkout's block). SeaweedFS's internal master, volume, filer and gRPC
-  ports are pinned to **61320–61326**, bound to `127.0.0.1`, with the admin
-  UI, WebDAV, Iceberg and Lance servers and telemetry turned off.
-  `emulatorPorts.test.ts` asserts all of them like the others.
-- `scripts/test-emulator.sh`, `screens-e2e.sh` and `web-e2e.mjs` start it
-  with a throwaway data dir and a generated access key, create the bucket,
-  apply the same CORS file, and stop it after. It is ready in under a second.
+- The S3 API takes port **61327**, the block's `s3` extra in `ci-tools.json`.
+  SeaweedFS's internal master, volume, filer and gRPC ports are the extras
+  **61320–61326**, bound to `127.0.0.1`, with the admin UI, WebDAV, Iceberg
+  and Lance servers and telemetry turned off. `scripts/lib/media-store.mjs`
+  reads every one from ci-tools, like the emulators' own.
+- Every run of the Functions emulator (`npm run test:emulator`, `npm run
+  emulators`, both browser suites and the native flows) starts it
+  with a throwaway data dir and a generated access key, creates the bucket,
+  applies the same CORS file, and stops it after. It is ready in under a
+  second.
 - The Worker has its own tests with `@cloudflare/vitest-plugin`
   (Miniflare's local R2): token verification (forged, expired, wrong
   audience, wrong service account), host allowlist, key pattern, size

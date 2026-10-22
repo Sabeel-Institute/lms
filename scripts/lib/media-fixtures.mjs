@@ -3,7 +3,8 @@
  *
  * GENERATED rather than committed: a binary in git is exactly what this repo's
  * "never add a binary" rule exists to prevent, and ffmpeg reproduces each one
- * identically in a second. Each is made once and then reused.
+ * identically in a second. Each is made once, under MEDIA_FIXTURES (gitignored,
+ * and outside shots/, which the suites empty as they start), and then reused.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -12,13 +13,14 @@ import { crc32 } from 'node:zlib';
 
 /** The audio fixture's length. A substitute supplied via E2E_AUDIO must match it. */
 export const AUDIO_SECONDS = 720;
-export const AUDIO_FIXTURE = process.env.E2E_AUDIO ?? 'e2e-shots/test-lecture.m4a';
-export const VIDEO_FIXTURE = 'e2e-shots/test-lecture.mp4';
+export const MEDIA_FIXTURES = '.tmp/media';
+export const AUDIO_FIXTURE = process.env.E2E_AUDIO ?? `${MEDIA_FIXTURES}/test-lecture.m4a`;
+export const VIDEO_FIXTURE = `${MEDIA_FIXTURES}/test-lecture.mp4`;
 
 /**
  * ffmpeg, writing to the path its arguments end with — into a folder made
- * first. A fresh checkout has no e2e-shots/ until a suite makes one, and the
- * sweep never did: on CI its first film failed as if ffmpeg were missing.
+ * first. A fresh checkout has no fixture folder until a suite makes one, and
+ * the sweep never did: on CI its first film failed as if ffmpeg were missing.
  */
 const ffmpeg = (args) => {
   mkdirSync(dirname(args[args.length - 1]), { recursive: true });
@@ -39,8 +41,7 @@ export function ensureAudioFixture() {
   } catch {
     throw new Error(
       `Could not generate ${AUDIO_FIXTURE}. Install ffmpeg, or point E2E_AUDIO at a ` +
-        `${AUDIO_SECONDS}-second audio file (it must live OUTSIDE e2e-shots/, which the ` +
-        'browser suite wipes on startup).',
+        `${AUDIO_SECONDS}-second audio file.`,
     );
   }
 }
@@ -65,7 +66,7 @@ export function ensureVideoFixture() {
  * Apple's cannot all play, so the server refuses it. Needs an ffmpeg built
  * with libx265.
  */
-export const HEVC_FIXTURE = 'e2e-shots/test-hevc.mp4';
+export const HEVC_FIXTURE = `${MEDIA_FIXTURES}/test-hevc.mp4`;
 export function ensureHevcFixture() {
   if (existsSync(HEVC_FIXTURE)) return;
   ffmpeg([

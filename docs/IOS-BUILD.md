@@ -39,7 +39,7 @@ Xcode, write it down here so the next prebuild can redo it.
 |---|---|---|
 | `platforms` | includes `ios` | |
 | `ios.bundleIdentifier` | `com.sabeelinstitute.lms` | the Android package, and the Apple and Firebase registrations |
-| `ios.buildNumber` | integer string | Apple requires it to INCREASE on every upload of a version |
+| `ios.buildNumber` | the version's code, as a string (`"2001"` for 0.2.1) | Apple takes each number once and requires it to increase; `npx sabeel-ci release` writes it with the version, and `check-app` refuses any other |
 | `ios.supportsTablet` | `false` | phone first; no iPad layout has been checked |
 | `ios.googleServicesFile` | `./GoogleService-Info.plist` | gitignored, like `google-services.json` |
 | `ios.infoPlist.CFBundleDisplayName` | `Sabeel LMS` | the home screen truncates `Sabeel Institute LMS`; the same short name as the Android launcher (`APP_SHORT_NAME`) |
@@ -52,7 +52,8 @@ Xcode, write it down here so the next prebuild can redo it.
 | `@sentry/react-native` | registered BARE | org, project and token come from the build environment; given options it writes them into `ios/sentry.properties` |
 
 There is deliberately **no `ios.version`**: `expo.version` is the one version on
-every surface, and Apple's `X.Y.Z` shape is checked by `npm run check:ios`.
+every surface, and Apple's `X.Y.Z` shape is checked by `npm run check:ios`
+(`sabeel-ci check-ios-config`).
 
 ### Precompiled Expo modules need SDK-aligned versions
 
@@ -104,10 +105,10 @@ All gitignored. Without each, something builds and quietly does not work.
 | `app/.env.local` | `EXPO_PUBLIC_SENTRY_DSN_ANDROID`, which `app/src/sentry.ts` reads on every native platform (iOS reports to the same React Native Sentry project) | the app ships with crash reporting off |
 | `app/.env.sentry-build-plugin` | `SENTRY_ORG`, `SENTRY_PROJECT` (`sabeel-recording-android`), `SENTRY_AUTH_TOKEN`, `IOS_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, optional `ASC_KEY_PATH` | no dSYMs uploaded; no signing or upload |
 | `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` | the App Store Connect API key (NOT the APNs key) | `-allowProvisioningUpdates` cannot sign; no upload |
-| `~/.apns/AuthKey_<key id>.p8` | the APNs key, for `send-test-push.mjs --apple` (the deployed functions read theirs from Secret Manager) | no real send from the Mac |
+| `~/.apns/AuthKey_<key id>.p8` | the APNs key, for `npx sabeel-ci send-test-push --apple` (the deployed functions read theirs from Secret Manager) | no real send from the Mac |
 | `functions/.secret.local` | placeholders for the secrets the functions bind (see `docs/DEV-TOOLING.md`) | the functions emulator asks Secret Manager and logs 403s |
 
-`scripts/load-build-env.sh` reads `app/.env.sentry-build-plugin` (parsed, not
+`sabeel-ci build-ios` reads `app/.env.sentry-build-plugin` (parsed, not
 sourced; a variable already in the environment wins). Never print or commit any
 of these values.
 
@@ -128,19 +129,19 @@ fails; user-level tools go under `~/.local` and `~/opt`.
 |---|---|---|
 | Xcode, CocoaPods | system | every iOS build |
 | Firebase CLI, idb, idb_companion (a wrapper that execs the real binary), Maestro, uv, shellcheck | `~/.local/bin` | emulators, driving the simulator |
-| JDK 21 | `/opt/homebrew/opt/openjdk@21` — export `SR_JDK21_HOME` to it | the Firestore and Auth emulators |
+| JDK 21 | `/opt/homebrew/opt/openjdk@21`, which `npx sabeel-ci jdk21` finds by itself | the Firestore and Auth emulators |
 | SeaweedFS 4.47 `darwin_arm64` | `~/opt/seaweedfs-4.47/weed`, the path `scripts/lib/media-store.mjs` reads | the local media store |
 | ffmpeg (static arm64 build) | `~/.local/bin/ffmpeg` | the seed's video fixture |
 
-The port guards (`free-emulator-ports.sh`, `preflight-metro.mjs`) use `lsof` on
-macOS, where `ss` and `/proc` do not exist.
+The port guards (`sabeel-ci free-emulator-ports`, `preflight-metro`) use
+`lsof` on macOS, where `ss` and `/proc` do not exist.
 
 ## The simulator loop
 
 ```mermaid
 flowchart LR
   subgraph host["Mac host processes"]
-    EMU["Firebase emulators<br/>61300-61306"] --- S3["SeaweedFS<br/>127.0.0.1:61307"]
+    EMU["Firebase emulators<br/>61300-61309"] --- S3["SeaweedFS<br/>127.0.0.1:61327"]
     METRO["Metro :8081<br/>EXPO_PUBLIC_USE_EMULATORS=1"]
     SEED["seed:emulators<br/>(drives the web build)"] --> METRO
     SEED --> EMU
@@ -155,9 +156,10 @@ the signed media URLs as they are — there is no `adb reverse` step on iOS.
 
 ```bash
 # 1. Emulators + media store (long-running)
-SR_JDK21_HOME=/opt/homebrew/opt/openjdk@21 nohup npm run emulators > /tmp/lms-emulators.log 2>&1 &
-# 2. Metro, with the emulator flag and the build label (refuses if another project holds 8081)
-EXPO_PUBLIC_USE_EMULATORS=1 EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) \
+nohup npm run emulators > /tmp/lms-emulators.log 2>&1 &
+# 2. Metro, with the emulator flag; `start` stamps the build label and refuses
+#    if another project holds 8081
+EXPO_PUBLIC_USE_EMULATORS=1 \
   nohup npm run start -w @sabeel/app -- --port 8081 > /tmp/lms-metro.log 2>&1 &
 # 3. The sweep's world, left in place (needs Metro: staff are made by driving the web app)
 npm run seed:emulators
@@ -172,7 +174,7 @@ xcrun simctl launch booted com.sabeelinstitute.lms
   window through AppleScript, which a session with no GUI may not do. Judge the
   install, never the exit code.
 - **`EXPO_PUBLIC_*` in a debug build come from the environment that started
-  Metro.** If the emulator sign-in rows are missing, Metro was started without
+  Metro.** If the dev sign-in row is missing, Metro was started without
   the flag: restart it with `--clear`.
 - **On this Mac, Metro does not see an edit while it runs.** It answers a
   relaunch with "Bundled … (1 module)" and serves the file as it was when Metro
@@ -183,7 +185,7 @@ xcrun simctl launch booted com.sabeelinstitute.lms
   To prove what is served, fetch the bundle the app loads and grep it:
   `curl -s 'http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&minify=false' | grep -c '<new code>'`.
 - The student is `abd.al.rahman.ibn.muhammad.al.shinqiti@example.com` /
-  `HikamStudent1`; staff sign in through the "Emulator sign-in (dev only)" rows.
+  `HikamStudent1`; staff sign in through the "Dev sign-in (emulator only)" row.
   The seeded world has no student-visible recording with more than one version;
   a device pass that switches versions adds one through the Admin SDK first.
 
@@ -206,7 +208,7 @@ This project's specifics:
 
 | Check | How |
 |---|---|
-| A slow connection, Play while loading | `kill -STOP $(lsof -nP -ti TCP:61307 -sTCP:LISTEN)` freezes the media store; `kill -CONT` releases it |
+| A slow connection, Play while loading | `kill -STOP $(lsof -nP -ti TCP:"$(npx sabeel-ci ports s3)" -sTCP:LISTEN)` freezes the media store; `kill -CONT` releases it |
 | Killed mid-play | `xcrun simctl terminate booted com.sabeelinstitute.lms`, relaunch, reopen the recording |
 | The element inspector left on by a stray `i` | with the app stopped: `D=$(xcrun simctl get_app_container booted com.sabeelinstitute.lms data)`, then `plutil -replace RCTDevMenu.showInspector -bool NO "$D/Library/Preferences/com.sabeelinstitute.lms.plist"` |
 
@@ -243,37 +245,40 @@ and a tap inside the app.
 
   ```bash
   npm run build -w @sabeel/shared
-  APNS_KEY_FILE=~/.apns/AuthKey_<key id>.p8 \
-    node scripts/send-test-push.mjs --apple development <token> <path>
+  npx sabeel-ci send-test-push --apple development <token> path=<path>
   ```
 
 With the app open the banner shows (the handler in `push.ts`) and a tap on it
 opens the path. A tap from outside the app cannot be driven here (above).
 
-## Releasing to TestFlight
+## Building the release
 
-`scripts/build-ios.sh` archives, exports and uploads with no Xcode UI. GitHub
-runs it for every release ("Builds on GitHub"); on the Mac it runs by hand.
+`npm run build:ios` (`sabeel-ci build-ios`) archives and exports a signed App
+Store `.ipa` to `build/ios/export` with no Xcode UI, and never uploads.
+GitHub runs it for every build ("Builds on GitHub"), and TestFlight takes
+only the iOS workflow's build of the release tag; on the Mac it runs by hand,
+to check a release builds there.
 
 ```bash
 npm run build:ios -- --check        # every gate, builds nothing, two seconds
-npm run build:ios -- --no-upload    # archive + export an .ipa to build-artifacts/ios/export
-npm run build:ios                   # archive, export, upload to App Store Connect
+npm run build:ios                   # archive + export an .ipa to build/ios/export
 ```
 
 Its gates, in order: macOS with Xcode and CocoaPods; **no
-`EXPO_PUBLIC_USE_EMULATORS` in the shell** (a release built from the dev loop's
-terminal would talk to 127.0.0.1); `npm run check:ios`; `IOS_TEAM_ID`; the
-Sentry variables (a warning); the App Store Connect key, resolved for every
-build because `-allowProvisioningUpdates` signs through it; and a signing
-keychain that can actually sign, proved by signing a throwaway binary.
+`EXPO_PUBLIC_USE_EMULATORS` in the shell or in `app/.env.local`** (a release
+built from the dev loop's terminal would talk to 127.0.0.1); `npm run
+check:ios`; `IOS_TEAM_ID`; the Sentry variables (a warning); the App Store
+Connect key, resolved for every build because `-allowProvisioningUpdates`
+signs through it; and a signing keychain that can actually sign, proved by
+signing a throwaway binary.
 
-`npm run check:ios` (`scripts/check-ios-config.mjs`) holds the plist to
-`app.json` (bundle id) and to `FIREBASE_PROJECT_ID` in `@sabeel/shared`, the
-sign-in and Sentry plugins bare, background playback on, export compliance
-answered, `expo.version` in Apple's shape and equal to `versionName` in
-`app/android/app/build.gradle`, an integer `buildNumber`, the icon 1024x1024
-with no alpha channel, the native DSN present, and the privacy manifest.
+`npm run check:ios` (`sabeel-ci check-ios-config`) holds the plist to
+`app.json` (bundle id) and to the Firebase project in `.firebaserc`, the
+sign-in and Sentry plugins bare, background playback on
+(`ios.backgroundPlayback` in `ci-tools.json`), export compliance answered,
+`expo.version` in Apple's shape with no `ios.version` beside it, a
+whole-number `buildNumber`, the icon 1024x1024 with no alpha channel, the
+native DSN present, and the privacy manifest.
 
 - **Over ssh the login keychain is locked**, and the archive would die at its
   first framework with `errSecInternalComponent`. Unlock it, typing the password
@@ -282,47 +287,51 @@ with no alpha channel, the native DSN present, and the privacy manifest.
   are two sessions: an unlock typed in one leaves the keychain locked in the
   other (seen: `errSecInternalComponent` in a session on ttys002 while another
   on ttys001 had just unlocked it). Unlock in the session that builds.
-- **The build label** is `EXPO_PUBLIC_COMMIT`, inlined when the archive's bundle
-  phase runs; a dirty tree stamps it with `+`. Commit first, then build.
-- **`ios.buildNumber` must increase on every upload**, even of the same
-  version. `expo.version` changes only with a release, on every surface at once.
+- **The build label** is `app/src/build-info.ts`, which `build-ios` stamps
+  with the version and HEAD's commit just before it archives; a dirty tree
+  stamps it with `+`. Commit first, then build.
+- **The build number is the version's code**, so each version reaches
+  TestFlight once. `expo.version` changes only with a release, on every
+  surface at once, and `npx sabeel-ci release` writes the build number with
+  it.
 - **The App Store Connect app record must exist** before an upload has anywhere
   to go. TestFlight is a tab inside it.
 
 ## Builds on GitHub
 
 `.github/workflows/ios.yml` builds the app on GitHub's macOS runners, which
-are free and unlimited for a public repo. Builds run automatically on main pushes. To build manually or upload to TestFlight:
+are free and unlimited for a public repo. Builds run automatically on main
+pushes. To build by hand, or to upload a release to TestFlight:
 
 ```bash
-gh workflow run ios.yml                       # build a signed .ipa
-gh workflow run ios.yml -f testflight=true    # build it, then upload it to TestFlight
+gh workflow run ios.yml                                   # build a signed .ipa
+gh workflow run ios.yml --ref vX.Y.Z -f testflight=true   # build the release, upload it
 gh run watch <run id>
 ```
 
-or Actions -> iOS -> Run workflow, or the REST API:
-`POST /repos/Sabeel-Institute/lms/actions/workflows/ios.yml/dispatches` with
-`{"ref": "main", "inputs": {"testflight": "true"}}`.
+or Actions -> iOS -> Run workflow, choosing the tag. An upload is a release,
+so it waits for Faisal's go-ahead like any other.
 
 Two jobs. **build** installs, writes the gitignored files from secrets,
 imports the signing identity into a keychain of its own, installs the App
-Store profile, and runs `build-ios.sh --no-upload` with manual signing. It
-needs no new build number. Its artifacts, kept 14 days: the `.ipa`, and a
-build record (the JavaScript source map and the `Podfile.lock` it resolved).
-**testflight**, only with `testflight=true`, asks App Store Connect whether
-the build number is free (`scripts/testflight-check.mjs`; if not, it stops in
-seconds: raise `expo.ios.buildNumber`, commit, run again), has Apple validate
-the `.ipa`, and uploads it. The Internal group gets it by itself ("TestFlight
-testers").
+Store profile, and runs `sabeel-ci build-ios` with manual signing. It uploads
+nothing. Its artifacts, kept 14 days: the `.ipa`, and a build record (the
+JavaScript source map and the `Podfile.lock` it resolved). **testflight**,
+only with `testflight=true`, asks first (`sabeel-ci testflight-check`): the
+commit must be the one tagged `v<version>` on GitHub, so it runs on the tag,
+never on main; and the build number must be one App Store Connect has not
+taken. Either refusal stops it in seconds. Then Apple validates the `.ipa`
+and it uploads. The Internal group gets it by itself ("TestFlight testers").
 
-**What the build job checks.** Before compiling, `build-ios.sh` refuses a
+**What the build job checks.** Before compiling, `build-ios` refuses a
 profile that is not installed, is for another app (Kanban's shares the
 certificate), has expired, or does not carry the certificate of the keychain's
 Apple Distribution identity. After exporting, the workflow refuses an `.ipa`
-without the production push entitlement, with `get-task-allow`, signed with
-another profile, or without this commit's label in its JavaScript.
+for another bundle id, without the production push entitlement, with
+`get-task-allow`, signed with another profile, or without this commit's stamp
+in its JavaScript.
 
-**The pods are pinned** by `app/Podfile.lock`, which `build-ios.sh` copies into
+**The pods are pinned** by `app/Podfile.lock`, which `build-ios` copies into
 the generated `app/ios/` before `pod install`, on the Mac and on GitHub alike.
 Without it every clean checkout resolved the third-party pods afresh, and the
 Mac, which kept an older lock, built other versions than GitHub from the same
@@ -386,8 +395,9 @@ outside the team through TestFlight.
 
 ## Open on iOS
 
-- **The update gate** compares `expo.android.versionCode` and sends an outdated
-  build to `DOWNLOAD_PAGE_URL`, the Play internal testing track. What a store build
+- **The update gate** compares the build's versionCode (the version's code,
+  which the iPhone build carries too) and sends an outdated build to
+  `DOWNLOAD_PAGE_URL`, the Play internal testing track. What a store build
   should do instead is decided in `docs/STORE-RELEASE.md`.
 - **The rich-text answer keeps the keyboard up.** Tapping outside the field
   does not close it on iOS (there is no Back key to do it), though the screen

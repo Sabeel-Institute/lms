@@ -1,13 +1,13 @@
-# Staff on Android: the emulator sign-in row, the day's queue, a session's
+# Staff on Android: the dev sign-in row, the day's queue, a session's
 # register, and the institute's lists. Seeded by
-# scripts/seed-emulator-world.mjs; run by scripts/native-e2e.sh.
+# scripts/seed-emulator-world.mjs; run by `npx sabeel-ci native-e2e`.
 appId: ${APP_ID}
 name: Staff work through the day
 ---
 - launchApp:
     clearState: true
 - extendedWaitUntil:
-    visible: "Emulator sign-in \\(dev only\\)"
+    visible: "Dev sign-in \\(emulator only\\)"
     timeout: 180000
 - tapOn: "as faisal.shah \\(first admin\\)"
 - extendedWaitUntil:

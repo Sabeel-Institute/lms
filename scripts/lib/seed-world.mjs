@@ -22,8 +22,8 @@
  */
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
-
-import { EMULATOR_PROJECT_ID as PROJECT } from './project.mjs';
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
 import { putLocalObject } from './media-store.mjs';
 import { VIDEO_FIXTURE, ensureVideoFixture } from './media-fixtures.mjs';
 import {
@@ -39,6 +39,9 @@ import {
 
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
+
+/** The emulators' demo project, from ci-tools.json. */
+const PROJECT = config(fileURLToPath(new URL('../..', import.meta.url))).emulators.project;
 
 const DAY = 86_400_000;
 const now = Date.now();

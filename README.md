@@ -58,7 +58,8 @@ and Google Play internal testing. Not started: admin backend stats. See
 ```bash
 npm ci
 npm run lint && npm run typecheck && npm run knip && npm test
-npm run test:emulator        # needs JDK 21
+npx sabeel-ci check-app      # what the shared CI tooling assumes of this repo
+npm run test:emulator        # needs JDK 21 and SeaweedFS (docs/DEV-TOOLING.md)
 
 # End-to-end flow walkthrough — starts its own emulators and dev server
 npm run test:e2e
@@ -71,7 +72,7 @@ npm run test:screens
 npm run web:export -w @sabeel/app
 
 # Android (AVD tb_emu)
-scripts/emulator.sh headless
+npx sabeel-ci emulator headless
 cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo run:android
 ```
 
@@ -83,7 +84,9 @@ functions/         Cloud Functions (TS, nodejs22, us-central1)
 packages/shared/   Types and constants shared by app, functions and tests
 firestore.rules    Scoped reads; every structural write goes through a callable
 cloudflare/        The Zoom copier Worker and the R2 media bucket's settings
-scripts/           Emulator, media store, dead-code and text-integrity tooling
+scripts/           Browser suites, seeds, migrations, the local media store
+ci-tools.json      This app's settings for the shared CI, release and device
+                   tooling (Sabeel-Institute/ci-tools, `npx sabeel-ci`)
 ```
 
 Media lives in a private Cloudflare R2 bucket. Clients never hold a permanent

@@ -1,3 +1,5 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/native.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: Native
 
 on:
@@ -7,11 +9,9 @@ on:
   pull_request:
     paths:
       - maestro/**
-      - scripts/native-e2e.sh
       - scripts/seed-emulator-world.mjs
-      - scripts/ci-avd.sh
-      - scripts/install-maestro.sh
-      - scripts/ios-sim-build.sh
+      - ci-tools.json
+      - package-lock.json
       - .github/workflows/native.yml
   workflow_dispatch:
 
@@ -38,6 +38,19 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -46,11 +59,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Android SDK packages, with retries
-        run: bash scripts/ci-android-sdk.sh
+        run: sabeel-ci ci-android-sdk
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@^15
+      # The app's Firebase app files, where it commits none: the pre-merge build's
+      # demo ones, which the debug build only needs to compile against.
       - name: Placeholder Firebase app configuration
-        run: node scripts/ci-premerge.mjs prepare
+        run: if [ ! -f app/google-services.json ]; then sabeel-ci ci-premerge prepare; fi
       - name: Install ffmpeg
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Install SeaweedFS
@@ -61,19 +76,18 @@ jobs:
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
       - name: Emulator secret placeholders
+        env:
+          SECRETS: '{"SENTRY_DSN":"disabled","R2_READ_KEY_ID":"unused-in-emulator","R2_READ_SECRET":"unused-in-emulator","R2_WRITE_KEY_ID":"unused-in-emulator","R2_WRITE_SECRET":"unused-in-emulator","APNS_KEY":"unused-in-emulator"}'
         run: |
-          printf '%s\n' SENTRY_DSN=disabled R2_READ_KEY_ID=unused-in-emulator \
-            R2_READ_SECRET=unused-in-emulator R2_WRITE_KEY_ID=unused-in-emulator \
-            R2_WRITE_SECRET=unused-in-emulator APNS_KEY=unused-in-emulator \
-            > functions/.secret.local
+          node -e 'const secrets = JSON.parse(process.env.SECRETS); require("node:fs").writeFileSync("functions/.secret.local", Object.entries(secrets).map(([name, value]) => name + "=" + value + "\n").join(""))'
       - name: Install Chromium for the seed
         run: npx playwright install --with-deps chromium
       - name: Boot an Android emulator
-        run: bash scripts/ci-avd.sh
+        run: sabeel-ci ci-avd
       - name: Install Maestro
-        run: bash scripts/install-maestro.sh
+        run: sabeel-ci install-maestro
       - name: Native flows
-        run: bash scripts/native-e2e.sh
+        run: sabeel-ci native-e2e
       - name: Screens, Maestro's report and logs
         if: always()
         uses: actions/upload-artifact@v7
@@ -94,12 +108,27 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
+      # The app's Firebase app files, where it commits none: the pre-merge build's
+      # demo ones, which the debug build only needs to compile against.
       - name: Placeholder Firebase app configuration
-        run: node scripts/ci-premerge.mjs prepare
+        run: if [ ! -f app/google-services.json ]; then sabeel-ci ci-premerge prepare; fi
       - name: Install dependencies
         run: npm ci
       - name: Install Firebase CLI
@@ -114,17 +143,16 @@ jobs:
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
       - name: Emulator secret placeholders
+        env:
+          SECRETS: '{"SENTRY_DSN":"disabled","R2_READ_KEY_ID":"unused-in-emulator","R2_READ_SECRET":"unused-in-emulator","R2_WRITE_KEY_ID":"unused-in-emulator","R2_WRITE_SECRET":"unused-in-emulator","APNS_KEY":"unused-in-emulator"}'
         run: |
-          printf '%s\n' SENTRY_DSN=disabled R2_READ_KEY_ID=unused-in-emulator \
-            R2_READ_SECRET=unused-in-emulator R2_WRITE_KEY_ID=unused-in-emulator \
-            R2_WRITE_SECRET=unused-in-emulator APNS_KEY=unused-in-emulator \
-            > functions/.secret.local
+          node -e 'const secrets = JSON.parse(process.env.SECRETS); require("node:fs").writeFileSync("functions/.secret.local", Object.entries(secrets).map(([name, value]) => name + "=" + value + "\n").join(""))'
       - name: Install Chromium for the seed
         run: npx playwright install chromium
       - name: Install Maestro
-        run: bash scripts/install-maestro.sh
+        run: sabeel-ci install-maestro
       - name: Native flows on the iOS simulator
-        run: bash scripts/native-e2e.sh --ios
+        run: sabeel-ci native-e2e --ios
       - name: Screens, Maestro's report and logs
         if: always()
         uses: actions/upload-artifact@v7

@@ -36,8 +36,8 @@ export const EMULATOR_HOST = Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1
  * var falls back to a shared default and silently connects to a sibling repo's
  * emulator, which reads and writes happily.
  *
- * Kept in step with `firebase.json`, `scripts/lib/ports.mjs` and the shell
- * sweeps by `functions/test/unit/emulatorPorts.test.ts`.
+ * Kept in step with `ci-tools.json`'s port block and `firebase.json` by
+ * `npx sabeel-ci check-app`.
  */
 export const EMULATOR_PORTS = {
   auth: 61302,

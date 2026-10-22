@@ -1,24 +1,23 @@
-import appConfig from '../app.json';
+import { versionCodeOf } from '@sabeel/shared';
+import { BUILD_INFO } from './build-info';
 
 /**
  * Build identity shown on the sign-in screen (see SignInScreen).
  *
  * Faisal's standing rule: every app surfaces its version and build commit on the
  * login screen, so a screenshot of a problem always says which build produced
- * it. The version is the single source of truth in `app.json`; the commit is
- * injected at build time via `EXPO_PUBLIC_COMMIT` (Metro inlines it into the
- * bundle) and falls back to `dev` for a local bundle that skipped the release
- * path. Keep both wired whenever this app is rebuilt or exported.
+ * it. Both come from `build-info.ts`, which `sabeel-ci build-info` writes from
+ * `app.json`'s version and HEAD's commit at every build (`prepare`, `start`,
+ * `android`, `build-web`, `build-aab`, `build-ios`), with a `+` after the commit
+ * when the tree held uncommitted changes. It is gitignored: a committed copy
+ * would name the commit before its own.
  */
-const APP_VERSION: string = appConfig.expo.version;
-const APP_COMMIT: string = process.env.EXPO_PUBLIC_COMMIT ?? 'dev';
-export const BUILD_LABEL = `v${APP_VERSION} · ${APP_COMMIT}`;
+export const BUILD_LABEL = `v${BUILD_INFO.version} · ${BUILD_INFO.commit}`;
 
 /**
- * The Android `versionCode` this bundle was built as — what the update gate
- * compares with the institute's floor. Read from the manifest rather than a
- * native module: `functions/test/unit/appVersion.test.ts` holds it equal to
- * the gradle value that actually ends up in the APK, and a release build
- * bundles its JS with its own APK, so the two cannot drift in what ships.
+ * The `versionCode` this bundle was built as — what the update gate compares
+ * with the institute's floor. Computed from the version as build.gradle
+ * computes the APK's, and the iPhone build carries the same number, so the
+ * bundle and the binary it ships in cannot disagree.
  */
-export const BUILD_VERSION_CODE: number = appConfig.expo.android.versionCode;
+export const BUILD_VERSION_CODE: number = versionCodeOf(BUILD_INFO.version);

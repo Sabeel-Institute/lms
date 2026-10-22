@@ -8,10 +8,16 @@
  * on a session; being marked EXCUSED is what opens a recording to a student and
  * requires them to play it, until the session's due date.
  */
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
+import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { chromium } from 'playwright';
-import { WEB_PORTS } from './lib/ports.mjs';
 
-const WEB = `http://127.0.0.1:${WEB_PORTS.e2e}/`;
+// The dev server's port, from ci-tools.json (`npx sabeel-ci ports web`).
+const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
+const PORTS = ports(STACK);
+
+const WEB = `http://127.0.0.1:${PORTS.web}/`;
 const DIR = 'docs/manual/img';
 const PHONE = { width: 390, height: 844 };
 const DESKTOP = { width: 1280, height: 900 };
@@ -31,8 +37,9 @@ const home = async (p) => { await p.goto(WEB, { waitUntil: 'domcontentloaded' })
 /**
  * How far down to cut a capture, when something below that point must not ship.
  *
- * The sign-in screen carries the emulator dev-sign-in panel ("as faisal.shah
- * (first admin)", "as manager", "as outsider (refused)"), because these
+ * The sign-in screen carries the dev sign-in row ("Dev sign-in (emulator
+ * only)": "as faisal.shah (first admin)", "as manager", "as outsider
+ * (refused)"), because these
  * shots are taken against a DEV server — that panel is what every suite here
  * uses to reach an authenticated screen at all. It is also the first figure in
  * a manual written for institute staff, so it cannot appear in it. Cutting
