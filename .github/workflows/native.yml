@@ -66,8 +66,15 @@ jobs:
       # demo ones, which the debug build only needs to compile against.
       - name: Placeholder Firebase app configuration
         run: if [ ! -f app/google-services.json ]; then sabeel-ci ci-premerge prepare; fi
+      # Without its recommends: the runners' apt mirror has taken 41 minutes over
+      # the full set. apt's own timeouts turn a stalled download into a failure,
+      # and the install runs once more (see ci.yml's browser job).
       - name: Install ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+        timeout-minutes: 15
+        run: |
+          echo 'Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
+          install() { sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg; }
+          install || { sleep 15; install; }
       - name: Install SeaweedFS
         run: |
           curl -fsSLo "$RUNNER_TEMP/weed.tgz" https://github.com/seaweedfs/seaweedfs/releases/download/4.47/linux_amd64.tar.gz
@@ -75,10 +82,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/seaweedfs"
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
-      # An apt mirror can hang: a stuck attempt is stopped and tried once more.
+      # An apt mirror can stall a download: apt's own timeouts make it fail
+      # instead, and the install runs once more (see ci.yml's browser job).
       - name: Install Chromium for the seed
-        timeout-minutes: 12
-        run: timeout 300 npx playwright install --with-deps chromium || timeout 300 npx playwright install --with-deps chromium
+        timeout-minutes: 15
+        run: |
+          echo 'Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
+          npx playwright install --with-deps chromium || { sleep 15; npx playwright install --with-deps chromium; }
       - name: Boot an Android emulator
         run: sabeel-ci ci-avd
       - name: Install Maestro
