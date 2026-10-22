@@ -19,7 +19,7 @@ emulator — not your diff.
 | Command | What it does |
 |---|---|
 | `npm run lint` | ESLint, then `check:version` (`app.json`'s version is store-legal and Android's code follows from it) and `check:text` (no source file holds a byte that makes tools treat it as binary) |
-| `npx sabeel-ci check-app` | What the shared tooling assumes of this repo: `ci-tools.json`, the rendered workflows, secrets read only in the release environment, `.gitignore`, the version written once with its deploy-log entry, the emulator ports and project. CI runs it first |
+| `npx sabeel-ci check-app` | What the shared tooling assumes of this repo: `ci-tools.json`, the rendered workflows, secrets read only in the release environment, `.gitignore`, the version written once with its deploy-log entry, the emulator ports and project, Sentry's setup, the Hosting site and Android's release signing and notification channel. CI runs it first |
 | `npm run typecheck` | Builds `@sabeel/shared` first, then typechecks every workspace — **including the functions tests** (`functions/tsconfig.test.json`) |
 | `npm test` | Vitest unit tests (shared, functions and app), no emulators needed |
 | `npm run test:emulator` | `sabeel-ci test-emulator`. Two passes: the rules suites (`test:emulator:rules` in `functions/`) against Firestore + Auth alone, then the integration suites (`test:emulator:functions`) against Firestore + Auth + Functions and the local media store (SeaweedFS) |
@@ -32,6 +32,7 @@ emulator — not your diff.
 | `npm run test:e2e` | The Playwright flow walkthrough — starts its own emulators and dev server (see below) |
 | `npm run test:screens` | The multi-width layout sweep — the same runner (see below) |
 | `npm run web:export -w @sabeel/app` | The web bundle that actually ships |
+| `npx sabeel-ci render-manual` | `docs/USER-MANUAL.md` to `docs/USER-MANUAL.pdf`, with the logo (`app/assets/logo.png`), `app.json`'s version and this month on the cover; needs `uv` and `google-chrome`. `sabeel-ci release` runs it |
 | `npx sabeel-ci emulator headless` | Boots the `tb_emu` AVD (or `SABEEL_AVD`) with no window; refuses to boot it twice and names who runs it |
 | `npm run check:queries` | **Against the REAL project.** Every query shape the app sends, checked for a missing composite index. With `CHECK_ACCESS_TOKEN` set it runs over REST as that user token instead of Application Default Credentials (see `docs/DEPLOY.md`) |
 | `npm run check:documents` | **Against the REAL project, read-only.** Every live document the app reads, checked against the fields its type requires (`documentShapes` in `@sabeel/shared`), with the screens' helpers run on each. Fails on a document that lacks a required field (migrate it) or that a helper throws on, which includes an audit entry under an action the audit screen has no words for (`AUDIT_ACTION_LABELS`). Same `CHECK_ACCESS_TOKEN` as `check:queries` |
@@ -186,8 +187,9 @@ audit lie, and an audit that reports nothing is worse than no audit.
 > Scripts state no port, comments included: they read them from ci-tools
 > (`npx sabeel-ci ports <name>` in shell; `ports(config(root))` from
 > `@sabeel-institute/ci-tools/lib/ports.mjs` and `lib/config.mjs` in Node),
-> and the emulator project from `config(root).emulators.project`. Two files
-> cannot, and state them: `firebase.json`, which the emulators bind, and
+> and the emulator project, `demo-sabeel-lms`, from
+> `emulatorProject(config(root))` (the same module) or `npx sabeel-ci ports
+> --project`. Two files cannot, and state them: `firebase.json`, which the emulators bind, and
 > `app/src/env.ts`, inlined into the bundle. `npx sabeel-ci check-app` holds
 > both to the block, and fails on a port of the block, or a Firebase default,
 > written anywhere in `scripts/` or `package.json`.
@@ -279,13 +281,14 @@ test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
 - **Keys:** three identities. An admin used only to create the bucket, and the
   read and write keys the functions use, with the same split as the two R2
   tokens. Their values, the endpoint and the bucket are in
-  `functions/.env.demo-sabeel-recordings`, the file the functions emulator
-  reads, so the store and the code agree by construction.
-- **`functions/.secret.local`** must name every secret the functions bind, or
-  the emulator asks Secret Manager for the demo project's and logs a 403:
-  `SENTRY_DSN=disabled` and `R2_READ_KEY_ID`, `R2_READ_SECRET`,
-  `R2_WRITE_KEY_ID`, `R2_WRITE_SECRET`, `APNS_KEY` set to anything (they are
-  unused under the emulator). CI writes the same file.
+  `functions/.env.demo-sabeel-lms`, the file the functions emulator reads,
+  so the store and the code agree by construction.
+- **`functions/.secret.local`** names every secret the functions bind, or the
+  emulator would ask Secret Manager for the demo project's and log a 403.
+  Nobody writes it by hand: ci-tools writes it from `ci.emulatorSecrets` in
+  `ci-tools.json` (placeholders, unused under the emulator) on every
+  `npm run emulators` and `npm run test:emulator`, and `scripts/e2e-stack.sh`
+  runs `npx sabeel-ci emulator-secrets` before it starts its own.
 - **Android:** signed URLs name `127.0.0.1:61327`, and the host is signed, so
   `10.0.2.2` cannot be substituted. `adb reverse tcp:61327 tcp:61327` lets the
   AVD reach it at the address the URL names; the native flows do it themselves
@@ -633,16 +636,16 @@ promote (409 = already an admin, fine).
 `npx sabeel-ci native-e2e` runs the Maestro flows in `maestro/` against the
 debug build: it stamps and builds the APK and installs it, starts the
 emulators and the media store, seeds the world the device pass uses
-(`seed-emulator-world.mjs`, `native.seed` in `ci-tools.json`, through a web
-dev server on the `web` port, 61310, that runs for the seed alone:
-`native.seedWeb`), maps the media store's port into the emulator (`adb
-reverse tcp:61327`: `native.reversePorts`), serves the JavaScript from Metro
-on 8081 with `EXPO_PUBLIC_USE_EMULATORS=1`, and runs every flow, or the one
-you name (`npx sabeel-ci native-e2e maestro/student.yaml`). It needs one
-booted emulator (`npx sabeel-ci emulator headless`) and installs the pinned
-Maestro itself (`sabeel-ci install-maestro`). Screenshots, Maestro's JUnit
-report and the emulator, web, Metro, seed and device logs land in
-`shots/native/`. It refuses a held 8081 or 61310.
+(`scripts/seed-emulators.mjs`, through a web dev server on the `web` port,
+61310, that runs for the seed alone: `native.seedWeb`), maps the media store's
+port into the emulator (`adb reverse tcp:61327`: `native.reversePorts`),
+serves the JavaScript from Metro on 8081 with `EXPO_PUBLIC_USE_EMULATORS=1`,
+and runs every flow, or the one you name (`npx sabeel-ci native-e2e
+maestro/student.yaml`). It needs one booted emulator (`npx sabeel-ci emulator
+headless`) and installs the pinned Maestro itself (`sabeel-ci
+install-maestro`). Screenshots, Maestro's JUnit report and the emulator, web,
+Metro, seed and device logs land in `shots/native/`. It refuses a held 8081 or
+61310.
 
 - **`maestro/student.yaml`**: a password sign-in with Next and Go, a recording
   that plays, keeps time for 15 s behind Home and is still playing when the app

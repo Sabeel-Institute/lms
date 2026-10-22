@@ -24,8 +24,81 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The build's source maps to Sentry before the site goes live, so a crash on
+  # it is readable from the first one. The Sentry token lives in release-build,
+  # like every build secret; this job reads nothing else.
+  sourcemaps:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository_owner == 'Sabeel-Institute' && inputs.deploy
+    environment: release-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    env:
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+    steps:
+      - name: Only the owner releases
+        env:
+          OWNER_ID: ${{ vars.RELEASE_OWNER_ID }}
+          OWNER_LOGIN: ${{ vars.RELEASE_OWNER_LOGIN }}
+          ACTOR_ID: ${{ github.actor_id }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          if [ -z "$OWNER_ID" ] || [ "$ACTOR_ID" != "$OWNER_ID" ] || [ "$TRIGGERING_ACTOR" != "$OWNER_LOGIN" ]; then
+            echo "::error::Only the organization owner starts or re-runs a release; this run is $TRIGGERING_ACTOR's."
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
+      - name: Verify build provenance and successful CI
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sabeel-ci ci-platform resolve-build
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.build.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-hosting-${{ steps.build.outputs.sha }}
+          run-id: ${{ steps.build.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/hosting-artifact
+      - name: Install checksum-pinned sentry-cli
+        env:
+          SENTRY_CLI: ${{ runner.temp }}/sentry-cli
+        run: |
+          curl --fail --silent --show-error --location --retry 3 https://github.com/getsentry/sentry-cli/releases/download/2.58.6/sentry-cli-Linux-x86_64 --output "$SENTRY_CLI"
+          echo "36b689311b399d9332950d84f4299aee682d2d290a770a77372b30a74f7e7add  $SENTRY_CLI" | sha256sum --check
+          chmod +x "$SENTRY_CLI"
+          echo "SENTRY_CLI=$SENTRY_CLI" >> "$GITHUB_ENV"
+      - name: Upload the build's source maps to Sentry
+        env:
+          BUILD_ENV: ${{ secrets.BUILD_ENV }}
+        run: sabeel-ci ci-platform sourcemaps
+
   deploy:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository_owner == 'Sabeel-Institute'
+    needs: sourcemaps
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository_owner == 'Sabeel-Institute' && (needs.sourcemaps.result == 'success' || !inputs.deploy) }}
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 20

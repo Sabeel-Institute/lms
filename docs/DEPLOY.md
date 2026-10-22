@@ -172,7 +172,8 @@ every Sabeel app. In order:
    It works from origin/main in a worktree of its own, leaving this checkout
    as it is: the version and the iOS build number in `app.json`, the line
    under the manual's title (`docs/USER-MANUAL.md`) and `docs/USER-MANUAL.pdf`
-   rendered with it, and the entry added to the deploy log, committed as
+   rendered with it (`npx sabeel-ci render-manual`, which needs `uv` and
+   `google-chrome`), and the entry added to the deploy log, committed as
    `chore(release): vX.Y.Z` on `release/vX.Y.Z`, pushed, and the pull request
    into main opened. It refuses a version that is not X.Y.Z, or whose code is
    not above main's and every released tag's: Android refuses an upgrade that
@@ -187,9 +188,11 @@ every Sabeel app. In order:
    It refuses anything but a clean main that matches origin, then:
    - builds the signed Play bundle (`sabeel-ci build-aab`: the version check,
      a deploy-log entry for the version, the native Sentry DSN in
-     `app/.env.local`, the build stamp, `gradlew bundleRelease`, and no
-     unsigned or debug-signed bundle), with the default **JDK 17** and no
-     emulator flag in the shell;
+     `app/.env.local`, the Sentry token in `app/.env.sentry-build-plugin`, the
+     build stamp, `gradlew bundleRelease`, whose `sentry.gradle` uploads the
+     bundle's source map to `ci-tools.json`'s native project, and no unsigned
+     or debug-signed bundle), with the default **JDK 17** and no emulator flag
+     in the shell;
    - runs every gate of `sabeel-ci publish-play --check`, Play's permission
      included;
    - makes the arm64-v8a and universal APKs from the same commit, signed with
@@ -237,24 +240,21 @@ every Sabeel app. In order:
 4. **Web:** Deploy Web, with the Web workflow's build of the same commit, as
    `--ship` prints it:
    `gh workflow run web-deploy.yml -f build_run_id=<the Web run> -f deploy=true`
-   (`docs/GITHUB-ACTIONS.md`). From this machine instead, `firebase deploy
-   --only hosting`: the predeploy (`scripts/web-release.mjs`) exports the
-   production bundle with source maps (`sabeel-ci build-web --source-maps`,
-   which checks the version, stamps the build and refuses an export that does
-   not carry the stamped commit), uploads the maps to Sentry, and strips the
-   `.map` files. It refuses to run with `EXPO_PUBLIC_USE_EMULATORS` set in the
-   shell or in `app/.env*` (that ships an emulator bundle), and refuses to
-   finish with a `.map` still in the deploy dir. Then verify against the LIVE
-   site (not "Deploy complete") with `npm run smoke:prod`, which asserts on the
-   deployed page:
+   (`docs/GITHUB-ACTIONS.md`). It uploads the build's source maps to Sentry
+   first and publishes the site only once they are in; the site itself holds
+   no map. Releases go this way, not through `firebase deploy --only hosting`
+   from this machine: that one's predeploy (`npm run web:export -w
+   @sabeel/app`) exports a bundle whose maps reach no one, so its crashes read
+   minified, and it does not look for an `EXPO_PUBLIC_USE_EMULATORS` left in
+   the shell or in `app/.env*`. Then verify against the LIVE site (not "Deploy
+   complete") with `npm run smoke:prod`, which asserts on the deployed page:
    - the sign-in label reads `v<version> · <commit>` for THIS checkout's
      `app.json` and HEAD (`SMOKE_EXPECT_COMMIT=<sha>` when checking a deploy
      made from elsewhere);
    - a provoked Auth request goes to Google and no emulator host is contacted
      — the emulator path is compiled out, so the dev sign-in row cannot render;
-   - the bundle's `.map` URL answers `text/html` (the SPA rewrite for a stripped
-     file), not a served map — the CONTENT-TYPE, since the status is 200 either
-     way.
+   - the bundle's `.map` URL answers 404: no map is served (the single-page
+     rewrite leaves `/_expo/` out, so a missing file there is a 404).
 
    **Then read Sentry for what the release brought** — a crash on the live site
    reached Sentry within minutes once and nobody looked (2026-10-13). Search
@@ -346,8 +346,10 @@ npm run bucket-config -w @sabeel/media-copier   # only when cors.json / lifecycl
 firebase deploy --only firestore:indexes
 firebase deploy --only firestore:rules
 firebase deploy --only functions --force        # --force is always needed: see below
-firebase deploy --only hosting
 ```
+
+Hosting last, through Deploy Web (step 4 of "Cutting a release"), which
+uploads the source maps before it publishes.
 
 Functions deploy from GitHub too, and that is the usual way: **Deploy
 Functions** (`functions-deploy.yml`, `docs/GITHUB-ACTIONS.md`) deploys main
@@ -535,9 +537,14 @@ hit on 2026-10-12 and all apply to any new project here (a test project too):
 
 ## Hosting
 
-`firebase.json` sets `no-cache` on everything except `/_expo/static/**`, which is
-content-hashed and therefore immutable. The `predeploy` hook runs the web export,
-so hosting always ships a fresh bundle.
+`firebase.json` sets `no-cache` on everything except `/_expo/static/**` and
+`/assets/**`, which are content-hashed and therefore immutable, and the security
+headers on every page but Firebase's own `/__/` (`npx sabeel-ci check-app`
+holds this shape). The single-page rewrite to `/index.html` leaves `/_expo/`
+out, so a missing chunk is a 404 rather than the page served as JavaScript. The
+`predeploy` hook runs the web export (`npm run web:export -w @sabeel/app`), so
+a deploy from this machine always ships a fresh bundle; Deploy Web publishes
+the Web workflow's build instead.
 
 `authDomain` in `firebase-config.ts` must be the **hosting** domain
 (`<project>.web.app`), not `firebaseapp.com` — hosting serves `/__/auth/*`
@@ -549,29 +556,24 @@ or sign-in breaks for everyone in between.
 
 ## Sentry source maps
 
-Web source-map upload is wired into the hosting deploy: the predeploy runs
-`scripts/web-release.mjs`, which exports **with** source maps, injects Sentry
-debug ids, uploads the maps to the `sabeel-recording-web` project, then
-**deletes the `.map` files from the deploy dir** so Firebase never serves them
-publicly. The shipped JS keeps its debug id, so production errors symbolicate
-against the maps in Sentry. Debug ids mean no release/version coordination.
+Every release build sends Sentry what makes its crashes readable, and refuses
+to build without it (`ci-tools` README, "Sentry"). The org and the projects are
+in `ci-tools.json` (`sentry`); the token is `SENTRY_AUTH_TOKEN` in the build
+machine's gitignored `app/.env.sentry-build-plugin` (`BUILD_ENV` in CI;
+`docs/SECRETS.md`).
 
-The upload needs the auth token in gitignored `app/android/sentry.properties`
-(see `docs/SECRETS.md`); without it the script still builds and strips maps,
-just skips the upload — so a fresh clone or CI can deploy, they just won't
-upload maps. (CI does not deploy anyway.)
-
-Note a `.map` URL on the live site returns **200 with `text/html`** — that is the
-SPA `** → /index.html` rewrite catching a missing file, not a served map. Verify
-the *content-type*, not the status, to confirm maps are not leaked.
-
-**Native source maps are not uploaded.** Release APKs ship (`assembleRelease`,
-signed with the release key in `~/.config/sabeel-lms/` — see
-[SECRETS.md](SECRETS.md#android-release-signing-key)), but
-the `@sentry/react-native` Gradle plugin is not active, and activating it means
-a `prebuild` in this bare workflow. The token is already in place for when that
-happens; Sentry reporting itself works on native today, with minified release
-stack traces.
+- **Web:** the Web workflow exports with source maps and keeps them beside the
+  site, never in it; every script carries a debug id (`getSentryExpoConfig` in
+  `app/metro.config.js`), which is how Sentry matches it to its map with no
+  release name to keep in step. Deploy Web uploads the maps to
+  `sabeel-recording-web` before it publishes. A `.map` URL on the live site is a
+  404, which `npm run smoke:prod` checks.
+- **Android:** `app/android/app/build.gradle` applies `sentry.gradle` when
+  `app/.env.sentry-build-plugin` exists, and it uploads the bundle's source map
+  to `sabeel-recording-android`. Java and Kotlin frames need no mapping: R8
+  minification is off.
+- **iOS:** Xcode's Sentry phase uploads the dSYMs and the source map to the
+  same project (`docs/IOS-BUILD.md`).
 
 ## Retiring old builds
 

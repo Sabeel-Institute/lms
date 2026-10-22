@@ -59,7 +59,7 @@ export const DEFAULT_DUE_DAYS = 7;
  * constant is what the app, the tests and `emulators:exec --project` all use, so
  * they cannot drift apart.
  */
-export const EMULATOR_PROJECT_ID = 'demo-sabeel-recordings';
+export const EMULATOR_PROJECT_ID = 'demo-sabeel-lms';
 
 
 /**

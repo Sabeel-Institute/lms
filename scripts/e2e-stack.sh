@@ -17,9 +17,9 @@ cd "$(dirname "$0")/.."
 # To drive the walkthrough against a stack you already started (`npm run
 # emulators` and a dev server on the `web` port), run `node scripts/web-e2e.mjs`.
 #
-# Ports, the emulator project and the JDK come from ci-tools
-# (`npx sabeel-ci ports`, ci-tools.json, `npx sabeel-ci jdk21`); no port is
-# stated here.
+# Ports, the emulator project, the JDK and the functions' secret placeholders
+# come from ci-tools (`npx sabeel-ci ports`, `ports --project`, `jdk21`,
+# `emulator-secrets`); no port or project is stated here.
 
 SUITE="${1:-}"
 case "$SUITE" in
@@ -36,7 +36,7 @@ esac
 # failure mode is not "port busy" — see the stale server note below.
 WEB_PORT=$(npx --no sabeel-ci ports "$PORT_NAME")
 if [ "$SUITE" = screens ] && [ -n "${SWEEP_WEB_PORT:-}" ]; then WEB_PORT=$SWEEP_WEB_PORT; fi
-PROJECT=$(node -p "require('./ci-tools.json').emulators.project")
+PROJECT=$(npx --no sabeel-ci ports --project)
 
 # The Firebase emulators need JDK 21 or later; the Android build keeps 17 as
 # the default `java`, so only this run is pointed at 21.
@@ -66,6 +66,9 @@ npx --no sabeel-ci free-emulator-ports
 # an error instead of a layout.
 npm run build -w @sabeel/shared
 npm run build -w functions
+# The placeholders for the secrets the functions bind (ci.emulatorSecrets),
+# without which the Functions emulator asks Secret Manager for each one.
+npx --no sabeel-ci emulator-secrets
 
 # Kill anything already on the web port. A LEFTOVER dev server is the nastiest
 # failure here: the new `expo start` cannot bind, exits quietly, and the

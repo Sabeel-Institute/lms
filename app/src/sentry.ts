@@ -6,14 +6,13 @@
 // bundle; absent, this is a silent console-only no-op.
 //
 // `@sentry/react-native` links a native module via RN autolinking (no prebuild
-// needed for capture). Source-map upload — which needs a Sentry auth token and
-// the Gradle plugin — is deferred; until then, release stack traces are
-// minified but the errors do report.
+// needed for capture). A release build uploads its source map (sentry.gradle on
+// Android, Xcode's Sentry phase on iOS), so its stack traces read as source.
 import * as Sentry from '@sentry/react-native';
 import { IS_DEV } from './env';
 import { BUILD_LABEL } from './buildInfo';
 
-const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN_ANDROID;
+const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN_NATIVE;
 const ENABLED = !!DSN && !IS_DEV;
 let started = false;
 

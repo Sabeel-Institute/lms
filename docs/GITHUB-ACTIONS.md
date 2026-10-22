@@ -70,8 +70,11 @@ they release.
   successful one.
   Artifacts are retained for 14 days. The AAB uses the existing release/upload
   key and is ready for a separately authorized Play upload.
-- Build records identify the source commit and workflow run. Web artifacts
-  contain neither source maps nor environment files.
+- Build records identify the source commit and workflow run. The site in a
+  Web artifact holds neither source maps nor environment files: the maps sit
+  beside it, under `sourcemaps/`, and every script carries the debug id Sentry
+  matches it to its map by. The Android build uploads its own map to Sentry
+  (`sentry.gradle`), the iOS build its symbols and map.
 
 ## Who changes main
 
@@ -89,7 +92,10 @@ they release.
 
 - **Deploy Web** only runs manually from main. Supply a successful **Web** run
   ID. CI must have passed on that exact commit. The workflow verifies artifact
-  provenance and checksums and uses short-lived Google credentials.
+  provenance and checksums and uses short-lived Google credentials. With
+  `deploy=true` its `sourcemaps` job first uploads the build's source maps to
+  Sentry (`sabeel-recording-web`, from `ci-tools.json`), in `release-build`
+  after the owner check; the site is published only once they are in.
 - The default `deploy=false` checks Hosting access without publishing. Select
   `deploy=true` to publish the selected artifact to live Firebase Hosting.
   No rebuilding occurs during deployment; functions, rules, indexes and data
@@ -137,13 +143,15 @@ TestFlight upload) first checks that the organization owner started it and,
 when it is re-run, re-ran it: the organization variables `RELEASE_OWNER_ID`
 and `RELEASE_OWNER_LOGIN`, which only organization admins can change.
 
-The `release-build` environment holds `APP_ENV_LOCAL`, the existing iOS
-signing secrets (`IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD`, `IOS_PROFILE`,
-`IOS_BUILD_ENV`, `ASC_KEY_P8`), `ANDROID_KEYSTORE` and
+The `release-build` environment holds `APP_ENV_LOCAL` (the Sentry DSNs),
+`BUILD_ENV` (`app/.env.sentry-build-plugin`: the Sentry auth token and the App
+Store Connect ids), the existing iOS signing secrets (`IOS_DIST_P12`,
+`IOS_DIST_P12_PASSWORD`, `IOS_PROFILE`, `ASC_KEY_P8`), `ANDROID_KEYSTORE` and
 `ANDROID_KEYSTORE_PROPERTIES`. It admits main and `v*` tags only, and only the
 jobs that build a release enter it (Android, Web, iOS and its TestFlight
-upload), so a workflow on any other branch reads none of them; repository
-secrets would reach a workflow on any branch a collaborator pushes.
+upload, and Deploy Web's source-map upload), so a workflow on any other
+branch reads none of them; repository secrets would reach a workflow on any
+branch a collaborator pushes.
 `sabeel-ci check-app` fails CI if a job reads one outside that environment,
 or if a release job does not check its owner first. Set one again from the
 vault with
@@ -188,9 +196,11 @@ approval. CI does not generate replacement signing keys.
 
 - Secret scanning and push protection are enabled. Dependabot alerts and
   security-update pull requests are enabled.
-- Dependabot checks npm workspaces and GitHub Actions weekly. Minor/patch npm
-  updates and security fixes are grouped separately; major upgrades require
-  explicit review. Updates never auto-merge or deploy.
+- Dependabot checks npm workspaces weekly. Minor/patch npm updates and
+  security fixes are grouped separately; major upgrades require explicit
+  review. Updates never auto-merge or deploy. The workflows' actions move in
+  ci-tools, whose Dependabot updates the templates, and arrive here with the
+  next ci-tools pin.
 - CodeQL scans JavaScript/TypeScript on main pushes, pull requests and weekly,
   without native builds or production credentials.
 - CI has separate workflow-validation, quality/unit, emulator-integration and

@@ -6,6 +6,19 @@ apply plugin: "com.google.gms.google-services"
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 /**
+ * A release uploads its JavaScript source map to Sentry, so a crash reads as
+ * source rather than as the minified bundle. sentry.gradle does it, applied
+ * exactly when the build machine's `app/.env.sentry-build-plugin` exists: that
+ * file holds the token (SENTRY_AUTH_TOKEN), and ci-tools' `build-aab` sets
+ * SENTRY_ORG and SENTRY_PROJECT from ci-tools.json and refuses a release
+ * without the file. A pull-request build has no file and applies nothing.
+ * docs/SECRETS.md says where the file comes from.
+ */
+if (file("$projectRoot/.env.sentry-build-plugin").exists()) {
+    apply from: new File(["node", "--print", "require.resolve('@sentry/react-native/package.json')"].execute(null, rootDir).text.trim(), "../sentry.gradle")
+}
+
+/**
  * The app version has ONE source of truth: app.json → expo.version. Nothing
  * here carries its own copy — two copies desync silently, and the symptom is
  * every release reporting the same version to Sentry.
@@ -143,9 +156,11 @@ android {
      * installed OVER the real app as an update. The release key lives outside
      * the repo, in `~/.config/sabeel-lms/` (or wherever
      * SABEEL_KEYSTORE_PROPERTIES points, as ci-tools' `ci-platform` sets it in
-     * CI), and docs/SECRETS.md says what it is and how it is backed up. Without that file the release signing config
-     * stays empty and Gradle refuses to package a release: fail closed, never
-     * fall back to the debug key. Debug builds are unaffected.
+     * CI), and docs/SECRETS.md says what it is and how it is backed up.
+     * Without that file the release signing config stays empty, and the
+     * `gradle.taskGraph.whenReady` check after this block stops the release:
+     * fail closed, never fall back to the debug key. Debug builds are
+     * unaffected.
      */
     def releaseKeyProps = new Properties()
     def releaseKeyFile = file(System.getenv('SABEEL_KEYSTORE_PROPERTIES')
@@ -221,6 +236,25 @@ android {
     }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+}
+
+/**
+ * Fail closed. Left to itself, AGP packages a release whose signing config has
+ * no keystore as an UNSIGNED artifact rather than failing, so a missing key
+ * shows up later, or not at all. A release packaging or signing task stops
+ * here instead, naming the file it looked for. The pre-merge build removes the
+ * release signing config on purpose (ci-tools' `ci-premerge`) to build an
+ * unsigned bundle with no secrets, and passes.
+ */
+gradle.taskGraph.whenReady { graph ->
+    def releaseSigning = android.buildTypes.release.signingConfig
+    def packagesRelease = graph.allTasks.any { it.project == project && it.name ==~ /^(package|sign)Release(Bundle)?$/ }
+    if (packagesRelease && releaseSigning != null && releaseSigning.storeFile == null) {
+        throw new GradleException(
+            "No release key: ${System.getenv('SABEEL_KEYSTORE_PROPERTIES') ?: '~/.config/sabeel-lms/keystore.properties'} " +
+            "is missing or names no storeFile. Restore it from the vault (docs/SECRETS.md); a release is never " +
+            "signed with the debug key, and never left unsigned.")
     }
 }
 

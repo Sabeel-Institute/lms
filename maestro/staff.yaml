@@ -1,6 +1,6 @@
 # Staff on Android: the dev sign-in row, the day's queue, a session's
 # register, and the institute's lists. Seeded by
-# scripts/seed-emulator-world.mjs; run by `npx sabeel-ci native-e2e`.
+# scripts/seed-emulators.mjs; run by `npx sabeel-ci native-e2e`.
 appId: ${APP_ID}
 name: Staff work through the day
 ---

@@ -1,7 +1,7 @@
 /** Rich, realistic (fake) deployment for the user-manual screenshots — emulator. */
 import { fileURLToPath } from 'node:url';
 import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
-import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
+import { emulatorProject, ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { createRequire } from 'node:module';
 import { readFileSync, statSync } from 'node:fs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
@@ -13,7 +13,7 @@ import { NEW_STAFF_ACCESS, RULES_VERSION, deriveDurationSec, mediaFromSingleAudi
 // The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
 const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
 const PORTS = ports(STACK);
-const EMULATOR_PROJECT_ID = STACK.emulators.project;
+const EMULATOR_PROJECT_ID = emulatorProject(STACK);
 process.env.FIRESTORE_EMULATOR_HOST=`127.0.0.1:${PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST=`127.0.0.1:${PORTS.auth}`;
 admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });

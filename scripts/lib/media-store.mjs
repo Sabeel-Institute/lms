@@ -26,11 +26,11 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
-import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
+import { emulatorProject, ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 
 const settings = config(fileURLToPath(new URL('../..', import.meta.url)));
 const P = ports(settings);
-const EMULATOR_PROJECT_ID = settings.emulators.project;
+const EMULATOR_PROJECT_ID = emulatorProject(settings);
 
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const { S3Client, CreateBucketCommand, HeadObjectCommand, PutBucketCorsCommand, PutObjectCommand } = require('@aws-sdk/client-s3');

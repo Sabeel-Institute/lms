@@ -98,7 +98,7 @@
       }
     ],
     "predeploy": [
-      "node scripts/web-release.mjs"
+      "npm run web:export -w @sabeel/app"
     ]
   },
   "emulators": {

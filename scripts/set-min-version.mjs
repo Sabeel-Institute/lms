@@ -3,7 +3,7 @@
  * Set the oldest app version allowed to run, in `config/app`.
  *
  *     node scripts/set-min-version.mjs <X.Y.Z>          # against production
- *     CHECK_PROJECT=demo-sabeel-recordings \
+ *     CHECK_PROJECT="$(npx sabeel-ci ports --project)" \
  *       FIRESTORE_EMULATOR_HOST="127.0.0.1:$(npx sabeel-ci ports firestore)" \
  *       node scripts/set-min-version.mjs <X.Y.Z>        # against the emulator
  *

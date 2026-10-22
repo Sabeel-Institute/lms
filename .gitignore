@@ -47,11 +47,13 @@ shots/
 # Logs & misc
 *.log
 .DS_Store
-app/android/sentry.properties
-# The build machine's Sentry org/project/token, Apple team id and App Store
-# Connect key ids (`sabeel-ci build-ios` reads it). Real secrets.
+# The build machine's Sentry auth token, Apple team id and App Store Connect
+# key ids, which the Android and iOS release builds read. Real secrets.
 .env.sentry-build-plugin
 app/.env.sentry-build-plugin
+# Sentry's tools also take a token from a sentry.properties file; this app
+# keeps none there, and one is never committed.
+**/sentry.properties
 functions/.secret.local
 **/.secret.local
 
@@ -73,3 +75,12 @@ __pycache__/
 app/ios/
 gha-creds-*.json
 app/android/keystore.properties
+
+# Signing and service-account keys: one committed to this public repository
+# stays readable in its history. The debug keystore ships with every Android
+# SDK, so it is no secret, and Gradle signs debug builds with it.
+*.jks
+*.keystore
+!app/android/app/debug.keystore
+*service-account*.json
+*firebase-adminsdk*.json

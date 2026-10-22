@@ -22,7 +22,7 @@
  */
 import { fileURLToPath } from 'node:url';
 import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
-import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
+import { emulatorProject, ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -35,7 +35,7 @@ import { lineId } from './lines.mjs';
 // The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
 const STACK = config(fileURLToPath(new URL('../..', import.meta.url)));
 const PORTS = ports(STACK);
-const EMULATOR_PROJECT_ID = STACK.emulators.project;
+const EMULATOR_PROJECT_ID = emulatorProject(STACK);
 
 const WEB = `http://127.0.0.1:${PORTS.web}/`;
 const REPO = resolve(new URL('../..', import.meta.url).pathname);

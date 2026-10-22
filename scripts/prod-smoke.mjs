@@ -204,10 +204,10 @@ check(
 );
 
 /*
- * SOURCE MAPS ARE NOT SERVED. `web-release.mjs` strips them after the Sentry
- * upload; Hosting then answers a `.map` URL with the SPA rewrite — `text/html`
- * — rather than the map. The status is 200 either way, so it is the content
- * type that says which. The bundle's own script URL names the file to ask for.
+ * SOURCE MAPS ARE NOT SERVED. The web build keeps them beside the site, never
+ * in it, and Deploy Web sends them to Sentry alone; the single-page rewrite
+ * leaves `/_expo/` out, so a file missing there is a 404. A served map would
+ * answer 200. The bundle's own script URL names the file to ask for.
  */
 const bundleSrc = await page
   .locator('script[src*="/_expo/static/js/web/"]')
@@ -216,8 +216,7 @@ const bundleSrc = await page
   .catch(() => null);
 if (bundleSrc) {
   const mapRes = await fetch(new URL(`${bundleSrc}.map`, BASE), { cache: 'no-store' });
-  const type = mapRes.headers.get('content-type') ?? '';
-  check(/text\/html/.test(type), `the bundle's .map is not served (content-type ${type || 'none'})`);
+  check(mapRes.status === 404, `the bundle's .map is not served (status ${mapRes.status})`);
   /*
    * NO NATIVE-ONLY WEIGHT. react-native-keyboard-controller has no web side,
    * and imported on the web it brought all of Reanimated: 22% of the bundle,
