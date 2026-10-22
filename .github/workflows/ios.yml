@@ -1,23 +1,27 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/ios.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: iOS
 
 # The iPhone app, built on GitHub's macOS runners (free for a public repo).
 #
-#   gh workflow run ios.yml                         # build an .ipa
-#   gh workflow run ios.yml -f testflight=true      # build, then upload to TestFlight
+#   gh workflow run ios.yml                                   # build a signed .ipa
+#   gh workflow run ios.yml --ref v1.2.3 -f testflight=true   # build the release, upload it
 #
-# or the Actions tab -> iOS -> Run workflow, or the REST API:
-#   POST /repos/Sabeel-Institute/lms/actions/workflows/ios.yml/dispatches
-#   {"ref": "main", "inputs": {"testflight": "true"}}
+# or the Actions tab -> iOS -> Run workflow. An upload is a release, so it
+# needs the owner's go-ahead like any other.
 #
-# BUILD and TESTFLIGHT are separate jobs. A build needs no new build number;
-# only the upload does, because Apple takes each number once per version. The
-# TestFlight job asks Apple first (scripts/testflight-check.mjs) and stops in
-# seconds if the number is used: raise expo.ios.buildNumber in app/app.json.
+# BUILD and TESTFLIGHT are separate jobs. A build needs nothing from Apple but
+# signing, and uploads nothing. The TestFlight job asks first (sabeel-ci
+# testflight-check): the commit must be the one tagged v<version> on GitHub,
+# because a published version is never reused for other code; and the build
+# number must be one Apple has not taken for that version. Either answer stops
+# it in seconds.
 #
-# Signing is MANUAL here (scripts/build-ios.sh, IOS_PROFILE_NAME): the one
-# Apple Distribution certificate and its App Store profile come from secrets.
-# Automatic signing on a fresh machine would mint a certificate every run.
-# Secrets and how to renew them: docs/IOS-BUILD.md, "Builds on GitHub".
+# Signing is MANUAL here (sabeel-ci build-ios with IOS_PROFILE_NAME): the
+# team's one Apple Distribution certificate and the app's App Store profile
+# come from secrets. Automatic signing on a fresh machine would mint a
+# certificate every run. Secrets and how to renew them: docs/IOS-BUILD.md,
+# "Builds on GitHub".
 
 on:
   push:
@@ -25,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       testflight:
-        description: "Upload to TestFlight after building (needs a build number Apple has not seen)"
+        description: "Upload to TestFlight after building (needs the release tag and a build number Apple has not seen)"
         type: boolean
         default: false
 
@@ -43,36 +47,39 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 120
     outputs:
-      version: ${{ steps.ipa.outputs.version }}
-      build: ${{ steps.ipa.outputs.build }}
+      commit: ${{ steps.ipa.outputs.commit }}
     steps:
       - uses: actions/checkout@v7
-
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - run: xcodebuild -version && pod --version
-
-      - run: npm ci
-
-      # The gitignored files a Mac keeps by hand, written from secrets.
-      - name: Build settings
+      # The gitignored files a Mac keeps by hand, written from secrets, every
+      # value masked on its own; GOOGLE_SERVICE_INFO_PLIST only for an app that
+      # does not commit its plist.
+      - name: Restore build configuration
         env:
           APP_ENV_LOCAL: ${{ secrets.APP_ENV_LOCAL }}
           IOS_BUILD_ENV: ${{ secrets.IOS_BUILD_ENV }}
           GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
-        run: |
-          # GitHub masks a multi-line secret line by line ("NAME=value"), so a
-          # value printed on its own (a tool echoing the Sentry token) would
-          # show in this public log. Mask each value by itself too.
-          printf '%s\n' "$IOS_BUILD_ENV" "$APP_ENV_LOCAL" | sed -n 's/^[A-Za-z_][A-Za-z0-9_]*=//p' \
-            | while IFS= read -r value; do if [ -n "$value" ]; then echo "::add-mask::$value"; fi; done
-          printf '%s\n' "$APP_ENV_LOCAL" > app/.env.local
-          printf '%s\n' "$IOS_BUILD_ENV" > app/.env.sentry-build-plugin
-          printf '%s' "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > app/GoogleService-Info.plist
-
+        run: sabeel-ci ci-platform prepare-ios
+      - run: npm ci
       # A keychain of its own, unlocked for this job, holding the distribution
       # identity; and the App Store profile where Xcode looks for profiles.
       - name: Signing
@@ -81,8 +88,12 @@ jobs:
           IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
           IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
         run: |
+          for v in IOS_DIST_P12 IOS_DIST_P12_PASSWORD IOS_PROFILE; do
+            [ -n "${!v}" ] || { echo "::error::secret $v is not set"; exit 1; }
+          done
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
@@ -95,8 +106,8 @@ jobs:
           security import "$RUNNER_TEMP/wwdr.cer" -k "$KEYCHAIN" || true
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
           KEYCHAINS=("$KEYCHAIN")
-          while IFS= read -r existing_keychain; do
-            KEYCHAINS+=("$existing_keychain")
+          while IFS= read -r existing; do
+            KEYCHAINS+=("$existing")
           done < <(security list-keychains -d user | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//')
           security list-keychains -d user -s "${KEYCHAINS[@]}"
           security default-keychain -d user -s "$KEYCHAIN"
@@ -114,22 +125,23 @@ jobs:
           done
           echo "IOS_PROFILE_NAME=$NAME" >> "$GITHUB_ENV"
           echo "profile: $NAME ($UUID), expires $(plutil -extract ExpirationDate raw "$RUNNER_TEMP/profile.plist")"
-
+      # Every gate runs first (the profile is for this app and unexpired, the
+      # identity can sign), then the twenty-minute part. It uploads nothing.
       - name: Build
-        run: bash scripts/build-ios.sh --no-upload
-
-      # What a phone enforces exists only after the export, so it is asserted
-      # on the .ipa itself: the push entitlement, a store build's
-      # get-task-allow, the profile it was signed with, and this commit's
-      # label inside the JavaScript (EXPO_PUBLIC_COMMIT; a dirty tree's ends
-      # in "+").
+        run: sabeel-ci build-ios
+      # What a device enforces exists only after the export, so it is asserted
+      # on the .ipa itself: the bundle id, the push entitlement, a store build's
+      # get-task-allow, the profile it was signed with, and this commit's stamp
+      # inside the compiled JavaScript (a dirty tree's ends in "+"; Hermes
+      # keeps the string as written).
       - name: What was built
         id: ipa
         run: |
-          IPA="$(find build-artifacts/ios/export -maxdepth 1 -name '*.ipa' | head -1)"
+          IPA="$(find build/ios/export -maxdepth 1 -name '*.ipa' | head -1)"
           [ -n "$IPA" ] || { echo "::error::no .ipa was exported"; exit 1; }
           unzip -q "$IPA" -d "$RUNNER_TEMP/ipa"
           APP="$(find "$RUNNER_TEMP/ipa/Payload" -maxdepth 1 -name '*.app' | head -1)"
+          BUNDLE="$(plutil -extract CFBundleIdentifier raw "$APP/Info.plist")"
           VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP/Info.plist")"
           BUILD="$(plutil -extract CFBundleVersion raw "$APP/Info.plist")"
           COMMIT="$(git rev-parse --short HEAD)"
@@ -138,28 +150,25 @@ jobs:
           codesign -dvv "$APP" 2>&1 | grep -E '^(Authority|TeamIdentifier)=' | head -2
 
           wrong=""
+          [ "$BUNDLE" = "$(node -p "require('./app/app.json').expo.ios.bundleIdentifier")" ] || wrong="$wrong bundle"
           [ "$(plutil -extract aps-environment raw "$RUNNER_TEMP/entitlements.plist")" = production ] || wrong="$wrong aps-environment"
           [ "$(plutil -extract get-task-allow raw "$RUNNER_TEMP/entitlements.plist")" = false ] || wrong="$wrong get-task-allow"
           [ "$(plutil -extract Name raw "$RUNNER_TEMP/embedded.plist")" = "$IOS_PROFILE_NAME" ] || wrong="$wrong profile"
-          grep -aq "$COMMIT" "$APP/main.jsbundle" || wrong="$wrong label"
-          ! grep -aq "${COMMIT}+" "$APP/main.jsbundle" || wrong="$wrong dirty-label"
+          grep -aq "$COMMIT" "$APP/main.jsbundle" || wrong="$wrong stamp"
+          ! grep -aq "${COMMIT}+" "$APP/main.jsbundle" || wrong="$wrong dirty-stamp"
           [ -z "$wrong" ] || { echo "::error::the exported app is wrong:$wrong"; exit 1; }
 
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "### Built v$VERSION ($BUILD) from \`$COMMIT\`, signed with \"$IOS_PROFILE_NAME\"" >> "$GITHUB_STEP_SUMMARY"
-
       - uses: actions/upload-artifact@v7
         with:
           name: ios-ipa
-          path: build-artifacts/ios/export/*.ipa
+          path: build/ios/export/*.ipa
           retention-days: 14
           if-no-files-found: error
-
-      # What the bundle was made from: the JavaScript source map, and the pod
-      # versions this build resolved (app/Podfile.lock, copied into the
-      # generated app/ios by build-ios.sh). For comparing two builds, and
-      # reading a crash.
+      # What the bundle was made from: the JavaScript source map, and the
+      # Podfile.lock this build installed (build-ios has already held its pods
+      # to app/Podfile.lock). For comparing two builds, and reading a crash.
       - name: Build record
         run: |
           mkdir -p "$RUNNER_TEMP/record"
@@ -167,13 +176,11 @@ jobs:
           find "$HOME/Library/Developer/Xcode/DerivedData" -name main.jsbundle.map -path '*Release-iphoneos*' \
             -exec cp {} "$RUNNER_TEMP/record/" \; -quit
           ls -la "$RUNNER_TEMP/record"
-
       - uses: actions/upload-artifact@v7
         with:
           name: ios-build-record
           path: ${{ runner.temp }}/record
           retention-days: 14
-
       - name: Remove the keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
@@ -186,6 +193,8 @@ jobs:
     # Apple's validation takes a minute or two, and on a bad day twenty-five;
     # the upload after it needs room too.
     timeout-minutes: 90
+    env:
+      COMMIT: ${{ needs.build.outputs.commit }}
     steps:
       - name: Only the owner releases
         env:
@@ -199,59 +208,69 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@v7
-
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - uses: actions/download-artifact@v8
         with:
           name: ios-ipa
-          path: ipa
-
+          path: ${{ runner.temp }}/ipa
       - name: App Store Connect key
         env:
           IOS_BUILD_ENV: ${{ secrets.IOS_BUILD_ENV }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: sabeel-ci ci-platform asc-key
+      # Asked of the .ipa itself, which is what goes up.
+      - name: Is this the release, and is the build number free?
         run: |
-          printf '%s\n' "$IOS_BUILD_ENV" | sed -n 's/^[A-Za-z_][A-Za-z0-9_]*=//p' \
-            | while IFS= read -r value; do if [ -n "$value" ]; then echo "::add-mask::$value"; fi; done
-          printf '%s\n' "$IOS_BUILD_ENV" > app/.env.sentry-build-plugin
-          . scripts/load-build-env.sh
-          mkdir -p "$HOME/.appstoreconnect/private_keys"
-          printf '%s\n' "$ASC_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          echo "ASC_KEY_ID=$ASC_KEY_ID" >> "$GITHUB_ENV"
-          echo "ASC_ISSUER_ID=$ASC_ISSUER_ID" >> "$GITHUB_ENV"
-
-      - name: Is the build number free?
-        run: |
-          IPA="$(find ipa -name '*.ipa' | head -1)"
+          IPA="$(find "$RUNNER_TEMP/ipa" -name '*.ipa' | head -1)"
           unzip -p "$IPA" 'Payload/*.app/Info.plist' > "$RUNNER_TEMP/Info.plist"
-          BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw "$RUNNER_TEMP/Info.plist")"
-          node scripts/testflight-check.mjs "$BUNDLE_ID" \
-            "${{ needs.build.outputs.version }}" "${{ needs.build.outputs.build }}"
-
-      # The flags as `xcrun altool --help` spells them (Xcode 26). Its parser
-      # ignores a flag it does not know, so a misspelling would not fail here.
+          BUNDLE="$(plutil -extract CFBundleIdentifier raw "$RUNNER_TEMP/Info.plist")"
+          VERSION="$(plutil -extract CFBundleShortVersionString raw "$RUNNER_TEMP/Info.plist")"
+          BUILD="$(plutil -extract CFBundleVersion raw "$RUNNER_TEMP/Info.plist")"
+          sabeel-ci testflight-check "$BUNDLE" "$VERSION" "$BUILD" "$COMMIT"
+          {
+            echo "IPA=$IPA"
+            echo "VERSION=$VERSION"
+            echo "BUILD=$BUILD"
+          } >> "$GITHUB_ENV"
+      # Validation uploads nothing and fails fast on what processing would
+      # reject later. The flags are spelled as `xcrun altool --help` spells
+      # them (Xcode 26): its parser ignores a flag it does not know, so a
+      # misspelling would not fail here. App Store Connect can fail one call in
+      # five for hours (2026-10-16), so a call that never reached Apple is
+      # retried; a real refusal stops at once.
       - name: Validate with Apple
         run: |
-          IPA="$(find ipa -name '*.ipa' | head -1)"
-          # App Store Connect can fail one call in five for hours (2026-10-16):
-          # retry a validation that never reached Apple; a real refusal stops at once.
           set -o pipefail
           for attempt in 1 2 3; do
-            if xcrun altool --validate-app "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID" 2>&1 | tee altool.log; then break; fi
-            grep -q -E 'timed out|Did not receive a response|NSURLErrorDomain|"status" ?: ?"5[0-9][0-9]"' altool.log && [ "$attempt" -lt 3 ] || exit 1
+            if xcrun altool --validate-app "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/altool.log"; then break; fi
+            grep -q -E 'timed out|Did not receive a response|NSURLErrorDomain|"status" ?: ?"5[0-9][0-9]"' "$RUNNER_TEMP/altool.log" && [ "$attempt" -lt 3 ] || exit 1
             echo "App Store Connect did not answer; trying again in $((attempt * 60)) s"
             sleep $((attempt * 60))
           done
-
       - name: Upload to TestFlight
         run: |
-          IPA="$(find ipa -name '*.ipa' | head -1)"
-          # App Store Connect can fail one call in five for hours (2026-10-16):
-          # retry a upload that never reached Apple; a real refusal stops at once.
           set -o pipefail
           for attempt in 1 2 3; do
-            if xcrun altool --upload-package "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID" 2>&1 | tee altool.log; then break; fi
-            grep -q -E 'timed out|Did not receive a response|NSURLErrorDomain|"status" ?: ?"5[0-9][0-9]"' altool.log && [ "$attempt" -lt 3 ] || exit 1
+            if xcrun altool --upload-package "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/altool.log"; then break; fi
+            grep -q -E 'timed out|Did not receive a response|NSURLErrorDomain|"status" ?: ?"5[0-9][0-9]"' "$RUNNER_TEMP/altool.log" && [ "$attempt" -lt 3 ] || exit 1
             echo "App Store Connect did not answer; trying again in $((attempt * 60)) s"
             sleep $((attempt * 60))
           done
-          echo "### Uploaded v${{ needs.build.outputs.version }} (${{ needs.build.outputs.build }}) to TestFlight" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Uploaded v$VERSION ($BUILD) to TestFlight" >> "$GITHUB_STEP_SUMMARY"

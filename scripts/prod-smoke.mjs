@@ -13,7 +13,7 @@
  * DEPLOY check, not a security suite; rules are covered by the emulator tests.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { FIREBASE_PROJECT_ID as PROJECT_ID, WEB_APP_URL } from '@sabeel/shared';
 
@@ -270,7 +270,8 @@ check(
   `every callable answers for itself, ${callables.length} asked${unanswered.length ? `; Cloud Run refused ${unanswered.join(', ')}` : ''}`,
 );
 
-await page.screenshot({ path: 'e2e-shots/prod-01-signin.png', fullPage: true });
+mkdirSync('shots/prod', { recursive: true });
+await page.screenshot({ path: 'shots/prod/01-signin.png', fullPage: true });
 await browser.close();
 
 console.log(fails.length ? `\n${fails.length} check(s) FAILED` : '\nall production checks passed');

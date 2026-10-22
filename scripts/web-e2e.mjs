@@ -20,7 +20,7 @@
  * store and the dev server for the run (scripts/e2e-stack.sh), as CI does. To
  * drive a stack you keep up instead (see docs/DEV-TOOLING.md):
  *   npm run emulators          # the emulators and the local media store
- *   cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61311 --clear
+ *   cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port "$(npx sabeel-ci ports web)" --clear
  *   node scripts/web-e2e.mjs
  *
  * SCOPE: this exercises real user FLOWS end to end. It is not a security suite —
@@ -28,9 +28,12 @@
  * every screen looking correct. Authorization is asserted in
  * functions/test/integration/rules.*.test.ts, which are mutation-tested.
  *
- * Screenshots land in e2e-shots/ (gitignored). LOOK AT THEM — correct values in
+ * Screenshots land in shots/e2e/ (gitignored). LOOK AT THEM — correct values in
  * palette.ts survive right up until you read the rendered screen.
  */
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
+import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { chromium } from 'playwright';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import {
@@ -45,8 +48,6 @@ import {
   readXlsx,
   todayInZone,
 } from '@sabeel/shared';
-import { EMULATOR_PORTS, MEDIA_STORE_PORTS, WEB_PORTS } from './lib/ports.mjs';
-import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import {
   AUDIO_FIXTURE,
   AUDIO_SECONDS,
@@ -60,13 +61,18 @@ import {
 } from './lib/media-fixtures.mjs';
 import { putLocalObject } from './lib/media-store.mjs';
 
-const WEB = process.env.E2E_WEB ?? `http://127.0.0.1:${WEB_PORTS.e2e}/`;
-const FN = `http://127.0.0.1:${EMULATOR_PORTS.functions}/${EMULATOR_PROJECT_ID}/us-central1`;
-const FS = `http://127.0.0.1:${EMULATOR_PORTS.firestore}`;
+// The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
+const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
+const PORTS = ports(STACK);
+const EMULATOR_PROJECT_ID = STACK.emulators.project;
+
+const WEB = process.env.E2E_WEB ?? `http://127.0.0.1:${PORTS.web}/`;
+const FN = `http://127.0.0.1:${PORTS.functions}/${EMULATOR_PROJECT_ID}/us-central1`;
+const FS = `http://127.0.0.1:${PORTS.firestore}`;
 const FS_READ = `${FS}/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents`;
 const FS_WIPE = `${FS}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents`;
-const AUTH = `http://127.0.0.1:${EMULATOR_PORTS.auth}`;
-const SHOTS = 'e2e-shots';
+const AUTH = `http://127.0.0.1:${PORTS.auth}`;
+const SHOTS = 'shots/e2e';
 const failures = [];
 /**
  * Assert the thing the step above waited for is ON SCREEN.
@@ -231,7 +237,7 @@ async function opens(page, name) {
   const served = page
     .context()
     .waitForEvent('response', {
-      predicate: (r) => r.url().includes(`127.0.0.1:${MEDIA_STORE_PORTS.s3}/`) && r.request().resourceType() === 'document',
+      predicate: (r) => r.url().includes(`127.0.0.1:${PORTS.s3}/`) && r.request().resourceType() === 'document',
       timeout: 20000,
     })
     .catch(() => null);
@@ -994,7 +1000,7 @@ await student.getByTestId('next-up-Session 1').waitFor({ timeout: 10000 });
  * taken, a ring turns round the button, the wait is said after a few
  * seconds, and the recording starts by itself once it can.
  */
-const slowMedia = new RegExp(`:${MEDIA_STORE_PORTS.s3}/`);
+const slowMedia = new RegExp(`:${PORTS.s3}/`);
 await student.route(slowMedia, async (route) => {
   await new Promise((resolve) => setTimeout(resolve, 6000));
   await route.continue().catch(() => undefined);
@@ -2022,7 +2028,7 @@ check(
  * upload, so the file would silently not be on the assignment.
  */
 const NOTES = 'Hikma notes.pdf';
-const mediaStore = new RegExp(`127\\.0\\.0\\.1:${MEDIA_STORE_PORTS.s3}/`);
+const mediaStore = new RegExp(`127\\.0\\.0\\.1:${PORTS.s3}/`);
 const slowPut = async (route) => {
   if (route.request().method() === 'PUT') await new Promise((r) => setTimeout(r, 4000));
   return route.continue();

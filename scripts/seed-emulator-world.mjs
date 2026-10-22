@@ -17,18 +17,24 @@
  * Prints the student's credentials and the ids the fixture is built around.
  * See "The device pass" in docs/DEPLOY.md for the whole recipe.
  */
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
+import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { createRequire } from 'node:module';
 import { chromium } from 'playwright';
-import { EMULATOR_PORTS } from './lib/ports.mjs';
-import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { resetEmulators, seedWorld } from './lib/seed-world.mjs';
+
+// The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
+const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
+const PORTS = ports(STACK);
+const EMULATOR_PROJECT_ID = STACK.emulators.project;
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
 
 const BASE = process.env.E2E_BASE ?? 'http://127.0.0.1:8081/';
-process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.firestore}`;
-process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.auth}`;
+process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${PORTS.firestore}`;
+process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${PORTS.auth}`;
 process.env.GCLOUD_PROJECT = EMULATOR_PROJECT_ID;
 
 admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });

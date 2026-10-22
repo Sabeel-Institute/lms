@@ -90,6 +90,9 @@
  * is chosen to BREAK layouts — the longest name a real cohort would have, a
  * roster longer than one screen, an empty cohort — not to look tidy.
  */
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
+import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { chromium, devices } from 'playwright';
 import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
@@ -98,20 +101,23 @@ import { join, resolve } from 'node:path';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
-import { EMULATOR_PORTS, WEB_PORTS } from './lib/ports.mjs';
-import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { backButton, byId, byName, resetEmulators, seedWorld, tap } from './lib/seed-world.mjs';
 // The built workspace package — `e2e-stack.sh` builds it before this runs.
 import { PUSH_DEVICE_MESSAGE, addDays } from '@sabeel/shared';
 
-const BASE = process.env.E2E_BASE ?? `http://127.0.0.1:${WEB_PORTS.sweep}/`;
+// The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
+const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
+const PORTS = ports(STACK);
+const EMULATOR_PROJECT_ID = STACK.emulators.project;
+
+const BASE = process.env.E2E_BASE ?? `http://127.0.0.1:${PORTS.sweep}/`;
 const ROOT = resolve(import.meta.dirname, '..');
 const SHOTS = resolve(ROOT, 'shots', 'screens');
 const PROJECT = EMULATOR_PROJECT_ID;
 const FULL = process.env.SWEEP_FULL === '1';
 
-process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.firestore}`;
-process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${EMULATOR_PORTS.auth}`;
+process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${PORTS.firestore}`;
+process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${PORTS.auth}`;
 process.env.GCLOUD_PROJECT = PROJECT;
 
 const results = [];
@@ -272,7 +278,7 @@ const PROFILES = FULL
     ]
   : [];
 
-// A clean folder, so the report (scripts/screens-report.mjs) shows this run's
+// A clean folder, so the report (`sabeel-ci screens-report`) shows this run's
 // screens and no other's, and the checks beside them however the run ends.
 await rm(SHOTS, { recursive: true, force: true });
 await mkdir(SHOTS, { recursive: true });

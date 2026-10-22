@@ -10,10 +10,11 @@
  *
  * `weed server`, not `weed mini`: mini also starts an admin server and a plugin
  * worker, which bind ports outside this checkout's block (one on every
- * interface) and cannot be switched off. Every port here is pinned, from
- * `ports.mjs`, and bound to 127.0.0.1 only.
+ * interface) and cannot be switched off. Every port here is pinned, from the
+ * block's extras in ci-tools.json (`s3`, `master`, `volume`, `filer` and their
+ * gRPC ports), and bound to 127.0.0.1 only.
  *
- * The bucket, endpoint and keys come from `functions/.env.demo-sabeel-recordings`,
+ * The bucket, endpoint and keys come from `functions/.env.<emulator project>`,
  * the file the functions emulator reads, so the server and the code talking to
  * it cannot disagree. Each run gets a fresh data directory; nothing persists.
  */
@@ -23,8 +24,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { MEDIA_STORE_PORTS as P } from './ports.mjs';
-import { EMULATOR_PROJECT_ID } from './project.mjs';
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
+import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
+
+const settings = config(fileURLToPath(new URL('../..', import.meta.url)));
+const P = ports(settings);
+const EMULATOR_PROJECT_ID = settings.emulators.project;
 
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const { S3Client, CreateBucketCommand, HeadObjectCommand, PutBucketCorsCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -33,15 +39,17 @@ const { S3Client, CreateBucketCommand, HeadObjectCommand, PutBucketCorsCommand, 
 const WEED_BIN = process.env.WEED_BIN ?? join(homedir(), 'opt', 'seaweedfs-4.47', 'weed');
 
 /**
- * Browser origins that may upload to the local store: the dev servers. The
- * methods and headers come from the production bucket's own CORS file, so a
- * header the app needs and R2 does not allow fails here too.
+ * Browser origins that may upload to the local store: the dev servers (the
+ * walkthrough's, the sweep's and Metro's). The methods and headers come from
+ * the production bucket's own CORS file, so a header the app needs and R2 does
+ * not allow fails here too.
  */
+const METRO_PORT = 8081;
 const DEV_ORIGINS = [
-  'http://127.0.0.1:61310',
-  'http://127.0.0.1:61311',
-  'http://localhost:8081',
-  'http://127.0.0.1:8081',
+  `http://127.0.0.1:${P.web}`,
+  `http://127.0.0.1:${P.sweep}`,
+  `http://localhost:${METRO_PORT}`,
+  `http://127.0.0.1:${METRO_PORT}`,
 ];
 
 /** The demo project's function parameters, as `KEY=value` lines. */

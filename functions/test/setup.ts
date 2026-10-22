@@ -1,5 +1,5 @@
 // Vitest global setup for functions tests. Integration tests expect the Firebase
-// emulators (see scripts/test-emulator.sh); unit tests run standalone.
+// emulators (`npm run test:emulator`); unit tests run standalone.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { EMULATOR_PROJECT_ID } from '@sabeel/shared';

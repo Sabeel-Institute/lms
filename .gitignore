@@ -6,6 +6,11 @@ packages/shared/lib/
 functions/lib/
 app/dist-web/
 app/.expo/
+# The iOS archive and export (`npx sabeel-ci build-ios`).
+/build/
+# The build stamp, written at every build by `sabeel-ci build-info`; committed,
+# it would mark every build as made from uncommitted changes.
+app/src/build-info.ts
 
 # Firebase
 .firebase/
@@ -35,10 +40,8 @@ functions/.env
 # history and had to be rewritten out. The APK ships as a GitHub Release asset.
 *.apk
 *.aab
-build-artifacts/
 
-# e2e artifacts
-e2e-shots/
+# Screenshots and logs of the browser and device suites
 shots/
 
 # Logs & misc
@@ -46,7 +49,7 @@ shots/
 .DS_Store
 app/android/sentry.properties
 # The build machine's Sentry org/project/token, Apple team id and App Store
-# Connect key ids (scripts/load-build-env.sh reads it). Real secrets.
+# Connect key ids (`sabeel-ci build-ios` reads it). Real secrets.
 .env.sentry-build-plugin
 app/.env.sentry-build-plugin
 functions/.secret.local

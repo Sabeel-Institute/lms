@@ -35,7 +35,47 @@ and commit messages, and renaming them would strand every one of those.
 | 8 | Admin backend stats | not started |
 | 9 | Deploy, manual, release | **complete** (2026-10-15: v0.1.2 deployed, device pass on tb_emu, published to the GitHub release and the download page; iPhone on TestFlight, build 3; Play internal testing ready, its first release is the next version) |
 
+## Deploy log
+
+One entry per release, newest first, written with the version bump and
+headed `### <YYYY-MM-DD> — <summary> — v<version>`. The entry is the
+release's notes, for students and teachers: `npx sabeel-ci release X.Y.Z
+--notes <entry>` adds it, and it titles and describes the release pull
+request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
+it). What was checked before and after each release is in the verification
+log below.
+
+### 2026-10-21 — Dependency and security maintenance — v0.2.1
+
+A pre-release: keep using Sabeel Class Recordings until the institute announces
+the day everyone moves.
+
+**For students**
+- **Change password**, in More, says "Sending the link…" while the email goes,
+  and a second tap no longer sends a second link.
+
+**For everyone**
+- When an old version of the app is retired, its update screen opens Google
+  Play.
+- Routine updates to the app's building blocks, for security and stability.
+
 ## Decision log
+
+- 2026-10-21 — **One copy of the CI, release and device tooling for the three
+  apps** (`Sabeel-Institute/ci-tools`, pinned to a commit in
+  `package-lock.json`; `ci-tools.json` says what is this app's). The shared
+  workflows are rendered from it (`npx sabeel-ci workflows`) and `npx
+  sabeel-ci check-app` fails CI on drift. With it: the version is written
+  once, `expo.version` in `app/app.json`, and Android's versionCode and the
+  iPhone build number are both `major * 1000000 + minor * 1000 + patch`.
+  0.2.1 shipped before the scheme as Android code 39 and iPhone build 5; the
+  scheme gives 0.2.1 the code 2001, so the next release, 0.2.2, is 2002 on
+  Play and on TestFlight. The update gate's floor is set from a version
+  (`set-min-version 0.2.2`), and every build made before the scheme is below
+  any floor. Releases are a pull request (`npx sabeel-ci release X.Y.Z`) and,
+  once merged, `--ship`. The emulator block keeps 61300 with ci-tools' layout:
+  the media store's S3 moved from 61307 to 61327, the walkthrough's dev server
+  from 61311 to 61310 and the sweep's from 61310 to 61311.
 
 - 2026-10-15 — **An iPhone's notifications go straight to Apple**
   (Faisal). The app is built on the Firebase JS SDK, which has no messaging

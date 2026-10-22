@@ -4,11 +4,11 @@
   "private": true,
   "main": "index.ts",
   "scripts": {
-    "start": "node ../scripts/preflight-metro.mjs && expo start",
-    "android": "node ../scripts/preflight-metro.mjs && EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) expo run:android",
+    "start": "sabeel-ci build-info && sabeel-ci preflight-metro && expo start",
+    "android": "sabeel-ci build-info && sabeel-ci preflight-metro && expo run:android",
     "web": "expo start --web",
-    "web:export": "EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) expo export --platform web --output-dir dist-web --clear",
-    "web:export:maps": "EXPO_PUBLIC_COMMIT=$(git rev-parse --short HEAD) expo export --platform web --output-dir dist-web --clear --source-maps",
+    "web:export": "sabeel-ci build-web",
+    "web:export:maps": "sabeel-ci build-web --source-maps",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

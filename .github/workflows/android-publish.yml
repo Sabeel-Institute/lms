@@ -1,3 +1,5 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/android-publish.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: Publish Android
 
 on:
@@ -49,19 +51,28 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
-      - name: Preserve current release validators
-        run: |
-          mkdir -p "$RUNNER_TEMP/play-release"
-          cp scripts/ci-platform.mjs scripts/ci-play.mjs scripts/publish-play.mjs "$RUNNER_TEMP/play-release/"
       - name: Verify Android build provenance and successful CI
         id: build
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node "$RUNNER_TEMP/play-release/ci-platform.mjs" resolve-android-build
+        run: sabeel-ci ci-platform resolve-android-build
       - uses: actions/checkout@v7
         with:
           ref: ${{ steps.build.outputs.sha }}
@@ -80,12 +91,9 @@ jobs:
           echo "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29  $BUNDLETOOL_JAR" | sha256sum --check
           echo "BUNDLETOOL_JAR=$BUNDLETOOL_JAR" >> "$GITHUB_ENV"
       - name: Verify AAB checksum, signature, package, version and commit
-        run: node "$RUNNER_TEMP/play-release/ci-play.mjs" verify
-      - run: npm ci
-        if: inputs.publish
+        run: sabeel-ci ci-play verify
       - name: Check Play access or publish to internal testing
         env:
           PLAY_PUBLISHER_JSON: ${{ secrets.PLAY_PUBLISHER_JSON }}
           PLAY_PUBLISHER_ACCOUNT: ${{ vars.PLAY_PUBLISHER_ACCOUNT }}
-          PLAY_PUBLISHER_SCRIPT: ${{ runner.temp }}/play-release/publish-play.mjs
-        run: node "$RUNNER_TEMP/play-release/ci-play.mjs" release
+        run: sabeel-ci ci-play release

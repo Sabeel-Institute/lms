@@ -1,15 +1,21 @@
 /** Rich, realistic (fake) deployment for the user-manual screenshots — emulator. */
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
+import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { createRequire } from 'node:module';
 import { readFileSync, statSync } from 'node:fs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const admin = require('firebase-admin');
-import { EMULATOR_PORTS } from './lib/ports.mjs';
-import { EMULATOR_PROJECT_ID } from './lib/project.mjs';
 import { putLocalObject } from './lib/media-store.mjs';
-import { AUDIO_FIXTURE, ensureAudioFixture, ensureSlideVideo } from './lib/media-fixtures.mjs';
+import { AUDIO_FIXTURE, MEDIA_FIXTURES, ensureAudioFixture, ensureSlideVideo } from './lib/media-fixtures.mjs';
 import { NEW_STAFF_ACCESS, RULES_VERSION, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
-process.env.FIRESTORE_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.firestore}`;
-process.env.FIREBASE_AUTH_EMULATOR_HOST=`127.0.0.1:${EMULATOR_PORTS.auth}`;
+
+// The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
+const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
+const PORTS = ports(STACK);
+const EMULATOR_PROJECT_ID = STACK.emulators.project;
+process.env.FIRESTORE_EMULATOR_HOST=`127.0.0.1:${PORTS.firestore}`;
+process.env.FIREBASE_AUTH_EMULATOR_HOST=`127.0.0.1:${PORTS.auth}`;
 admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
 const auth=admin.auth(), db=admin.firestore();
 const now=Date.now(), day=86400000;
@@ -101,7 +107,7 @@ async function mkSession(courseId, sid, rid, title, { status='published', dueOff
   // A class shared its screen: the same part as video too, which students
   // start on — so the manual shows the versions and a "Watch by" card.
   if (slides) {
-    const file=`e2e-shots/guide-${rid}.mp4`;
+    const file=`${MEDIA_FIXTURES}/guide-${rid}.mp4`;
     ensureSlideVideo(file, slides);
     const key=mediaStorageKey(rid, 'video1');
     await putLocalObject(key, readFileSync(file), 'video/mp4');

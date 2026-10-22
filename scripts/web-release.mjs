@@ -2,7 +2,10 @@
  * Build the web bundle FOR DEPLOY, with Sentry source maps.
  *
  * Runs as the hosting predeploy. Four steps:
- *   1. Export with external source maps (plain `web:export` emits none).
+ *   1. Export with external source maps (`sabeel-ci build-web --source-maps`,
+ *      through `web:export:maps`; plain `web:export` emits none). It checks the
+ *      version, stamps the build and refuses an export that does not carry
+ *      the stamped commit.
  *   2. Inject Sentry "debug IDs" into the JS and the maps. Debug IDs match a
  *      runtime error to its map with no release/version coordination.
  *   3. Upload the maps to the `sabeel-recording-web` Sentry project.
@@ -50,28 +53,10 @@ for (const name of ['.env', '.env.local', '.env.production', '.env.production.lo
   }
 }
 
-// 1. Export with source maps.
+// 1. Export with source maps. The build label is `v<version> · <commit>`, with
+// a `+` after the commit when the tree holds uncommitted changes; a deploy
+// from such a tree says so on every screen that shows the label.
 run('npm', ['run', 'web:export:maps', '-w', '@sabeel/app']);
-
-/*
- * The build label on the More sheet is `v<version> · <commit>`, from
- * `EXPO_PUBLIC_COMMIT` — which `web:export:maps` sets from `git rev-parse`.
- * A checkout where that answers nothing exports a label of `v0.6.4 · ` and
- * deploys it. Look for the commit in the shipped JS rather than trusting the
- * environment, since the bundle is what ships.
- */
-const commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT }).toString().trim();
-if (!/^[0-9a-f]{7,}$/.test(commit)) throw new Error(`[web-release] no commit to label the build with (got "${commit}")`);
-const jsFiles = (dir) =>
-  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? jsFiles(join(dir, e.name)) : e.name.endsWith('.js') ? [join(dir, e.name)] : [],
-  );
-if (!jsFiles(DIST).some((f) => readFileSync(f, 'utf8').includes(commit))) {
-  throw new Error(`[web-release] the exported bundle does not carry commit ${commit} — the build label would be wrong.`);
-}
-if (execFileSync('git', ['status', '--porcelain'], { cwd: ROOT }).toString().trim()) {
-  console.warn(`[web-release] WARNING: the working tree is not clean; the bundle is labelled ${commit} but may not match it.`);
-}
 
 // Does the token file carry an auth token? (Presence check only — the value is
 // never read here; sentry-cli reads it itself.)

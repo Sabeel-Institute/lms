@@ -109,7 +109,7 @@ beforeEach(async () => {
     /*
      * EVERY RECORDING POINTS AT A SESSION, AND NO SESSION POINTS BACK.
      *
-     * The rules pass runs with no Functions emulator (scripts/test-emulator.sh),
+     * The rules pass runs with no Functions emulator (`npm run test:emulator`),
      * so nothing written here fires a trigger: these documents are the world
      * the rules judge, exactly as seeded. A recording points at its session, as
      * production's do. No session names a recording, because this file seeds an

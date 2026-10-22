@@ -1,3 +1,5 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/web.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
 name: Web
 
 on:
@@ -26,13 +28,26 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - name: Restore production build configuration
         env:
           APP_ENV_LOCAL: ${{ secrets.APP_ENV_LOCAL }}
-        run: node scripts/ci-platform.mjs prepare-web
+        run: sabeel-ci ci-platform prepare-web
       - run: npm ci
       - name: Build and checksum Hosting artifact
-        run: node scripts/ci-platform.mjs web
+        run: sabeel-ci ci-platform web
       - uses: actions/upload-artifact@v7
         with:
           name: web-hosting-${{ github.sha }}

@@ -19,6 +19,9 @@
  * status is the number of failed checks.
  */
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
+import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { localMediaConfig, startMediaStore } from './lib/media-store.mjs';
 import { r2Config, s3For } from './lib/r2.mjs';
 
@@ -46,7 +49,8 @@ let origin;
 if (target === 'local') {
   store = await startMediaStore();
   cfg = localMediaConfig();
-  origin = 'http://127.0.0.1:61311';
+  // The walkthrough's dev server, one of the origins the local store allows.
+  origin = `http://127.0.0.1:${ports(config(fileURLToPath(new URL('..', import.meta.url)))).web}`;
 } else {
   cfg = r2Config();
   origin = 'https://oursabeel-lms.web.app';
