@@ -36,6 +36,10 @@
     <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notification_icon_color"/>
     <meta-data android:name="expo.modules.notifications.default_notification_icon" android:resource="@drawable/ic_notification"/>
     <meta-data android:name="expo.modules.notifications.default_notification_color" android:resource="@color/notification_icon_color"/>
+    <!-- The channel a push lands in when its message names none: the one the
+         functions send on (PUSH_CHANNEL_ID in @sabeel/shared, which push.ts
+         creates), never Android's "Miscellaneous". -->
+    <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="sabeel-alerts"/>
     <meta-data android:name="expo.modules.updates.ENABLED" android:value="false"/>
     <meta-data android:name="expo.modules.updates.ENABLE_BSDIFF_PATCH_SUPPORT" android:value="true"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>

@@ -75,3 +75,12 @@ __pycache__/
 app/ios/
 gha-creds-*.json
 app/android/keystore.properties
+
+# Signing and service-account keys: one committed to this public repository
+# stays readable in its history. The debug keystore ships with every Android
+# SDK, so it is no secret, and Gradle signs debug builds with it.
+*.jks
+*.keystore
+!app/android/app/debug.keystore
+*service-account*.json
+*firebase-adminsdk*.json
