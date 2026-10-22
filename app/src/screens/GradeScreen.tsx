@@ -362,18 +362,17 @@ export function GradeScreen({
       width={layout === 'stack' ? 'read' : 'list'}
     >
       {guard.element}
-      {layout === 'stack' ? (
-        <>
-          {work}
-          {grade}
-        </>
-      ) : (
-        <View style={styles.columns}>
-          {layout === 'three' ? <View style={styles.listCol}>{list}</View> : null}
-          <View style={styles.workCol}>{work}</View>
-          <View style={styles.gradeCol}>{grade}</View>
-        </View>
-      )}
+      {/* ONE POSITION, at every width. The grade form went straight into the
+          page on a phone and into a column at a desk, so crossing the
+          breakpoint (a window resized, a tablet turned) unmounted it: a grade
+          typed and not yet stored was gone, and a return straight after went
+          out with the grade as stored, without the feedback just typed. The
+          layout changes the styles, never the tree. */}
+      <View style={layout === 'stack' ? null : styles.columns}>
+        {layout === 'three' ? <View style={styles.listCol}>{list}</View> : null}
+        <View style={layout === 'stack' ? null : styles.workCol}>{work}</View>
+        <View style={layout === 'stack' ? null : styles.gradeCol}>{grade}</View>
+      </View>
     </Screen>
   );
 }
