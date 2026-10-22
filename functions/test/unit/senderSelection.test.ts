@@ -230,7 +230,7 @@ describe('a person with an iPhone', () => {
     const { send } = await freshMessaging();
     await expect(send([web('tok-a'), iphone('ab12')], MESSAGE)).resolves.toEqual({ stale: [], sent: 2 });
     expect(sendEachForMulticast.mock.calls[0][0]).toMatchObject({ tokens: ['tok-a'] });
-    expect(sendToApns.mock.calls[0][0]).toEqual([iphone('ab12')]);
+    expect(sendToApns.mock.calls[0][0]).toEqual([{ token: 'ab12', apnsEnvironment: 'production', message: MESSAGE }]);
   });
 
   it('prunes the iPhone Apple calls dead, and only that one', async () => {

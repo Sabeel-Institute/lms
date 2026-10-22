@@ -1,7 +1,7 @@
 import { getMessaging } from 'firebase-admin/messaging';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { type DeviceTokenDoc, type PushMessage } from '@sabeel/shared';
-import { fcmMessage } from './fcm';
+import { DEAD_TOKEN_CODES, fcmMessage } from './fcm';
 import { sendToApns, type ApnsCredentials, type ApnsDevice } from './apns';
 import { reportError } from './sentry';
 
@@ -30,23 +30,9 @@ export interface SendOutcome {
 export type Sender = (devices: DeviceTokenDoc[], message: PushMessage) => Promise<SendOutcome>;
 
 /**
- * FCM error codes that mean "this token will never work again".
- *
- * Anything else — a quota error, a transient unavailable — must NOT delete the
- * token: pruning on a temporary failure would silently unregister a working
- * device and the only symptom would be notifications quietly stopping.
- *
- * `messaging/invalid-argument` is deliberately NOT here, though it looks like it
- * belongs: FCM also returns it for a malformed MESSAGE, so one bad title would
- * come back against every entry in the batch and prune every recipient's tokens
- * at once. Only these two are specific to the token.
+ * Whether a per-token failure code justifies deleting that registration: one
+ * of `DEAD_TOKEN_CODES` (fcm.ts), which says why the list is so short.
  */
-const DEAD_TOKEN_CODES = new Set([
-  'messaging/registration-token-not-registered',
-  'messaging/invalid-registration-token',
-]);
-
-/** Whether a per-token failure code justifies deleting that registration. */
 export function isDeadToken(code: string | undefined): boolean {
   return !!code && DEAD_TOKEN_CODES.has(code);
 }
@@ -91,7 +77,8 @@ function apnsCredentials(): ApnsCredentials {
 
 async function sendToApple(devices: ApnsDevice[], message: PushMessage): Promise<SendOutcome> {
   if (devices.length === 0) return { stale: [], sent: 0 };
-  const out = await sendToApns(devices, message, apnsCredentials());
+  const sends = devices.map(({ token, apnsEnvironment }) => ({ token, apnsEnvironment, message }));
+  const out = await sendToApns(sends, apnsCredentials());
   // Reasons only: a token is an address, and the log has no use for one.
   for (const f of out.failed) console.warn(`apns: not delivered (${f.reason})`);
   return { stale: out.dead, sent: out.delivered.length };
