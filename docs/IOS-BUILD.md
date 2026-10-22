@@ -49,7 +49,7 @@ Xcode, write it down here so the next prebuild can redo it.
 | `expo-image-picker` plugin | `cameraPermission` | the camera's purpose string (photographing work for an assignment) |
 | `expo-build-properties` | `ios.extraPods`: GoogleUtilities, RecaptchaInterop with modular headers | without them `pod install` refuses: "Swift pod AppCheckCore depends upon GoogleUtilities and RecaptchaInterop, which do not define modules" |
 | `@react-native-google-signin/google-signin` | registered BARE | the plugin then reads `REVERSED_CLIENT_ID` out of the plist, so the URL scheme has one home; given options it wants the value copied by hand, and validates it on every platform, web export included |
-| `@sentry/react-native` | registered BARE | org, project and token come from the build environment; given options it writes them into `ios/sentry.properties` |
+| `@sentry/react-native` | registered BARE | org and project come from `ci-tools.json` (`sentry`), the token from `app/.env.sentry-build-plugin`, both through the build's environment; given options it writes them into `ios/sentry.properties` |
 
 There is deliberately **no `ios.version`**: `expo.version` is the one version on
 every surface, and Apple's `X.Y.Z` shape is checked by `npm run check:ios`
@@ -102,11 +102,10 @@ All gitignored. Without each, something builds and quietly does not work.
 | File | What it carries | Without it |
 |---|---|---|
 | `app/GoogleService-Info.plist` | the iOS app's Firebase config and Google OAuth client | prebuild fails; `check:ios` says so first |
-| `app/.env.local` | `EXPO_PUBLIC_SENTRY_DSN_ANDROID`, which `app/src/sentry.ts` reads on every native platform (iOS reports to the same React Native Sentry project) | the app ships with crash reporting off |
-| `app/.env.sentry-build-plugin` | `SENTRY_ORG`, `SENTRY_PROJECT` (`sabeel-recording-android`), `SENTRY_AUTH_TOKEN`, `IOS_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, optional `ASC_KEY_PATH` | no dSYMs uploaded; no signing or upload |
+| `app/.env.local` | `EXPO_PUBLIC_SENTRY_DSN_NATIVE`, which `app/src/sentry.ts` reads on every native platform (iOS reports to the same React Native Sentry project as Android, `sentry.projects.native` in `ci-tools.json`) | the app ships with crash reporting off |
+| `app/.env.sentry-build-plugin` | `SENTRY_AUTH_TOKEN`, `IOS_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, optional `ASC_KEY_PATH` | `build-ios` refuses to build (no token, no team); no upload |
 | `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` | the App Store Connect API key (NOT the APNs key) | `-allowProvisioningUpdates` cannot sign; no upload |
 | `~/.apns/AuthKey_<key id>.p8` | the APNs key, for `npx sabeel-ci send-test-push --apple` (the deployed functions read theirs from Secret Manager) | no real send from the Mac |
-| `functions/.secret.local` | placeholders for the secrets the functions bind (see `docs/DEV-TOOLING.md`) | the functions emulator asks Secret Manager and logs 403s |
 
 `sabeel-ci build-ios` reads `app/.env.sentry-build-plugin` (parsed, not
 sourced; a variable already in the environment wins). Never print or commit any
@@ -356,7 +355,7 @@ away, until Apple's per-team certificate limit stopped every build.
 | `IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD` | The Apple Distribution certificate and private key, base64, and its password | `~/.config/sabeel-lms/ios-distribution/` on Faisal's machine |
 | `IOS_PROFILE` | The App Store profile "Sabeel LMS App Store CI", base64 | the same folder |
 | `ASC_KEY_P8` | The App Store Connect API key (Admin) | `~/.appstoreconnect/private_keys/AuthKey_W37AZSR3Q5.p8` |
-| `IOS_BUILD_ENV` | `app/.env.sentry-build-plugin`, its `NAME=value` lines only | the Mac's copy |
+| `BUILD_ENV` | `app/.env.sentry-build-plugin`, its `NAME=value` lines only; the Android release build reads it too | the Mac's copy |
 | `APP_ENV_LOCAL` | `app/.env.local`, its `NAME=value` lines only | |
 | `GOOGLE_SERVICE_INFO_PLIST` | `app/GoogleService-Info.plist`, base64 | |
 

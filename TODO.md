@@ -239,10 +239,10 @@ secret** (`SENTRY_DSN`) and the functions redeployed, so server reporting is now
 active (secret bound to all 19 functions, verified by name). Reporting is off in
 dev/debug bundles by design — events come only from deployed surfaces.
 
-One small deferral, not blocking: **native source-map upload** (the Gradle
-plugin needs a `prebuild`), so release APK stack traces are minified until
-then; the errors still report. Web source maps upload on every hosting deploy
-(`scripts/web-release.mjs`).
+Source maps reach Sentry from every release: the Android build's
+`sentry.gradle` and Xcode's Sentry phase upload them with the token in the
+build machine's `app/.env.sentry-build-plugin` (`BUILD_ENV` in CI), and Deploy
+Web uploads the web build's before it publishes.
 
 ### ✅ 2. Notifications — DONE except one browser check (2026-08-15)
 

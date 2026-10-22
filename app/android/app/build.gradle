@@ -6,6 +6,19 @@ apply plugin: "com.google.gms.google-services"
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 /**
+ * A release uploads its JavaScript source map to Sentry, so a crash reads as
+ * source rather than as the minified bundle. sentry.gradle does it, applied
+ * exactly when the build machine's `app/.env.sentry-build-plugin` exists: that
+ * file holds the token (SENTRY_AUTH_TOKEN), and ci-tools' `build-aab` sets
+ * SENTRY_ORG and SENTRY_PROJECT from ci-tools.json and refuses a release
+ * without the file. A pull-request build has no file and applies nothing.
+ * docs/SECRETS.md says where the file comes from.
+ */
+if (file("$projectRoot/.env.sentry-build-plugin").exists()) {
+    apply from: new File(["node", "--print", "require.resolve('@sentry/react-native/package.json')"].execute(null, rootDir).text.trim(), "../sentry.gradle")
+}
+
+/**
  * The app version has ONE source of truth: app.json → expo.version. Nothing
  * here carries its own copy — two copies desync silently, and the symptom is
  * every release reporting the same version to Sentry.

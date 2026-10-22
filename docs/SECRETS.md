@@ -8,9 +8,9 @@
 |---|---|---|
 | Firebase web config (apiKey, appId, …) | **No** | Committed in `app/src/firebase-config.ts` — it ships in every client bundle |
 | `google-services.json`, `GoogleService-Info.plist` | No, but not committed | Regenerated from Firebase; gitignored because they are per-project and carry OAuth client ids |
-| Sentry **client** DSNs (web, android) | No, but not committed | Gitignored `app/.env.local` as `EXPO_PUBLIC_SENTRY_DSN_WEB` and `EXPO_PUBLIC_SENTRY_DSN_ANDROID`. Send-only, and they ship in the bundle anyway; kept out of git so they can rotate per environment |
+| Sentry **client** DSNs (web, Android and iOS) | No, but not committed | Gitignored `app/.env.local` as `EXPO_PUBLIC_SENTRY_DSN_WEB` and `EXPO_PUBLIC_SENTRY_DSN_NATIVE` (GitHub secret `APP_ENV_LOCAL` in CI). Send-only, and they ship in the bundle anyway; kept out of git so they can rotate per environment |
 | Sentry **functions** DSN | **Yes** | Secret Manager as `SENTRY_DSN` (server-side, never shipped to a client) |
-| Sentry **auth token** (source-map upload) | **Yes** | Gitignored `app/android/sentry.properties` (`auth.token=`). An **org** token (org `devnull-ke`), shared across all the Sabeel Sentry projects; the web pipeline reads it via `SENTRY_PROPERTIES`, overriding the project to `sabeel-recording-web` |
+| Sentry **auth token** (source-map and symbol upload) | **Yes** | `SENTRY_AUTH_TOKEN` in the build machine's gitignored `app/.env.sentry-build-plugin`, and in the GitHub secret `BUILD_ENV` (environment `release-build`) for CI. An **org** token (org `devnull-ke`, scope `org:ci`), shared across all the Sabeel Sentry projects. The org and the projects it uploads to are in `ci-tools.json` (`sentry`), never in a secret |
 | Zoom account id / client id / client secret | **Yes** | Secret Manager, via `firebase functions:secrets:set` |
 | Service account keys | **Yes** | One exists, Play's publishing account — see below |
 | Android **release signing key** and its password | **Yes** | `~/.config/sabeel-lms/release.keystore` and `keystore.properties`, outside the repo, mode 600; also Play's app signing and upload key — see below |
@@ -154,12 +154,11 @@ or only with effort:
 | File | Holds | If lost |
 |---|---|---|
 | `~/.config/sabeel-lms/release.keystore` + `keystore.properties` | Android release key and password; also Play's app signing and upload key | **No updates to a GitHub install, ever; none on Play until an upload key reset** (above). Back up both. |
-| `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` | App Store Connect API key (Admin): signs and uploads iPhone builds; also GitHub secret `ASC_KEY_P8` | Apple lets it be downloaded once. Make a new key in App Store Connect (Users and Access, Integrations), set `ASC_KEY_P8` and the `ASC_KEY_ID` in `IOS_BUILD_ENV` again, revoke the old one |
+| `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` | App Store Connect API key (Admin): signs and uploads iPhone builds; also GitHub secret `ASC_KEY_P8` | Apple lets it be downloaded once. Make a new key in App Store Connect (Users and Access, Integrations), set `ASC_KEY_P8` and the `ASC_KEY_ID` in `BUILD_ENV` again, revoke the old one |
 | `~/.config/sabeel-lms/ios-distribution/` | Apple Distribution certificate and private key (`.p12`, its password) and the App Store profiles; also GitHub secrets | Renew early, as `docs/IOS-BUILD.md` ("Builds on GitHub", Renewal) does: new certificate, profiles and secrets |
 | `app/.env.local` | Sentry client DSNs | Copy again from Sentry project settings |
-| `app/android/sentry.properties` | Sentry org auth token | Create a new token in Sentry |
+| `app/.env.sentry-build-plugin` | Sentry org auth token (`SENTRY_AUTH_TOKEN`), the Apple team id and the App Store Connect key ids; also GitHub secret `BUILD_ENV` | Create a new token in Sentry; set `BUILD_ENV` again from the file |
 | `~/.config/sabeel-lms/AuthKey_X5R8FL94BC.p8` | Apple push key (also in Secret Manager as `APNS_KEY`) | Apple never lets it be downloaded again. Make a new key in the developer portal, set `APNS_KEY` to it and `APNS_KEY_ID` to its id, redeploy the functions. Back it up |
-| `functions/.secret.local` | `SENTRY_DSN=disabled`, `R2_*` and `APNS_KEY` placeholders for the emulator | Recreate from this file |
 | `app/google-services.json`, `app/android/app/google-services.json` | Firebase Android config | `firebase apps:sdkconfig ANDROID 1:226338267845:android:a85d5935fb8f4555cac6ac` |
 | `app/GoogleService-Info.plist` | Firebase iOS config | `firebase apps:sdkconfig IOS 1:226338267845:ios:13ce4f7992ecd4decac6ac --out app/GoogleService-Info.plist` |
 | `~/.config/.wrangler/config/default.toml` | Cloudflare login | Log in again (`docs/DEV-TOOLING.md`) |

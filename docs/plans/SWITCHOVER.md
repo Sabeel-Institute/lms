@@ -53,10 +53,10 @@ the first line.
   Phase 0 rather than a later migration. Nothing else needs a default bucket:
   Functions deploys use their own `gcf-*` buckets, and the seeding export uses
   a bucket in the legacy project.
-- Sentry: the existing projects for now. `app/.env.local`,
-  `app/android/sentry.properties` and `functions/.secret.local` were copied
-  from the legacy checkout. Both `google-services.json` files were **not**
-  copied: they belong to the legacy project and would connect this repo to it.
+- Sentry: the existing projects for now (`sentry` in `ci-tools.json`).
+  `app/.env.local` and the Sentry token were copied from the legacy checkout.
+  Both `google-services.json` files were **not** copied: they belong to the
+  legacy project and would connect this repo to it.
 - Everyone switches on one day. The legacy project is frozen, copied a last
   time, then retired.
 
