@@ -75,8 +75,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/seaweedfs"
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
+      # An apt mirror can hang: a stuck attempt is stopped and tried once more.
       - name: Install Chromium for the seed
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 12
+        run: timeout 300 npx playwright install --with-deps chromium || timeout 300 npx playwright install --with-deps chromium
       - name: Boot an Android emulator
         run: sabeel-ci ci-avd
       - name: Install Maestro
