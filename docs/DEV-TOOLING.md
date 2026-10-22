@@ -3,6 +3,13 @@
 What each script guards against, and which failures are environmental rather
 than yours. Read this before debugging the harness.
 
+The CI, release, emulator and device tooling is the Sabeel apps' shared
+`@sabeel-institute/ci-tools`, pinned in `package-lock.json` and run as `npx
+sabeel-ci <command>`; its README says what each command does, and
+`ci-tools.json` holds this app's settings for it. `scripts/` holds this app's
+own tools: the browser suites and their runner, the seeds, the media store,
+migrations, the production checks and the help films.
+
 **First question when a suite fails: does it also fail on stashed changes?** A
 clean-HEAD repro means the cause is environmental — almost always a leftover
 emulator — not your diff.
@@ -11,36 +18,39 @@ emulator — not your diff.
 
 | Command | What it does |
 |---|---|
-| `npm run lint` | ESLint + `check:text` |
+| `npm run lint` | ESLint, then `check:version` (`app.json`'s version is store-legal and Android's code follows from it) and `check:text` (no source file holds a byte that makes tools treat it as binary) |
+| `npx sabeel-ci check-app` | What the shared tooling assumes of this repo: `ci-tools.json`, the rendered workflows, secrets read only in the release environment, `.gitignore`, the version written once with its deploy-log entry, the emulator ports and project. CI runs it first |
 | `npm run typecheck` | Builds `@sabeel/shared` first, then typechecks every workspace — **including the functions tests** (`functions/tsconfig.test.json`) |
 | `npm test` | Vitest unit tests (shared, functions and app), no emulators needed |
-| `npm run test:emulator` | Two passes: the rules suites (`test:rules`) against Firestore + Auth alone, then the integration suites against Firestore + Auth + Functions and the local media store (SeaweedFS) |
-| `npm run emulators` | The same emulators and media store, long-running, for `node scripts/web-e2e.mjs`, `seed:emulators` and a device pass |
-| `node scripts/with-media-store.mjs <cmd…>` | Runs a command with SeaweedFS up on 127.0.0.1:61307 and stops it after; what the runners above wrap themselves in |
+| `npm run test:emulator` | `sabeel-ci test-emulator`. Two passes: the rules suites (`test:emulator:rules` in `functions/`) against Firestore + Auth alone, then the integration suites (`test:emulator:functions`) against Firestore + Auth + Functions and the local media store (SeaweedFS) |
+| `npm run emulators` | `sabeel-ci emulators`: the same emulators and media store, long-running, for `node scripts/web-e2e.mjs`, `seed:emulators` and a device pass |
+| `node scripts/with-media-store.mjs <cmd…>` | Runs a command with SeaweedFS up on the block's `s3` port (127.0.0.1:61327) and stops it after; every Functions emulator run goes through it (`emulators.functionsWrapper` in `ci-tools.json`) |
 | `npm run knip` | Dead-code audit — fails on unused files, exports and dependencies |
-| `npm run emulators:free` | Kills whatever is squatting on the emulator ports |
+| `npm run emulators:free` | `sabeel-ci free-emulator-ports`: stops this checkout's leftovers on its emulator ports |
+| `npx sabeel-ci ports [<name>]` | This checkout's ports by name, or one of them (`npx sabeel-ci ports web`) |
 | `npm run build` | Builds shared, then bundles functions with esbuild |
 | `npm run test:e2e` | The Playwright flow walkthrough — starts its own emulators and dev server (see below) |
 | `npm run test:screens` | The multi-width layout sweep — the same runner (see below) |
 | `npm run web:export -w @sabeel/app` | The web bundle that actually ships |
-| `scripts/emulator.sh headless` | Boots the `tb_emu` AVD with no window |
+| `npx sabeel-ci emulator headless` | Boots the `tb_emu` AVD (or `SABEEL_AVD`) with no window; refuses to boot it twice and names who runs it |
 | `npm run check:queries` | **Against the REAL project.** Every query shape the app sends, checked for a missing composite index. With `CHECK_ACCESS_TOKEN` set it runs over REST as that user token instead of Application Default Credentials (see `docs/DEPLOY.md`) |
 | `npm run check:documents` | **Against the REAL project, read-only.** Every live document the app reads, checked against the fields its type requires (`documentShapes` in `@sabeel/shared`), with the screens' helpers run on each. Fails on a document that lacks a required field (migrate it) or that a helper throws on, which includes an audit entry under an action the audit screen has no words for (`AUDIT_ACTION_LABELS`). Same `CHECK_ACCESS_TOKEN` as `check:queries` |
-| `npm run check:push` | **Against the REAL project.** FCM credentials, the VAPID key, and that the code FCM returns for a dead token is one the app prunes on; then Apple's: that it accepts the key Secret Manager holds as `APNS_KEY`, with the ids in `functions/.env.oursabeel-lms`, for this app (read with the active gcloud account). Takes `CHECK_ACCESS_TOKEN` too |
+| `npm run check:push` | **Against the REAL project.** `sabeel-ci check-push`, through the functions' own `fcm.ts`, `apns.ts` and `testPush.ts`: FCM's credentials, and that the code FCM returns for a dead token is one the app prunes on (`DEAD_TOKEN_CODES`); then Apple's: that both its services accept the key Secret Manager holds as `APNS_KEY`, with the ids in `functions/.env.oursabeel-lms`, for this app (read with the active gcloud account). Takes `CHECK_ACCESS_TOKEN` too |
+| `npm run check:web-push` | The exported web bundle (`app/dist-web`) carries the VAPID public key and the permission path; every CI web build runs it |
 | `npm run smoke:prod` | **Against the LIVE site.** The auth handler, the three store pages, the build label for this checkout's version and commit, a provoked Auth request going to Google and not an emulator, no dev sign-in rows, and the bundle's `.map` not served |
 | `npm run students:report [-- --email <address>]` | **Against the REAL project, read-only.** Every student's account: whether a password has ever been set and when, last sign-in, last activity. Test accounts and staff members' own student accounts are listed apart and left out of the counts. `--email` shows one record with its audited history and what its state means for the next set-password link. Start here when a student can't get in (see "A student can't set a password") |
 | `npm run seed:emulators` | Seeds the sweep's world into an already-running emulator suite and leaves it there, for a device pass (needs the web dev server up: see `docs/DEPLOY.md`) |
 | `node scripts/repro-stale-scope.mjs delete\|remove\|none` | The WEB-4 regression: a manager's cold load with a stale cached course list must render the work queue and report no listener refusal. Needs emulators + the e2e dev server; resets the emulators; exit 1 on a refusal |
-| `node scripts/set-min-version.mjs <versionCode>` | **Against the REAL project** (or the emulator with `CHECK_PROJECT` + `FIRESTORE_EMULATOR_HOST`). Sets the oldest Android build allowed to run |
+| `node scripts/set-min-version.mjs <X.Y.Z>` | **Against the REAL project** (or the emulator with `CHECK_PROJECT` + `FIRESTORE_EMULATOR_HOST`). Sets the oldest app version allowed to run on a phone, stored as its versionCode |
 | `node scripts/s3-conformance.mjs local\|r2` | The 18 S3 behaviours the media code relies on (signatures, expiry, write-once PUT, signed type, `Range`, multipart ETags, a completed upload taking no more parts, CORS, read key cannot write), against SeaweedFS or **against the REAL R2 bucket** with the real keys from Secret Manager. Writes and deletes a few objects under `conformance/`. Run after changing either |
 | `npm run bucket-config -w @sabeel/media-copier` | **Against the REAL R2 bucket.** Applies `cloudflare/media-bucket/cors.json` and `lifecycle.json`; `wrangler r2 bucket cors list` / `lifecycle list` read them back |
 | `npm test -w @sabeel/media-copier` | The copier Worker's tests, inside workerd with a local R2 |
 | `node scripts/tutorials/lines.mjs` | The help films' narration, one line per step, as `tts.py` reads it (see "The help films") |
 | `uv run scripts/tutorials/tts.py --model 1.7B --speaker aiden --lines <json> --out <dir>` | Renders the narration on this machine's CPU with Qwen3-TTS, a built-in voice; resumable, and renders a line again when its words change |
 | `uv run scripts/tutorials/asr_check.py --lines <json> --wav <dir>` | Transcribes the rendered narration (Whisper) and flags a line that does not say what its script says |
-| `node scripts/tutorials/record.mjs --wav <dir> --out <dir> [--only …] [--variant …]` | Records the help films against the guide world: MP4 + WebVTT per film and cut. Needs the emulators and the dev server on the e2e port |
+| `node scripts/tutorials/record.mjs --wav <dir> --out <dir> [--only …] [--variant …]` | Records the help films against the guide world: MP4 + WebVTT per film and cut. Needs the emulators and the dev server on the `web` port |
 | `node scripts/tutorials/publish.mjs --from <dir> [--only …]` | **Into the REAL media bucket**, under `help/`, through wrangler: every film and its captions, both cuts, or nothing |
-| `node scripts/send-test-push.mjs <fcm-token> [path]`, or `--apple <development\|production> <iphone-token> [path]` | **Against the REAL services.** One real push to one device, built by the functions' own `fcm.ts` / `apns.ts`; writes nothing. The device check for "a push is shown, and a tap opens `path`", with the app open and then closed — no emulator delivers a push. An iPhone's token goes to the Apple service it came from: `development` for a debug build (an Apple-silicon simulator receives these), `production` for TestFlight; the key is `APNS_KEY_FILE` or `~/.config/sabeel-lms/AuthKey_<id>.p8`. The token is in the `devices` collection of whichever Firestore the device registered with |
+| `npx sabeel-ci send-test-push <fcm-token> [path=<app path>]`, or `--apple <development\|production> <iphone-token> [path=<app path>]` | **Against the REAL services.** One real push to one device, built by the functions' own `testPush.ts`, `fcm.ts` and `apns.ts`; writes nothing. The device check for "a push is shown, and a tap opens `path`", with the app open and then closed — no emulator delivers a push. An iPhone's token goes to the Apple service it came from: `development` for a debug build (an Apple-silicon simulator receives these), `production` for TestFlight; the key is `APNS_KEY_FILE` or `~/.apns/AuthKey_<id>.p8`. The token is in the `devices` collection of whichever Firestore the device registered with |
 
 The last two are **pre-release checks, not part of the loop**: both authenticate
 against production with the Admin SDK, so neither can run in CI or against the
@@ -75,12 +85,12 @@ no root, and is idempotent:
 ```sh
 ../agent-skills/skills/expo-firebase-stack/tools/check-host.sh   # what is missing
 ../agent-skills/skills/expo-firebase-stack/tools/bootstrap-linux.sh \
-    --jdk21-aliases SR --repo "$PWD"
+    --jdk21-aliases SABEEL --repo "$PWD"
 ```
 
-`--jdk21-aliases SR` sets `SR_JDK21_HOME`, which
-`scripts/test-emulator.sh` reads to find JDK 21 without disturbing the Gradle
-default.
+`--jdk21-aliases SABEEL` sets `SABEEL_JDK21_HOME`, the first place `npx
+sabeel-ci jdk21` looks for JDK 21 for the emulators; the Gradle default stays
+17.
 
 **The Android emulator needs hardware virtualization, which a VM may not have.**
 `emulator -accel-check` is authoritative — `accel: 3` means no KVM, and if
@@ -133,25 +143,36 @@ audit lie, and an audit that reports nothing is worse than no audit.
 
 ## Emulators
 
-- **JDK 21+ required.** `scripts/test-emulator.sh` resolves `SR_JDK21_HOME` →
-  `~/opt/jdk-21` → whatever `java` is on PATH, so JDK 17 can stay the default for
-  the Android/Gradle build.
+- **JDK 21+ required.** `npx sabeel-ci jdk21` resolves `SABEEL_JDK21_HOME` →
+  `~/opt/jdk-21` → `JAVA_HOME` → the `java` on PATH (then, on a Mac,
+  `java_home -v 21` and Homebrew's openjdk@21), and only the emulator runs are
+  pointed at it, so JDK 17 can stay the default for the Android/Gradle build.
+- **A resident Gradle daemon holds about 3.7 GB** beside the emulators.
+  `test:emulator` reports one and leaves it, because `gradlew --stop` stops
+  every checkout's; `SABEEL_STOP_GRADLE=1 npm run test:emulator` stops it when
+  memory is tight and nothing else is building.
 - **ffmpeg, built with libx265.** The upload tests send REAL media through the
   server's probe — a buffer of zeros is rightly refused — so
   `functions/test/mediaSamples.ts` makes M4A, MP3, WAV, FLAC, H.264, HEVC and
   QuickTime samples on first use, in the system temp directory. The e2e makes
   its own the same way (`scripts/lib/media-fixtures.mjs`). HEVC needs libx265;
   a distribution ffmpeg has it.
-> **This checkout owns emulator ports 61300-61306** and **61308-61309** (the
-> task queue and Eventarc, which the suite starts by itself), the local media store's
-> **61307** (S3) and **61320-61326** (SeaweedFS's own master, volume and filer
-> servers, pinned so it binds nothing else), and web dev-server ports
-> 61310 (sweep) / 61311 (`test:e2e`). The legacy `sabeel-recording-app` checkout
-> owns 61100+, and the sibling Sabeel repos own 61000+ and 61200+. The repos
-> share this machine and all used to pin 8080/9099/5001/9199, so whichever
-> suite started second killed the other's Firestore. `61303` also reads as "this project, functions" at a glance — the
-> diagnostic that was missing when one session killed another's emulator after
-> misreading a truncated `ps` line.
+> **This checkout owns ports 61300-61399**, the block ci-tools gives this app
+> (`emulators.base` in `ci-tools.json`, laid out by ci-tools' `lib/ports.mjs`,
+> the same offsets in every app's block): the emulators on **61300-61309**
+> (Firestore and its websocket, Auth, Functions, the UI, the hub, logging, and
+> the task queue and Eventarc, which the suite starts by itself), the web dev
+> servers on **61310** (`web`: the walkthrough, the native seed, the help
+> films) and **61311** (`sweep`), a throttling proxy on **61312** (`proxy`),
+> and the local media store on **61320-61327** (SeaweedFS's own master, volume
+> and filer servers, pinned so it binds nothing else, and its S3 API on
+> 61327). `npx sabeel-ci ports` lists them by name. The legacy
+> `sabeel-recording-app` checkout owns 61100+, and the sibling Sabeel repos own
+> 61000+ and 61200+. Firebase's default ports (8080, 9099, 5001, 9199, …) are
+> the same for every checkout on this machine, so two suites on them kill each
+> other's Firestore. `61303` also reads as "this project, functions" at a
+> glance — the diagnostic that was missing when one session killed another's
+> emulator after misreading a truncated `ps` line.
 >
 > 61300+ specifically: the ephemeral range here is 32768-60999
 > (`/proc/sys/net/ipv4/ip_local_port_range`) so nothing above it is handed out at
@@ -162,13 +183,14 @@ audit lie, and an audit that reports nothing is worse than no audit.
 > the implicit ones included: left at 9499, the task queue's port stopped this
 > suite starting while a sibling's ran (2026-10-16).
 >
-> Five files state these numbers and cannot share a representation —
-> `firebase.json`, `app/src/env.ts` (inlined into the bundle),
-> `scripts/lib/ports.mjs`, the `PORTS=(…)` array in `free-emulator-ports.sh` and
-> the `WEB_PORT`s in `e2e-stack.sh`.
-> `functions/test/unit/emulatorPorts.test.ts` asserts they agree, that every port
-> is inside the block, and that the kill list contains **nothing this checkout
-> does not own**. Never widen that array past the block.
+> Scripts state no port, comments included: they read them from ci-tools
+> (`npx sabeel-ci ports <name>` in shell; `ports(config(root))` from
+> `@sabeel-institute/ci-tools/lib/ports.mjs` and `lib/config.mjs` in Node),
+> and the emulator project from `config(root).emulators.project`. Two files
+> cannot, and state them: `firebase.json`, which the emulators bind, and
+> `app/src/env.ts`, inlined into the bundle. `npx sabeel-ci check-app` holds
+> both to the block, and fails on a port of the block, or a Firebase default,
+> written anywhere in `scripts/` or `package.json`.
 >
 > Two are easy to move wrongly: `firestore.websocketPort` is a **nested** key
 > defaulting to **9150** that is *not* derived from `firestore.port`, and left
@@ -178,24 +200,28 @@ audit lie, and an audit that reports nothing is worse than no audit.
 > the AVD reaches the host directly at `10.0.2.2:8081`, so concurrent *web* work
 > is fine and concurrent *native* work stays one session at a time.
 
-- **`free-emulator-ports.sh` runs first, every time.** A killed run leaves
-  emulators squatting on this checkout's ports, **61300-61307 and 61320-61326**. The
-  next run then talks to a half-dead emulator that answers on the port but has no
-  functions registered, so every callable 404s — and a 404 carries no CORS
-  headers, so the browser reports "blocked by CORS policy" while the callable
-  surfaces a bare `internal`. Every symptom points at the app rather than at the
-  leftover process.
+- **`sabeel-ci free-emulator-ports` runs first, every time** (`npm run
+  emulators:free` by hand). A killed run leaves emulators squatting on this
+  checkout's suite ports (`npx sabeel-ci ports --suite`: 61300-61309 and the
+  media store's 61320-61327). The next run then talks to a half-dead emulator
+  that answers on the port but has no functions registered, so every callable
+  404s — and a 404 carries no CORS headers, so the browser reports "blocked by
+  CORS policy" while the callable surfaces a bare `internal`. Every symptom
+  points at the app rather than at the leftover process. It stops a process
+  only when its working directory is inside this checkout; one from another
+  checkout of this repo (the main clone, a worktree) is named with its pid and
+  directory, nothing is stopped, and the run fails. Stop that one yourself.
 - **Never `pkill -f firebase`.** The pattern matches the cleanup script's own
   command line and the shell that spawned it, so the "cleanup" kills the caller.
   The script looks up owners by port instead. The same trap catches
   `pkill -f "expo start"` / `pkill -f "expo run"` — it matches the agent's own
   tool process and the command exits **144** as its shell is killed mid-run.
-  **Kill dev servers by port:** `ss -lptn 'sport = :61311' | grep -oP 'pid=\K[0-9]+' | xargs -r kill`
+  **Kill dev servers by port:** `ss -lptn "sport = :$(npx sabeel-ci ports web)" | grep -oP 'pid=\K[0-9]+' | xargs -r kill`
   (`lsof` is not on PATH in a non-interactive shell without the toolchain env
   sourced, and a missing `lsof` turns a port guard into a silent no-op)
-  (or `free-emulator-ports.sh` for the emulator suite). macOS is the other way
-  round — no `ss`, no `/proc` — so `free-emulator-ports.sh` and
-  `preflight-metro.mjs` ask `lsof` there.
+  (or `npm run emulators:free` for the emulator suite). macOS is the other way
+  round — no `ss`, no `/proc` — so `sabeel-ci free-emulator-ports` and
+  `sabeel-ci preflight-metro` ask `lsof` there.
 - **Waiting for the port is not waiting for readiness.** The functions emulator
   accepts connections before it has registered anything. Poll a known callable
   until it stops 404ing.
@@ -239,8 +265,8 @@ test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
   unpacked to the same path.
 - **`weed server`, not `weed mini`.** Mini also starts an admin server and a
   plugin worker that bind ports outside this checkout's block, one of them on
-  every interface, and neither can be switched off. Every port is pinned from
-  `scripts/lib/ports.mjs` and bound to 127.0.0.1.
+  every interface, and neither can be switched off. Every port is pinned, from
+  the block's extras in `ci-tools.json`, and bound to 127.0.0.1.
 - **Each run starts empty**, in a fresh temp directory removed on exit. The
   bucket is created and its CORS set (the dev servers' origins) at start.
 - **It holds about 1 GB** (16 volumes of 64 MB), and its volumes are
@@ -260,9 +286,10 @@ test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
   `SENTRY_DSN=disabled` and `R2_READ_KEY_ID`, `R2_READ_SECRET`,
   `R2_WRITE_KEY_ID`, `R2_WRITE_SECRET`, `APNS_KEY` set to anything (they are
   unused under the emulator). CI writes the same file.
-- **Android:** signed URLs name `127.0.0.1:61307`, and the host is signed, so
-  `10.0.2.2` cannot be substituted. `adb reverse tcp:61307 tcp:61307` lets the
-  AVD reach it at the address the URL names.
+- **Android:** signed URLs name `127.0.0.1:61327`, and the host is signed, so
+  `10.0.2.2` cannot be substituted. `adb reverse tcp:61327 tcp:61327` lets the
+  AVD reach it at the address the URL names; the native flows do it themselves
+  (`native.reversePorts` in `ci-tools.json`).
 - **Stopping it:** the wrapper stops SeaweedFS when its command exits or on
   SIGINT, SIGTERM or SIGHUP (so `tmux kill-session` works). A leftover is freed
   by `npm run emulators:free`, which covers its ports.
@@ -271,26 +298,27 @@ test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
 
 `npm run test:e2e` (`scripts/e2e-stack.sh web` → `scripts/web-e2e.mjs`) needs
 nothing running: the runner frees the emulator ports, starts the emulators, the
-media store and an Expo web dev server on **61311**, runs the walkthrough and
-stops them all. CI's browser job runs the same command.
+media store and an Expo web dev server on **61310** (the block's `web` port),
+runs the walkthrough and stops them all. CI's browser job runs the same
+command. Its screenshots land in `shots/e2e/`, emptied as it starts.
 
 For a tight loop against a stack you keep up, start the two yourself and run
 the script directly:
 
 ```bash
 npm run emulators      # Firestore, Auth, Functions and the local media store
-cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 61311 --clear
+cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port "$(npx sabeel-ci ports web)" --clear
 node scripts/web-e2e.mjs
 ```
 
 **`npm run test:emulator`, `test:e2e` and `test:screens` all kill that emulator
-suite.** Each runs `free-emulator-ports.sh` first, by design — so after one of
-them you must restart the long-lived suite before the direct run will work. The
-symptom is every e2e check failing at once.
+suite.** Each runs `sabeel-ci free-emulator-ports` first, by design — so after
+one of them you must restart the long-lived suite before the direct run will
+work. The symptom is every e2e check failing at once.
 
 **Its media is generated, not committed.** `scripts/lib/media-fixtures.mjs`
 makes the twelve-minute M4A, the same twelve minutes as a tiny MP4, and the
-manual's slide videos with ffmpeg, once, under `e2e-shots/`. The e2e and
+manual's slide videos with ffmpeg, once, under `.tmp/media/`. The e2e and
 `seed-guide.mjs` both take them from there, so neither depends on the other
 having run first.
 
@@ -339,8 +367,9 @@ there after 15 s. It once photographed and measured the course screen with its
 assignments still being counted.
 
 **It needs nothing running.** The runner starts the emulator suite and its own
-Expo web dev server on port **61310** (not `test:e2e`'s 61311) and kills both on
-the way out, and it never touches a world somebody else built.
+Expo web dev server on port **61311** (the block's `sweep`, not `test:e2e`'s
+61310) and kills both on the way out, and it never touches a world somebody
+else built.
 
 ```bash
 npm run test:screens                    # the CI set: 320, 390, 720, 1024, 1440
@@ -350,15 +379,15 @@ SWEEP_FULL=1 npm run test:screens       # + iPhone SE / Pixel 7 / iPad Mini prof
 
 **Review a sweep in its report.** The sweep writes its screenshots and every
 check (`results.json`) to `shots/screens/`, emptied at the start of each run;
-`scripts/screens-report.mjs` turns them into one page: every screen at every
+`npx sabeel-ci screens-report` turns them into one page: every screen at every
 width side by side, the failed checks beside the screenshot they are about,
 and what changed against a baseline sweep as before / after / difference. A
 filter narrows it to a screen or a width, or to what failed or changed.
 `manifest.json` beside the page holds the same data for an agent.
 
 ```bash
-node scripts/screens-report.mjs shots/screens --baseline-from-main   # → shots/screens-report/index.html
-node scripts/screens-report.mjs shots/screens --baseline <dir of screenshots>
+npx sabeel-ci screens-report shots/screens --baseline-from-main   # → shots/screens-report/index.html
+npx sabeel-ci screens-report shots/screens --baseline <dir of screenshots>
 ```
 
 `--baseline-from-main` compares with the report of the latest successful CI
@@ -371,8 +400,8 @@ command that downloads the page: `gh run download <run id> -n screens-report`.
 part of CI. The full local equivalent is
 
 ```bash
-npm run lint && npm run typecheck && npm run knip && npm test \
-  && npm run test:emulator && npm run test:screens
+npx sabeel-ci check-app && npm run lint && npm run typecheck && npm run knip \
+  && npm test && npm run test:emulator && npm run test:screens
 ```
 
 To run the job manually, use `gh workflow run ci.yml --ref <branch>`.
@@ -485,8 +514,8 @@ that it is good.
 **Port lookups in these scripts use `ss`, never `lsof`.** `lsof` is not on the
 default non-interactive PATH on this box, and a lookup that silences stderr then
 reports "no listener" for a missing binary — which silently disables both the
-stale-server kill and the cleanup trap. `free-emulator-ports.sh` set the
-convention; follow it.
+stale-server kill and the cleanup trap. `sabeel-ci free-emulator-ports` does
+the same on Linux; follow it.
 
 **Do not `exec` the emulator command, and do not add `INT TERM` to the trap.**
 `exec` replaces the shell so the EXIT trap never runs (that leaked a dev server
@@ -560,7 +589,8 @@ denied. Note the two different URL shapes: reads use
 ## Android
 
 - AVD `tb_emu` (Pixel 6, API 35, Google APIs image) is shared with the sibling
-  projects. Override with `SR_AVD`.
+  projects. Override with `SABEEL_AVD`. `npx sabeel-ci emulator headless` boots
+  it, and refuses while another session runs it.
 - Firebase emulators are reachable from the AVD at `10.0.2.2`; from web use the
   literal `127.0.0.1`, never `localhost` (the emulators bind IPv4 only, and
   `localhost` can resolve to `::1` first — which surfaces as a CORS error,
@@ -598,24 +628,26 @@ promote (409 = already an admin, fine).
   `adb logcat -d | grep -i deprecated` for the actual warning rather than trusting
   the toast — and it never appears in a release build.
 
-### Native flows: `scripts/native-e2e.sh`
+### Native flows: `npx sabeel-ci native-e2e`
 
-`bash scripts/native-e2e.sh` runs the Maestro flows in `maestro/` against the
-debug build: it builds and installs the APK, starts the emulators and the media
-store, seeds the world the device pass uses (`seed-emulator-world.mjs`, through
-a web dev server on 61311 that runs for the seed alone), maps the media store's
-port into the emulator (`adb reverse tcp:61307`), serves the JavaScript from
-Metro on 8081 with `EXPO_PUBLIC_USE_EMULATORS=1`, and runs every flow, or the
-one you name (`bash scripts/native-e2e.sh maestro/student.yaml`). It needs one
-booted emulator (`scripts/emulator.sh headless`) and installs the pinned Maestro
-itself (`scripts/install-maestro.sh`). Screenshots, Maestro's JUnit report and
-the emulator, web, Metro, seed and device logs land in `shots/native/`. It
-refuses a held 8081 or 61311.
+`npx sabeel-ci native-e2e` runs the Maestro flows in `maestro/` against the
+debug build: it stamps and builds the APK and installs it, starts the
+emulators and the media store, seeds the world the device pass uses
+(`seed-emulator-world.mjs`, `native.seed` in `ci-tools.json`, through a web
+dev server on the `web` port, 61310, that runs for the seed alone:
+`native.seedWeb`), maps the media store's port into the emulator (`adb
+reverse tcp:61327`: `native.reversePorts`), serves the JavaScript from Metro
+on 8081 with `EXPO_PUBLIC_USE_EMULATORS=1`, and runs every flow, or the one
+you name (`npx sabeel-ci native-e2e maestro/student.yaml`). It needs one
+booted emulator (`npx sabeel-ci emulator headless`) and installs the pinned
+Maestro itself (`sabeel-ci install-maestro`). Screenshots, Maestro's JUnit
+report and the emulator, web, Metro, seed and device logs land in
+`shots/native/`. It refuses a held 8081 or 61310.
 
 - **`maestro/student.yaml`**: a password sign-in with Next and Go, a recording
   that plays, keeps time for 15 s behind Home and is still playing when the app
   comes back, Classes, and Change password reporting "Reset link sent".
-- **`maestro/staff.yaml`**: the emulator sign-in row, Today, a session's
+- **`maestro/staff.yaml`**: the dev sign-in row, Today, a session's
   register, Courses, People and More.
 - **A debug build's warning toast takes taps.** "Open debugger to view
   warnings" sits over the tab bar whenever the app logs a warning, so the
@@ -626,14 +658,15 @@ refuses a held 8081 or 61311.
 They are the debug half of the device pass for the rows a script can reach;
 the lock screen, a notification and the release-only rows stay with the pass
 below. The **Native** workflow runs the same command on GitHub's emulator
-(`scripts/ci-avd.sh`) on every main push, every release tag, every pull
-request that changes the flows or their scripts, and by hand, and keeps
+(`sabeel-ci ci-avd`) on every main push, every release tag, every pull
+request that changes the flows, their seed or `ci-tools.json`, and by hand,
+and keeps
 `shots/native/` as the `native-<sha>` artifact. Its `ios` job runs `--ios` on a
 macOS runner for release tags, by hand and for pull requests that change
 the flows, and keeps the same folder as `native-ios-<sha>`.
 
-**On the iOS simulator**: `bash scripts/native-e2e.sh --ios` (macOS) builds the
-debug app for the simulator with `scripts/ios-sim-build.sh` (a prebuild scoped
+**On the iOS simulator**: `npx sabeel-ci native-e2e --ios` (macOS) builds the
+debug app for the simulator with `sabeel-ci ios-sim-build` (a prebuild scoped
 to iOS, the committed `Podfile.lock`, `xcodebuild` for `iphonesimulator`),
 installs it on a booted iPhone simulator, and runs the same flows. Each flow
 takes the installed app's id as `${APP_ID}`, since the Android and iOS builds
@@ -657,7 +690,7 @@ tests without a device" has the techniques and both tools, installed under
 `~/.claude/skills/expo-firebase-stack/tools/`. This project's specifics:
 
 - **A slow phone connection**: the emulator's own speed setting does nothing,
-  so a proxy on **61312** (this checkout's range, used by nothing else):
+  so a proxy on **61312**, the block's `proxy` port, used by nothing else:
 
   ```bash
   node ~/.claude/skills/expo-firebase-stack/tools/slow-proxy.mjs 61312 1600 800
@@ -684,7 +717,7 @@ carrying a stale emulator env, or a dev build pointed at production).
 
 **Do not verify this by grepping the exported bundle.** The strings survive
 minification: the `DevRow` component is still referenced from a branch the
-minifier cannot prove dead, so `grep "Emulator sign-in" app/dist-web/` finds it
+minifier cannot prove dead, so `grep "Dev sign-in" app/dist-web/` finds it
 in a perfectly safe build. That check produces a false alarm and teaches you to
 ignore it.
 
@@ -721,10 +754,11 @@ disagree.
    transcript model 2.6 GB, and with the emulators and a dev server up as
    well they ran a 15 GB machine out of memory — earlyoom stopped the
    Firestore emulator, and every emulator with it.
-2. Start the emulators and a dev server for them on the e2e port, as the
+2. Start the emulators and a dev server for them on the `web` port, as the
    browser suite does: `EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web
-   --port 61311` in `app/`. **Not an export.** A production export reports to
-   the live Sentry project and draws no emulator sign-in for staff, and
+   --port "$(npx sabeel-ci ports web)"` in `app/`. **Not an export.** A
+   production export reports to the live Sentry project and draws no dev
+   sign-in row for staff, and
    `record.mjs` refuses one. A development export (`--dev`) loads its split
    chunks through the dev server's hot-reload socket, which a static server
    cannot answer, so the first formatting editor a film opens reloads the

@@ -208,16 +208,18 @@ Do not silently change any of these.
 
 - Unit: `npm test` (Vitest: shared, functions **and app** — the app's node-only
   suite covers its pure logic, the playback session and the work queue).
-- **This checkout owns emulator ports 61300-61306**, 61308-61309 (the task
-  queue and Eventarc emulators the suite starts by itself), the local media
-  store's 61307 (S3) and 61320-61326 (its internals), and web dev-server ports
-  61310 (sweep) / 61311 (`test:e2e`); the legacy `sabeel-recording-app` checkout
-  owns 61100+, and the sibling repos own 61000+ and 61200+.
-  Three projects share this machine and all three used to pin 8080/9099/5001/9199,
-  so whichever suite started second killed the other's Firestore. Five files state
-  the ports and `functions/test/unit/emulatorPorts.test.ts` asserts they agree and
-  that the kill list reaches no further. Never widen `free-emulator-ports.sh` past
-  this block. Details in `docs/DEV-TOOLING.md`.
+- **This checkout owns emulator ports 61300-61399**, ci-tools' block for this
+  app (`emulators.base` in `ci-tools.json`): the emulators on 61300-61309, the
+  walkthrough's web dev server on 61310 (`web`) and the sweep's on 61311
+  (`sweep`), the device pass's throttling proxy on 61312, and the local media
+  store on 61320-61327, its S3 API on 61327. The legacy `sabeel-recording-app`
+  checkout owns 61100+, and the sibling repos own 61000+ and 61200+. Firebase's
+  default ports are the same for every checkout, so two suites on them kill
+  each other's Firestore. Scripts read every port from ci-tools (`npx
+  sabeel-ci ports <name>`, `ports(config(root))` in Node) and state none;
+  `npx sabeel-ci check-app` holds `firebase.json` and `app/src/env.ts` to the
+  block, and `npm run emulators:free` stops only this checkout's leftovers
+  inside it. Details in `docs/DEV-TOOLING.md`.
 - Rules/integration: `npm run test:emulator` — two passes: the rules tests
   against Firestore and Auth alone, where a write fires no trigger, then the
   integration tests with the Functions emulator and the local media store
@@ -235,12 +237,12 @@ Do not silently change any of these.
   loop.
 - Web: `npx expo start --web` in `app/`, or `npm run web:export -w @sabeel/app`
   for the bundle that actually ships.
-- Android: `scripts/emulator.sh headless` (AVD `tb_emu`), then `npx expo
+- Android: `npx sabeel-ci emulator headless` (AVD `tb_emu`), then `npx expo
   run:android` in `app/`. Firebase emulators from the AVD = `10.0.2.2`; from web =
   the literal `127.0.0.1`, never `localhost` (the emulators bind IPv4-only and
   `localhost` can resolve to `::1` first). Media is the exception on the AVD:
-  signed URLs name `127.0.0.1:61307` and the host is part of the signature, so
-  run `adb reverse tcp:61307 tcp:61307` rather than rewriting the URL.
+  signed URLs name `127.0.0.1:61327` and the host is part of the signature, so
+  run `adb reverse tcp:61327 tcp:61327` rather than rewriting the URL.
 - iOS: release builds run on GitHub (`ios.yml`). The simulator loop, driving a
   headless simulator, and a Mac build (`npm run build:ios`) need the Mac; all
   are in `docs/IOS-BUILD.md`. The simulator shares the Mac's loopback, so
@@ -252,12 +254,32 @@ Do not silently change any of these.
 - **CI runs on every push to main and every pull request** (`ci.yml`), with
   CodeQL and the pre-merge builds (`premerge.yml`) beside it; all three gate a
   merge (`docs/GITHUB-ACTIONS.md`). Run the local loop before pushing a branch
-  rather than waiting on CI for it — `npm run lint && npm run typecheck && npm
-  run knip && npm test && npm run test:emulator && npm run test:screens`.
+  rather than waiting on CI for it — `npx sabeel-ci check-app && npm run lint
+  && npm run typecheck && npm run knip && npm test && npm run test:emulator &&
+  npm run test:screens`.
   Nothing deploys on its own: Functions, Hosting and the Play upload are
   started by hand, from this machine or the manual workflows, and the iOS
   workflow's TestFlight job uploads only when started by hand, under the same
   go-ahead as any release (Faisal, 2026-10-15).
+- **The CI, release, emulator and device tooling is shared** with the sibling
+  apps: `@sabeel-institute/ci-tools`, pinned to a commit in
+  `package-lock.json`, this app's settings in `ci-tools.json`, run as `npx
+  sabeel-ci <command>` (its README lists them). The workflows in
+  `.github/workflows/` are rendered from it and never edited here; a change
+  goes into ci-tools by pull request, then the pin moves (`npm install
+  --save-dev github:Sabeel-Institute/ci-tools#<commit>`) and `npx sabeel-ci
+  workflows` renders it. `scripts/` holds this app's own tools only.
+- **Releases.** The version is written once, `expo.version` in
+  `app/app.json`; Android's versionCode (computed by `build.gradle`) and the
+  iPhone build number (written by the release tool) are both
+  `major * 1000000 + minor * 1000 + patch`. `npx sabeel-ci release X.Y.Z
+  --notes <entry>`
+  opens the release pull request with the version and its deploy-log entry
+  (`docs/PHASE_STATUS.md`, "Deploy log"); once Faisal merges it, `npx
+  sabeel-ci release --ship` on main builds, checks, tags and publishes to Play
+  internal testing; then Deploy Web, and TestFlight from the tag (`gh workflow
+  run ios.yml --ref vX.Y.Z -f testflight=true`). The recipe is
+  `docs/DEPLOY.md`, "Cutting a release".
 - **If a suite fails, first ask whether it fails on stashed changes too.** A
   clean-HEAD repro means the cause is environmental — usually a leftover emulator
   (`npm run emulators:free`) — not your diff.
@@ -341,7 +363,7 @@ Plus **before a release**, and whenever Faisal asks. That pre-release pass is
 mandatory, not optional.
 
 **Run the device pass yourself; never hand Faisal a checklist the AVD can
-run.** `bash scripts/native-e2e.sh` already runs part of its debug half as
+run.** `npx sabeel-ci native-e2e` already runs part of its debug half as
 Maestro flows, on every main push in CI too, and on an iPhone simulator with
 `--ios` (`docs/DEV-TOOLING.md`, "Native flows"). Nearly every "test it on a phone" step has a stand-in here, at
 conditions a phone at home cannot give: a slow connection (a throttling proxy —
@@ -390,10 +412,10 @@ skip the browser check.
   the run, yesterday's build stays on the device and every screenshot after it is
   a lie. Confirm with
   `adb shell dumpsys package com.sabeelinstitute.lms | grep versionName`
-  against **`app/android/app/build.gradle`**, which is the file that produces it
-  — `android/` is committed, not prebuilt, so `app.json` does not feed it.
-  `functions/test/unit/appVersion.test.ts` asserts the two agree, so in practice
-  either will do; the gradle file is the one that cannot be wrong.
+  against `expo.version` in `app/app.json`, which `build.gradle` reads for both
+  `versionName` and `versionCode` (`android/` is committed, not prebuilt, and
+  `npx sabeel-ci check-app` refuses a `build.gradle` that states a version of
+  its own).
 - **A native debug build takes `EXPO_PUBLIC_*` from the environment that started
   METRO**, not from the APK. If a flag looks unset, restart Metro with `--clear`.
 
@@ -439,8 +461,9 @@ Manager, never in the app bundle.**
   session directs with SendMessage. It works on a branch and pushes it; this
   session reviews it, runs the Linux suites (and the Android pass when a
   dependency moves) and opens the pull request into main. TestFlight builds
-  are made from main by `ios.yml` and upload under the same go-ahead as any
-  release. Each upload needs a higher `ios.buildNumber` in `app.json`.
+  are made by `ios.yml` from the release tag and upload under the same
+  go-ahead as any release; the build number is the version's code, so each
+  version reaches TestFlight once.
 
 ## Conventions
 

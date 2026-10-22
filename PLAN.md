@@ -62,10 +62,10 @@ skeleton. Phase 0 forks it rather than inventing a new one:
   as `.web.ts(x)` siblings.
 - Config-as-code: `firestore.rules`, `firestore.indexes.json`, and now
   `storage.rules` deploy from the repo, never console-edited.
-- `scripts/`: `test-emulator.sh`, `free-emulator-ports.sh`, `web-e2e.mjs`
-  (added in 1c), `check-text-sources.mjs`; `release.mjs` and `publish-apk.sh`
-  arrive in Phase 9. CI = lint + typecheck + knip + unit + emulator tests, no
-  deploys from CI.
+- `scripts/`: this app's own tools, `web-e2e.mjs` (added in 1c) among them.
+  The CI, release, emulator and device tooling is the three apps' shared
+  `@sabeel-institute/ci-tools` (`npx sabeel-ci`, settings in `ci-tools.json`).
+  CI = lint + typecheck + knip + unit + emulator tests, no deploys from CI.
 - Live Firestore reads go through a `useLiveQuery`/`useLiveDoc` wrapper,
   lint-enforced. Hand-rolled `onSnapshot` state caused a week-long stale-data bug
   in the time tracker; that postmortem is inherited, not re-learned.
