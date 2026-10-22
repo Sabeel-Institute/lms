@@ -42,13 +42,19 @@ export function Sheet({
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <SheetKeyboard style={styles.shade}>
-      <Pressable style={styles.backdrop} onPress={onClose} focusable={false}>
+      {/* Neither Pressable is an accessibility element (`accessible={false}`).
+          A Pressable is one by default, and on iOS an accessibility element
+          swallows everything under it: the iOS accessibility tree held the
+          whole sheet as ONE element labelled with all its text, so VoiceOver
+          had no row to move to and Maestro could not tap "Change password". react-native-web does
+          not forward the prop, so the web DOM is unchanged. */}
+      <Pressable style={styles.backdrop} onPress={onClose} focusable={false} accessible={false}>
         {/* Absorbs taps so a press inside does not dismiss via the backdrop.
             The testID is what the layout sweep scopes to: RNW portals a Modal
             out of the app root without hiding it, so a whole-document query
             measures the SCREEN BEHIND the sheet — the panel would have to lose
             its width cap entirely before anything noticed. */}
-        <Pressable testID="sheet-panel" style={styles.panel} onPress={() => {}}>
+        <Pressable testID="sheet-panel" style={styles.panel} onPress={() => {}} accessible={false}>
           {closeAt === 'corner' ? (
             <View style={styles.titleRow}>
               <Text style={[styles.title, styles.titleInRow]}>{title}</Text>

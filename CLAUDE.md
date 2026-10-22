@@ -342,8 +342,8 @@ mandatory, not optional.
 
 **Run the device pass yourself; never hand Faisal a checklist the AVD can
 run.** `bash scripts/native-e2e.sh` already runs part of its debug half as
-Maestro flows, on every main push in CI too (`docs/DEV-TOOLING.md`, "Native
-flows"). Nearly every "test it on a phone" step has a stand-in here, at
+Maestro flows, on every main push in CI too, and on an iPhone simulator with
+`--ios` (`docs/DEV-TOOLING.md`, "Native flows"). Nearly every "test it on a phone" step has a stand-in here, at
 conditions a phone at home cannot give: a slow connection (a throttling proxy —
 the emulator ignores its own speed setting), the lock screen and its
 controls, an app killed mid-play, offline, a second device beside a browser,
@@ -449,7 +449,8 @@ Manager, never in the app bundle.**
   are blocked. The ruleset "main: only the owner merges" lets the
   organization owner (Faisal) update `main` through a pull request and no
   other way, and "main: verified pre-merge builds" requires CI, CodeQL and the
-  pre-merge builds to pass on an up-to-date branch. The agent's commits, made
+  pre-merge builds to pass (on the pull request's merge with main; the branch
+  need not be up to date). The agent's commits, made
   with his account, go on a branch and land through a pull request like
   anyone else's. Collaborators' pull requests also need the code owner's
   approval (`.github/CODEOWNERS`).

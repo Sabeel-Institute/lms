@@ -1,7 +1,7 @@
 # A student on Android: a password sign-in, a recording that keeps playing in
 # the background and resumes its place, the class list and Change password.
 # Seeded by scripts/seed-emulator-world.mjs; run by scripts/native-e2e.sh.
-appId: com.sabeelinstitute.lms
+appId: ${APP_ID}
 name: Student signs in, listens, and changes the password
 ---
 - launchApp:
@@ -14,8 +14,10 @@ name: Student signs in, listens, and changes the password
 - pressKey: Enter
 - inputText: "HikamStudent1"
 - pressKey: Enter
+# A card's texts are one accessibility label on iOS, and Maestro matches the
+# whole label, so texts inside a card or a row are matched as part of one.
 - extendedWaitUntil:
-    visible: "NEXT UP"
+    visible: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
     timeout: 60000
 - runFlow:
     when:
@@ -25,7 +27,7 @@ name: Student signs in, listens, and changes the password
 - takeScreenshot: 01-home
 
 # Playback reaches the audio, and keeps time behind Home.
-- tapOn: "Play Session 2 — Knowledge and Certainty"
+- tapOn: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
 - extendedWaitUntil:
     visible: "Bookmark this place"
     timeout: 30000
@@ -46,14 +48,14 @@ name: Student signs in, listens, and changes the password
     timeout: 15000
 - tapOn: "Pause"
 - takeScreenshot: 03-after-background
-- tapOn: "Navigate up"
+- runFlow: common/back.yaml
 
 # The classes, and Change password reports what really happened.
 - tapOn: "Classes"
 - assertVisible: "Your classes"
 - tapOn: "More"
-- tapOn: "Change password"
+- tapOn: "Change password[\\s\\S]*"
 - extendedWaitUntil:
-    visible: "Reset link sent"
+    visible: "Reset link sent[\\s\\S]*"
     timeout: 30000
 - takeScreenshot: 04-password-link
