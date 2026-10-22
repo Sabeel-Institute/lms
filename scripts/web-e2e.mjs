@@ -297,6 +297,24 @@ async function more(page, option) {
 const shot = (page, name) => page.screenshot({ path: `${SHOTS}/${name}.png` });
 
 /**
+ * A walkthrough that stops on an uncaught error (a waitFor that timed out)
+ * leaves a picture of every page it had open, and where each one was, beside
+ * the run's screenshots: the step's own shot is never taken, and without these
+ * a failure in CI says what it waited for but not what was on the screen.
+ */
+let crashed = false;
+process.on('uncaughtException', async (error) => {
+  if (crashed) return;
+  crashed = true;
+  console.error(error);
+  for (const [index, page] of browser.contexts().flatMap((context) => context.pages()).entries()) {
+    console.error(`open page ${index}: ${page.url()}`);
+    await page.screenshot({ path: `${SHOTS}/zz-stopped-page-${index}.png` }).catch(() => {});
+  }
+  process.exit(1);
+});
+
+/**
  * The screen's own H1 — what a pushed screen cannot share with the page before
  * it. By test id and visibility, not by role: the stack header's title is a
  * heading too, and the screens underneath keep theirs, hidden.
