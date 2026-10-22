@@ -188,9 +188,11 @@ approval. CI does not generate replacement signing keys.
 
 - Secret scanning and push protection are enabled. Dependabot alerts and
   security-update pull requests are enabled.
-- Dependabot checks npm workspaces and GitHub Actions weekly. Minor/patch npm
-  updates and security fixes are grouped separately; major upgrades require
-  explicit review. Updates never auto-merge or deploy.
+- Dependabot checks npm workspaces weekly. Minor/patch npm updates and
+  security fixes are grouped separately; major upgrades require explicit
+  review. Updates never auto-merge or deploy. The workflows' actions move in
+  ci-tools, whose Dependabot updates the templates, and arrive here with the
+  next ci-tools pin.
 - CodeQL scans JavaScript/TypeScript on main pushes, pull requests and weekly,
   without native builds or production credentials.
 - CI has separate workflow-validation, quality/unit, emulator-integration and
