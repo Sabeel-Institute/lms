@@ -45,6 +45,15 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@types/react"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # The Node types follow the runtime the functions and CI run, Node 22.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # The web Sentry SDK follows the one @sentry/react-native pins (10.x
+      # for 7.x); a newer major would be a second Sentry in the same app.
+      - dependency-name: "@sentry/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@sentry/browser"
+        update-types: ["version-update:semver-major"]
     groups:
       routine:
         patterns: ["*"]
