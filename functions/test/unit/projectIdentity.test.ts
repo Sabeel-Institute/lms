@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { APP_ID, APP_NAME, APP_SHORT_NAME, FIREBASE_PROJECT_ID } from '@sabeel/shared';
+import { APP_ID, APP_NAME, APP_SHORT_NAME, EMULATOR_PROJECT_ID, FIREBASE_PROJECT_ID } from '@sabeel/shared';
 
 /**
  * Nothing in this checkout can reach the retired personal project, and the
@@ -28,10 +28,12 @@ const LEGACY = ['sabeel-class-recordings', '977423479850', 'com.sabeelinstitute.
 /** This file, which has to name the ids it looks for. */
 const SELF = 'functions/test/unit/projectIdentity.test.ts';
 
+function tracked(): string[] {
+  return execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean);
+}
+
 function trackedCodeAndConfig(): string[] {
-  return execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
-    .split('\0')
-    .filter((p) => p && p !== SELF && !p.startsWith('docs/') && !p.endsWith('.md'));
+  return tracked().filter((p) => p !== SELF && !p.startsWith('docs/') && !p.endsWith('.md'));
 }
 
 describe('the retired project', () => {
@@ -42,6 +44,9 @@ describe('the retired project', () => {
     expect(files).not.toContain(SELF);
     const offenders: string[] = [];
     for (const path of files) {
+      // A file's name is read by tools too: the Functions emulator and a
+      // deploy each load `functions/.env.<project id>`.
+      for (const id of LEGACY) if (path.includes(id)) offenders.push(`${path} (its name): ${id}`);
       const buf = readFileSync(resolve(ROOT, path));
       if (buf.includes(0)) continue; // binary
       const text = buf.toString('utf8');
@@ -54,6 +59,18 @@ describe('the retired project', () => {
 describe('the files that cannot import the project id agree with it', () => {
   it('.firebaserc deploys to it by default', () => {
     expect(JSON.parse(read('.firebaserc')).projects).toEqual({ default: FIREBASE_PROJECT_ID });
+  });
+
+  /** The functions take their parameters from `functions/.env.<project id>`:
+   *  the institute's project when deployed, the emulators' demo project in
+   *  tests. A file for any other project is a deploy target nobody meant. */
+  it('the functions carry parameters for it and the emulators alone', () => {
+    expect(EMULATOR_PROJECT_ID).toMatch(/^demo-/);
+    expect(EMULATOR_PROJECT_ID).not.toBe(FIREBASE_PROJECT_ID);
+    const parameters = tracked().filter((p) => p.startsWith('functions/.env'));
+    expect(parameters.sort()).toEqual(
+      [`functions/.env.${EMULATOR_PROJECT_ID}`, `functions/.env.${FIREBASE_PROJECT_ID}`].sort(),
+    );
   });
 });
 

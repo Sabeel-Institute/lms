@@ -103,11 +103,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/seaweedfs"
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
-      - name: Emulator secret placeholders
-        env:
-          SECRETS: '{"SENTRY_DSN":"disabled","R2_READ_KEY_ID":"unused-in-emulator","R2_READ_SECRET":"unused-in-emulator","R2_WRITE_KEY_ID":"unused-in-emulator","R2_WRITE_SECRET":"unused-in-emulator","APNS_KEY":"unused-in-emulator"}'
-        run: |
-          node -e 'const secrets = JSON.parse(process.env.SECRETS); require("node:fs").writeFileSync("functions/.secret.local", Object.entries(secrets).map(([name, value]) => name + "=" + value + "\n").join(""))'
       - name: Emulator integration tests
         run: npm run test:emulator
 
@@ -163,11 +158,10 @@ jobs:
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
       - name: Emulator secret placeholders
-        env:
-          SECRETS: '{"SENTRY_DSN":"disabled","R2_READ_KEY_ID":"unused-in-emulator","R2_READ_SECRET":"unused-in-emulator","R2_WRITE_KEY_ID":"unused-in-emulator","R2_WRITE_SECRET":"unused-in-emulator","APNS_KEY":"unused-in-emulator"}'
-        run: |
-          node -e 'const secrets = JSON.parse(process.env.SECRETS); require("node:fs").writeFileSync("functions/.secret.local", Object.entries(secrets).map(([name, value]) => name + "=" + value + "\n").join(""))'
+        run: sabeel-ci emulator-secrets
+      # A stuck apt mirror held this step until the job's own timeout.
       - name: Install Chromium
+        timeout-minutes: 10
         run: npx playwright install --with-deps chromium
       - name: Browser suite
         env:

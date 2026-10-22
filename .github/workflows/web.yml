@@ -46,6 +46,7 @@ jobs:
           APP_ENV_LOCAL: ${{ secrets.APP_ENV_LOCAL }}
         run: sabeel-ci ci-platform prepare-web
       - run: npm ci
+      # The site, and beside it its source maps for Deploy Web to upload.
       - name: Build and checksum Hosting artifact
         run: sabeel-ci ci-platform web
       - uses: actions/upload-artifact@v7

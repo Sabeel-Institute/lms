@@ -1,6 +1,6 @@
 # A student on Android: a password sign-in, a recording that keeps playing in
 # the background and resumes its place, the class list and Change password.
-# Seeded by scripts/seed-emulator-world.mjs; run by `npx sabeel-ci native-e2e`.
+# Seeded by scripts/seed-emulators.mjs; run by `npx sabeel-ci native-e2e`.
 appId: ${APP_ID}
 name: Student signs in, listens, and changes the password
 ---

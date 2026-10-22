@@ -27,7 +27,7 @@
  */
 import { fileURLToPath } from 'node:url';
 import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
-import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
+import { emulatorProject, ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { createRequire } from 'node:module';
 import { chromium } from 'playwright';
 import { resetEmulators, seedWorld } from './lib/seed-world.mjs';
@@ -35,7 +35,7 @@ import { resetEmulators, seedWorld } from './lib/seed-world.mjs';
 // The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
 const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
 const PORTS = ports(STACK);
-const EMULATOR_PROJECT_ID = STACK.emulators.project;
+const EMULATOR_PROJECT_ID = emulatorProject(STACK);
 
 // Resolved from the functions workspace, which already depends on the Admin
 // SDK — the same arrangement as `check-query-shapes.mjs`.

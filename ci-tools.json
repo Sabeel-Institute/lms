@@ -5,9 +5,9 @@
     "emulatorSecrets": { "SENTRY_DSN": "disabled", "R2_READ_KEY_ID": "unused-in-emulator", "R2_READ_SECRET": "unused-in-emulator", "R2_WRITE_KEY_ID": "unused-in-emulator", "R2_WRITE_SECRET": "unused-in-emulator", "APNS_KEY": "unused-in-emulator" },
     "knip": true, "ffmpeg": true, "mediaStore": true
   },
-  "build": { "sentryDsnVariable": "EXPO_PUBLIC_SENTRY_DSN_ANDROID" },
+  "sentry": { "org": "devnull-ke", "projects": { "native": "sabeel-recording-android", "web": "sabeel-recording-web", "functions": "sabeel-recording-functions" } },
   "ios": { "backgroundPlayback": true },
-  "emulators": { "base": 61300, "project": "demo-sabeel-recordings", "extras": { "master": 20, "masterGrpc": 21, "volume": 22, "volumeGrpc": 23, "filer": 24, "filerGrpc": 25, "s3Grpc": 26, "s3": 27 }, "functionsWrapper": ["node", "scripts/with-media-store.mjs"] },
-  "native": { "seed": "scripts/seed-emulator-world.mjs", "seedWeb": true, "reversePorts": ["s3"] },
+  "emulators": { "base": 61300, "extras": { "master": 20, "masterGrpc": 21, "volume": 22, "volumeGrpc": 23, "filer": 24, "filerGrpc": 25, "s3Grpc": 26, "s3": 27 }, "functionsWrapper": ["node", "scripts/with-media-store.mjs"] },
+  "native": { "seedWeb": true, "reversePorts": ["s3"] },
   "release": { "appSigningCertificate": "E8:C3:7E:B6:5E:BA:D0:C9:DF:57:D4:58:68:58:D4:59:F9:7F:A4:7E:FB:5D:28:D3:06:0A:79:E9:11:00:FF:D5" }
 }

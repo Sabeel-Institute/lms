@@ -52,6 +52,7 @@ jobs:
       - name: Restore build configuration and existing signing key
         env:
           APP_ENV_LOCAL: ${{ secrets.APP_ENV_LOCAL }}
+          BUILD_ENV: ${{ secrets.BUILD_ENV }}
           ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
           ANDROID_KEYSTORE_PROPERTIES: ${{ secrets.ANDROID_KEYSTORE_PROPERTIES }}
           ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
@@ -59,6 +60,8 @@ jobs:
       - run: npm ci
       - name: Android SDK packages, with retries
         run: sabeel-ci ci-android-sdk
+      # sentry.gradle uploads the bundle's source map to ci-tools.json's
+      # sentry.projects.native with the token BUILD_ENV carries.
       - name: Build and verify signed Play bundle
         env:
           ANDROID_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}

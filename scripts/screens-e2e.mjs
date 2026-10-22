@@ -92,7 +92,7 @@
  */
 import { fileURLToPath } from 'node:url';
 import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
-import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
+import { emulatorProject, ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { chromium, devices } from 'playwright';
 import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
@@ -108,7 +108,7 @@ import { PUSH_DEVICE_MESSAGE, addDays } from '@sabeel/shared';
 // The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
 const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
 const PORTS = ports(STACK);
-const EMULATOR_PROJECT_ID = STACK.emulators.project;
+const EMULATOR_PROJECT_ID = emulatorProject(STACK);
 
 const BASE = process.env.E2E_BASE ?? `http://127.0.0.1:${PORTS.sweep}/`;
 const ROOT = resolve(import.meta.dirname, '..');

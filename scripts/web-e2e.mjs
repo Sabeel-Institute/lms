@@ -33,7 +33,7 @@
  */
 import { fileURLToPath } from 'node:url';
 import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
-import { ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
+import { emulatorProject, ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { chromium } from 'playwright';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import {
@@ -64,7 +64,7 @@ import { putLocalObject } from './lib/media-store.mjs';
 // The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
 const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
 const PORTS = ports(STACK);
-const EMULATOR_PROJECT_ID = STACK.emulators.project;
+const EMULATOR_PROJECT_ID = emulatorProject(STACK);
 
 const WEB = process.env.E2E_WEB ?? `http://127.0.0.1:${PORTS.web}/`;
 const FN = `http://127.0.0.1:${PORTS.functions}/${EMULATOR_PROJECT_ID}/us-central1`;

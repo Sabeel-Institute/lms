@@ -52,10 +52,12 @@ entry point: audited callables via `auditedCall`, the rest via `reportedCall`,
 the auth trigger, the two assignment triggers, and the notification trigger and
 its daily schedule. So once it is set, the next functions deploy turns on server
 error reporting. Until then the binding is inert
-and the functions run normally. Locally, `functions/.secret.local` (gitignored)
-holds `SENTRY_DSN=disabled` and placeholder `R2_*` values so the emulator does
-not probe Secret Manager; reporting stays off in tests, and the media store uses
-the local SeaweedFS keys instead (`docs/DEV-TOOLING.md`).
+and the functions run normally. Under the emulators, ci-tools writes
+`functions/.secret.local` (gitignored) from `ci.emulatorSecrets` in
+`ci-tools.json` — `SENTRY_DSN=disabled` and placeholder `R2_*` and `APNS_KEY`
+values — so the emulator does not probe Secret Manager; reporting stays off in
+tests, and the media store uses the local SeaweedFS keys instead
+(`docs/DEV-TOOLING.md`).
 
 ## One service account key file: Play publishing
 
