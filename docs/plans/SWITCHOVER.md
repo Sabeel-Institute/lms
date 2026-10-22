@@ -186,7 +186,7 @@ most until switchover (`NOTIFY_AUDIENCE`).
 ## Switchover day
 
 Before the day: the user manual (`docs/USER-MANUAL.md`, rendered to PDF by
-`docs/render-manual.py`) still names "Class Recordings" and the legacy web
+`npx sabeel-ci render-manual`) still names "Class Recordings" and the legacy web
 address throughout; it is rewritten for "Sabeel Institute LMS" and
 `oursabeel-lms.web.app`, with fresh screenshots, and published on the new
 download page alongside the first Android release of

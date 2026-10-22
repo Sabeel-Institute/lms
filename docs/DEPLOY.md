@@ -172,7 +172,8 @@ every Sabeel app. In order:
    It works from origin/main in a worktree of its own, leaving this checkout
    as it is: the version and the iOS build number in `app.json`, the line
    under the manual's title (`docs/USER-MANUAL.md`) and `docs/USER-MANUAL.pdf`
-   rendered with it, and the entry added to the deploy log, committed as
+   rendered with it (`npx sabeel-ci render-manual`, which needs `uv` and
+   `google-chrome`), and the entry added to the deploy log, committed as
    `chore(release): vX.Y.Z` on `release/vX.Y.Z`, pushed, and the pull request
    into main opened. It refuses a version that is not X.Y.Z, or whose code is
    not above main's and every released tag's: Android refuses an upgrade that

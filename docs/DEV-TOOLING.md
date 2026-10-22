@@ -32,6 +32,7 @@ emulator — not your diff.
 | `npm run test:e2e` | The Playwright flow walkthrough — starts its own emulators and dev server (see below) |
 | `npm run test:screens` | The multi-width layout sweep — the same runner (see below) |
 | `npm run web:export -w @sabeel/app` | The web bundle that actually ships |
+| `npx sabeel-ci render-manual` | `docs/USER-MANUAL.md` to `docs/USER-MANUAL.pdf`, with the logo (`app/assets/logo.png`), `app.json`'s version and this month on the cover; needs `uv` and `google-chrome`. `sabeel-ci release` runs it |
 | `npx sabeel-ci emulator headless` | Boots the `tb_emu` AVD (or `SABEEL_AVD`) with no window; refuses to boot it twice and names who runs it |
 | `npm run check:queries` | **Against the REAL project.** Every query shape the app sends, checked for a missing composite index. With `CHECK_ACCESS_TOKEN` set it runs over REST as that user token instead of Application Default Credentials (see `docs/DEPLOY.md`) |
 | `npm run check:documents` | **Against the REAL project, read-only.** Every live document the app reads, checked against the fields its type requires (`documentShapes` in `@sabeel/shared`), with the screens' helpers run on each. Fails on a document that lacks a required field (migrate it) or that a helper throws on, which includes an audit entry under an action the audit screen has no words for (`AUDIT_ACTION_LABELS`). Same `CHECK_ACCESS_TOKEN` as `check:queries` |
