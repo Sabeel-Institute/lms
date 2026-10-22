@@ -11,6 +11,7 @@ on:
       - maestro/**
       - scripts/seed-emulator-world.mjs
       - ci-tools.json
+      - package-lock.json
       - .github/workflows/native.yml
   workflow_dispatch:
 

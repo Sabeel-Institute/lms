@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
-    "@sabeel-institute/ci-tools": "github:Sabeel-Institute/ci-tools#fecb91e2bc16e9df2adc24eec962c3d757b64fa6",
+    "@sabeel-institute/ci-tools": "github:Sabeel-Institute/ci-tools#ff1e8a681cf9f1d4469871e61d8dd8ea1a7c5aa1",
     "@sabeel/shared": "*",
     "@types/node": "^22.10.0",
     "eslint": "^9.39.0",
