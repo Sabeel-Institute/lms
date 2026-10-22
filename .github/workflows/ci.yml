@@ -68,8 +68,15 @@ jobs:
         run: npm run typecheck
       - name: Dead-code audit
         run: npm run knip
+      # Without its recommends: the runners' apt mirror has taken 41 minutes over
+      # the full set. apt's own timeouts turn a stalled download into a failure,
+      # and the install runs once more (see ci.yml's browser job).
       - name: Install ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+        timeout-minutes: 15
+        run: |
+          echo 'Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
+          install() { sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg; }
+          install || { sleep 15; install; }
       - name: Unit tests
         run: npm test
 
@@ -94,8 +101,15 @@ jobs:
           java-version: 21
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@^15
+      # Without its recommends: the runners' apt mirror has taken 41 minutes over
+      # the full set. apt's own timeouts turn a stalled download into a failure,
+      # and the install runs once more (see ci.yml's browser job).
       - name: Install ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+        timeout-minutes: 15
+        run: |
+          echo 'Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
+          install() { sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg; }
+          install || { sleep 15; install; }
       - name: Install SeaweedFS
         run: |
           curl -fsSLo "$RUNNER_TEMP/weed.tgz" https://github.com/seaweedfs/seaweedfs/releases/download/4.47/linux_amd64.tar.gz
@@ -148,8 +162,15 @@ jobs:
           java-version: 21
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@^15
+      # Without its recommends: the runners' apt mirror has taken 41 minutes over
+      # the full set. apt's own timeouts turn a stalled download into a failure,
+      # and the install runs once more (see ci.yml's browser job).
       - name: Install ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+        timeout-minutes: 15
+        run: |
+          echo 'Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
+          install() { sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg; }
+          install || { sleep 15; install; }
       - name: Install SeaweedFS
         run: |
           curl -fsSLo "$RUNNER_TEMP/weed.tgz" https://github.com/seaweedfs/seaweedfs/releases/download/4.47/linux_amd64.tar.gz
@@ -159,10 +180,15 @@ jobs:
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
       - name: Emulator secret placeholders
         run: sabeel-ci emulator-secrets
-      # A stuck apt mirror held this step until the job's own timeout.
+      # An apt mirror can stall a download indefinitely (one held this step
+      # for 45 minutes). apt's own timeouts make it fail instead, and the
+      # install runs once more. Stopping it from outside is no use: the
+      # apt-get it starts runs as root, outlives the kill and keeps the lock.
       - name: Install Chromium
-        timeout-minutes: 10
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 15
+        run: |
+          echo 'Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
+          npx playwright install --with-deps chromium || { sleep 15; npx playwright install --with-deps chromium; }
       - name: Browser suite
         env:
           SUITE: ${{ matrix.suite }}

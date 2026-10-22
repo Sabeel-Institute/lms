@@ -36,9 +36,11 @@ name: Student signs in, listens, and changes the password
     visible: "Bookmark this place"
     timeout: 30000
 - tapOn: "Play"
+# The player allows half a minute to get a recording ready on a slow
+# connection, and the iPhone simulator on a busy CI Mac has taken longer.
 - extendedWaitUntil:
     visible: "0:0[3-9]"
-    timeout: 30000
+    timeout: 60000
 - takeScreenshot: 02-playing
 - pressKey: Home
 - runFlow:
