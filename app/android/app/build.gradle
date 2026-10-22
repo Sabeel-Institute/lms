@@ -34,10 +34,11 @@ if (!expoVersion.matches(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/)) {
         "date-style components. See npx sabeel-ci check-version.")
 }
 def (vMajor, vMinor, vPatch) = expoVersion.tokenize('.').collect { it.toInteger() }
-if (vMinor > 999 || vPatch > 999 || vMajor > 2147) {
+// Major at most 2100 keeps the sum below Integer.MAX_VALUE before it is compared.
+if (vMinor > 999 || vPatch > 999 || vMajor > 2100 || vMajor * 1000000 + vMinor * 1000 + vPatch > 2100000000) {
     throw new GradleException(
         "app.json version '${expoVersion}' overflows the versionCode scheme " +
-        "(minor/patch max 999, major max 2147).")
+        "(minor and patch at most 999, the code at most 2100000000, Play's limit).")
 }
 def computedVersionCode = vMajor * 1000000 + vMinor * 1000 + vPatch
 
