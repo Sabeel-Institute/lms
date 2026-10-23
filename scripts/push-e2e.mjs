@@ -43,7 +43,9 @@ import {
 import { byId, resetEmulators, seedWorld, tap } from './lib/seed-world.mjs';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore } = require('firebase-admin/firestore');
 
 // The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
 const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
@@ -74,9 +76,9 @@ const text = (locator) => locator.innerText({ timeout: 5_000 }).catch(() => '');
 /** The screen's own heading, without the chevron a heading that links carries. */
 const screenTitle = async (page) => (await text(byId(page, 'screen-title'))).replace(/\s*›\s*$/, '').trim();
 
-admin.initializeApp({ projectId: PROJECT });
-const db = admin.firestore();
-const auth = admin.auth();
+initializeApp({ projectId: PROJECT });
+const db = getFirestore();
+const auth = getAuth();
 
 await resetEmulators();
 // Chromium's own notification centre, not the desktop's: with a notification
