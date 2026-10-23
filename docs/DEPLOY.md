@@ -185,38 +185,40 @@ every Sabeel app. In order:
    git switch main && git pull --ff-only
    npx sabeel-ci release --ship
    ```
-   It refuses anything but a clean main that matches origin, then:
-   - builds the signed Play bundle (`sabeel-ci build-aab`: the version check,
-     a deploy-log entry for the version, the native Sentry DSN in
-     `app/.env.local`, the Sentry token in `app/.env.sentry-build-plugin`, the
-     build stamp, `gradlew bundleRelease`, whose `sentry.gradle` uploads the
-     bundle's source map to `ci-tools.json`'s native project, and no unsigned
-     or debug-signed bundle), with the default **JDK 17** and no emulator flag
-     in the shell;
-   - runs every gate of `sabeel-ci publish-play --check`, Play's permission
-     included;
-   - makes the arm64-v8a and universal APKs from the same commit, signed with
-     the bundle's key;
-   - cold-starts the universal APK five times on the AVD (`sabeel-ci
-     check-release`, which boots `tb_emu` if nothing is attached: check who
-     owns it first, `CLAUDE.md`): each start must reach the sign-in screen
-     with the label `v<version> · <commit>` for this commit, no dev sign-in
-     row, and no crash or ANR in the device log;
-   - creates the GitHub release `vX.Y.Z` at that commit, titled and described
-     by the deploy-log entry, with `sabeel-institute-lms-arm64-v8a.apk`,
-     `sabeel-institute-lms-universal.apk` and the manual. Creating it creates
-     the tag, which only Faisal may (the tag ruleset);
-   - last, because it reaches every tester's phone by itself, publishes to
-     Play internal testing (`sabeel-ci publish-play --internal`): the build
-     goes up as a draft release no tester sees, Play generates its APKs, and
-     the release completes only if they are signed with the LMS's own key
-     (`release.appSigningCertificate` in `ci-tools.json`). If that step fails
-     the GitHub release stands; fix the cause and run `npx sabeel-ci
-     publish-play --internal` alone.
+   It refuses anything but a clean main that matches origin, and builds and
+   signs nothing on this machine. Then:
+   - waits for the Android workflow's run on that commit and refuses one that
+     failed. That run built the signed Play bundle in the `release-build`
+     environment (`sabeel-ci build-aab`: the version check, a deploy-log entry
+     for the version, the native Sentry DSN, the Sentry token, the build
+     stamp, `gradlew bundleRelease`, whose `sentry.gradle` uploads the
+     bundle's source map to `ci-tools.json`'s native project) and cold-started
+     it five times on an emulator;
+   - has Publish Android check that bundle (provenance, checksum, signature,
+     version, commit) and Play's permission without uploading;
+   - has Publish Android put it on Play internal testing: the build goes up
+     as a draft release no tester sees, Play generates its APKs, and the
+     release completes only if they are signed with the LMS's own key
+     (`release.appSigningCertificate` in `ci-tools.json`);
+   - downloads the universal APK Play generated, signed exactly as Play
+     installs it (`sabeel-ci play-apk`, refusing any other signer), and
+     cold-starts it five times on the AVD (`sabeel-ci check-release`, which
+     boots `tb_emu` if nothing is attached: check who owns it first,
+     `CLAUDE.md`): each start must reach the sign-in screen with the label
+     `v<version> · <commit>` for this commit, no dev sign-in row, and no crash
+     or ANR in the device log;
+   - last, makes the GitHub release `vX.Y.Z` at that commit, titled and
+     described by the deploy-log entry, with `sabeel-institute-lms-universal.apk`
+     and the manual: a draft, then published, which creates the tag, which
+     only Faisal may (the tag ruleset). The tag comes last, so a tagged
+     release always holds its APK and manual and names a version testers
+     have. If any step before it fails, nothing is tagged: fix the cause and
+     run `npx sabeel-ci release --ship` again, which resumes (Play's held
+     bundle is not uploaded twice, and a draft left behind is replaced).
 
-   It needs the release keystore (`docs/SECRETS.md`), the Play publishing key
-   and `gh` signed in as Faisal. It ends by printing the two runs that put the
-   same commit on the web and on iPhones.
+   It needs the Play publishing key (`~/keys/sabeel-play-publisher.json`) and
+   `gh` signed in as Faisal; no release keystore. It ends by printing the two
+   runs that put the same commit on the web and on iPhones.
 
    **The first Play release was 0.2.0 (code 38),** completed by the publisher
    with no Play Console step. 0.1.2 (code 37), processed before the signing
@@ -224,18 +226,18 @@ every Sabeel app. In order:
    removed from the internal track. Play Console gives every new app a
    Google-generated signing key when it is created; the LMS's was replaced
    with its own (App integrity, App signing, "Change key", "Export and upload
-   a key from Java keystore", with Google's PEPK tool), so a Play install and
-   the APK from the GitHub release update each other. The bundle carries every
+   a key from Java keystore", with Google's PEPK tool). The bundle carries every
    ABI and Play cuts per-device APKs from it, so `build.gradle` turns the APK
-   splits off for bundle tasks.
+   splits off for bundle tasks; the GitHub release's APK is Play's own
+   universal one.
 
    **Testers.** Play Console, Internal testing, Testers: the email list "Sabeel
    staff" (20 staff) is ticked. To add someone, edit that list there and add
    the address of their Google account. Each tester opens the join link once
    (`https://play.google.com/apps/internaltest/4701751467577150757`, also on
    `/get-app`; it never changes), accepts, and installs from Play. A Play
-   install and the GitHub release's APK are signed with the same key, so
-   either updates the other.
+   install and the GitHub release's APK are both Play's, signed with the same
+   key, so either updates the other.
 
 4. **Web:** Deploy Web, with the Web workflow's build of the same commit, as
    `--ship` prints it:
