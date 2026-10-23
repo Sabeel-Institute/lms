@@ -37,7 +37,9 @@ import { dirname, resolve } from 'node:path';
 import { r2Config, s3For } from './lib/r2.mjs';
 import { refuseAfterSwitchover } from './lib/before-switchover.mjs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore } = require('firebase-admin/firestore');
 const { CopyObjectCommand, DeleteObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 refuseAfterSwitchover('seed-demo-prod', "demo data would land on real students' records");
@@ -54,9 +56,9 @@ const PROJECT = FIREBASE_PROJECT_ID;
 if (process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error('FIRESTORE_EMULATOR_HOST is set — this script targets production.');
 }
-admin.initializeApp({ projectId: PROJECT });
-const auth = admin.auth();
-const db = admin.firestore();
+initializeApp({ projectId: PROJECT });
+const auth = getAuth();
+const db = getFirestore();
 // The media bucket (R2), with the write key from Secret Manager.
 const media = r2Config();
 const s3 = s3For(media.endpoint, media.write);

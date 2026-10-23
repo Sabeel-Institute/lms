@@ -30,16 +30,18 @@ const PORTS = ports(STACK);
 const EMULATOR_PROJECT_ID = emulatorProject(STACK);
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore } = require('firebase-admin/firestore');
 
 const BASE = process.env.E2E_BASE ?? 'http://127.0.0.1:8081/';
 process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${PORTS.auth}`;
 process.env.GCLOUD_PROJECT = EMULATOR_PROJECT_ID;
 
-admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
-const db = admin.firestore();
-const auth = admin.auth();
+initializeApp({ projectId: EMULATOR_PROJECT_ID });
+const db = getFirestore();
+const auth = getAuth();
 
 await resetEmulators();
 const browser = await chromium.launch();

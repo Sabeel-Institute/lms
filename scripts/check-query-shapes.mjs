@@ -24,11 +24,12 @@ import { AUDIT_PAGE, FIREBASE_PROJECT_ID } from '@sabeel/shared';
 // Adding it at the root would be a second copy of a large package for one
 // script, so knip is told to expect the unlisted import instead.
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
 const PROJECT_ID = process.env.CHECK_PROJECT ?? FIREBASE_PROJECT_ID;
-admin.initializeApp({ projectId: PROJECT_ID });
-const db = admin.firestore();
+initializeApp({ projectId: PROJECT_ID });
+const db = getFirestore();
 
 // Placeholders: shape is what matters, not whether anything matches.
 const ID = '__shape_probe__';

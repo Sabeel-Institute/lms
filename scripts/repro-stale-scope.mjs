@@ -40,13 +40,15 @@ const EMULATOR_PROJECT_ID = emulatorProject(STACK);
 // Resolved from the functions workspace, which already depends on the Admin
 // SDK — the same arrangement as `check-query-shapes.mjs`.
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${PORTS.auth}`;
-admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
-const db = admin.firestore();
-const auth = admin.auth();
+initializeApp({ projectId: EMULATOR_PROJECT_ID });
+const db = getFirestore();
+const auth = getAuth();
 const BASE = process.env.E2E_WEB ?? `http://127.0.0.1:${PORTS.web}/`;
 const MODE = process.argv[2] ?? 'delete';
 if (!['delete', 'remove', 'none'].includes(MODE)) {
@@ -63,7 +65,7 @@ await seedWorld({ db, auth, browser, base: BASE });
 const mgr = (await db.collection('staffUsers').where('email', '==', 'manager@oursabeel.com').get()).docs[0];
 const managerUid = mgr.id;
 await db.collection('courses').doc('sw-arabic').update({
-  managerUids: admin.firestore.FieldValue.arrayUnion(managerUid),
+  managerUids: FieldValue.arrayUnion(managerUid),
 });
 
 // One context is one browser profile: the auth session and the Firestore cache
@@ -93,7 +95,7 @@ if (MODE === 'delete') {
   await db.collection('courses').doc('sw-arabic').delete();
 } else if (MODE === 'remove') {
   await db.collection('courses').doc('sw-arabic').update({
-    managerUids: admin.firestore.FieldValue.arrayRemove(managerUid),
+    managerUids: FieldValue.arrayRemove(managerUid),
   });
 }
 

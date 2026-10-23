@@ -57,7 +57,9 @@ import { createRequire } from 'node:module';
 import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
 import { r2Config, s3For } from './lib/r2.mjs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore, FieldValue, FieldPath } = require('firebase-admin/firestore');
 const { DeleteObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 
 const PROJECT = FIREBASE_PROJECT_ID;
@@ -65,9 +67,9 @@ const EXECUTE = process.argv.includes('--yes');
 if (process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error('FIRESTORE_EMULATOR_HOST is set — this script targets production.');
 }
-admin.initializeApp({ projectId: PROJECT });
-const db = admin.firestore();
-const auth = admin.auth();
+initializeApp({ projectId: PROJECT });
+const db = getFirestore();
+const auth = getAuth();
 // The media bucket (R2), with the write key from Secret Manager.
 const media = r2Config();
 const s3 = s3For(media.endpoint, media.write);
@@ -82,7 +84,6 @@ async function listKeys(prefix) {
   } while (token);
   return keys;
 }
-const { FieldValue, FieldPath } = admin.firestore;
 
 const isDemoId = (v) => String(v ?? '').startsWith('demo-');
 /** Any id, key or value starting with `demo-`, however deep. */

@@ -35,12 +35,13 @@ import {
 // Resolved from the functions workspace, which already depends on the Admin
 // SDK, as check:queries does.
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getFirestore, FieldPath } = require('firebase-admin/firestore');
 
 const PROJECT_ID = process.env.CHECK_PROJECT ?? FIREBASE_PROJECT_ID;
 const TOKEN = process.env.CHECK_ACCESS_TOKEN;
-admin.initializeApp({ projectId: PROJECT_ID });
-const db = admin.firestore();
+initializeApp({ projectId: PROJECT_ID });
+const db = getFirestore();
 const today = todayInZone(INSTITUTE_TIMEZONE);
 const PAGE = 500;
 const EXAMPLES = 3;
@@ -61,7 +62,7 @@ async function* documents(collection) {
   }
   let last = null;
   for (;;) {
-    let q = db.collection(collection).orderBy(admin.firestore.FieldPath.documentId()).limit(PAGE);
+    let q = db.collection(collection).orderBy(FieldPath.documentId()).limit(PAGE);
     if (last) q = q.startAfter(last);
     const page = await q.get();
     for (const d of page.docs) yield { id: d.id, data: d.data() };
