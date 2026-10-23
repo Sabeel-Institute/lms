@@ -66,15 +66,25 @@ jobs:
       # demo ones, which the debug build only needs to compile against.
       - name: Placeholder Firebase app configuration
         run: if [ ! -f app/google-services.json ]; then sabeel-ci ci-premerge prepare; fi
-      # Without its recommends: the runners' apt mirror has taken 41 minutes over
-      # the full set. apt's own timeouts turn a stalled download into a failure,
-      # and the install runs once more (see ci.yml's browser job).
+      # A static build (ffmpeg 7.0.2 with libx265, from ffmpeg-static's GitHub
+      # release) instead of apt: the runners' apt mirror held one install for 41
+      # minutes and stalls about one in five. ffprobe comes with it, as it does
+      # with the distribution package.
       - name: Install ffmpeg
-        timeout-minutes: 15
+        timeout-minutes: 5
         run: |
-          echo 'Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
-          install() { sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg; }
-          install || { sleep 15; install; }
+          dir="$RUNNER_TEMP/ffmpeg"
+          base=https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/ffmpeg.gz" "$base/ffmpeg-linux-x64.gz"
+          curl -fsSL --retry 3 -o "$dir/ffprobe.gz" "$base/ffprobe-linux-x64.gz"
+          printf '%s  %s\n' \
+            bfe8a8fc511530457b528c48d77b5737527b504a3797a9bc4866aeca69c2dffa "$dir/ffmpeg.gz" \
+            25d9b6ccb05e3d9de9e04e31e2506d8dd7f9f0418981965ac6df12e8d3afd067 "$dir/ffprobe.gz" | sha256sum -c -
+          gunzip "$dir/ffmpeg.gz" "$dir/ffprobe.gz"
+          chmod +x "$dir/ffmpeg" "$dir/ffprobe"
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/ffmpeg" -hide_banner -encoders | grep -q libx265
       - name: Install SeaweedFS
         run: |
           curl -fsSLo "$RUNNER_TEMP/weed.tgz" https://github.com/seaweedfs/seaweedfs/releases/download/4.47/linux_amd64.tar.gz
