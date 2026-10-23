@@ -12,6 +12,10 @@ buildscript {
     // Processes google-services.json (Android OAuth client for staff Google
     // Sign-In; FCM sender for Phase 7). The JSON is gitignored.
     classpath('com.google.gms:google-services:4.4.4')
+    // Sentry's Android Gradle plugin, at the version @sentry/react-native pairs
+    // with its Android SDK (sentryAndroidGradlePluginVersion in its Expo plugin;
+    // `sabeel-ci check-app` holds the two equal). app/build.gradle says what it does.
+    classpath('io.sentry:sentry-android-gradle-plugin:5.12.2')
   }
 }
 

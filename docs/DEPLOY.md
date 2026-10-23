@@ -570,8 +570,9 @@ machine's gitignored `app/.env.sentry-build-plugin` (`BUILD_ENV` in CI;
   404, which `npm run smoke:prod` checks.
 - **Android:** `app/android/app/build.gradle` applies `sentry.gradle` when
   `app/.env.sentry-build-plugin` exists, and it uploads the bundle's source map
-  to `sabeel-recording-android`. Java and Kotlin frames need no mapping: R8
-  minification is off.
+  to `sabeel-recording-android`. R8 shrinks the release build, and Sentry's
+  Android Gradle plugin uploads its mapping file under the same gate, so Java
+  and Kotlin frames read in full (ci-tools README, "Its Android build").
 - **iOS:** Xcode's Sentry phase uploads the dSYMs and the source map to the
   same project (`docs/IOS-BUILD.md`).
 
