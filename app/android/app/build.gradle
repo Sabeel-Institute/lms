@@ -218,6 +218,25 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            /**
+             * A separate package, so a dev build and the store build coexist.
+             *
+             * Android keys an install on applicationId, so without this the two
+             * collide: same package, different signature, and installing either
+             * one simply fails until the other is uninstalled. Suffixing debug
+             * makes them independent apps that can sit side by side.
+             *
+             * The cost is that `com.sabeelinstitute.lms.debug` is a DIFFERENT
+             * app to Firebase and needs its own registration with the debug
+             * SHA-1, or the google-services plugin fails the build outright with
+             * "No matching client found for package name".
+             *
+             * `expo run:android` does not know about this: it reads the
+             * applicationId with a regex over the `applicationId` line alone and
+             * would install the .debug APK, then try to launch the unsuffixed
+             * package. Hence `--app-id` in the android script.
+             */
+            applicationIdSuffix '.debug'
         }
         release {
             signingConfig signingConfigs.release

@@ -1,0 +1,8 @@
+<resources>
+  <!--
+    Debug builds install beside the store build (applicationIdSuffix in
+    build.gradle), so they need a launcher label that tells them apart. The
+    difference comes first: the launcher truncates to about eleven characters.
+  -->
+  <string name="app_name">LMS dev</string>
+</resources>
