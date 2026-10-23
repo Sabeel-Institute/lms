@@ -411,7 +411,7 @@ skip the browser check.
 - **`BUILD SUCCESSFUL` is not proof the APK installed.** If the AVD drops during
   the run, yesterday's build stays on the device and every screenshot after it is
   a lie. Confirm with
-  `adb shell dumpsys package com.sabeelinstitute.lms | grep versionName`
+  `adb shell dumpsys package com.sabeelinstitute.lms.debug | grep versionName`
   against `expo.version` in `app/app.json`, which `build.gradle` reads for both
   `versionName` and `versionCode` (`android/` is committed, not prebuilt, and
   `npx sabeel-ci check-app` refuses a `build.gradle` that states a version of

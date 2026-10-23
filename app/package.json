@@ -5,7 +5,7 @@
   "main": "index.ts",
   "scripts": {
     "start": "sabeel-ci build-info && sabeel-ci preflight-metro && expo start",
-    "android": "sabeel-ci build-info && sabeel-ci preflight-metro && expo run:android",
+    "android": "sabeel-ci build-info && sabeel-ci preflight-metro && expo run:android --app-id com.sabeelinstitute.lms.debug",
     "web": "expo start --web",
     "web:export": "sabeel-ci build-web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
