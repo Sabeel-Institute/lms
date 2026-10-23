@@ -175,6 +175,23 @@ async function signedIn(signIn, homeAnchor) {
 const shown = async (worker) =>
   (await worker()).evaluate(async () => (await self.registration.getNotifications()).map((n) => ({ title: n.title, body: n.body, data: n.data })));
 
+/**
+ * Deliver a push to the worker and wait for the banner it draws.
+ *
+ * One DevTools delivery was lost in CI (one push in six, with the worker and
+ * the page otherwise fine and the next push shown), so a push whose banner
+ * has not come within ten seconds is delivered once more, and the run says so.
+ */
+async function pushed(cdp, registrationId, worker, payload, match) {
+  for (const attempt of [1, 2]) {
+    await cdp.send('ServiceWorker.deliverPushMessage', { origin: ORIGIN, registrationId, data: JSON.stringify(payload) });
+    const banner = await until(async () => (await shown(worker)).find(match), 10_000);
+    if (banner && attempt > 1) console.log('  ..   the push was delivered a second time');
+    if (banner) return banner;
+  }
+  return undefined;
+}
+
 async function tapEach(who, cases, browserOf) {
   const { context, page, worker, cdp, registrationId, home } = browserOf;
   check(`${who}: the worker is registered at the origin root`, Boolean(registrationId));
@@ -186,8 +203,7 @@ async function tapEach(who, cases, browserOf) {
 
     // -- the app open: the worker draws the push, the tap is posted to the tab --
     check(`${c.kind}: the app is on its home screen before the tap`, await home(page));
-    await cdp.send('ServiceWorker.deliverPushMessage', { origin: ORIGIN, registrationId, data: JSON.stringify(payload) });
-    const banner = await until(async () => (await shown(worker)).find(same));
+    const banner = await pushed(cdp, registrationId, worker, payload, same);
     check(`${c.kind}: the push is shown, with its words and its path`,
       Boolean(banner) && JSON.stringify(banner.data) === JSON.stringify(payload.data),
       JSON.stringify(banner ?? await shown(worker)));
