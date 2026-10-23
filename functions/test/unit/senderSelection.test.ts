@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { PUSH_CHANNEL_ID, WEB_APP_URL } from '@sabeel/shared';
+import { PUSH_CHANNEL_ID } from '@sabeel/shared';
 
 /**
  * Which sender the module picks, in both directions.
@@ -94,13 +94,15 @@ describe('sender selection', () => {
   });
 
   /*
-   * THE OTHER PLATFORM'S HALF. A web push with no `link` is a banner that
-   * closes when tapped and opens nothing: the SDK's click handler in the
-   * service worker focuses or opens `fcmOptions.link`, and with none it
-   * returns. Every message is about one thing — a recording, an assignment,
-   * a register — and the tap has to land on it, not on the home screen.
+   * WHERE THE TAP GOES. Every message is about one thing — a recording, an
+   * assignment, a register — and the tap has to land on it, not on the home
+   * screen. One field carries it to every surface: the phone apps read it off
+   * the tapped notification, and the web service worker's click handler opens
+   * it (firebaseMessagingSw.test.ts). Nothing web-specific is sent: only the
+   * Firebase SDK's own worker reads an `fcmOptions.link`, and the app's
+   * worker handles its clicks itself.
    */
-  it('sends the tap to the thing the message is about, on both surfaces', async () => {
+  it('sends the tap to the thing the message is about, the same on every surface', async () => {
     vi.stubEnv('FUNCTIONS_EMULATOR', '');
     const sendEachForMulticast = vi.fn(async (_message: unknown) => ({
       responses: [] as { success: boolean; error?: { code: string } }[],
@@ -113,11 +115,11 @@ describe('sender selection', () => {
     const { send } = await freshMessaging();
     await send([web('tok-a')], MESSAGE);
 
-    const sent = sendEachForMulticast.mock.calls[0][0] as { data: Record<string, string>; webpush: unknown };
-    expect(sent).toMatchObject({ webpush: { fcmOptions: { link: `${WEB_APP_URL}work/cw1` } } });
-    // Android reads the path from the data — under any key but `body`, which
-    // expo-notifications takes as the whole payload when it parses as JSON.
+    const sent = sendEachForMulticast.mock.calls[0][0] as Record<string, unknown>;
+    // Under any key but `body`, which expo-notifications takes as the whole
+    // payload when it parses as JSON.
     expect(sent.data).toEqual({ path: 'work/cw1' });
+    expect(sent).not.toHaveProperty('webpush');
     vi.doUnmock('firebase-admin/messaging');
   });
 

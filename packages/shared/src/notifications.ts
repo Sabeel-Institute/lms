@@ -160,9 +160,10 @@ export interface PushMessage {
   body: string;
   /**
    * Where a tap lands: an app path (`work/<id>`), the same on every surface.
-   * The phone apps open it from the tapped notification's data; a browser can
-   * only open a URL, so the web link is the app's address plus this path. Built
-   * by `pushPaths`, which the app's route tables are tested against.
+   * The phone apps open it from the tapped notification's data; on the web
+   * the service worker posts it to an open tab, or opens the app's address
+   * plus this path. Built by `pushPaths`, which the app's route tables are
+   * tested against.
    */
   path: string;
 }

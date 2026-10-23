@@ -9,6 +9,7 @@ cd "$(dirname "$0")/.."
 #   SWEEP_WIDTHS=320 bash scripts/e2e-stack.sh screens  # one width, tight loop
 #   SWEEP_FULL=1 bash scripts/e2e-stack.sh screens      # + real device profiles
 #   bash scripts/e2e-stack.sh web                       # the flow walkthrough
+#   bash scripts/e2e-stack.sh push                      # every notification, tapped
 #
 # It owns both processes for the length of one run, so a suite composes with a
 # fresh CI runner instead of fighting a developer's desk. The sweep seeds its
@@ -25,13 +26,15 @@ SUITE="${1:-}"
 case "$SUITE" in
   screens) PORT_NAME=sweep; SUITE_SCRIPT=scripts/screens-e2e.mjs ;;
   web) PORT_NAME=web; SUITE_SCRIPT=scripts/web-e2e.mjs ;;
+  push) PORT_NAME=web; SUITE_SCRIPT=scripts/push-e2e.mjs ;;
   *)
-    echo "usage: bash scripts/e2e-stack.sh screens|web" >&2
+    echo "usage: bash scripts/e2e-stack.sh screens|web|push" >&2
     exit 2
     ;;
 esac
 
-# The sweep on the block's `sweep` port and the walkthrough on its `web` port.
+# The sweep on the block's `sweep` port, the walkthrough and the push suite on
+# its `web` port.
 # Two suites that grab the same port cannot be run side by side, and the
 # failure mode is not "port busy" — see the stale server note below.
 WEB_PORT=$(npx --no sabeel-ci ports "$PORT_NAME")
@@ -60,7 +63,7 @@ npx --no sabeel-ci free-emulator-ports
 
 # The functions emulator loads the BUILT bundle (functions/lib, per `main`), not
 # the TypeScript, and the tests would pass against yesterday's triggers without
-# this. Both suites need
+# this. Every suite needs
 # `getPlaybackUrl` for the player screen and `onUserCreate` to provision the
 # staff accounts they sign in as, so a stale lib here is a screen that renders
 # an error instead of a layout.
@@ -119,7 +122,7 @@ trap cleanup EXIT
 
 echo "Starting Expo web dev server on ${WEB_PORT}…"
 # The DEV server, not an export: `expo export` sets __DEV__ false, which
-# correctly strips the emulator dev sign-in row both suites drive to reach any
+# correctly strips the emulator dev sign-in row every suite drives to reach any
 # authenticated screen at all. `--clear` because Metro will otherwise serve a
 # bundle built under different EXPO_PUBLIC_* values.
 ( cd app && CI=1 EXPO_PUBLIC_USE_EMULATORS=1 \

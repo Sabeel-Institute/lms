@@ -1,64 +1,92 @@
-/* eslint-env serviceworker */
-/* global importScripts, firebase, self */
-/**
- * Web push service worker.
+/* global self, clients */
+/*
+ * Service worker for web push.
  *
- * It exists to receive messages while the tab is closed — that is the whole of
- * its job, and it cannot be part of the app bundle: a service worker has to be a
- * separate file served from the origin root, or its scope is limited to the
- * directory it came from.
+ * A browser cannot be woken by a push without one: when the tab is closed or
+ * backgrounded there is no page running, so the push service hands the message
+ * to this worker instead. It must sit at the ORIGIN ROOT, or its scope is
+ * limited to the directory it came from. `app/public/` is copied verbatim into
+ * `dist-web` by `expo export`, and Firebase Hosting serves a matching real file
+ * before applying the `**` → `/index.html` rewrite — so no rewrite exception is
+ * needed, but the file must genuinely reach the export. Check the EXPORTED
+ * bundle, never the dev server.
  *
- * `app/public/` is copied verbatim into `dist-web` by `expo export`, and Firebase
- * Hosting serves a matching real file before applying the `**` → `/index.html`
- * rewrite — so no rewrite exception is needed, but the file must genuinely reach
- * the export. Check the EXPORTED bundle, never the dev server.
+ * It handles the `push` event ITSELF, without the Firebase messaging SDK, and
+ * loads no outside script. The SDK's worker shows a push only while no tab of
+ * the app is visible and drops one arriving at a focused tab unless the page
+ * draws it; this one shows every push, whether the app is in the foreground,
+ * the background or closed. Minting the token (`push.web.ts`) needs only a
+ * registration, not a Firebase-aware worker, so there is no copy of the
+ * Firebase config here either.
  *
- * The compat SDK, deliberately: a service worker has no bundler, and the modular
- * SDK cannot be loaded from a plain `importScripts`. The version is pinned
- * rather than floating, because a worker that fails to parse does not fall back
- * to anything — push simply stops, silently.
+ * The payload is FCM's web push JSON: `notification` (title, body) and `data`,
+ * which is `{ path }` — the app path of the thing the message is about
+ * (`pushPaths` in @sabeel/shared, `fcmMessage` in functions/src/fcm.ts). A tap
+ * opens that path. `functions/test/unit/firebaseMessagingSw.test.ts` runs this
+ * file in a fake worker scope; `scripts/push-e2e.mjs` delivers a real push of
+ * every kind to it in Chromium and follows each tap to its screen.
  */
-importScripts('https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/12.15.0/firebase-messaging-compat.js');
 
-// Only the messaging fields matter here; this worker never reads Firestore or
-// signs anyone in. `apiKey` and `projectId` are not secrets — they ship in the
-// app bundle already. A worker has no bundler, so these are literals;
-// `serviceWorkerConfig.test.ts` holds them to `firebase-config.ts`.
-firebase.initializeApp({
-  apiKey: 'AIzaSyC6N2JTrBAwLQ9zpwLdoAbQNt0nrOunwQQ',
-  projectId: 'oursabeel-lms',
-  messagingSenderId: '226338267845',
-  appId: '1:226338267845:web:2e285dbdf341e54bcac6ac',
-});
+const APP_NAME = 'Sabeel Institute LMS';
 
-// Registering messaging is enough for a closed or hidden tab: the SDK shows the
-// notification payload itself when no window of this origin is visible, and its
-// click opens the link the server set. A custom onBackgroundMessage handler
-// here would produce a SECOND banner alongside the automatic one.
-//
-// With a window visible the SDK draws nothing and forwards the payload to the
-// page, which shows it through this registration (push.web.ts,
-// showForegroundPush) — so the click on THAT banner lands here too, and the
-// SDK's own click handler ignores it (no FCM_MSG in its data). This one acts
-// only on notifications the page shaped, marked `data.page`, and leaves the
-// SDK's to the SDK: a window of ours that is open is brought forward and told
-// where the message points (pushTaps.web.ts), so the tap opens the assignment
-// in the tab already open rather than a second copy of the app; with none
-// open, the link — the app's address plus that path — is opened.
-firebase.messaging();
+// Take over as soon as a new version of this file is installed. A worker waits
+// by default until every tab of the app is closed, which for someone who keeps
+// a tab open means weeks on the previous worker; this one intercepts no
+// fetches, so there is nothing an open page could be part-way through with the
+// old one.
+self.addEventListener('install', () => self.skipWaiting());
 
-self.addEventListener('notificationclick', (event) => {
-  const data = event.notification.data;
-  if (!data || !data.page) return;
-  event.notification.close();
+/** FCM's JSON body, or null for a push that is not one (nothing else sends any). */
+function readPayload(event) {
+  try {
+    return event.data ? event.data.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+self.addEventListener('push', (event) => {
+  const payload = readPayload(event);
+  if (!payload) return;
+  const { title, body } = payload.notification ?? {};
+  const data = payload.data ?? {};
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      const open = clients.find((c) => 'focus' in c);
-      if (!open) return self.clients.openWindow(data.link);
-      return open.focus().then((tab) => {
-        if (data.path) (tab || open).postMessage({ type: 'open-path', path: data.path });
-      });
+    self.registration.showNotification(title ?? APP_NAME, {
+      body: body ?? '',
+      icon: '/favicon.ico',
+      // An exact repeat collapses into one banner rather than stacking.
+      tag: `${title ?? APP_NAME}|${body ?? ''}`,
+      data,
     }),
   );
+});
+
+/**
+ * The address that opens a notification's subject in a new tab: the app's
+ * root plus its path, which the web routes resolve (`linkPaths.ts`). Leading
+ * slashes are dropped, so the result is always this origin's own path and
+ * never `//host`, which a browser would read as another site.
+ */
+function subjectUrl(data) {
+  const path = typeof data.path === 'string' ? data.path.replace(/^\/+/, '') : '';
+  return `/${path}`;
+}
+
+/**
+ * A tapped notification opens its subject. A tab of the app already open is
+ * told where to go and brought forward (one app, not a second copy beside
+ * it); with none open, a new one opens at `subjectUrl`. The message is posted
+ * before focusing, so a refused focus cannot cost the navigation.
+ */
+async function openSubject(data) {
+  const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const open = wins.find((w) => w.url.startsWith(self.location.origin));
+  if (!open) return clients.openWindow(subjectUrl(data));
+  open.postMessage({ type: 'push-open', data });
+  return open.focus().catch(() => undefined);
+}
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(openSubject(event.notification.data ?? {}));
 });

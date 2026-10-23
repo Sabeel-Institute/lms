@@ -1,7 +1,7 @@
 {
   "name": "lms",
   "ci": {
-    "browserSuites": ["test:screens", "test:e2e"],
+    "browserSuites": ["test:screens", "test:e2e", "test:e2e:push"],
     "emulatorSecrets": { "SENTRY_DSN": "disabled", "R2_READ_KEY_ID": "unused-in-emulator", "R2_READ_SECRET": "unused-in-emulator", "R2_WRITE_KEY_ID": "unused-in-emulator", "R2_WRITE_SECRET": "unused-in-emulator", "APNS_KEY": "unused-in-emulator" },
     "knip": true, "ffmpeg": true, "mediaStore": true
   },

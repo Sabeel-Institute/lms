@@ -20,27 +20,23 @@ vi.mock('firebase/messaging', () => ({
   isSupported: vi.fn(),
   getToken: vi.fn(),
   getMessaging: vi.fn(() => ({})),
-  onMessage: vi.fn(),
 }));
 vi.mock('./firebase', () => ({ app: {} }));
 vi.mock('./firebase-config', () => ({ VAPID_PUBLIC_KEY: 'test-vapid-public-key' }));
 
-import { getToken, isSupported, onMessage } from 'firebase/messaging';
-import { WEB_APP_URL } from '@sabeel/shared';
+import { getToken, isSupported } from 'firebase/messaging';
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
 let requestPermission: ReturnType<typeof vi.fn>;
-let showNotification: ReturnType<typeof vi.fn>;
 
 /** A browser that supports web push, in a given permission state. */
 function browser(permission: 'default' | 'granted' | 'denied', answer = 'granted'): void {
   requestPermission = vi.fn(() => Promise.resolve(answer));
-  showNotification = vi.fn(() => Promise.resolve());
   const nav = {
     serviceWorker: {
       register: vi.fn(() => Promise.resolve({ scope: '/' })),
-      ready: Promise.resolve({ scope: '/', showNotification }),
+      ready: Promise.resolve({ scope: '/' }),
     },
   };
   Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
@@ -192,48 +188,5 @@ describe('pushPromptState', () => {
     asMock(isSupported).mockResolvedValue(false);
     const { pushPromptState } = await loadPush();
     await expect(pushPromptState()).resolves.toBe('unsupported');
-  });
-});
-
-/**
- * A push that arrives while the tab is OPEN is shown. FCM's worker forwards a
- * payload to a visible page instead of displaying it, so the promise is the
- * page's: listen once the device can receive push, and show what arrives
- * through the worker's registration. Mutations: never call onMessage, or show
- * nothing in the callback — both leave the token flow green.
- */
-describe('a push while the tab is open', () => {
-  it('is listened for once the device holds a token', async () => {
-    browser('granted');
-    const { devicePushToken } = await loadPush();
-    await devicePushToken(false);
-    expect(onMessage).toHaveBeenCalledTimes(1);
-  });
-
-  it('is shown through the worker, with its title and body, marked as the page\'s', async () => {
-    browser('granted');
-    const { devicePushToken } = await loadPush();
-    await devicePushToken(false);
-    const listener = asMock(onMessage).mock.calls[0][1] as (p: unknown) => void;
-    listener({
-      notification: { title: 'Hikam: a recording is ready', body: 'Session 3 — yours until 2026-09-30.' },
-      data: { path: 'play/r1' },
-    });
-    await new Promise((r) => setTimeout(r, 0));
-    // Marked as the page's, and pointing at the recording, not the home page.
-    expect(showNotification).toHaveBeenCalledWith(
-      'Hikam: a recording is ready',
-      expect.objectContaining({
-        body: 'Session 3 — yours until 2026-09-30.',
-        data: { page: true, link: `${WEB_APP_URL}play/r1`, path: 'play/r1' },
-      }),
-    );
-  });
-
-  it('is not listened for while the device cannot receive push', async () => {
-    browser('denied');
-    const { devicePushToken } = await loadPush();
-    await devicePushToken(false);
-    expect(onMessage).not.toHaveBeenCalled();
   });
 });
