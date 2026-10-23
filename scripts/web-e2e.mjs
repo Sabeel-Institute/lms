@@ -2734,6 +2734,10 @@ const ownDates = (d) => !!d.fields.moreTime?.mapValue || d.fields.returned?.mapV
 const subsOf = async () => (await readCollection('submissions')).filter((d) => d.fields.courseworkId?.stringValue === cwId);
 await admin.goBack();
 await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
+// THE ADDRESS FOLLOWS THE SCREEN. Were it left on the grade, the editor would
+// be recorded after the grade, and Back from the editor would land there.
+const backFromGrade = new URL(admin.url()).pathname;
+check('Back from the grade takes the address to the assignment too', !backFromGrade.includes('/grade/'), backFromGrade);
 await tap(admin, 'coursework-edit');
 await tap(admin, 'coursework-close');
 await tap(admin, 'coursework-close-confirm');
@@ -2768,8 +2772,17 @@ check('a notification’s link opens the assignment it is about', (await screenT
 
 // UP, NOT FORWARD: the course named under the assignment goes back to the
 // course page, and Back from there does not come down into the assignment.
+// Back from the editor has once left the assignment hidden under another
+// screen; keep that screen if it recurs.
 await admin.goBack();
-await admin.getByTestId('coursework-tab-students').waitFor({ timeout: 20000 });
+await admin
+  .getByTestId('coursework-tab-students')
+  .waitFor({ timeout: 20000 })
+  .catch(async (error) => {
+    console.log(`  Back from the editor left the address at ${new URL(admin.url()).pathname}`);
+    await shot(admin, '42c-back-from-editor');
+    throw error;
+  });
 await tap(admin, 'up-to-course-from-assignment');
 await admin.getByTestId('nav-coursework').filter({ visible: true }).first().waitFor({ timeout: 15000 });
 await admin.goBack();

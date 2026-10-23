@@ -201,8 +201,10 @@ every Sabeel app. In order:
      release completes only if they are signed with the LMS's own key
      (`release.appSigningCertificate` in `ci-tools.json`);
    - downloads the universal APK Play generated, signed exactly as Play
-     installs it (`sabeel-ci play-apk`, refusing any other signer), and
-     cold-starts it five times on the AVD (`sabeel-ci check-release`, which
+     installs it (`sabeel-ci play-apk`, refusing any other signer, and an APK
+     carrying Play's installer check: Play Console's automatic protection
+     stays off for this app, since a protected APK opens only when Play
+     installed it), and cold-starts it five times on the AVD (`sabeel-ci check-release`, which
      boots `tb_emu` if nothing is attached: check who owns it first,
      `CLAUDE.md`): each start must reach the sign-in screen with the label
      `v<version> · <commit>` for this commit, no dev sign-in row, and no crash
