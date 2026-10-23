@@ -79,7 +79,11 @@ const db = admin.firestore();
 const auth = admin.auth();
 
 await resetEmulators();
-const browser = await chromium.launch({ channel: 'chromium' });
+// Chromium's own notification centre, not the desktop's: with a notification
+// daemon on the machine's session bus, Chromium hands banners to it and drops
+// them from `getNotifications()` when the daemon closes them, so the banner
+// this suite reads back can be gone before it looks.
+const browser = await chromium.launch({ channel: 'chromium', args: ['--disable-features=NativeNotifications,SystemNotifications'] });
 const world = await seedWorld({ db, auth, browser, base: BASE });
 const { STUDENT, STUDENT_PASSWORD, dueSoon, blocking } = world;
 
@@ -172,11 +176,12 @@ async function tapEach(who, cases, browserOf) {
     await cdp.send('ServiceWorker.deliverPushMessage', { origin: ORIGIN, registrationId, data: JSON.stringify(payload) });
     const banner = await until(async () => (await shown(worker)).find(same));
     check(`${c.kind}: the push is shown, with its words and its path`,
-      Boolean(banner) && JSON.stringify(banner.data) === JSON.stringify(payload.data), JSON.stringify(banner));
+      Boolean(banner) && JSON.stringify(banner.data) === JSON.stringify(payload.data),
+      JSON.stringify(banner ?? await shown(worker)));
     await worker.evaluate(async ({ title, body }) => {
       const n = (await self.registration.getNotifications()).find((x) => x.title === title && x.body === body);
       // eslint-disable-next-line no-undef -- runs in the worker, where it is a global
-      self.dispatchEvent(new NotificationEvent('notificationclick', { notification: n }));
+      if (n) self.dispatchEvent(new NotificationEvent('notificationclick', { notification: n }));
     }, payload.notification);
     check(`${c.kind}: tapping it opens ${c.message.path} in the open tab`, await c.landed(page), page.url());
     check(`${c.kind}: the tapped notification is closed`, await until(async () => !(await shown(worker)).some(same)));
