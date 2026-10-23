@@ -62,10 +62,6 @@ jobs:
         run: sabeel-ci ci-android-sdk
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@^15
-      # The app's Firebase app files, where it commits none: the pre-merge build's
-      # demo ones, which the debug build only needs to compile against.
-      - name: Placeholder Firebase app configuration
-        run: if [ ! -f app/google-services.json ]; then sabeel-ci ci-premerge prepare; fi
       # A static build (ffmpeg 7.0.2 with libx265, from ffmpeg-static's GitHub
       # release) instead of apt: the runners' apt mirror held one install for 41
       # minutes and stalls about one in five. ffprobe comes with it, as it does
@@ -142,10 +138,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      # The app's Firebase app files, where it commits none: the pre-merge build's
-      # demo ones, which the debug build only needs to compile against.
-      - name: Placeholder Firebase app configuration
-        run: if [ ! -f app/google-services.json ]; then sabeel-ci ci-premerge prepare; fi
       - name: Install dependencies
         run: npm ci
       - name: Install Firebase CLI
