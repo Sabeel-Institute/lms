@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "io.sentry.android.gradle"
 apply plugin: "com.google.gms.google-services"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
@@ -305,4 +306,38 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+}
+
+/**
+ * R8 renames the Java and Kotlin classes of a release build, so a native crash
+ * reads as obfuscated frames unless Sentry holds that build's mapping file.
+ * Sentry's Android Gradle plugin stamps each minified build with a UUID the SDK
+ * reports with every event, and uploads the build's mapping under it.
+ *
+ * It uploads under the same gate as sentry.gradle above: the build machine's
+ * app/.env.sentry-build-plugin (BUILD_ENV in CI), which reaches sentry-cli as
+ * SENTRY_DOTENV_PATH, never on a command line, with SENTRY_ORG and
+ * SENTRY_PROJECT set by `sabeel-ci build-aab` and `release`. Without the file,
+ * or with SENTRY_DISABLE_AUTO_UPLOAD=true (the pre-merge builds), a release
+ * build still carries its UUID and keeps its mapping, and uploads nothing. The
+ * SDK itself comes from @sentry/react-native, so the plugin installs none and
+ * instruments nothing, and it sends Sentry no telemetry about the build.
+ */
+def sentryBuildEnv = file("$projectRoot/.env.sentry-build-plugin")
+sentry {
+    includeProguardMapping = true
+    autoUploadProguardMapping = sentryBuildEnv.exists() && System.getenv('SENTRY_DISABLE_AUTO_UPLOAD') != 'true'
+    uploadNativeSymbols = false
+    includeNativeSources = false
+    includeSourceContext = false
+    telemetry = false
+    tracingInstrumentation {
+        enabled = false
+    }
+    autoInstallation {
+        enabled = false
+    }
+}
+tasks.withType(io.sentry.android.gradle.tasks.SentryCliExecTask).configureEach {
+    if (sentryBuildEnv.exists()) environment('SENTRY_DOTENV_PATH', sentryBuildEnv.absolutePath)
 }
