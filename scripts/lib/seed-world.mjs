@@ -20,7 +20,6 @@
  * Everything goes through the Admin SDK except staff accounts, which cannot be
  * minted that way (see `provisionStaff`).
  */
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
@@ -37,9 +36,6 @@ import {
   mediaStorageKey,
   todayInZone,
 } from '@sabeel/shared';
-
-const require = createRequire(new URL('../../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
 
 /** The emulators' demo project, from ci-tools.json. */
 const PROJECT = emulatorProject(config(fileURLToPath(new URL('../..', import.meta.url))));

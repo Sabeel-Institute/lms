@@ -100,7 +100,9 @@ import { mkdir, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore } = require('firebase-admin/firestore');
 import { backButton, byId, byName, resetEmulators, seedWorld, tap } from './lib/seed-world.mjs';
 // The built workspace package — `e2e-stack.sh` builds it before this runs.
 import { PUSH_DEVICE_MESSAGE, addDays } from '@sabeel/shared';
@@ -283,9 +285,9 @@ const PROFILES = FULL
 await rm(SHOTS, { recursive: true, force: true });
 await mkdir(SHOTS, { recursive: true });
 process.on('exit', () => writeFileSync(join(SHOTS, 'results.json'), JSON.stringify(results, null, 1)));
-admin.initializeApp({ projectId: PROJECT });
-const db = admin.firestore();
-const auth = admin.auth();
+initializeApp({ projectId: PROJECT });
+const db = getFirestore();
+const auth = getAuth();
 
 // ---- the world -----------------------------------------------------------
 

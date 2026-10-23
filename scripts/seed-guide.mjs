@@ -5,7 +5,9 @@ import { emulatorProject, ports } from '@sabeel-institute/ci-tools/lib/ports.mjs
 import { createRequire } from 'node:module';
 import { readFileSync, statSync } from 'node:fs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore } = require('firebase-admin/firestore');
 import { putLocalObject } from './lib/media-store.mjs';
 import { AUDIO_FIXTURE, MEDIA_FIXTURES, ensureAudioFixture, ensureSlideVideo } from './lib/media-fixtures.mjs';
 import { NEW_STAFF_ACCESS, RULES_VERSION, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
@@ -16,8 +18,8 @@ const PORTS = ports(STACK);
 const EMULATOR_PROJECT_ID = emulatorProject(STACK);
 process.env.FIRESTORE_EMULATOR_HOST=`127.0.0.1:${PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST=`127.0.0.1:${PORTS.auth}`;
-admin.initializeApp({ projectId: EMULATOR_PROJECT_ID });
-const auth=admin.auth(), db=admin.firestore();
+initializeApp({ projectId: EMULATOR_PROJECT_ID });
+const auth=getAuth(), db=getFirestore();
 const now=Date.now(), day=86400000;
 const iso=(ms)=>new Date(ms).toISOString().slice(0,10);
 // The institute's rules, accepted long ago by every account the guide signs in

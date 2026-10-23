@@ -50,7 +50,8 @@ import { createRequire } from 'node:module';
 import { COLLECTIONS, FIREBASE_PROJECT_ID, INSTITUTE_TIMEZONE, isAllowedStaffEmail } from '@sabeel/shared';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
-const admin = require('firebase-admin');
+const { initializeApp, applicationDefault } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
 const PROJECT = FIREBASE_PROJECT_ID;
 const USAGE = 'usage: npm run students:report [-- --email <student address>]';
@@ -68,9 +69,9 @@ if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HO
   throw new Error('An emulator host is set — this script reads production only.');
 }
 
-const credential = admin.credential.applicationDefault();
-admin.initializeApp({ projectId: PROJECT, credential });
-const db = admin.firestore();
+const credential = applicationDefault();
+initializeApp({ projectId: PROJECT, credential });
+const db = getFirestore();
 
 /** Auth's own records, keyed by uid; `query` is `{ localId: [...] }` or `{ email: [...] }`. */
 async function lookup(query) {
