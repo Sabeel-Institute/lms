@@ -55,7 +55,6 @@ jobs:
           BUILD_ENV: ${{ secrets.BUILD_ENV }}
           ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
           ANDROID_KEYSTORE_PROPERTIES: ${{ secrets.ANDROID_KEYSTORE_PROPERTIES }}
-          ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
         run: sabeel-ci ci-platform prepare-android
       - run: npm ci
       - name: Android SDK packages, with retries

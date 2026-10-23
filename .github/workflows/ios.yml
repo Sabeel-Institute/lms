@@ -71,13 +71,11 @@ jobs:
           echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
       - run: xcodebuild -version && pod --version
       # The gitignored files a Mac keeps by hand, written from secrets, every
-      # value masked on its own; GOOGLE_SERVICE_INFO_PLIST only for an app that
-      # does not commit its plist.
+      # value masked on its own.
       - name: Restore build configuration
         env:
           APP_ENV_LOCAL: ${{ secrets.APP_ENV_LOCAL }}
           BUILD_ENV: ${{ secrets.BUILD_ENV }}
-          GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
         run: sabeel-ci ci-platform prepare-ios
       - run: npm ci
       # A keychain of its own, unlocked for this job, holding the distribution

@@ -1,0 +1,71 @@
+# Rendered from Sabeel-Institute/ci-tools workflows/nightly.yml by
+# `npx sabeel-ci workflows`: edit it there, not here.
+name: Nightly
+
+# Production every night, read-only. The live web app must serve, byte for
+# byte, the build CI made of the commit its scripts are stamped with
+# (ci-hosting-smoke --live), and every callable must answer for itself
+# (ci-functions health, which the Health workflow also runs every half hour).
+# A night with a failure opens one issue labelled `nightly`, or comments on the
+# open one, and fails the run; a night that passes closes it. It signs in to
+# nothing and reads no one's data. The push credentials are not checked here:
+# that needs production's FCM sender identity and Apple's key in a scheduled
+# job, which no environment grants; `sabeel-ci check-push` asks them by hand.
+on:
+  schedule:
+    - cron: "23 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  production:
+    if: github.repository_owner == 'Sabeel-Institute'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
+      - run: npm ci
+      - name: The live web app serves the build CI made
+        id: web
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sabeel-ci ci-hosting-smoke --live
+      - name: Every callable answers for itself
+        id: functions
+        continue-on-error: true
+        run: sabeel-ci ci-functions health
+      - name: The nightly issue, opened, updated or closed
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEB: ${{ steps.web.outcome }}
+          FUNCTIONS: ${{ steps.functions.outcome }}
+        run: sabeel-ci nightly-issue "web=$WEB" "functions=$FUNCTIONS"

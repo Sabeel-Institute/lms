@@ -49,9 +49,11 @@ jobs:
       # The site, and beside it its source maps for Deploy Web to upload.
       - name: Build and checksum Hosting artifact
         run: sabeel-ci ci-platform web
+      # Kept 90 days, GitHub's longest for a public repository: the Nightly
+      # workflow checks the live site against the build of its commit.
       - uses: actions/upload-artifact@v7
         with:
           name: web-hosting-${{ github.sha }}
           path: ${{ runner.temp }}/web-artifact
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
