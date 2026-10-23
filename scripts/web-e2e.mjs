@@ -3514,14 +3514,18 @@ await openHikam(admin);
 /*
  * AN EXPORT NEEDS THE SERVER. Offline it was built from whatever the open
  * screens had cached, stamped as the record "now", and said nothing.
+ * Firestore refuses a server read only once it has decided it is offline, and
+ * on a slow CI runner the refusal has not shown within 20 s: it is given a
+ * minute, and a screenshot is kept if it still does not show.
  */
 await admin.context().setOffline(true);
 await tap(admin, 'course-export');
 const exportRefused = await admin
   .getByText('An export needs a connection', { exact: false })
   .first()
-  .waitFor({ timeout: 20000 })
+  .waitFor({ timeout: 60000 })
   .then(() => true, () => false);
+if (!exportRefused) await shot(admin, '25c-export-offline-not-refused');
 await admin.context().setOffline(false);
 check('an export taken offline says it needs a connection, rather than saving what was cached', exportRefused);
 /*
