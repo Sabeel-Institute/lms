@@ -276,8 +276,10 @@ Do not silently change any of these.
   --notes <entry>`
   opens the release pull request with the version and its deploy-log entry
   (`docs/PHASE_STATUS.md`, "Deploy log"); once Faisal merges it, `npx
-  sabeel-ci release --ship` on main builds, checks, tags and publishes to Play
-  internal testing; then Deploy Web, and TestFlight from the tag (`gh workflow
+  sabeel-ci release --ship` on main publishes the bundle CI built from that
+  commit to Play internal testing, cold-starts the APK Play signs and tags the
+  GitHub release with it, building and signing nothing locally; then Deploy
+  Web, and TestFlight from the tag (`gh workflow
   run ios.yml --ref vX.Y.Z -f testflight=true`). The recipe is
   `docs/DEPLOY.md`, "Cutting a release".
 - **If a suite fails, first ask whether it fails on stashed changes too.** A

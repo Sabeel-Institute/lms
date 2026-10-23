@@ -132,9 +132,9 @@ they release.
   Play's SHA-256 must match the selected AAB exactly.
 - Dirty-marked AABs cannot be published. Permission-check mode may inspect one
   to validate credentials, but a clean Android build is required for release.
-- `npx sabeel-ci publish-play --internal` does the same from a terminal, and
-  `npx sabeel-ci release --ship` runs it last. Android builds never upload to
-  Play automatically.
+- `npx sabeel-ci release --ship` runs Publish Android on the release commit's
+  bundle, and `npx sabeel-ci publish-play --internal` does the same from a
+  terminal. Android builds never upload to Play automatically.
 
 ## Credentials and trust
 
