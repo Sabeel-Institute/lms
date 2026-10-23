@@ -41,7 +41,7 @@ Xcode, write it down here so the next prebuild can redo it.
 | `ios.bundleIdentifier` | `com.sabeelinstitute.lms` | the Android package, and the Apple and Firebase registrations |
 | `ios.buildNumber` | the version's code, as a string (`"2001"` for 0.2.1) | Apple takes each number once and requires it to increase; `npx sabeel-ci release` writes it with the version, and `check-app` refuses any other |
 | `ios.supportsTablet` | `false` | phone first; no iPad layout has been checked |
-| `ios.googleServicesFile` | `./GoogleService-Info.plist` | gitignored, like `google-services.json` |
+| `ios.googleServicesFile` | `./GoogleService-Info.plist` | committed, like `google-services.json` |
 | `ios.infoPlist.CFBundleDisplayName` | `Sabeel LMS` | the home screen truncates `Sabeel Institute LMS`; the same short name as the Android launcher (`APP_SHORT_NAME`) |
 | `ios.config.usesNonExemptEncryption` | `false` | answers export compliance, so builds reach testers without the questionnaire |
 | `ios.privacyManifests` | what the app collects, none of it for tracking | Expo writes `PrivacyInfo.xcprivacy` from it; Apple refuses an upload without one |
@@ -101,7 +101,6 @@ All gitignored. Without each, something builds and quietly does not work.
 
 | File | What it carries | Without it |
 |---|---|---|
-| `app/GoogleService-Info.plist` | the iOS app's Firebase config and Google OAuth client | prebuild fails; `check:ios` says so first |
 | `app/.env.local` | `EXPO_PUBLIC_SENTRY_DSN_NATIVE`, which `app/src/sentry.ts` reads on every native platform (iOS reports to the same React Native Sentry project as Android, `sentry.projects.native` in `ci-tools.json`) | the app ships with crash reporting off |
 | `app/.env.sentry-build-plugin` | `SENTRY_AUTH_TOKEN`, `IOS_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, optional `ASC_KEY_PATH` | `build-ios` refuses to build (no token, no team); no upload |
 | `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` | the App Store Connect API key (NOT the APNs key) | `-allowProvisioningUpdates` cannot sign; no upload |
@@ -357,7 +356,6 @@ away, until Apple's per-team certificate limit stopped every build.
 | `ASC_KEY_P8` | The App Store Connect API key (Admin) | `~/.appstoreconnect/private_keys/AuthKey_W37AZSR3Q5.p8` |
 | `BUILD_ENV` | `app/.env.sentry-build-plugin`, its `NAME=value` lines only; the Android release build reads it too | the Mac's copy |
 | `APP_ENV_LOCAL` | `app/.env.local`, its `NAME=value` lines only | |
-| `GOOGLE_SERVICE_INFO_PLIST` | `app/GoogleService-Info.plist`, base64 | |
 
 Set one again with `gh secret set NAME --env release-build -R Sabeel-Institute/lms < file`
 (`base64 -w0 file |` for the binary ones). Keep comment lines out of the

@@ -7,7 +7,7 @@
 | Thing | Secret? | Where it lives |
 |---|---|---|
 | Firebase web config (apiKey, appId, …) | **No** | Committed in `app/src/firebase-config.ts` — it ships in every client bundle |
-| `google-services.json`, `GoogleService-Info.plist` | No, but not committed | Regenerated from Firebase; gitignored because they are per-project and carry OAuth client ids |
+| `google-services.json`, `GoogleService-Info.plist` | **No** | Committed (`app/google-services.json`, `app/android/app/google-services.json`, `app/GoogleService-Info.plist`), as in Kanban and the Time Tracker: client config every installed app carries, with OAuth client ids that are public by design. `sabeel-ci check-app` holds them to the app's package, bundle id and Firebase project |
 | Sentry **client** DSNs (web, Android and iOS) | No, but not committed | Gitignored `app/.env.local` as `EXPO_PUBLIC_SENTRY_DSN_WEB` and `EXPO_PUBLIC_SENTRY_DSN_NATIVE` (GitHub secret `APP_ENV_LOCAL` in CI). Send-only, and they ship in the bundle anyway; kept out of git so they can rotate per environment |
 | Sentry **functions** DSN | **Yes** | Secret Manager as `SENTRY_DSN` (server-side, never shipped to a client) |
 | Sentry **auth token** (source-map and symbol upload) | **Yes** | `SENTRY_AUTH_TOKEN` in the build machine's gitignored `app/.env.sentry-build-plugin`, and in the GitHub secret `BUILD_ENV` (environment `release-build`) for CI. An **org** token (org `devnull-ke`, scope `org:ci`), shared across all the Sabeel Sentry projects. The org and the projects it uploads to are in `ci-tools.json` (`sentry`), never in a secret |
@@ -159,8 +159,6 @@ or only with effort:
 | `app/.env.local` | Sentry client DSNs | Copy again from Sentry project settings |
 | `app/.env.sentry-build-plugin` | Sentry org auth token (`SENTRY_AUTH_TOKEN`), the Apple team id and the App Store Connect key ids; also GitHub secret `BUILD_ENV` | Create a new token in Sentry; set `BUILD_ENV` again from the file |
 | `~/.config/sabeel-lms/AuthKey_X5R8FL94BC.p8` | Apple push key (also in Secret Manager as `APNS_KEY`) | Apple never lets it be downloaded again. Make a new key in the developer portal, set `APNS_KEY` to it and `APNS_KEY_ID` to its id, redeploy the functions. Back it up |
-| `app/google-services.json`, `app/android/app/google-services.json` | Firebase Android config | `firebase apps:sdkconfig ANDROID 1:226338267845:android:a85d5935fb8f4555cac6ac` |
-| `app/GoogleService-Info.plist` | Firebase iOS config | `firebase apps:sdkconfig IOS 1:226338267845:ios:13ce4f7992ecd4decac6ac --out app/GoogleService-Info.plist` |
 | `~/.config/.wrangler/config/default.toml` | Cloudflare login | Log in again (`docs/DEV-TOOLING.md`) |
 | `~/keys/sabeel-play-publisher.json` | Play publishing key (all Sabeel apps) | Make a new key for the same service account (above) |
 

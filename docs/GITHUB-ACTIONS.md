@@ -155,8 +155,8 @@ branch a collaborator pushes.
 `sabeel-ci check-app` fails CI if a job reads one outside that environment,
 or if a release job does not check its owner first. Set one again from the
 vault with
-`gh secret set NAME --env release-build -R <repo>`. LMS also needs
-`ANDROID_GOOGLE_SERVICES_JSON`. The certificate fingerprint is stored in
+`gh secret set NAME --env release-build -R <repo>`. The Firebase app config
+files are committed, so no secret carries them. The certificate fingerprint is stored in
 `ANDROID_SIGNING_CERT_SHA256`; builds verify it before uploading an AAB.
 
 Hosting uses `FIREBASE_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER` and
