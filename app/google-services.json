@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "226338267845",
+    "project_id": "oursabeel-lms",
+    "storage_bucket": "oursabeel-lms.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:226338267845:android:a85d5935fb8f4555cac6ac",
+        "android_client_info": {
+          "package_name": "com.sabeelinstitute.lms"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "226338267845-bfelj85helun8hf2kun0a070rb8q0qes.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sabeelinstitute.lms",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "226338267845-c4hmaniiltb026i0g2r6hi61vlgk5a7u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sabeelinstitute.lms",
+            "certificate_hash": "f6f1f117152c32bf4db0b516f88c3fabe2abc4d2"
+          }
+        },
+        {
+          "client_id": "226338267845-4ik78e1nokc2nu5rt9rujo0sr89cg9cp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAdiCksjnJiUcod8xpnFqjm29X3GI4r-74"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "226338267845-4ik78e1nokc2nu5rt9rujo0sr89cg9cp.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

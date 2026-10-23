@@ -20,16 +20,6 @@ storage-debug.log
 ui-debug.log
 pubsub-debug.log
 
-# Google services file is per-project and carries the OAuth client ids —
-# regenerated from the console, never committed.
-# google-services.json carries the Android OAuth client + FCM sender — per-project
-# config, regenerated from the Firebase console, never committed. Both the Expo
-# source location and the Gradle location.
-**/google-services.json
-# GoogleService-Info.plist is its iOS twin (the iOS OAuth client, its
-# REVERSED_CLIENT_ID URL scheme, the FCM sender): same rule.
-**/GoogleService-Info.plist
-
 # Env / local secrets (client DSNs etc. — names only in docs/SECRETS.md)
 .env
 .env.local
