@@ -45,6 +45,27 @@ request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
 it). What was checked before and after each release is in the verification
 log below.
 
+### 2026-10-23 — Notifications on the website open what they are about — v0.3.0
+
+A pre-release: keep using Sabeel Class Recordings until the institute announces
+the day everyone moves.
+
+**For everyone**
+- Tapping a notification on the website opens what it is about, in the open
+  tab or a new one.
+- On a phone's browser the page fills the screen: no white band under the app
+  as the address bar slides away, and the buttons at the bottom stay in reach.
+- On Android, a request over a dead connection gives up within a minute and
+  says so, instead of waiting for minutes.
+- After a Google sign-in that fails, the next try opens the account chooser
+  again, so a different account can be picked.
+- A smaller Android app, and routine updates to the app's building blocks, for
+  security and stability.
+
+**For teachers**
+- The grade form keeps what you entered when the window is resized or the
+  phone turns.
+
 ### 2026-10-21 — Dependency and security maintenance — v0.2.1
 
 A pre-release: keep using Sabeel Class Recordings until the institute announces
