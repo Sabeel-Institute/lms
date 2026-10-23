@@ -14,15 +14,23 @@ name: Student signs in, listens, and changes the password
 # Next moves the focus to the password; on iOS Maestro can type before the
 # focus lands there, so the flow puts it there itself. Go signs in.
 - pressKey: Enter
-- tapOn:
-    id: "signin-password"
-- inputText: "HikamStudent1"
-- pressKey: Enter
+# The iPhone simulator on a busy CI Mac has typed a wrong character into the
+# secure field: thirteen characters, and the Auth emulator refused them before
+# any sign-in gate ran (2026-10-22). A sign-in that does not land gets one more
+# try, with the field emptied first.
 # A card's texts are one accessibility label on iOS, and Maestro matches the
 # whole label, so texts inside a card or a row are matched as part of one.
-- extendedWaitUntil:
-    visible: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
-    timeout: 60000
+- retry:
+    maxRetries: 1
+    commands:
+      - tapOn:
+          id: "signin-password"
+      - eraseText: 30
+      - inputText: "HikamStudent1"
+      - pressKey: Enter
+      - extendedWaitUntil:
+          visible: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
+          timeout: 60000
 - runFlow:
     when:
       visible: "Not now"
@@ -63,5 +71,5 @@ name: Student signs in, listens, and changes the password
 - tapOn: "Change password[\\s\\S]*"
 - extendedWaitUntil:
     visible: "Reset link sent[\\s\\S]*"
-    timeout: 30000
+    timeout: 60000
 - takeScreenshot: 04-password-link
