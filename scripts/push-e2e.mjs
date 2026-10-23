@@ -141,8 +141,21 @@ async function signedIn(signIn, homeAnchor) {
     await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;
   });
-  const worker = context.serviceWorkers().find((w) => w.url().endsWith('/firebase-messaging-sw.js'))
-    ?? (await context.waitForEvent('serviceworker'));
+  /**
+   * The worker of the registration at the origin root, the one the app
+   * registers and pushes are delivered to. Looked up each time rather than
+   * held: the browser can hold more than one worker for the same script (a
+   * second registration under another scope, or a version on its way out),
+   * and a handle to the wrong one reads another registration's banners.
+   */
+  const worker = async () => {
+    for (const w of context.serviceWorkers()) {
+      const root = await w.evaluate(() => self.registration.scope === `${self.location.origin}/`
+        && self.serviceWorker?.state !== 'redundant').catch(() => false);
+      if (root) return w;
+    }
+    throw new Error('no worker at the origin root');
+  };
   const cdp = await context.newCDPSession(page);
   const registrations = new Map();
   cdp.on('ServiceWorker.workerRegistrationUpdated', ({ registrations: list }) => {
@@ -159,8 +172,8 @@ async function signedIn(signIn, homeAnchor) {
 }
 
 /** The banners the worker is showing, with their data. */
-const shown = (worker) =>
-  worker.evaluate(async () => (await self.registration.getNotifications()).map((n) => ({ title: n.title, body: n.body, data: n.data })));
+const shown = async (worker) =>
+  (await worker()).evaluate(async () => (await self.registration.getNotifications()).map((n) => ({ title: n.title, body: n.body, data: n.data })));
 
 async function tapEach(who, cases, browserOf) {
   const { context, page, worker, cdp, registrationId, home } = browserOf;
@@ -178,7 +191,7 @@ async function tapEach(who, cases, browserOf) {
     check(`${c.kind}: the push is shown, with its words and its path`,
       Boolean(banner) && JSON.stringify(banner.data) === JSON.stringify(payload.data),
       JSON.stringify(banner ?? await shown(worker)));
-    await worker.evaluate(async ({ title, body }) => {
+    await (await worker()).evaluate(async ({ title, body }) => {
       const n = (await self.registration.getNotifications()).find((x) => x.title === title && x.body === body);
       // eslint-disable-next-line no-undef -- runs in the worker, where it is a global
       if (n) self.dispatchEvent(new NotificationEvent('notificationclick', { notification: n }));
@@ -188,7 +201,7 @@ async function tapEach(who, cases, browserOf) {
 
     // -- no tab open: the worker's own address for it, in a tab of its own ------
     // eslint-disable-next-line no-undef -- the worker's own function, run in the worker
-    const url = await worker.evaluate((data) => subjectUrl(data), payload.data);
+    const url = await (await worker()).evaluate((data) => subjectUrl(data), payload.data);
     const fresh = await context.newPage();
     await fresh.goto(new URL(url, BASE).href, { waitUntil: 'domcontentloaded' });
     check(`${c.kind}: the address the worker opens lands there too (${url})`, await c.landed(fresh), fresh.url());
