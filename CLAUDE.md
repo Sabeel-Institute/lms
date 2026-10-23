@@ -235,6 +235,9 @@ Do not silently change any of these.
   widths straddling the content-column cap, **asserted**, not just photographed.
   Same runner, same CI job (the browser matrix). `SWEEP_WIDTHS=320` for a tight
   loop.
+- Web push taps: `npm run test:e2e:push`. Every kind of notification delivered
+  to the real service worker in full Chromium and tapped, with a tab open and
+  with none; each must land on its subject. Same runner, same CI job.
 - Web: `npx expo start --web` in `app/`, or `npm run web:export -w @sabeel/app`
   for the bundle that actually ships.
 - Android: `npx sabeel-ci emulator headless` (AVD `tb_emu`), then `npx expo
@@ -504,7 +507,12 @@ Manager, never in the app bundle.**
 - **A tapped notification opens its subject.** Each message carries a `path`
   built by `pushPaths` in `@sabeel/shared`, and `app/src/linkPaths.test.ts` holds
   every one to the route tables. Never name an FCM data key `body`: expo-
-  notifications reads it as the whole payload.
+  notifications reads it as the whole payload. On the web the service worker
+  (`app/public/firebase-messaging-sw.js`, no Firebase SDK, no outside script)
+  shows every push and handles the click: an open tab is posted the path
+  (`pushTaps.web.ts`) and focused, otherwise a new tab opens at `/<path>`.
+  `functions/test/unit/firebaseMessagingSw.test.ts` and `npm run
+  test:e2e:push` hold every message to it.
 - **Old data is migrated, never accommodated.** A document is read through
   `read()`/`readIfExists()` (`app/src/documents.ts`), typed by its collection,
   and ESLint allows `.data() as` nowhere else in the app. Every field of every

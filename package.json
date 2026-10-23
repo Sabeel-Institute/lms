@@ -29,6 +29,7 @@
     "emulators": "sabeel-ci emulators",
     "test:e2e": "bash scripts/e2e-stack.sh web",
     "test:screens": "bash scripts/e2e-stack.sh screens",
+    "test:e2e:push": "bash scripts/e2e-stack.sh push",
     "seed:emulators": "node scripts/seed-emulators.mjs",
     "smoke:prod": "node scripts/prod-smoke.mjs",
     "check:queries": "node scripts/check-query-shapes.mjs",

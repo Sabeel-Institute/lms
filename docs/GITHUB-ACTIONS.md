@@ -35,9 +35,9 @@ they release.
   repository: the rendered workflows, the version written once, the emulator
   ports, the release environment's secrets), lint, type checks, the dead-code
   audit, unit tests, Firebase-emulator integration tests
-  and both browser suites (the flow walkthrough and the multi-width sweep,
-  `npm run test:e2e` and `npm run test:screens`) on main pushes and pull
-  requests. Every sweep, pass or fail, leaves a `screens-report` artifact: a
+  and the browser suites (the flow walkthrough, the multi-width sweep and
+  every web notification tapped, `npm run test:e2e`, `npm run test:screens`
+  and `npm run test:e2e:push`) on main pushes and pull requests. Every sweep, pass or fail, leaves a `screens-report` artifact: a
   page of every screen at every width with the failed checks beside them and
   what changed against main's latest sweep, before / after / difference. The
   run page's summary lists the failed checks and changed screens and the

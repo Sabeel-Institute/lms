@@ -68,6 +68,9 @@ npm run test:e2e
 # emulators and dev server, so it needs nothing running. Shots in shots/screens/.
 npm run test:screens
 
+# Every kind of notification, tapped on the web — the same runner
+npm run test:e2e:push
+
 # Web
 npm run web:export -w @sabeel/app
 

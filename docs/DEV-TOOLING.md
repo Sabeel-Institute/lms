@@ -31,6 +31,7 @@ emulator — not your diff.
 | `npm run build` | Builds shared, then bundles functions with esbuild |
 | `npm run test:e2e` | The Playwright flow walkthrough — starts its own emulators and dev server (see below) |
 | `npm run test:screens` | The multi-width layout sweep — the same runner (see below) |
+| `npm run test:e2e:push` | Every notification tapped on the web, in full Chromium — the same runner (see below) |
 | `npm run web:export -w @sabeel/app` | The web bundle that actually ships |
 | `npx sabeel-ci render-manual` | `docs/USER-MANUAL.md` to `docs/USER-MANUAL.pdf`, with the logo (`app/assets/logo.png`), `app.json`'s version and this month on the cover; needs `uv` and `google-chrome`. `sabeel-ci release` runs it |
 | `npx sabeel-ci emulator headless` | Boots the `tb_emu` AVD (or `SABEEL_AVD`) with no window; refuses to boot it twice and names who runs it |
@@ -305,6 +306,15 @@ media store and an Expo web dev server on **61310** (the block's `web` port),
 runs the walkthrough and stops them all. CI's browser job runs the same
 command. Its screenshots land in `shots/e2e/`, emptied as it starts.
 
+`npm run test:e2e:push` (`scripts/e2e-stack.sh push` → `scripts/push-e2e.mjs`)
+uses the same runner and port. It builds the sweep's world
+(`scripts/lib/seed-world.mjs`), signs in a student and an administrator in full
+Chromium (the headless shell refuses notification permission), and for every
+message the server builds delivers the push to the real service worker over
+DevTools, reads the banner back, dispatches its click inside the worker and
+asserts the screen it lands on: with the app open, and at the address the
+worker opens when no tab is.
+
 For a tight loop against a stack you keep up, start the two yourself and run
 the script directly:
 
@@ -314,8 +324,8 @@ cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port "$(npx sabeel-
 node scripts/web-e2e.mjs
 ```
 
-**`npm run test:emulator`, `test:e2e` and `test:screens` all kill that emulator
-suite.** Each runs `sabeel-ci free-emulator-ports` first, by design — so after
+**`npm run test:emulator`, `test:e2e`, `test:e2e:push` and `test:screens` all
+kill that emulator suite.** Each runs `sabeel-ci free-emulator-ports` first, by design — so after
 one of them you must restart the long-lived suite before the direct run will
 work. The symptom is every e2e check failing at once.
 

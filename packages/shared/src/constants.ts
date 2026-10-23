@@ -121,8 +121,7 @@ export const SIGNED_URL_REFRESH_MS = 60 * 60 * 1000;
  *
  * If a custom domain is ever attached to this Hosting site, change
  * `WEB_APP_URL` and nowhere else, and check the rewrite still answers an
- * anonymous `curl`. `WEB_APP_URL` is also where a tapped web push lands
- * (`functions/src/messaging.ts`).
+ * anonymous `curl`.
  *
  * Absolute, not a relative path: it is opened from the native apps as well as
  * the browser, where there is no origin to be relative to.

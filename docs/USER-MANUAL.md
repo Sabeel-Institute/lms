@@ -387,7 +387,9 @@ The app can send you five kinds of message, and no more. Tap **More**, then
 
 All of them start switched on. There's deliberately no message *after*
 something closes: by then there'd be nothing you could do about it. **Tapping a
-message opens what it's about** — the recording or the assignment. On an
+message opens what it's about** — the recording or the assignment. On the
+website, the tap brings forward the tab you already have open and goes there, or
+opens a new tab if none is. On an
 Android phone the app's messages are listed as **Class alerts and deadlines** in
 its notification settings.
 
@@ -970,7 +972,8 @@ deliberately: students are told about assignments, but a teacher is not sent a
 message for every hand-in, since **Today** carries the count.
 
 - **Attendance still not taken** — a couple of days after a class meeting whose
-  attendance you never submitted.
+  attendance you never submitted. Tapping it opens that class meeting, with its
+  register ready to submit.
 
 It goes to the people who manage the class, so if you manage none — which is
 usual for an administrator — you have no switches here, and the screen says so.

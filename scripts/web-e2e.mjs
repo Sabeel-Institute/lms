@@ -2759,8 +2759,9 @@ check(
   JSON.stringify(takenAgain.map((d) => [d.fields.studentUid.stringValue, d.fields.closedEarly?.booleanValue])),
 );
 
-// A TAPPED NOTIFICATION'S WEB END is its link: the app's address plus the path
-// the message carries (pushPaths). Opened cold, it lands on the assignment.
+// A TAPPED NOTIFICATION'S WEB END, with no tab open, is the app's address plus
+// the path the message carries (pushPaths), which the service worker opens.
+// Opened cold, it lands on the assignment. push-e2e.mjs taps every kind.
 await student.goto(`${WEB}${pushPaths.work(cwId)}`, { waitUntil: 'domcontentloaded' });
 await student.getByTestId('work-returned').waitFor({ timeout: 30000 }).catch(() => {});
 check('a notification’s link opens the assignment it is about', (await screenTitle(student).catch(() => '')) === CW);

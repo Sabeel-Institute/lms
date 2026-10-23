@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Sabeel Institute LMS</title>
+
+    <!--
+      A COPY of Expo's default web reset, with two changes. Expo generates this
+      file itself unless the project provides one here (app/public/index.html) —
+      so any future change to their template has to be merged in by hand. That
+      is the price of the fixes below.
+
+      1. `#root` is sized in `dvh`, the DYNAMIC viewport height.
+
+         `height: 100%` resolves against the layout viewport, which on a mobile
+         browser does not follow the address bar as it collapses and expands. On
+         Chrome for Android it settles on the SMALL viewport, so the moment the
+         bar hides on scroll the visible area grows past the app — leaving a band
+         of bare page below it, which reads as a white stripe that appears while
+         scrolling a card and stays there. `dvh` tracks the visible area instead,
+         so the app is always exactly as tall as what you can see. The plain
+         `height: 100%` is kept first as the fallback for anything that does not
+         know `dvh`.
+
+         This also matters for reaching things: the app root being taller or
+         shorter than the viewport is what pushes a control pinned to the bottom
+         out of sight, and `body { overflow: hidden }` means there is no page
+         scroll to recover it.
+
+      2. `html, body` are painted the app's canvas colour.
+
+         Belt and braces for the same problem: if the root and the viewport ever
+         disagree for a frame, the gap shows the app's own background instead of
+         white. The value is Warm Ivory from docs/BRAND.md, mirrored from
+         `app/src/theme/palette.ts` — which is the source of truth.
+         `functions/test/unit/webTemplate.test.ts` (in `npm test`, and so in CI) fails if
+         the two drift apart, because this is a hardcoded colour outside the
+         theme and the only honest way to hold that is to check it.
+    -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+        background-color: #F6EBDD;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        height: 100dvh;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
