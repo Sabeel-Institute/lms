@@ -22,10 +22,12 @@ import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import { BOLD_STAR, ITALIC_STAR, ORDERED_LIST, UNORDERED_LIST } from '@lexical/markdown';
 import { $findMatchingParent } from '@lexical/utils';
 import {
+  $createRangeSelectionFromDom,
   $createTextNode,
   $getRoot,
   $getSelection,
   $isRangeSelection,
+  $setSelection,
   FORMAT_TEXT_COMMAND,
   TextNode,
   type LexicalEditor,
@@ -81,6 +83,9 @@ function listTypeAtCaret(editor: LexicalEditor): string | null {
 }
 
 /** Loads the markdown, reports markdown and marks back, and exposes the commands. */
+/** Keys whose keydown edits at, or moves, the caret (the set facebook/lexical#9283 reads the DOM for). */
+const CARET_KEYS = new Set(['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'Backspace', 'Delete', 'Enter', 'Tab']);
+
 function Bridge({
   initialMarkdown,
   onChangeMarkdown,
@@ -94,6 +99,43 @@ function Bridge({
 }) {
   const [editor] = useLexicalComposerContext();
   const seeded = useRef(false);
+
+  /**
+   * Act on the caret the browser shows, not the one Lexical last heard of.
+   *
+   * On keydown, Lexical 0.52 reuses its last selection instead of reading the
+   * DOM. Chromium coalesces `selectionchange`, so a caret move the browser made
+   * natively (End, Home, a click) can still be unreported when the next key
+   * arrives on a busy page, and that key then acts on the caret from before the
+   * move: select a word, Bold, End, Enter, and the Enter and what follows
+   * REPLACED the word (found by Kanban's richtext suite). Lexical fixed it
+   * upstream (facebook/lexical#9283, after 0.52.0) by reading the DOM for these
+   * keys; this does the same, first, in the capture phase. Remove it once a
+   * Lexical release carries #9283.
+   */
+  useEffect(() => {
+    let root: HTMLElement | null = null;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!CARET_KEYS.has(event.key) || event.isComposing) return;
+      const domSelection = root?.ownerDocument.defaultView?.getSelection() ?? null;
+      editor.update(
+        () => {
+          const fromDom = $createRangeSelectionFromDom(domSelection, editor);
+          if (fromDom !== null) $setSelection(fromDom);
+        },
+        { discrete: true },
+      );
+    };
+    const unregister = editor.registerRootListener((next, prev) => {
+      prev?.removeEventListener('keydown', onKeyDown, true);
+      next?.addEventListener('keydown', onKeyDown, true);
+      root = next;
+    });
+    return () => {
+      unregister();
+      root?.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [editor]);
 
   // Seed ONCE: re-seeding a focused editor moves the caret and drops keys.
   useEffect(() => {
