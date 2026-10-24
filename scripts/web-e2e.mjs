@@ -35,7 +35,9 @@ import { fileURLToPath } from 'node:url';
 import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
 import { emulatorProject, ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { chromium } from 'playwright';
-import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { extname } from 'node:path';
 import {
   FIRST_ADMIN_EMAIL,
   HELP_VIDEOS,
@@ -4233,6 +4235,52 @@ check(
   unhandled.length === 0,
   unhandled.slice(0, 3).join(' | '),
 );
+
+console.log('\nThe export');
+/*
+ * Everything above runs on the dev server, which does not tree-shake. The site
+ * is the export `sabeel-ci build-web` makes, which does, so a module wrongly
+ * shaken out would first fail on the live site. e2e-stack.sh builds it with
+ * --emulators into app/dist-web; a student signs in on it here.
+ */
+const EXPORT_DIR = 'app/dist-web';
+const exportTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.ttf': 'font/ttf', '.png': 'image/png', '.json': 'application/json' };
+const exportServer = createServer((req, res) => {
+  const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  let file = `${EXPORT_DIR}${path}`;
+  if (path === '/' || !existsSync(file) || statSync(file).isDirectory()) {
+    // A missing script or asset is a 404, as on Hosting; only routes fall back.
+    if (path.startsWith('/_expo/') || path.startsWith('/assets/')) {
+      res.writeHead(404).end();
+      return;
+    }
+    file = `${EXPORT_DIR}/index.html`;
+  }
+  res.setHeader('content-type', exportTypes[extname(file)] ?? 'application/octet-stream');
+  createReadStream(file).pipe(res);
+});
+await new Promise((r) => exportServer.listen(0, '127.0.0.1', r));
+const shipped = await browser.newContext({ viewport: { width: 390, height: 844 } });
+const shippedPage = await shipped.newPage();
+const shippedErrors = [];
+shippedPage.on('pageerror', (e) => shippedErrors.push(String(e)));
+await shippedPage.goto(`http://127.0.0.1:${exportServer.address().port}/`, { waitUntil: 'domcontentloaded' });
+await shippedPage.getByTestId('signin-email').waitFor({ timeout: 40000 });
+check('the export shows no dev sign-in, though built for the emulators', !(await shows(shippedPage, 'dev-sign-in')));
+await shippedPage.getByTestId('signin-email').fill('fatima@example.com');
+await shippedPage.getByTestId('signin-password').fill('StudentPass123!');
+await tap(shippedPage, 'signin-student');
+await onToDo(shippedPage);
+await tap(shippedPage, 'tab-classes');
+await shippedPage.waitForTimeout(2000);
+const shippedIcons = await shippedPage.evaluate(async () => {
+  await document.fonts.ready;
+  return [...document.fonts].filter((f) => f.family.replace(/"/g, '') === 'sabeel-icons').map((f) => f.status);
+});
+check('a student signs in on the export, and its icons draw', shippedIcons.includes('loaded'), shippedIcons.join(', '));
+check('with no uncaught error on the page', shippedErrors.length === 0, shippedErrors.slice(0, 3).join(' | '));
+await shipped.close();
+exportServer.close();
 
 // ------------------------------------------------------------------ result --
 await browser.close();

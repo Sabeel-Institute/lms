@@ -6,13 +6,16 @@
 // Sentry project. The DSN is a client value baked in at build time (see
 // app/.env.local); if it is absent the seam is a silent console-only no-op.
 import type * as SentryBrowser from '@sentry/browser';
-import { IS_DEV } from './env';
+import { IS_DEV, USE_EMULATORS } from './env';
 import { BUILD_LABEL } from './buildInfo';
 import { withoutIds } from './withoutIds';
 import { minimalEnvelope } from './sentryEnvelope';
 
 const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN_WEB;
-const ENABLED = !!DSN && !IS_DEV;
+// Off for a build pointed at the emulators too: the web suite drives the
+// export `sabeel-ci build-web --emulators` makes, which takes the DSN from
+// .env.local, and would otherwise file its test errors into production.
+const ENABLED = !!DSN && !IS_DEV && !USE_EMULATORS;
 
 /*
  * LOADED AT THE FIRST REPORT, NOT AT START-UP. @sentry/browser was a fifth of
