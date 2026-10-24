@@ -45,6 +45,17 @@ request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
 it). What was checked before and after each release is in the verification
 log below.
 
+### 2026-10-24 — Icons on slow connections; a smaller website — v0.3.1
+
+- **Icons appear on a slow connection.** The website downloaded a font of
+  2,234 icons to draw the few dozen it uses, and gave up after 12 seconds:
+  on a slow connection the icons stayed blank. The app now carries a 5 KB
+  font of exactly its own icons, on the website and the phone apps alike.
+- **The website is smaller**: the build leaves out code the app never
+  calls.
+- The web test suite now also signs in on the website exactly as it is
+  built for release, so a part left out by mistake fails a test first.
+
 ### 2026-10-23 — Notifications on the website open what they are about — v0.3.0
 
 A pre-release: keep using Sabeel Class Recordings until the institute announces
