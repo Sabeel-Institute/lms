@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon } from '../icons';
 import {
   COLLECTIONS,
   INSTITUTE_TIMEZONE,
@@ -281,7 +281,7 @@ function Card({ item, onOpen }: { item: Item; onOpen: () => void }) {
   const inGrid = useGridCell();
   const body = (
     <>
-      <MaterialIcons
+      <Icon
         name={item.kind === 'recording' ? 'play-circle-outline' : 'assignment'}
         size={22}
         color={t.text.secondary}

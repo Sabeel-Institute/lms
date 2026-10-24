@@ -1,13 +1,11 @@
-import { type ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon, type IconName } from '../icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type Role } from '@sabeel/shared';
 import { RAIL_WIDTH, getTheme, spacing } from '../theme';
 import type { RootStackParamList } from '../nav';
 
 const t = getTheme();
-type IconName = ComponentProps<typeof MaterialIcons>['name'];
 type RouteName = keyof RootStackParamList;
 
 type Tab = {
@@ -184,7 +182,7 @@ export function AppNav({
         ]}
       >
         <View style={styles.railMark}>
-          <MaterialIcons name="graphic-eq" size={22} color={t.accent.base} />
+          <Icon name="graphic-eq" size={22} color={t.accent.base} />
         </View>
         <View style={styles.railTabs}>{items}</View>
         {more}
@@ -249,7 +247,7 @@ function NavItem({
       ]}
     >
       <View>
-        <MaterialIcons name={icon} size={24} color={tint} />
+        <Icon name={icon} size={24} color={tint} />
         {badge > 0 ? (
           <View testID={`${testID}-badge`} style={styles.badge}>
             <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>

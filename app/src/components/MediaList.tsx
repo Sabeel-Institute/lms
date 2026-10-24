@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon } from '../icons';
 import {
   VERSION_LABELS,
   VERSION_ORDER,
@@ -163,7 +163,7 @@ function FileRow({
   const ready = item.status === 'ready';
   const face = (
     <>
-      <MaterialIcons
+      <Icon
         name={item.kind === 'video' ? 'videocam' : 'audiotrack'}
         size={20}
         color={ready ? t.text.secondary : t.text.muted}

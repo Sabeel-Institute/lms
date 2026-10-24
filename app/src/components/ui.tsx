@@ -8,7 +8,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type ComponentProps,
   type ReactElement,
   type ReactNode,
   type Ref,
@@ -24,7 +23,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { LAYOUT_WIDTHS, getTheme, spacing, type LayoutWidth } from '../theme';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon, type IconName } from '../icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useListenerError } from '../liveQuery';
 import { useRoomy, useWide } from '../useWidth';
@@ -418,7 +417,7 @@ export function IconButton({
   disabled,
   onPress,
   testID,
-}: ({ glyph: string; icon?: undefined } | { icon: ComponentProps<typeof MaterialIcons>['name']; glyph?: undefined }) & {
+}: ({ glyph: string; icon?: undefined } | { icon: IconName; glyph?: undefined }) & {
   /** Required: with no visible text this IS the button's name. */
   label: string;
   variant?: 'secondary' | 'danger';
@@ -451,7 +450,7 @@ export function IconButton({
       {busy ? (
         <ActivityIndicator color={ink} />
       ) : icon ? (
-        <MaterialIcons name={icon} size={22} color={ink} />
+        <Icon name={icon} size={22} color={ink} />
       ) : (
         <Text
           style={[
@@ -981,7 +980,7 @@ export function NavRow({
         <Text style={styles.rowTitle}>{label}</Text>
         {typeof caption === 'string' ? <Text style={styles.rowDetail}>{caption}</Text> : (caption ?? null)}
       </View>
-      <MaterialIcons name="chevron-right" size={22} color={t.text.muted} />
+      <Icon name="chevron-right" size={22} color={t.text.muted} />
     </Pressable>
   );
 }
@@ -1352,7 +1351,7 @@ export function Collapsible({
             literal ▸ is the only place a typed shape stood in for an icon, and
             it renders at whatever weight the platform font gives it — beside a
             Material bar and Material rail it read as a different vocabulary. */}
-        <MaterialIcons
+        <Icon
           name={open ? 'expand-more' : 'chevron-right'}
           size={20}
           color={t.text.secondary}

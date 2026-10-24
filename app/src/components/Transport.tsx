@@ -1,4 +1,4 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon } from '../icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { WaitingRing } from './WaitingRing';
 import { SKIP_BACK_MS, SKIP_FORWARD_MS } from '../playback';
@@ -151,7 +151,7 @@ export function Skip({
           and "30" with a hairline mark above each say nothing about which way
           they go, and the durations are asymmetric so the number cannot be read
           as the cue either. */}
-      <MaterialIcons
+      <Icon
         name="replay"
         size={18}
         color={disabled ? t.text.muted : t.text.secondary}

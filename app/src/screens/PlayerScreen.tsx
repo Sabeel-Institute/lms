@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon, type IconName } from '../icons';
 import {
   canPlayFromCourse,
   canPlayNow,
@@ -560,7 +560,7 @@ function PlayerLink({
   onPress,
 }: {
   testID: string;
-  icon: ComponentProps<typeof MaterialIcons>['name'];
+  icon: IconName;
   label: string;
   disabled: boolean;
   onPress: () => void;
@@ -575,7 +575,7 @@ function PlayerLink({
       onPress={onPress}
       style={({ pressed }) => [styles.link, pressed && !disabled ? styles.completePressed : null]}
     >
-      <MaterialIcons name={icon} size={20} color={disabled ? t.text.muted : t.accent.base} />
+      <Icon name={icon} size={20} color={disabled ? t.text.muted : t.accent.base} />
       <Text style={[styles.linkText, disabled ? styles.linkTextOff : null]}>{label}</Text>
     </Pressable>
   );

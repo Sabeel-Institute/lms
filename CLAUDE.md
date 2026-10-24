@@ -504,6 +504,13 @@ Manager, never in the app bundle.**
   when it holds a screen. Save-as-you-type goes through `createAutosave`
   (`app/src/autosave.ts`): ordered, flushed before moving on, never dropped on
   leaving. Parent links go UP (`up()` in `App.tsx`), never push a second copy.
+- **Every icon is `Icon` from `app/src/icons`, whose font holds only the
+  glyphs in `names.json`** (Material Icons' names; ci-tools' README, "Icons").
+  The stock font is 156 KB over the wire, which a slow connection can miss
+  within the 12 s `@expo/vector-icons` allows, leaving every icon blank. To
+  add one: put its name in `names.json`, then `npx sabeel-ci icons`. A name
+  missing from the list fails typecheck, a font that lags the list fails
+  `icons.test.ts`, and importing a stock set fails lint.
 - **A tapped notification opens its subject.** Each message carries a `path`
   built by `pushPaths` in `@sabeel/shared`, and `app/src/linkPaths.test.ts` holds
   every one to the route tables. Never name an FCM data key `body`: expo-
