@@ -45,6 +45,15 @@ request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
 it). What was checked before and after each release is in the verification
 log below.
 
+### 2026-10-24 — Keyboard edits after formatting land where the caret is — v0.3.2
+
+- **On the website, a word you have just formatted is no longer replaced.**
+  Selecting a word, pressing Bold and then End and Enter on the keyboard,
+  without clicking, replaced the word with the new line. The editor now acts
+  on the caret the browser shows. The fault is in the editor library's
+  current release and is fixed in its next; the app carries the same fix
+  until then.
+
 ### 2026-10-24 — Icons on slow connections; a smaller website — v0.3.1
 
 - **Icons appear on a slow connection.** The website downloaded a font of
