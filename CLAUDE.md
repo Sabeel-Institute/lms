@@ -228,7 +228,10 @@ Do not silently change any of these.
   checks signatures and expiry like R2, so the production signing path runs
   locally.
 - Browser e2e: `npm run test:e2e`. The flow walkthrough; it resets Firestore and
-  Auth as it goes. `scripts/e2e-stack.sh` starts the emulators and a dev server
+  Auth as it goes. It ends on the web export `sabeel-ci build-web --emulators`
+  makes, tree-shaken as the site is, which the dev server is not: a student
+  signs in there, so a module wrongly shaken out fails here and not on the
+  live site. `scripts/e2e-stack.sh` starts the emulators and a dev server
   for the run and stops them after, so it needs nothing running, and CI runs the
   same command. Against a stack you started yourself: `node scripts/web-e2e.mjs`.
 - Layout sweep: `npm run test:screens`. Every screen of both populations at five

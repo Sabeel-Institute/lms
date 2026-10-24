@@ -120,6 +120,14 @@ cleanup() {
 # the explicit signal handlers ARE the fix.)
 trap cleanup EXIT
 
+# The web suite also drives the export as Hosting gets it, tree-shaken, pointed
+# at the emulators (web-e2e.mjs, "The export"). Built first: the dev server
+# below clears Metro's cache again anyway.
+if [ "$SUITE" = web ]; then
+  echo "Building the web export (sabeel-ci build-web --emulators)…"
+  npx --no sabeel-ci build-web --emulators >/dev/null
+fi
+
 echo "Starting Expo web dev server on ${WEB_PORT}…"
 # The DEV server, not an export: `expo export` sets __DEV__ false, which
 # correctly strips the emulator dev sign-in row every suite drives to reach any
