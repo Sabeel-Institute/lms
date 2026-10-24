@@ -1,4 +1,4 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon, type IconName } from '../icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { getTheme, spacing } from '../theme';
 
@@ -36,9 +36,8 @@ export interface RichMarks {
 
 export const NO_MARKS: RichMarks = { bold: false, italic: false, bullets: false, numbers: false, link: false };
 
-type Icon = keyof typeof MaterialIcons.glyphMap;
 
-const TOOLS: { key: keyof RichMarks; icon: Icon; label: string; run: (c: RichCommands, on: boolean) => void }[] = [
+const TOOLS: { key: keyof RichMarks; icon: IconName; label: string; run: (c: RichCommands, on: boolean) => void }[] = [
   { key: 'bold', icon: 'format-bold', label: 'Bold', run: (c) => c.toggleBold() },
   { key: 'italic', icon: 'format-italic', label: 'Italic', run: (c) => c.toggleItalic() },
   { key: 'bullets', icon: 'format-list-bulleted', label: 'Bullet list', run: (c) => c.toggleBullets() },
@@ -67,7 +66,7 @@ export function RichToolbar({ commands, marks }: { commands: RichCommands; marks
         >
           {/* text.secondary, not muted: an icon that is a button's only label
               needs 3:1, and muted falls short on most surfaces. */}
-          <MaterialIcons name={tool.icon} size={22} color={marks[tool.key] ? t.text.accent : t.text.secondary} />
+          <Icon name={tool.icon} size={22} color={marks[tool.key] ? t.text.accent : t.text.secondary} />
         </Pressable>
       ))}
     </View>

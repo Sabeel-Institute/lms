@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon } from '../icons';
 import {
   hasLedger,
   isVisibleToStudents,
@@ -340,7 +340,7 @@ function RecordingLine({
   const playable = startingItem(r.media, r.defaultVersion) !== null;
   const body: ReactNode = (
     <>
-      <MaterialIcons
+      <Icon
         name={playable ? 'play-circle-outline' : 'hourglass-empty'}
         size={40}
         color={playable ? t.text.accent : t.text.muted}

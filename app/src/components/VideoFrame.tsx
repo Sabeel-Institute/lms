@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon } from '../icons';
 import { getTheme, spacing } from '../theme';
 
 const t = getTheme();
@@ -28,7 +28,7 @@ export function VideoFrame({
         onPress={onFullscreen}
         style={({ pressed }) => [styles.fullscreen, pressed ? styles.pressed : null]}
       >
-        <MaterialIcons name="fullscreen" size={26} color={t.text.inverse} />
+        <Icon name="fullscreen" size={26} color={t.text.inverse} />
       </Pressable>
     </View>
   );

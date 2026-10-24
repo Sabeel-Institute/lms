@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon } from '../icons';
 import { INSTITUTE_TIMEZONE, todayInZone } from '@sabeel/shared';
 import { Empty, Grid, Notice, Screen, useGridCell } from '../components/ui';
 import { PushNudge } from '../components/PushNudge';
@@ -199,7 +199,7 @@ function QueueRow({ item, onPress }: { item: TodayItem; onPress: () => void }) {
         </Text>
         <Text style={styles.caption}>{[item.courseName, item.detail].filter(Boolean).join(' · ')}</Text>
       </View>
-      <MaterialIcons name="chevron-right" size={22} color={t.text.muted} />
+      <Icon name="chevron-right" size={22} color={t.text.muted} />
     </Pressable>
   );
 }

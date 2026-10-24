@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ComponentProps, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Icon, type IconName } from '../icons';
 import {
   attachmentContentType,
   attachmentProblem,
@@ -27,7 +27,6 @@ const size = (bytes: number) =>
 /** What a file is, in the word its own name ends with: PDF, DOCX, M4A. */
 const typeWord = (name: string) => name.match(/\.([a-z0-9]{1,4})$/i)?.[1].toUpperCase() ?? 'FILE';
 
-type IconName = ComponentProps<typeof MaterialIcons>['name'];
 
 /** The pictogram for a file, from what it is stored as. */
 function glyphFor(contentType: string | null): IconName {
@@ -237,7 +236,7 @@ export function Attachments({
                 // The glyph's own box, so the row does not jump as it starts and stops.
                 <ActivityIndicator size="small" color={t.accent.base} style={styles.glyph} />
               ) : (
-                <MaterialIcons name={glyphFor(f.contentType)} size={20} color={t.text.secondary} style={styles.glyph} />
+                <Icon name={glyphFor(f.contentType)} size={20} color={t.text.secondary} style={styles.glyph} />
               )}
               <View style={styles.text}>
                 <Text style={styles.name} numberOfLines={1}>
@@ -271,9 +270,9 @@ export function Attachments({
         <View key={p.key} style={styles.row}>
           <View style={styles.face}>
             {p.error ? (
-              <MaterialIcons name="error-outline" size={20} color={t.text.danger} style={styles.glyph} />
+              <Icon name="error-outline" size={20} color={t.text.danger} style={styles.glyph} />
             ) : p.waiting ? (
-              <MaterialIcons name={glyphFor(attachmentContentType(p.name))} size={20} color={t.text.muted} style={styles.glyph} />
+              <Icon name={glyphFor(attachmentContentType(p.name))} size={20} color={t.text.muted} style={styles.glyph} />
             ) : (
               <ActivityIndicator size="small" color={t.accent.base} style={styles.glyph} />
             )}
