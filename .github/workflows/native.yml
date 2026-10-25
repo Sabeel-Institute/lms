@@ -7,12 +7,7 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
-    paths:
-      - maestro/**
-      - scripts/seed-emulators.mjs
-      - ci-tools.json
-      - package-lock.json
-      - .github/workflows/native.yml
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -189,3 +184,18 @@ jobs:
             shots/native/
             !shots/native/ios-build/
           retention-days: 14
+
+  # The check main's ruleset requires. A pull request runs both platforms;
+  # a skipped or cancelled one fails it, as a skipped required check would
+  # otherwise pass.
+  native:
+    if: always() && github.event_name == 'pull_request'
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the flows on Android and iOS
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e 'const jobs = Object.values(JSON.parse(process.env.JOB_RESULTS)); if (jobs.length !== 2 || jobs.some(job => job.result !== "success")) process.exit(1);'

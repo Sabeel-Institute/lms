@@ -682,11 +682,10 @@ They are the debug half of the device pass for the rows a script can reach;
 the lock screen, a notification and the release-only rows stay with the pass
 below. The **Native** workflow runs the same command on GitHub's emulator
 (`sabeel-ci ci-avd`) on every main push, every release tag, every pull
-request that changes the flows, their seed or `ci-tools.json`, and by hand,
-and keeps
+request to main, and by hand, and keeps
 `shots/native/` as the `native-<sha>` artifact. Its `ios` job runs `--ios` on a
-macOS runner for release tags, by hand and for pull requests that change
-the flows, and keeps the same folder as `native-ios-<sha>`.
+macOS runner for release tags, pull requests and by hand, and keeps the same
+folder as `native-ios-<sha>`.
 
 **On the iOS simulator**: `npx sabeel-ci native-e2e --ios` (macOS) builds the
 debug app for the simulator with `sabeel-ci ios-sim-build` (a prebuild scoped

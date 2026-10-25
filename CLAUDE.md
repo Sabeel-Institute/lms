@@ -258,9 +258,10 @@ Do not silently change any of these.
   not ahead of it. Suppressing knip to keep unused scaffolding would make the audit
   lie, and an audit that reports nothing is worse than no audit.
 - **CI runs on every push to main and every pull request** (`ci.yml`), with
-  CodeQL and the pre-merge builds (`premerge.yml`) beside it; all three gate a
-  merge (`docs/GITHUB-ACTIONS.md`). Run the local loop before pushing a branch
-  rather than waiting on CI for it — `npx sabeel-ci check-app && npm run lint
+  CodeQL, the pre-merge builds (`premerge.yml`) and the native flows
+  (`native.yml`) beside it; all four gate a merge (`docs/GITHUB-ACTIONS.md`).
+  Run the local loop before pushing a branch rather than waiting on CI for it
+  — `npx sabeel-ci check-app && npm run lint
   && npm run typecheck && npm run knip && npm test && npm run test:emulator &&
   npm run test:screens`.
   Nothing deploys on its own: Functions, Hosting and the Play upload are
@@ -479,9 +480,9 @@ Manager, never in the app bundle.**
   Nobody pushes to `main` directly, admins included; force-push and deletion
   are blocked. The ruleset "main: only the owner merges" lets the
   organization owner (Faisal) update `main` through a pull request and no
-  other way, and "main: verified pre-merge builds" requires CI, CodeQL and the
-  pre-merge builds to pass (on the pull request's merge with main; the branch
-  need not be up to date). The agent's commits, made
+  other way, and "main: verified pre-merge builds" requires CI, CodeQL, the
+  pre-merge builds and the native flows to pass (on the pull request's merge
+  with main; the branch need not be up to date). The agent's commits, made
   with his account, go on a branch and land through a pull request like
   anyone else's. Collaborators' pull requests also need the code owner's
   approval (`.github/CODEOWNERS`).
