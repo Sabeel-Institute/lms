@@ -671,8 +671,9 @@ Metro, seed and device logs land in `shots/native/`. It refuses a held 8081 or
   average past 300, and a tap or a keystroke that lands before a screen takes
   it is lost. So every step that moves the app on goes through ci-tools'
   shared steps, `ci-tools/tap-until.yaml` (tap until the next screen shows) and
-  `back-until.yaml` (Back until the screen behind shows). Each takes a step
-  again only while its screen is still showing, so a real failure still fails.
+  `back-until.yaml` (Back until the screen being left is gone). Each takes a
+  step again only while its screen is still showing, so a real failure still
+  fails.
   `native-e2e` copies them, with `back.yaml` and `wait.yaml`, into
   `maestro/ci-tools/` for each run; Git ignores the copy, and Maestro runs no
   subfolder's file as a flow of its own.

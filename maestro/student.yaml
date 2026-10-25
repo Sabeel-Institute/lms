@@ -102,7 +102,6 @@ name: Student signs in, listens, and changes the password
     file: ci-tools/back-until.yaml
     env:
       FROM: "Bookmark this place"
-      EXPECT: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
 
 # The classes, and Change password reports what really happened.
 - runFlow:

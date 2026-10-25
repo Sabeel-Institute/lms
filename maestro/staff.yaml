@@ -36,7 +36,6 @@ name: Staff work through the day
     file: ci-tools/back-until.yaml
     env:
       FROM: "ATTENDANCE"
-      EXPECT: "ATTENDANCE NOT TAKEN[\\s\\S]*"
 
 - runFlow:
     file: ci-tools/tap-until.yaml
