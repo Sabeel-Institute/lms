@@ -3527,22 +3527,67 @@ const rowOf = (sheet, first, headerRows = 2) =>
 
 await openHikam(admin);
 /*
- * AN EXPORT NEEDS THE SERVER. Offline it was built from whatever the open
- * screens had cached, stamped as the record "now", and said nothing.
- * Firestore refuses a server read only once it has decided it is offline, and
- * on a slow CI runner the refusal has not shown within 20 s: it is given a
- * minute, and a screenshot is kept if it still does not show.
+ * AN EXPORT NEEDS THE SERVER. Offline it is refused, with a message that says
+ * so, and nothing is saved from what the open screens have cached.
+ *
+ * THE TAP WAITS FOR THE SDK TO KNOW IT IS OFFLINE. `setOffline(true)` tells
+ * the browser, not Firestore, which finds out only when a stream attempt
+ * fails, a moment later and asynchronously. Until it has, a one-shot server
+ * read of a query a screen already listens to is answered from that live,
+ * already-synced view, and an export tapped straight after going offline is
+ * built and saved. The SDK logs a `Listen ... transport errored` warning for
+ * each failed attempt, and the first failure can leave it undecided between
+ * online and offline, so the tap waits for the pair. The wait is registered
+ * before going offline, because the warnings follow within milliseconds. If
+ * they never come the tap goes ahead and the check says so.
+ *
+ * THE REFUSAL IS RACED AGAINST A DOWNLOAD. A file saved while offline is the
+ * failure this check exists for; it is reported as soon as it is saved
+ * instead of after the minute the refusal is otherwise given. That minute is
+ * for a slow CI runner, and a screenshot is kept if the refusal still does
+ * not show.
  */
+const whenSdkOffline = (page, timeout = 15000) =>
+  new Promise((resolve) => {
+    let failedStreams = 0;
+    const timer = setTimeout(() => finish(false), timeout);
+    const onConsole = (message) => {
+      const failed = message.type() === 'warning' && /RPC 'Listen' stream \S+ transport errored/.test(message.text());
+      if (failed && (failedStreams += 1) === 2) finish(true);
+    };
+    function finish(noticed) {
+      clearTimeout(timer);
+      page.off('console', onConsole);
+      resolve(noticed);
+    }
+    page.on('console', onConsole);
+  });
+const sdkNoticesOffline = whenSdkOffline(admin);
 await admin.context().setOffline(true);
+const sdkNoticedOffline = await sdkNoticesOffline;
+let onDownload;
+const savedWhileOffline = new Promise((resolve) => {
+  onDownload = (download) => resolve(download.suggestedFilename());
+  admin.on('download', onDownload);
+});
 await tap(admin, 'course-export');
-const exportRefused = await admin
-  .getByText('An export needs a connection', { exact: false })
-  .first()
-  .waitFor({ timeout: 60000 })
-  .then(() => true, () => false);
+const exportOutcome = await Promise.race([
+  admin
+    .getByText('An export needs a connection', { exact: false })
+    .first()
+    .waitFor({ timeout: 60000 })
+    .then(() => 'refused', () => 'no refusal within 60 s'),
+  savedWhileOffline.then((file) => `saved "${file}" while offline`),
+]);
+admin.off('download', onDownload);
+const exportRefused = exportOutcome === 'refused';
 if (!exportRefused) await shot(admin, '25c-export-offline-not-refused');
 await admin.context().setOffline(false);
-check('an export taken offline says it needs a connection, rather than saving what was cached', exportRefused);
+check(
+  'an export taken offline says it needs a connection, rather than saving what was cached',
+  exportRefused,
+  exportRefused ? '' : `${exportOutcome}${sdkNoticedOffline ? '' : '; the SDK logged no offline stream failures within 15 s of going offline'}`,
+);
 /*
  * BACK ONLINE IS NOT RECONNECTED. Firestore reconnects in its own time, and an
  * export started before it has is refused again, rightly; on a slow CI runner
