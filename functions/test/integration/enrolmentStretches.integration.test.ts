@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, beforeEach, afterEach, expect, vi } from 'vitest';
+import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect, vi } from 'vitest';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import {
@@ -18,6 +18,7 @@ import { createCohortRecord } from '../../src/cohorts';
 import { createCourseRecord } from '../../src/courses';
 import { applyEnrollmentActive, createEnrollmentRecord } from '../../src/enrollments';
 import { reconcileCourseAssignments } from '../../src/assignmentsFanout';
+import { setBackgroundTriggers } from '../backgroundTriggers';
 import { withAudio } from '../mediaFixtures';
 
 /*
@@ -31,13 +32,22 @@ import { withAudio } from '../mediaFixtures';
  * deadline" for a recording whose date passed while the student was out of
  * the class, and count a register held in their absence against them.
  *
- * The clock only ever moves FORWARD of the real one: the emulator's own
- * triggers run on real time, and a fixture dated in the past would close
- * what they open.
+ * THE EMULATOR'S OWN TRIGGERS ARE OFF HERE. Every session and recording
+ * write of the fixture fires `onSessionWritten` / `onRecordingWritten` out of
+ * band, on the real clock, while this test moves a fake one and reconciles
+ * each step itself. A trigger transaction that finished late, after the
+ * removals, re-granted the access the removals had switched off, and the
+ * grant read back active. With the triggers off, every write is one the test
+ * made, in the order it made them, through the same functions the triggers
+ * call.
  */
 
-beforeAll(() => {
+beforeAll(async () => {
   if (getApps().length === 0) initializeApp({ projectId: EMULATOR_PROJECT_ID });
+  await setBackgroundTriggers(false);
+});
+afterAll(async () => {
+  await setBackgroundTriggers(true);
 });
 
 const db = () => getFirestore();
