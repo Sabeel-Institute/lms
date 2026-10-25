@@ -70,6 +70,30 @@ export function useLeaveGuard({
     if (Platform.OS === 'web' && here.current && window.location.href !== here.current) window.history.forward();
   };
 
+  /*
+   * A HELD BROWSER BACK LEAVES ONCE THE ADDRESS IS BACK. Holding a browser
+   * Back, React Navigation rolls the address forward again (history.go(1)), and
+   * the leave dispatched after a settle moves it back (history.go(-1)).
+   * Chromium drops a go(-1) issued before that go(1) has landed — in the same
+   * task, a microtask or a setTimeout(0) — and a settle that resolves at once is
+   * that quick: the screen left while the address stayed on it, and the next
+   * Back went to the wrong page. So a settled leave first waits for the
+   * roll-forward's popstate, or 300 ms if none comes. In-app Back and native
+   * never moved the address, and go at once.
+   */
+  const addressBack = (): Promise<void> => {
+    if (Platform.OS !== 'web' || here.current === null || window.location.href === here.current) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => {
+        window.removeEventListener('popstate', done);
+        clearTimeout(timer);
+        setTimeout(resolve, 0);
+      };
+      const timer = setTimeout(done, 300);
+      window.addEventListener('popstate', done);
+    });
+  };
+
   usePreventRemove(when, ({ data }) => {
     if (free.current) {
       navigation.dispatch(data.action);
@@ -83,7 +107,8 @@ export function useLeaveGuard({
     // twice, and a second GO_BACK takes the screen under this one with it.
     if (settling.current) return;
     settling.current = true;
-    void settle().then((ok) => {
+    // addressBack() listens before React Navigation's roll-forward runs.
+    void Promise.all([settle(), addressBack()]).then(([ok]) => {
       settling.current = false;
       if (ok) {
         free.current = true;
