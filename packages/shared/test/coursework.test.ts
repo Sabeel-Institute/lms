@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import {
   INSTITUTE_TIMEZONE,
@@ -364,35 +365,50 @@ describe('the stored tally', () => {
     return { grading, subs, grades };
   }
 
+  /*
+   * Both properties below compare tens of thousands of cases. Each case is
+   * compared in plain code and each difference is collected with the case that
+   * produced it, so the one assertion at the end fails naming every case that
+   * differs. An `expect` per case would cost seconds, and on a loaded runner
+   * more than the test timeout.
+   */
   it('moves no student’s state', () => {
+    const moved: string[] = [];
     for (let seed = 1; seed <= 2000; seed++) {
       const { subs, grades } = aClass(seed);
       for (const s of subs) {
         for (const today of days) {
           for (const courseOpen of [true, false]) {
-            expect(staffWorkState(s, grades.get(s.studentUid), today, courseOpen), `seed ${seed}`).toBe(
-              staffWorkStateBefore(s, grades.get(s.studentUid), today, courseOpen),
-            );
+            const before = staffWorkStateBefore(s, grades.get(s.studentUid), today, courseOpen);
+            const now = staffWorkState(s, grades.get(s.studentUid), today, courseOpen);
+            if (now !== before) moved.push(`seed ${seed}, student ${s.studentUid}, on ${today}, courseOpen ${courseOpen}: was ${before}, now ${now}`);
           }
         }
       }
     }
+    expect(moved).toEqual([]);
   });
 
   it('gives the same figures, on every day, as counting the work', () => {
+    const differ: string[] = [];
     for (let seed = 1; seed <= 2000; seed++) {
       const { grading, subs, grades } = aClass(seed);
       const tally = courseworkTally(grading, subs, grades, INSTITUTE_TIMEZONE);
       for (const today of days) {
         for (const courseOpen of [true, false]) {
           const direct = tallyCounts(subs.map((s) => workTally(grading, s, grades.get(s.studentUid), today, courseOpen, INSTITUTE_TIMEZONE)));
-          expect(countsFromTally(tally, today, courseOpen), `seed ${seed} on ${today}`).toEqual(direct);
+          const stored = countsFromTally(tally, today, courseOpen);
+          if (!isDeepStrictEqual(stored, direct)) {
+            differ.push(`seed ${seed} on ${today}, courseOpen ${courseOpen}: counting the work gives ${JSON.stringify(direct)}, the tally ${JSON.stringify(stored)}`);
+          }
         }
       }
       // Today's "N of them late": late work still to grade, as the page judges each.
       const each = subs.map((s) => workTally(grading, s, grades.get(s.studentUid), days[0], true, INSTITUTE_TIMEZONE));
-      expect(tally.lateToGrade, `seed ${seed}`).toBe(each.filter((t) => t?.state === 'toGrade' && t.late).length);
+      const lateToGrade = each.filter((t) => t?.state === 'toGrade' && t.late).length;
+      if (tally.lateToGrade !== lateToGrade) differ.push(`seed ${seed}: late work to grade is ${lateToGrade} counting the work, ${tally.lateToGrade} in the tally`);
     }
+    expect(differ).toEqual([]);
   });
 
   it('is stored the same when nothing changed, whatever order the work came in', () => {
