@@ -657,16 +657,25 @@ install-maestro`). Screenshots, Maestro's JUnit report and the emulator, web,
 Metro, seed and device logs land in `shots/native/`. It refuses a held 8081 or
 61310.
 
-- **`maestro/student.yaml`**: a password sign-in with Next and Go, a recording
-  that plays, keeps time for 15 s behind Home and is still playing when the app
-  comes back, Classes, and Change password reporting "Reset link sent".
+- **`maestro/student.yaml`**: a password sign-in, its email read back before it
+  is sent, a recording that plays and whose clock moves at least 10 s while
+  the app is behind Home for 15 s, Classes, and Change password reporting
+  "Reset link sent".
 - **`maestro/staff.yaml`**: the dev sign-in row, Today, a session's
   register, Courses, People and More.
 - **A debug build's warning toast takes taps.** "Open debugger to view
   warnings" sits over the tab bar whenever the app logs a warning, so the
   runner starts Metro with `EXPO_PUBLIC_E2E=1` and `app/index.ts` then tells
-  LogBox to ignore warnings; they still reach `logs/metro.log`. Shared steps
-  live in `maestro/common/`, which Maestro does not run as flows of their own.
+  LogBox to ignore warnings; they still reach `logs/metro.log`.
+- **A busy simulator drops taps.** The iPhone simulator holds a CI Mac's load
+  average past 300, and a tap or a keystroke that lands before a screen takes
+  it is lost. So every step that moves the app on goes through ci-tools'
+  shared steps, `ci-tools/tap-until.yaml` (tap until the next screen shows) and
+  `back-until.yaml` (Back until the screen behind shows). Each takes a step
+  again only while its screen is still showing, so a real failure still fails.
+  `native-e2e` copies them, with `back.yaml` and `wait.yaml`, into
+  `maestro/ci-tools/` for each run; Git ignores the copy, and Maestro runs no
+  subfolder's file as a flow of its own.
 
 They are the debug half of the device pass for the rows a script can reach;
 the lock screen, a notification and the release-only rows stay with the pass

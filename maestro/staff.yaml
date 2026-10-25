@@ -1,6 +1,8 @@
-# Staff on Android: the dev sign-in row, the day's queue, a session's
-# register, and the institute's lists. Seeded by
-# scripts/seed-emulators.mjs; run by `npx sabeel-ci native-e2e`.
+# Staff: the dev sign-in row, the day's queue, a session's register, and the
+# institute's lists. Seeded by scripts/seed-emulators.mjs; run by `npx
+# sabeel-ci native-e2e`. Each step that moves the app on checks that it did
+# (ci-tools/tap-until.yaml, back-until.yaml): a busy CI simulator drops taps
+# that land before a screen takes them.
 appId: ${APP_ID}
 name: Staff work through the day
 ---
@@ -9,10 +11,12 @@ name: Staff work through the day
 - extendedWaitUntil:
     visible: "Dev sign-in \\(emulator only\\)"
     timeout: 180000
-- tapOn: "as faisal.shah \\(first admin\\)"
-- extendedWaitUntil:
-    visible: "ATTENDANCE NOT TAKEN[\\s\\S]*"
-    timeout: 60000
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "as faisal.shah \\(first admin\\)"
+      EXPECT: "ATTENDANCE NOT TAKEN[\\s\\S]*"
+      SECONDS: 60
 - runFlow:
     when:
       visible: "Not now"
@@ -20,18 +24,36 @@ name: Staff work through the day
       - tapOn: "Not now"
 - takeScreenshot: 01-today
 
-- tapOn: "[\\s\\S]*Session 5 — Reliance and Trust[\\s\\S]*"
-- extendedWaitUntil:
-    visible: "ATTENDANCE"
-    timeout: 30000
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "[\\s\\S]*Session 5 — Reliance and Trust[\\s\\S]*"
+      EXPECT: "ATTENDANCE"
+      SECONDS: 30
 - assertVisible: "[\\s\\S]*Present"
 - takeScreenshot: 02-register
-- runFlow: common/back.yaml
+- runFlow:
+    file: ci-tools/back-until.yaml
+    env:
+      FROM: "ATTENDANCE"
+      EXPECT: "ATTENDANCE NOT TAKEN[\\s\\S]*"
 
-- tapOn: "Courses"
-- assertVisible: "Add a cohort"
-- tapOn: "People"
-- assertVisible: "STUDENTS[\\s\\S]*"
-- tapOn: "More"
-- assertVisible: "Audit history[\\s\\S]*"
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Courses"
+      EXPECT: "Add a cohort"
+      SECONDS: 30
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "People"
+      EXPECT: "STUDENTS[\\s\\S]*"
+      SECONDS: 30
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "More"
+      EXPECT: "Audit history[\\s\\S]*"
+      SECONDS: 30
 - takeScreenshot: 03-more
