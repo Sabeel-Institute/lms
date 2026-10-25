@@ -43,6 +43,9 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@google-cloud/functions-framework"
       ]
     },
     "cloudflare/media-copier": {

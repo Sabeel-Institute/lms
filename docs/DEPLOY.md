@@ -528,6 +528,15 @@ hit on 2026-10-12 and all apply to any new project here (a test project too):
   pinned to the versions the suite runs against, so regenerate it whenever a
   dependency in `functions/package.json` changes, and check
   `npm ci --dry-run --omit=dev` accepts the pair before deploying.
+- **The Functions Framework is a dependency.** `functions/package.json` names
+  the Functions Framework (`@google-cloud/functions-framework`) though no
+  source imports it: Cloud Run starts it, and it parses every request before a
+  function sees it. Named, Cloud Build installs it from
+  `functions/package-lock.json` and Dependabot covers it; unnamed, Google's
+  buildpack installs a copy of its own from its own lock. `check-app` fails
+  without it, knip ignores it as unused, and Dependabot leaves its majors
+  alone: it stays on the 3.x line the buildpack itself installs for Node 22
+  until a major is taken on purpose.
 - **Eventarc permission denied** on the first deploy of a Firestore-trigger
   function. Propagation lag; retry after a few minutes.
 - **Secret Manager 403** for every bound secret on first deploy — grant the

@@ -54,6 +54,11 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@sentry/browser"
         update-types: ["version-update:semver-major"]
+      # The Functions Framework serves every request in production. It stays
+      # on the 3.x line Google's buildpack installs for Node 22; a major
+      # (Express 5 underneath) is taken on purpose.
+      - dependency-name: "@google-cloud/functions-framework"
+        update-types: ["version-update:semver-major"]
     groups:
       routine:
         patterns: ["*"]
