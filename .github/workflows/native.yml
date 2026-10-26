@@ -123,6 +123,11 @@ jobs:
       # past 300 in the flows). The flows' taps and keystrokes need what is left.
       - name: Stop Spotlight indexing
         run: sudo mdutil -a -i off
+      # macOS hands out temporary ports from 49152-65535, which holds every
+      # app's emulator block (61000 up, above Linux's 32768-60999): a
+      # connection that drew 61303 kept the Functions emulator from starting.
+      - name: End the temporary port range below the emulator blocks
+        run: sudo sysctl -w net.inet.ip.portrange.last=60999 net.inet.ip.portrange.hilast=60999
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
