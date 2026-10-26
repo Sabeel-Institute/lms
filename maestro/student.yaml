@@ -1,36 +1,47 @@
-# A student on Android: a password sign-in, a recording that keeps playing in
-# the background and resumes its place, the class list and Change password.
+# A student: a password sign-in, a recording that keeps playing in the
+# background and resumes its place, the class list and Change password.
 # Seeded by scripts/seed-emulators.mjs; run by `npx sabeel-ci native-e2e`.
+#
+# On a busy CI simulator a tap or a keystroke can land before the screen takes
+# it. Every step that moves the app on checks that it did, and takes again only
+# what visibly did not happen (ci-tools/tap-until.yaml, back-until.yaml).
+# A card's texts are one accessibility label on iOS, and Maestro matches the
+# whole label, so texts inside a card or a row are matched as part of one.
 appId: ${APP_ID}
 name: Student signs in, listens, and changes the password
 ---
-- launchApp:
-    clearState: true
-- extendedWaitUntil:
-    visible: "Dev sign-in \\(emulator only\\)"
-    timeout: 180000
-- tapOn: "you@example.com"
-- inputText: "abd.al.rahman.ibn.muhammad.al.shinqiti@example.com"
-# Next moves the focus to the password; on iOS Maestro can type before the
-# focus lands there, so the flow puts it there itself. Go signs in.
-- pressKey: Enter
-# The iPhone simulator on a busy CI Mac has typed a wrong character into the
-# secure field: thirteen characters, and the Auth emulator refused them before
-# any sign-in gate ran (2026-10-22). A sign-in that does not land gets one more
-# try, with the field emptied first.
-# A card's texts are one accessibility label on iOS, and Maestro matches the
-# whole label, so texts inside a card or a row are matched as part of one.
+# A password sign-in, from a fresh start each try. The email is read back
+# before it is sent, the password's length too on iOS (one dot a character),
+# and a password typed wrong is caught by the sign-in itself.
 - retry:
-    maxRetries: 1
+    maxRetries: 2
     commands:
+      - launchApp:
+          clearState: true
+      - extendedWaitUntil:
+          visible: "Dev sign-in \\(emulator only\\)"
+          timeout: 180000
+      - tapOn:
+          id: "signin-email"
+      - inputText: "abd.al.rahman.ibn.muhammad.al.shinqiti@example.com"
+      - assertVisible:
+          id: "signin-email"
+          text: "abd\\.al\\.rahman\\.ibn\\.muhammad\\.al\\.shinqiti@example\\.com"
       - tapOn:
           id: "signin-password"
-      - eraseText: 30
       - inputText: "HikamStudent1"
+      - runFlow:
+          when:
+            platform: iOS
+          commands:
+            - assertVisible:
+                id: "signin-password"
+                text: "•{13}"
       - pressKey: Enter
+      # Sign-in, its gate and the first screen's reads, on a saturated runner.
       - extendedWaitUntil:
           visible: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
-          timeout: 60000
+          timeout: 120000
 - runFlow:
     when:
       visible: "Not now"
@@ -39,37 +50,77 @@ name: Student signs in, listens, and changes the password
 - takeScreenshot: 01-home
 
 # Playback reaches the audio, and keeps time behind Home.
-- tapOn: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
-- extendedWaitUntil:
-    visible: "Bookmark this place"
-    timeout: 30000
-- tapOn: "Play"
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Play Session 2 — Knowledge and Certainty[\\s\\S]*"
+      EXPECT: "Bookmark this place"
+      SECONDS: 30
 # The player allows half a minute to get a recording ready on a slow
-# connection, and the iPhone simulator on a busy CI Mac has taken longer.
+# connection, and a busy CI simulator has taken longer. "Play" turns to
+# "Pause" (or the waiting ring) once the tap is taken.
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Play"
+      EXPECT: "Pause"
+      SECONDS: 60
 - extendedWaitUntil:
-    visible: "0:0[3-9]"
+    visible:
+      id: "player-elapsed"
+      text: "0:0[3-9]|0:[1-5][0-9]|[1-9][0-9]*:[0-5][0-9]"
     timeout: 60000
 - takeScreenshot: 02-playing
+# Where it was when it went behind Home, to compare with where it is after.
+- copyTextFrom:
+    id: "player-elapsed"
+- evalScript: ${output.beforeHome = maestro.copiedText}
 - pressKey: Home
 - runFlow:
-    file: common/wait.yaml
+    file: ci-tools/wait.yaml
     env:
       SECONDS: 15
 - launchApp:
     stopApp: false
 - extendedWaitUntil:
-    visible: "0:(1[5-9]|[2-5][0-9])"
-    timeout: 15000
-- tapOn: "Pause"
+    visible:
+      id: "player-elapsed"
+    timeout: 30000
+# It kept playing behind Home: at least 10 of those 15 seconds are on its
+# clock. A comparison, not a window: a slow runner moves both readings later.
+- copyTextFrom:
+    id: "player-elapsed"
+- assertTrue: "${((seconds) => seconds(maestro.copiedText) - seconds(output.beforeHome) >= 10)((time) => time.split(':').reduce((sum, part) => sum * 60 + Number(part), 0))}"
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Pause"
+      EXPECT: "Play"
+      SECONDS: 15
 - takeScreenshot: 03-after-background
-- runFlow: common/back.yaml
+- runFlow:
+    file: ci-tools/back-until.yaml
+    env:
+      FROM: "Bookmark this place"
 
 # The classes, and Change password reports what really happened.
-- tapOn: "Classes"
-- assertVisible: "Your classes"
-- tapOn: "More"
-- tapOn: "Change password[\\s\\S]*"
-- extendedWaitUntil:
-    visible: "Reset link sent[\\s\\S]*"
-    timeout: 60000
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Classes"
+      EXPECT: "Your classes"
+      SECONDS: 30
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "More"
+      EXPECT: "Change password[\\s\\S]*"
+      SECONDS: 30
+# "Sending the link…" replaces the row's label once the tap is taken.
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Change password[\\s\\S]*"
+      EXPECT: "Reset link sent[\\s\\S]*"
+      SECONDS: 60
 - takeScreenshot: 04-password-link

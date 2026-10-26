@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import {
@@ -498,7 +498,9 @@ function GradeForm({
   stagedNow.current = staged;
   const unsaved = saveState.kind === 'waiting' || saveState.kind === 'saving' || saveState.kind === 'failed';
   const hasGrade = invalid === null && gradeOf(draft) !== null;
-  useEffect(() => onStatus({ unsaved, invalid, hasGrade, staged }), [onStatus, unsaved, invalid, hasGrade, staged]);
+  // A layout effect, so the leave guard's hold is never a task behind the form:
+  // a Back taken in that gap was held by a guard whose save had already gone.
+  useLayoutEffect(() => onStatus({ unsaved, invalid, hasGrade, staged }), [onStatus, unsaved, invalid, hasGrade, staged]);
 
   // The latest draft, for two changes that land before a re-render.
   const latest = useRef(draft);

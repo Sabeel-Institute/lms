@@ -74,3 +74,5 @@ app/android/keystore.properties
 !app/android/app/debug.keystore
 *service-account*.json
 *firebase-adminsdk*.json
+# native-e2e copies ci-tools' shared flow steps here for each run
+maestro/ci-tools/

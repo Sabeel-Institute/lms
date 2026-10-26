@@ -110,7 +110,10 @@ jobs:
           distribution: temurin
           java-version: 21
       - name: Install Firebase CLI
-        run: npm install --global firebase-tools@^15
+        id: firebase-cli
+        run: |
+          npm install --global firebase-tools@^15
+          echo "version=$(firebase --version)" >> "$GITHUB_OUTPUT"
       # A static build (ffmpeg 7.0.2 with libx265, from ffmpeg-static's GitHub
       # release) instead of apt: the runners' apt mirror held one install for 41
       # minutes and stalls about one in five. ffprobe comes with it, as it does
@@ -137,6 +140,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/seaweedfs"
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
+      # The emulators' jars and the Emulator UI download on their first start, and
+      # a download that fails ends the emulators: kept per Firebase CLI version.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ steps.firebase-cli.outputs.version }}
       - name: Emulator integration tests
         run: npm run test:emulator
 
@@ -181,7 +190,10 @@ jobs:
           distribution: temurin
           java-version: 21
       - name: Install Firebase CLI
-        run: npm install --global firebase-tools@^15
+        id: firebase-cli
+        run: |
+          npm install --global firebase-tools@^15
+          echo "version=$(firebase --version)" >> "$GITHUB_OUTPUT"
       # A static build (ffmpeg 7.0.2 with libx265, from ffmpeg-static's GitHub
       # release) instead of apt: the runners' apt mirror held one install for 41
       # minutes and stalls about one in five. ffprobe comes with it, as it does
@@ -208,6 +220,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/seaweedfs"
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
+      # The emulators' jars and the Emulator UI download on their first start, and
+      # a download that fails ends the emulators: kept per Firebase CLI version.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ steps.firebase-cli.outputs.version }}
       - name: Emulator secret placeholders
         run: sabeel-ci emulator-secrets
       # An apt mirror can stall a download indefinitely (one held this step

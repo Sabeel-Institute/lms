@@ -657,26 +657,35 @@ install-maestro`). Screenshots, Maestro's JUnit report and the emulator, web,
 Metro, seed and device logs land in `shots/native/`. It refuses a held 8081 or
 61310.
 
-- **`maestro/student.yaml`**: a password sign-in with Next and Go, a recording
-  that plays, keeps time for 15 s behind Home and is still playing when the app
-  comes back, Classes, and Change password reporting "Reset link sent".
+- **`maestro/student.yaml`**: a password sign-in, its email read back before it
+  is sent, a recording that plays and whose clock moves at least 10 s while
+  the app is behind Home for 15 s, Classes, and Change password reporting
+  "Reset link sent".
 - **`maestro/staff.yaml`**: the dev sign-in row, Today, a session's
   register, Courses, People and More.
 - **A debug build's warning toast takes taps.** "Open debugger to view
   warnings" sits over the tab bar whenever the app logs a warning, so the
   runner starts Metro with `EXPO_PUBLIC_E2E=1` and `app/index.ts` then tells
-  LogBox to ignore warnings; they still reach `logs/metro.log`. Shared steps
-  live in `maestro/common/`, which Maestro does not run as flows of their own.
+  LogBox to ignore warnings; they still reach `logs/metro.log`.
+- **A busy simulator drops taps.** The iPhone simulator holds a CI Mac's load
+  average past 300, and a tap or a keystroke that lands before a screen takes
+  it is lost. So every step that moves the app on goes through ci-tools'
+  shared steps, `ci-tools/tap-until.yaml` (tap until the next screen shows) and
+  `back-until.yaml` (Back until the screen being left is gone). Each takes a
+  step again only while its screen is still showing, so a real failure still
+  fails.
+  `native-e2e` copies them, with `back.yaml` and `wait.yaml`, into
+  `maestro/ci-tools/` for each run; Git ignores the copy, and Maestro runs no
+  subfolder's file as a flow of its own.
 
 They are the debug half of the device pass for the rows a script can reach;
 the lock screen, a notification and the release-only rows stay with the pass
 below. The **Native** workflow runs the same command on GitHub's emulator
 (`sabeel-ci ci-avd`) on every main push, every release tag, every pull
-request that changes the flows, their seed or `ci-tools.json`, and by hand,
-and keeps
+request to main, and by hand, and keeps
 `shots/native/` as the `native-<sha>` artifact. Its `ios` job runs `--ios` on a
-macOS runner for release tags, by hand and for pull requests that change
-the flows, and keeps the same folder as `native-ios-<sha>`.
+macOS runner for release tags, pull requests and by hand, and keeps the same
+folder as `native-ios-<sha>`.
 
 **On the iOS simulator**: `npx sabeel-ci native-e2e --ios` (macOS) builds the
 debug app for the simulator with `sabeel-ci ios-sim-build` (a prebuild scoped

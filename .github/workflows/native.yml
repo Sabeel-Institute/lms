@@ -7,12 +7,7 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
-    paths:
-      - maestro/**
-      - scripts/seed-emulators.mjs
-      - ci-tools.json
-      - package-lock.json
-      - .github/workflows/native.yml
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -61,7 +56,16 @@ jobs:
       - name: Android SDK packages, with retries
         run: sabeel-ci ci-android-sdk
       - name: Install Firebase CLI
-        run: npm install --global firebase-tools@^15
+        id: firebase-cli
+        run: |
+          npm install --global firebase-tools@^15
+          echo "version=$(firebase --version)" >> "$GITHUB_OUTPUT"
+      # The emulators' jars and the Emulator UI download on their first start, and
+      # a download that fails ends the emulators: kept per Firebase CLI version.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ steps.firebase-cli.outputs.version }}
       # A static build (ffmpeg 7.0.2 with libx265, from ffmpeg-static's GitHub
       # release) instead of apt: the runners' apt mirror held one install for 41
       # minutes and stalls about one in five. ffprobe comes with it, as it does
@@ -114,6 +118,16 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 120
     steps:
+      # Spotlight indexes every file the install and the build write, on a
+      # runner whose few cores the simulator already saturates (load averages
+      # past 300 in the flows). The flows' taps and keystrokes need what is left.
+      - name: Stop Spotlight indexing
+        run: sudo mdutil -a -i off
+      # macOS hands out temporary ports from 49152-65535, which holds every
+      # app's emulator block (61000 up, above Linux's 32768-60999): a
+      # connection that drew 61303 kept the Functions emulator from starting.
+      - name: End the temporary port range below the emulator blocks
+        run: sudo sysctl -w net.inet.ip.portrange.last=60999 net.inet.ip.portrange.hilast=60999
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -141,7 +155,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install Firebase CLI
-        run: npm install --global firebase-tools@^15
+        id: firebase-cli
+        run: |
+          npm install --global firebase-tools@^15
+          echo "version=$(firebase --version)" >> "$GITHUB_OUTPUT"
+      # The emulators' jars and the Emulator UI download on their first start, and
+      # a download that fails ends the emulators: kept per Firebase CLI version.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ steps.firebase-cli.outputs.version }}
       - name: Install ffmpeg
         run: brew install --quiet ffmpeg
       - name: Install SeaweedFS
@@ -166,3 +189,18 @@ jobs:
             shots/native/
             !shots/native/ios-build/
           retention-days: 14
+
+  # The check main's ruleset requires. A pull request runs both platforms;
+  # a skipped or cancelled one fails it, as a skipped required check would
+  # otherwise pass.
+  native:
+    if: always() && github.event_name == 'pull_request'
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the flows on Android and iOS
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e 'const jobs = Object.values(JSON.parse(process.env.JOB_RESULTS)); if (jobs.length !== 2 || jobs.some(job => job.result !== "success")) process.exit(1);'
