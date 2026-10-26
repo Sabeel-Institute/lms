@@ -45,6 +45,14 @@ request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
 it). What was checked before and after each release is in the verification
 log below.
 
+### 2026-10-26 — Back after leaving unsaved work goes where it should — v0.3.3
+
+- **On the website, Back after "Leave without saving?" now goes to the right
+  screen.** Leaving a screen that held unsaved or still-sending work, such as
+  a grade being sent, could leave the browser's address on that screen, so
+  the next Back opened the wrong one. The address now follows the screen
+  you are on.
+
 ### 2026-10-24 — Keyboard edits after formatting land where the caret is — v0.3.2
 
 - **On the website, a word you have just formatted is no longer replaced.**
