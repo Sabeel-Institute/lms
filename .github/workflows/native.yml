@@ -21,8 +21,57 @@ env:
   SENTRY_DISABLE_AUTO_UPLOAD: "true"
 
 jobs:
-  android:
+  # The Expo fingerprint of each platform's native inputs: the key its debug
+  # build is kept under (the native-fingerprint command). A debug build loads
+  # its JavaScript from Metro, so a commit that changes no native input runs
+  # the flows on the build already kept for its key, from main or from an
+  # earlier run of this pull request.
+  fingerprint:
     if: github.repository_owner == 'Sabeel-Institute'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      android: ${{ steps.keys.outputs.android }}
+      ios: ${{ steps.keys.outputs.ios }}
+      ios-kept: ${{ steps.ios-kept.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
+      - name: Install dependencies
+        run: npm ci
+      - name: Fingerprint the native inputs
+        id: keys
+        run: sabeel-ci native-fingerprint debug
+      # Read by the iOS job's condition on a main push, which has no flows to
+      # run once the build is kept.
+      - name: Is the iOS build kept already
+        id: ios-kept
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/native-build
+          key: ${{ steps.keys.outputs.ios }}
+          lookup-only: true
+
+  android:
+    needs: fingerprint
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -53,8 +102,25 @@ jobs:
           cache: gradle
       - name: Install dependencies
         run: npm ci
+      - name: The debug APK, if kept for these native inputs
+        id: kept
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/native-build
+          key: ${{ needs.fingerprint.outputs.android }}
       - name: Android SDK packages, with retries
+        if: steps.kept.outputs.cache-hit != 'true'
         run: sabeel-ci ci-android-sdk
+      - name: Build the debug APK
+        if: steps.kept.outputs.cache-hit != 'true'
+        run: sabeel-ci native-build android ~/native-build
+      # Kept before the flows run, so a failed flow still leaves the build.
+      - name: Keep the debug APK for these native inputs
+        if: steps.kept.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/native-build
+          key: ${{ needs.fingerprint.outputs.android }}
       - name: Install Firebase CLI
         id: firebase-cli
         run: |
@@ -92,19 +158,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/seaweedfs"
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
-      # An apt mirror can stall a download: apt's own timeouts make it fail
-      # instead, and the install runs once more (see ci.yml's browser job).
-      - name: Install Chromium for the seed
-        timeout-minutes: 15
-        run: |
-          echo 'Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
-          npx playwright install --with-deps chromium || { sleep 15; npx playwright install --with-deps chromium; }
       - name: Boot an Android emulator
         run: sabeel-ci ci-avd
       - name: Install Maestro
         run: sabeel-ci install-maestro
       - name: Native flows
-        run: sabeel-ci native-e2e
+        run: sabeel-ci native-e2e --build ~/native-build
       - name: Screens, Maestro's report and logs
         if: always()
         uses: actions/upload-artifact@v7
@@ -113,8 +172,11 @@ jobs:
           path: shots/native/
           retention-days: 14
 
+  # On a main push it runs only to keep a build for new native inputs, and
+  # runs the flows on it while it is there.
   ios:
-    if: github.repository_owner == 'Sabeel-Institute' && (startsWith(github.ref, 'refs/tags/v') || github.event_name != 'push')
+    needs: fingerprint
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || needs.fingerprint.outputs.ios-kept != 'true'
     runs-on: macos-26
     timeout-minutes: 120
     steps:
@@ -154,6 +216,21 @@ jobs:
           java-version: 21
       - name: Install dependencies
         run: npm ci
+      - name: The debug app, if kept for these native inputs
+        id: kept
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/native-build
+          key: ${{ needs.fingerprint.outputs.ios }}
+      - name: Build the debug app for the iOS simulator
+        if: steps.kept.outputs.cache-hit != 'true'
+        run: sabeel-ci native-build ios ~/native-build
+      - name: Keep the debug app for these native inputs
+        if: steps.kept.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/native-build
+          key: ${{ needs.fingerprint.outputs.ios }}
       - name: Install Firebase CLI
         id: firebase-cli
         run: |
@@ -174,20 +251,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/seaweedfs"
           tar -xzf "$RUNNER_TEMP/weed.tgz" -C "$RUNNER_TEMP/seaweedfs"
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
-      - name: Install Chromium for the seed
-        run: npx playwright install chromium
       - name: Install Maestro
         run: sabeel-ci install-maestro
       - name: Native flows on the iOS simulator
-        run: sabeel-ci native-e2e --ios
+        run: sabeel-ci native-e2e --ios --build ~/native-build
       - name: Screens, Maestro's report and logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: native-ios-${{ github.sha }}
-          path: |
-            shots/native/
-            !shots/native/ios-build/
+          path: shots/native/
           retention-days: 14
 
   # The check main's ruleset requires. A pull request runs both platforms;
