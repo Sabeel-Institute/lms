@@ -183,9 +183,16 @@ async function tap(locator, timeout = 30_000) {
  * payload, which only the emulator accepts, sent as the same
  * `accounts:signInWithIdp` request the Firebase SDK makes. The blocking
  * sign-up gate and `onUserCreate` therefore see exactly what they see from the
- * app. A refusal throws with the emulator's message; a connection the
- * emulator is not yet taking is tried again.
+ * app.
+ *
+ * A refusal throws with the emulator's message. What only says the backend is
+ * still coming up is tried again for up to three minutes: a connection the
+ * emulator does not take yet, and a blocking function that missed the Auth
+ * emulator's deadline while its worker started (on a CI Mac with the
+ * simulator up, `beforeSignIn`'s first run took 75 s, LMS #67).
  */
+const STILL_STARTING = /Deadline exceeded|ECONNREFUSED|ECONNRESET|socket hang up/;
+
 async function devGoogleSignIn(email) {
   const name = email.split('@')[0].split(/[.\-_]/).filter(Boolean)
     .map((part) => part[0].toUpperCase() + part.slice(1)).join(' ');
@@ -196,18 +203,21 @@ async function devGoogleSignIn(email) {
     requestUri: 'http://127.0.0.1/',
     returnSecureToken: true,
   });
-  for (let attempt = 1; ; attempt += 1) {
-    let response;
+  const deadline = Date.now() + 180_000;
+  for (;;) {
+    let failure;
     try {
-      response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      const answer = await response.json().catch(() => ({}));
+      if (response.ok) return answer.localId;
+      failure = new Error(`the Auth emulator refused ${email}: ${answer.error?.message ?? response.status}`);
     } catch (error) {
-      if (attempt >= 10) throw error;
-      await new Promise((r) => setTimeout(r, 1000));
-      continue;
+      failure = error;
     }
-    const answer = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(`the Auth emulator refused ${email}: ${answer.error?.message ?? response.status}`);
-    return answer.localId;
+    const transient = STILL_STARTING.test(`${failure.message} ${failure.cause?.code ?? ''}`);
+    if (!transient || Date.now() > deadline) throw failure;
+    console.log(`  ..  ${email}: ${failure.message.slice(0, 120)}; signing in again`);
+    await new Promise((r) => setTimeout(r, 5000));
   }
 }
 
