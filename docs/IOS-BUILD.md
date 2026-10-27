@@ -141,7 +141,6 @@ flowchart LR
   subgraph host["Mac host processes"]
     EMU["Firebase emulators<br/>61300-61309"] --- S3["SeaweedFS<br/>127.0.0.1:61327"]
     METRO["Metro :8081<br/>EXPO_PUBLIC_USE_EMULATORS=1"]
-    SEED["seed:emulators<br/>(drives the web build)"] --> METRO
     SEED --> EMU
   end
   SIM["iPhone simulator, same Mac<br/>debug build"] -->|127.0.0.1| EMU
@@ -159,7 +158,7 @@ nohup npm run emulators > /tmp/lms-emulators.log 2>&1 &
 #    if another project holds 8081
 EXPO_PUBLIC_USE_EMULATORS=1 \
   nohup npm run start -w @sabeel/app -- --port 8081 > /tmp/lms-metro.log 2>&1 &
-# 3. The sweep's world, left in place (needs Metro: staff are made by driving the web app)
+# 3. The sweep's world, left in place (needs only the emulators)
 npm run seed:emulators
 # 4. Build and install the debug app
 xcrun simctl boot "iPhone 17 Pro"

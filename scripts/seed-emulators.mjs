@@ -9,10 +9,10 @@
  * be pointed at. The device pass needs the opposite: a world that outlives the
  * seeding process, because the thing doing the looking is an APK.
  *
- * It needs the Expo dev server already up (`E2E_BASE`, default 8081), because
- * staff are Google identities the Admin SDK cannot mint: `seedWorld` drives the
- * app's own emulator sign-in row so `onUserCreate` provisions them, then
- * approves them out of band. Everything else is Admin SDK.
+ * It needs only the emulators. Staff are Google identities the Admin SDK cannot
+ * mint, so `seedWorld` signs them in as the app's dev sign-in row does, over
+ * the Auth emulator's REST API, lets `onUserCreate` provision them and approves
+ * them out of band. Everything else is Admin SDK.
  *
  * Prints the student's credentials and the ids the fixture is built around.
  * See "The device pass" in docs/DEPLOY.md for the whole recipe.
@@ -21,7 +21,6 @@ import { fileURLToPath } from 'node:url';
 import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
 import { emulatorProject, ports } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { createRequire } from 'node:module';
-import { chromium } from 'playwright';
 import { resetEmulators, seedWorld } from './lib/seed-world.mjs';
 
 // The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
@@ -34,7 +33,6 @@ const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 
-const BASE = process.env.E2E_BASE ?? 'http://127.0.0.1:8081/';
 process.env.FIRESTORE_EMULATOR_HOST ??= `127.0.0.1:${PORTS.firestore}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `127.0.0.1:${PORTS.auth}`;
 process.env.GCLOUD_PROJECT = EMULATOR_PROJECT_ID;
@@ -44,9 +42,7 @@ const db = getFirestore();
 const auth = getAuth();
 
 await resetEmulators();
-const browser = await chromium.launch();
-const world = await seedWorld({ db, auth, browser, base: BASE });
-await browser.close();
+const world = await seedWorld({ db, auth });
 
 console.log('\n--- seeded ---');
 console.log('student      ', world.STUDENT, '/', world.STUDENT_PASSWORD);

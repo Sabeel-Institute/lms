@@ -56,11 +56,11 @@ const iso = (ms) => todayInZone(INSTITUTE_TIMEZONE, ms);
  *
  * `emulators:exec` starts this script once it believes the suite is up, and the
  * functions emulator in particular accepts connections before it has registered
- * anything — the trap docs/DEV-TOOLING.md records. The browser pays for that
- * gap, not this script: the first dev sign-in came back
+ * anything — the trap docs/DEV-TOOLING.md records. The first staff sign-in
+ * pays for that gap: made through the app it came back
  * `auth/network-request-failed`, the pending screen never arrived, and the run
  * died 60 seconds later pointing at a locator. So poll the two services this
- * suite actually drives until each answers for real.
+ * seed actually drives until each answers for real.
  */
 async function waitForEmulators() {
   /*
@@ -178,18 +178,63 @@ async function tap(locator, timeout = 30_000) {
 }
 
 /**
+ * Sign in to the Auth emulator as the app's dev sign-in row does
+ * (`app/src/auth/devSignIn.ts`): a Google credential whose ID token is a JSON
+ * payload, which only the emulator accepts, sent as the same
+ * `accounts:signInWithIdp` request the Firebase SDK makes. The blocking
+ * sign-up gate and `onUserCreate` therefore see exactly what they see from the
+ * app.
+ *
+ * A refusal throws with the emulator's message. What only says the backend is
+ * still coming up is tried again for up to three minutes: a connection the
+ * emulator does not take yet, and a blocking function that missed the Auth
+ * emulator's deadline while its worker started (on a CI Mac with the
+ * simulator up, `beforeSignIn`'s first run took 75 s, LMS #67).
+ */
+const STILL_STARTING = /Deadline exceeded|ECONNREFUSED|ECONNRESET|socket hang up/;
+
+async function devGoogleSignIn(email) {
+  const name = email.split('@')[0].split(/[.\-_]/).filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1)).join(' ');
+  const token = JSON.stringify({ sub: `dev-${email}`, email, email_verified: true, name });
+  const url = `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=emulator`;
+  const body = JSON.stringify({
+    postBody: `id_token=${encodeURIComponent(token)}&providerId=google.com`,
+    requestUri: 'http://127.0.0.1/',
+    returnSecureToken: true,
+  });
+  const deadline = Date.now() + 180_000;
+  for (;;) {
+    let failure;
+    try {
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      const answer = await response.json().catch(() => ({}));
+      if (response.ok) return answer.localId;
+      failure = new Error(`the Auth emulator refused ${email}: ${answer.error?.message ?? response.status}`);
+    } catch (error) {
+      failure = error;
+    }
+    const transient = STILL_STARTING.test(`${failure.message} ${failure.cause?.code ?? ''}`);
+    if (!transient || Date.now() > deadline) throw failure;
+    console.log(`  ..  ${email}: ${failure.message.slice(0, 120)}; signing in again`);
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+}
+
+/**
  * Build the world. Returns the handles a suite needs to drive it: who to sign
  * in as, which ids to navigate to, and which sessions cover which state.
  */
-export async function seedWorld({ db, auth, browser, base }) {
+export async function seedWorld({ db, auth }) {
   /**
-   * Mint a staff account THROUGH THE APP, then approve it out of band.
+   * Mint a staff account AS THE APP DOES, then approve it out of band.
    *
-   * Staff are Google identities and the Admin SDK cannot create one, so the dev
-   * sign-in row is the only way to produce an account the domain gate would
-   * accept. `onUserCreate` writes the pending `staffUsers` document; this waits
-   * for it, then does what an admin's approval does — claims first, then the
-   * mirror, in that order, because the token is what rules trust.
+   * Staff are Google identities and the Admin SDK cannot create one, so this
+   * signs in as the dev sign-in row does (`devGoogleSignIn`), which is the only
+   * way to produce an account the domain gate would accept. `onUserCreate`
+   * writes the pending `staffUsers` document; this waits for it, then does what
+   * an admin's approval does — claims first, then the mirror, in that order,
+   * because the token is what rules trust.
    */
   /**
    * THE INSTITUTE'S RULES, ALREADY ACCEPTED, as they are by every account in
@@ -199,35 +244,26 @@ export async function seedWorld({ db, auth, browser, base }) {
    */
   const ACCEPTED = { rulesAcceptedAt: now - 30 * DAY, rulesVersion: RULES_VERSION };
 
-  async function provisionStaff(testId, email, role) {
+  async function provisionStaff(email, role) {
     const staffDoc = async () => {
       const snap = await db.collection('staffUsers').where('email', '==', email).get();
       return snap.empty ? '' : snap.docs[0].id;
     };
 
     /*
-     * Waits for the DOCUMENT, not for the pending screen, and tries twice.
+     * Waits for the DOCUMENT, and signs in twice if it never comes.
      *
-     * The document is what this function is for, and it is the only unambiguous
-     * evidence: the app shows "Setting up your account" and "Waiting for
-     * approval" at different moments of the same successful path, so a wait on
-     * one text is a race against which one is up. Twice because the first
-     * sign-in of a run meets a backend that has only just come up — that came
-     * back `auth/network-request-failed`, which the app REPORTS to the user
-     * rather than throwing at the caller, so there is nothing to catch here,
-     * only a screen that never changes.
+     * The document is what this function is for: the account exists as soon as
+     * the sign-in answers, but `onUserCreate` writes the profile after it, on a
+     * Functions emulator that may only just have registered its triggers.
      */
     let uid = '';
     for (let attempt = 1; attempt <= 2 && !uid; attempt += 1) {
-      const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-      const page = await ctx.newPage();
-      await page.goto(base, { waitUntil: 'domcontentloaded' });
-      await tap(byId(page, testId), 60_000);
+      await devGoogleSignIn(email);
       for (let i = 0; i < 60 && !uid; i += 1) {
         uid = await staffDoc();
         if (!uid) await new Promise((r) => setTimeout(r, 500));
       }
-      await ctx.close();
       if (!uid) console.log(`  ..  ${email} never provisioned; signing in again`);
     }
     if (!uid) throw new Error(`${email} was never provisioned by onUserCreate`);
@@ -236,8 +272,8 @@ export async function seedWorld({ db, auth, browser, base }) {
     return uid;
   }
 
-  const adminUid = await provisionStaff('dev-signin-first-admin', 'faisal.shah@oursabeel.com', 'admin');
-  const managerUid = await provisionStaff('dev-signin-manager', 'manager@oursabeel.com', 'manager');
+  const adminUid = await provisionStaff('faisal.shah@oursabeel.com', 'admin');
+  const managerUid = await provisionStaff('manager@oursabeel.com', 'manager');
 
   /*
    * A PENDING staff account, written directly — there is no third dev sign-in to

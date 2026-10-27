@@ -58,7 +58,7 @@ if (!['delete', 'remove', 'none'].includes(MODE)) {
 
 await resetEmulators();
 const browser = await chromium.launch();
-await seedWorld({ db, auth, browser, base: BASE });
+await seedWorld({ db, auth });
 
 // The seeded manager runs sw-hikam; put them on sw-arabic as well, so there is
 // a second course to take away.

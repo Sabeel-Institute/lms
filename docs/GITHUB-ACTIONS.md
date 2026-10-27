@@ -12,12 +12,17 @@ they release.
 ## Checks and builds
 
 - **Pre-merge Builds** runs on every main-targeting PR, including Dependabot,
-  and can also be run manually. It checks Expo SDK dependency ranges; builds the
-  backend bundle, installs its production dependencies from
+  on main pushes, and can also be run manually. It checks Expo SDK dependency
+  ranges; builds the backend bundle, installs its production dependencies from
   `functions/package-lock.json` alone in an empty directory, as Cloud Build
-  does, and loads the bundle there; exports production web JavaScript,
-  compiles an unsigned arm64 Android release AAB and archives an unsigned iOS
-  device app in Release mode. Native builds use synthetic Firebase config and
+  does, and loads the bundle there; exports production web JavaScript and
+  compiles both phones' production JavaScript through Hermes; and compiles an
+  unsigned arm64 Android release AAB and archives an unsigned iOS device app
+  in Release mode, each only for native inputs no release build has compiled.
+  Its `fingerprint` job keys each platform by the Expo fingerprint of the
+  native inputs it compiles (`sabeel-ci native-fingerprint release`), and a
+  platform whose key compiled on main or earlier in the pull request skips its
+  native compile. Native builds use synthetic Firebase config and
   disable symbol uploads; no signing, publishing or deployment credentials are
   available. Test products are neither uploaded nor accepted as release artifacts.
 - SDK recommendations permit same-minor native patch updates; supported caret
@@ -25,7 +30,8 @@ they release.
   SDK dependencies or pinned iOS pods fails validation rather than rewriting
   lockfiles. Native dependency PRs must include any intended Podfile.lock update.
 - The required `premerge-builds` gate fails if any constituent job fails,
-  skips or is cancelled. It is required alongside CI (`build-test`), CodeQL
+  skips or is cancelled, but for a platform skipped because the fingerprint
+  job found its native inputs compiled. It is required alongside CI (`build-test`), CodeQL
   (`analyze`) and Native (`native`) on main, with no status-check bypasses. A
   branch need not be up to date with main to merge: main's own CI runs on
   every merge, and no release workflow accepts a commit it has not passed.
@@ -48,13 +54,18 @@ they release.
   store, on main pushes, release tags, every pull request to main, and by
   hand: `npx sabeel-ci native-e2e`, as locally
   (`docs/DEV-TOOLING.md`). Its screens and logs are the `native-<sha>` artifact.
-  Its `ios` job runs the same flows on an iPhone simulator on a macOS runner
-  (`--ios`) for release tags, pull requests and by hand, as
+  Each platform's debug build is kept in the Actions cache under the Expo
+  fingerprint of its native inputs (`sabeel-ci native-fingerprint debug`): a
+  commit that changes none runs the flows on the build kept from main or from
+  an earlier run of its pull request, and only new native inputs build
+  (`sabeel-ci native-build`). Its `ios` job runs the same flows on an iPhone
+  simulator on a macOS runner (`--ios`) for release tags, pull requests and by
+  hand, and on a main push only to keep a build for new native inputs, as
   `native-ios-<sha>`. On a pull request its `native` job passes only when the
   flows passed on both, and main requires it.
 - **Android**, **Web** and **iOS** build automatically on main pushes and can
   also be started manually. They do not run on untrusted pull requests.
-- Every Android build (Android, the pre-merge build and Native) first installs
+- Every Android build (Android, the pre-merge build and a Native build) first installs
   the NDK and build tools React Native's version catalog names, retrying a bad
   download (`sabeel-ci ci-android-sdk`); Gradle would fetch them once and fail
   the build on a truncated file.

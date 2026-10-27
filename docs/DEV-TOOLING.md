@@ -41,7 +41,7 @@ emulator — not your diff.
 | `npm run check:web-push` | The exported web bundle (`app/dist-web`) carries the VAPID public key and the permission path; every CI web build runs it |
 | `npm run smoke:prod` | **Against the LIVE site.** The auth handler, the three store pages, the build label for this checkout's version and commit, a provoked Auth request going to Google and not an emulator, no dev sign-in rows, and the bundle's `.map` not served |
 | `npm run students:report [-- --email <address>]` | **Against the REAL project, read-only.** Every student's account: whether a password has ever been set and when, last sign-in, last activity. Test accounts and staff members' own student accounts are listed apart and left out of the counts. `--email` shows one record with its audited history and what its state means for the next set-password link. Start here when a student can't get in (see "A student can't set a password") |
-| `npm run seed:emulators` | Seeds the sweep's world into an already-running emulator suite and leaves it there, for a device pass (needs the web dev server up: see `docs/DEPLOY.md`) |
+| `npm run seed:emulators` | Seeds the sweep's world into an already-running emulator suite and leaves it there, for a device pass (`docs/DEPLOY.md`) |
 | `node scripts/repro-stale-scope.mjs delete\|remove\|none` | The WEB-4 regression: a manager's cold load with a stale cached course list must render the work queue and report no listener refusal. Needs emulators + the e2e dev server; resets the emulators; exit 1 on a refusal |
 | `node scripts/set-min-version.mjs <X.Y.Z>` | **Against the REAL project** (or the emulator with `CHECK_PROJECT` + `FIRESTORE_EMULATOR_HOST`). Sets the oldest app version allowed to run on a phone, stored as its versionCode |
 | `node scripts/s3-conformance.mjs local\|r2` | The 18 S3 behaviours the media code relies on (signatures, expiry, write-once PUT, signed type, `Range`, multipart ETags, a completed upload taking no more parts, CORS, read key cannot write), against SeaweedFS or **against the REAL R2 bucket** with the real keys from Secret Manager. Writes and deletes a few objects under `conformance/`. Run after changing either |
@@ -646,16 +646,17 @@ promote (409 = already an admin, fine).
 `npx sabeel-ci native-e2e` runs the Maestro flows in `maestro/` against the
 debug build: it stamps and builds the APK and installs it, starts the
 emulators and the media store, seeds the world the device pass uses
-(`scripts/seed-emulators.mjs`, through a web dev server on the `web` port,
-61310, that runs for the seed alone: `native.seedWeb`), maps the media store's
+(`scripts/seed-emulators.mjs`), maps the media store's
 port into the emulator (`adb reverse tcp:61327`: `native.reversePorts`),
 serves the JavaScript from Metro on 8081 with `EXPO_PUBLIC_USE_EMULATORS=1`,
 and runs every flow, or the one you name (`npx sabeel-ci native-e2e
 maestro/student.yaml`). It needs one booted emulator (`npx sabeel-ci emulator
 headless`) and installs the pinned Maestro itself (`sabeel-ci
-install-maestro`). Screenshots, Maestro's JUnit report and the emulator, web,
-Metro, seed and device logs land in `shots/native/`. It refuses a held 8081 or
-61310.
+install-maestro`). Screenshots, Maestro's JUnit report and the emulator,
+Metro and seed logs land in `shots/native/`, with the device's log when a flow
+failed. It refuses a held 8081 or 61310. Given `--build <dir>`, it installs the
+debug app `npx sabeel-ci native-build` made there instead of building one,
+which is how CI runs it.
 
 - **`maestro/student.yaml`**: a password sign-in, its email read back before it
   is sent, a recording that plays and whose clock moves at least 10 s while
@@ -688,9 +689,10 @@ macOS runner for release tags, pull requests and by hand, and keeps the same
 folder as `native-ios-<sha>`.
 
 **On the iOS simulator**: `npx sabeel-ci native-e2e --ios` (macOS) builds the
-debug app for the simulator with `sabeel-ci ios-sim-build` (a prebuild scoped
-to iOS, the committed `Podfile.lock`, `xcodebuild` for `iphonesimulator`),
-installs it on a booted iPhone simulator, and runs the same flows. Each flow
+debug app for the simulator with `sabeel-ci native-build ios` (a prebuild
+scoped to iOS, the committed `Podfile.lock`, `xcodebuild` for
+`iphonesimulator`), boots the iPhone simulator it built for, installs the app
+and runs the same flows. Each flow
 takes the installed app's id as `${APP_ID}`, since the Android and iOS builds
 differ. Two iOS differences shape the flows: a pressable card's texts are one
 accessibility label on iOS, and Maestro matches a label whole, so texts inside

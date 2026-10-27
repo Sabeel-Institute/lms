@@ -86,7 +86,7 @@ await resetEmulators();
 // them from `getNotifications()` when the daemon closes them, so the banner
 // this suite reads back can be gone before it looks.
 const browser = await chromium.launch({ channel: 'chromium', args: ['--disable-features=NativeNotifications,SystemNotifications'] });
-const world = await seedWorld({ db, auth, browser, base: BASE });
+const world = await seedWorld({ db, auth });
 const { STUDENT, STUDENT_PASSWORD, dueSoon, blocking } = world;
 
 // ---- what the server would send, about things in the seeded world ----------

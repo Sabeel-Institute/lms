@@ -104,18 +104,15 @@ Two rules decide the shape of this, and both were learned by getting them wrong:
   one, so every "the fix did not work" reading is a lie. Let `expo run:android`
   start its own Metro.
 
-The seed needs a web dev server (staff are Google identities the Admin SDK
-cannot mint, so `seedWorld` drives the app's own dev sign-in row and lets
-`onUserCreate` provision them). So seed first, stop that server, then hand the
-port to `run:android`:
+The seed needs only the emulators (staff are Google identities the Admin SDK
+cannot mint, so `seedWorld` signs them in as the app's dev sign-in row does,
+over the Auth emulator's REST API, and lets `onUserCreate` provision them):
 
 ```sh
 npx sabeel-ci emulator headless &                               # the AVD
 npm run emulators             # frees the ports, builds, starts the emulators + media store; leave running
 
-( cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo start --web --port 8081 --clear ) &
 npm run seed:emulators        # prints the student's credentials and the fixture ids
-kill %2                       # release 8081 (job 2: the AVD is job 1, the dev server job 2)
 
 ( cd app && EXPO_PUBLIC_USE_EMULATORS=1 npx expo run:android )   # its own Metro
 adb reverse tcp:61327 tcp:61327                                  # the audio, see below

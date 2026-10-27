@@ -298,7 +298,7 @@ const auth = getAuth();
  */
 await resetEmulators();
 const browser = await chromium.launch();
-const world = await seedWorld({ db, auth, browser, base: BASE });
+const world = await seedWorld({ db, auth });
 const {
   STUDENT, DISABLED_STUDENT, DELETED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived, LONG_COURSE_NAME, UNENROLLED,
   HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE, TO_GRADE, RULES_UNSEEN,
