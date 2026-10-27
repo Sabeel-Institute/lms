@@ -95,11 +95,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ci-tools-bin"
           ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
           echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 21
-          cache: gradle
       - name: Install dependencies
         run: npm ci
       - name: The debug APK, if kept for these native inputs
@@ -108,6 +103,21 @@ jobs:
         with:
           path: ~/native-build
           key: ${{ needs.fingerprint.outputs.android }}
+      # Gradle's cache only for a build: restoring it took half a minute that
+      # the kept APK has no use for.
+      - name: JDK 21, with Gradle's cache for the build
+        if: steps.kept.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: JDK 21
+        if: steps.kept.outputs.cache-hit == 'true'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
       - name: Android SDK packages, with retries
         if: steps.kept.outputs.cache-hit != 'true'
         run: sabeel-ci ci-android-sdk
