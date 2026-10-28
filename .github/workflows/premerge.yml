@@ -257,8 +257,26 @@ jobs:
       - name: Prepare public test configuration
         run: sabeel-ci ci-premerge prepare
       - run: npm ci
+      # React Native's prebuilt iOS binaries, kept per React Native version
+      # as in Native.
+      - name: React Native's version
+        id: react-native
+        working-directory: app
+        run: echo "version=$(node -p "require('react-native/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: React Native's iOS binaries, if kept for this version
+        id: rn-binaries
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/Library/Caches/ReactNative
+          key: react-native-ios-${{ steps.react-native.outputs.version }}
       - name: Compile and verify unsigned device Release archive
         run: sabeel-ci ci-premerge ios
+      - name: Keep React Native's iOS binaries for this version
+        if: steps.rn-binaries.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/Library/Caches/ReactNative
+          key: react-native-ios-${{ steps.react-native.outputs.version }}
       - name: Record that these native inputs compiled
         run: mkdir -p ~/release-compiled && echo "$GITHUB_SHA" > ~/release-compiled/commit
       - uses: actions/cache/save@v6

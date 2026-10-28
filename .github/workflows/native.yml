@@ -271,9 +271,31 @@ jobs:
         with:
           path: ~/native-build
           key: ${{ needs.fingerprint.outputs.ios }}
+      # pod install takes React Native's prebuilt iOS binaries (160 MB from
+      # Maven Central, which can stall for hours) from this folder when they
+      # are there, after checking each against Maven's SHA-1. Kept per React
+      # Native version, and only after a build that fetched them succeeded.
+      - name: React Native's version
+        id: react-native
+        if: steps.kept.outputs.cache-hit != 'true'
+        working-directory: app
+        run: echo "version=$(node -p "require('react-native/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: React Native's iOS binaries, if kept for this version
+        id: rn-binaries
+        if: steps.kept.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/Library/Caches/ReactNative
+          key: react-native-ios-${{ steps.react-native.outputs.version }}
       - name: Build the debug app for the iOS simulator
         if: steps.kept.outputs.cache-hit != 'true'
         run: sabeel-ci native-build ios ~/native-build
+      - name: Keep React Native's iOS binaries for this version
+        if: steps.kept.outputs.cache-hit != 'true' && steps.rn-binaries.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/Library/Caches/ReactNative
+          key: react-native-ios-${{ steps.react-native.outputs.version }}
       - name: Keep the debug app for these native inputs
         if: steps.kept.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
