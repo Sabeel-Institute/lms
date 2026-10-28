@@ -1860,32 +1860,49 @@ const TOURS = [
   ['rules', signInRulesUnseen, tourRules],
 ];
 
+/**
+ * FOUR TOURS AT ONCE, one browser context each, the staff tours first: a staff
+ * tour is two thirds of a width's time, so they go out before the short ones
+ * that fill in around them. In a row the sweep took eleven minutes of CI.
+ *
+ * They cannot see each other. A tour opens editors and sheets but never saves
+ * one, never presses "I agree", plays nothing, and never reads what another
+ * population could write; the world is seeded once, above, and only read
+ * after. A tour that started writing would make what the others photograph
+ * depend on which finished first, and the screens report would show it as
+ * screens changing from run to run.
+ */
+const AT_ONCE = 4;
+
+async function runTour([tag, contextOptions, width], [who, signIn, tour]) {
+  // A fresh context per population: sessions do not share, and a stale one
+  // restores the OTHER population's route — the shared-device case the route
+  // tables were split for.
+  const ctx = await browser.newContext(contextOptions);
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => check(`${tag}/${who} page error`, false, String(e).slice(0, 110)));
+  await signIn(page);
+  // Before the tour, so a viewport that did not apply fails here rather than
+  // a whole tour later, having quietly measured the wrong width.
+  const at = await laidOutAt(page);
+  check(
+    `${tag}/${who} laid out at ${width}px`,
+    at.layout === width,
+    `documentElement.clientWidth = ${at.layout}, window.innerWidth = ${at.window}`,
+  );
+  await tour(page, `${tag}-${who}`);
+  await ctx.close();
+}
+
 try {
   const runs = [
     ...WIDTHS.map((w) => [`${w}px`, { viewport: { width: w, height: 900 } }, w]),
     ...PROFILES.map(([label, d]) => [label, d, d.viewport.width]),
   ];
-  for (const [tag, contextOptions, width] of runs) {
-    for (const [who, signIn, tour] of TOURS) {
-      // A fresh context per population: sessions do not share, and a stale one
-      // restores the OTHER population's route — the shared-device case the route
-      // tables were split for.
-      const ctx = await browser.newContext(contextOptions);
-      const page = await ctx.newPage();
-      page.on('pageerror', (e) => check(`${tag}/${who} page error`, false, String(e).slice(0, 110)));
-      await signIn(page);
-      // Before the tour, so a viewport that did not apply fails here rather than
-      // a whole tour later, having quietly measured the wrong width.
-      const at = await laidOutAt(page);
-      check(
-        `${tag}/${who} laid out at ${width}px`,
-        at.layout === width,
-        `documentElement.clientWidth = ${at.layout}, window.innerWidth = ${at.window}`,
-      );
-      await tour(page, `${tag}-${who}`);
-      await ctx.close();
-    }
-  }
+  const queue = TOURS.flatMap((population) => runs.map((run) => [run, population]));
+  await Promise.all(Array.from({ length: AT_ONCE }, async () => {
+    while (queue.length) await runTour(...queue.shift());
+  }));
 } finally {
   await browser.close();
 }

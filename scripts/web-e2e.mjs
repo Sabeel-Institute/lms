@@ -266,16 +266,32 @@ const sawText = (page, text, timeout = 20000) =>
     .first()
     .waitFor({ timeout });
 
+/** Reads `read()` until `ok` holds of it, or `timeout` passes; the last value either way, for the check that follows to judge. */
+async function until(read, ok, timeout = 15000, every = 250) {
+  const deadline = Date.now() + timeout;
+  let value = await read();
+  while (!ok(value) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, every));
+    value = await read();
+  }
+  return value;
+}
+
 /** Home by URL. Since the linking config landed the stack IS browser history,
- *  so goBack() works too — this goes to `/`, which is the Home path. */
-async function goHome(page) {
+ *  so goBack() works too — this goes to `/`, which is the Home path.
+ *
+ *  `settle` holds the page that many ms once it has loaded, so its listeners
+ *  have answered: a count of zero, or a row that is gone, is also what a page
+ *  that has not loaded yet shows. A caller whose next step waits for what it
+ *  needs passes 0. */
+async function goHome(page, settle = 3000) {
   await page.goto(WEB, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(3000);
+  if (settle > 0) await page.waitForTimeout(settle);
 }
 
 /** Admin: Courses → Autumn 2026 → Hikam Foundations, from home. Reused a lot. */
 async function openHikam(page) {
-  await goHome(page);
+  await goHome(page, 0);
   await tap(page, 'tab-courses');
   await tap(page, 'cohort-open-Autumn 2026');
   await page.getByTestId('course-open-Arabic I').filter({ visible: true }).first().waitFor({ timeout: 20000 }).catch(() => {});
@@ -559,20 +575,22 @@ check(
 // the check passed unconditionally. It survived a deliberate mutation of the
 // rule it was written to protect, which is the only reason it was caught.
 // Signing in cannot be vacuous: either the credential works or it does not.
-let strangerDenied = '';
-for (let i = 0; i < 20 && !strangerDenied; i++) {
-  await outsider.waitForTimeout(1000);
-  const r = await fetch(
-    `${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: strangerEmail, password: 'hunter2hunter2', returnSecureToken: true }),
-    },
-  );
-  const body = await r.json();
-  if (body.error) strangerDenied = body.error.message;
-}
+const strangerDenied = await until(
+  async () => {
+    const r = await fetch(
+      `${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: strangerEmail, password: 'hunter2hunter2', returnSecureToken: true }),
+      },
+    );
+    return (await r.json()).error?.message ?? '';
+  },
+  (denied) => denied !== '',
+  20000,
+  1000,
+);
 check(
   '…and no account was made — its credential works nowhere',
   strangerDenied === 'EMAIL_NOT_FOUND',
@@ -581,7 +599,7 @@ check(
 
 // ------------------------------------------------------- academic structure --
 console.log('\nAcademic structure');
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-courses');
 // Creating is a header action that opens a sheet, not a form pinned above the
 // list — so every one of these is a tap before it is a fill. The sheet closes
@@ -613,7 +631,7 @@ await admin.getByTestId('cohort-rename').fill('Autumn 2026 — Term 1');
 await tap(admin, 'cohort-rename-save');
 await sawText(admin, 'Autumn 2026 — Term 1');
 check('a cohort can be renamed, and its page follows the write live', await showsText(admin, 'Autumn 2026 — Term 1'));
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-courses');
 await admin.getByTestId('cohort-open-Autumn 2026 — Term 1').waitFor({ timeout: 20000 }).catch(() => {});
 check(
@@ -628,7 +646,7 @@ await admin.getByTestId('cohort-rename').fill('Autumn 2026');
 await tap(admin, 'cohort-rename-save');
 // Exact, because the heading it replaces contains these words as a prefix.
 await admin.getByText('Autumn 2026', { exact: true }).filter({ visible: true }).first().waitFor({ timeout: 20000 });
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-courses');
 await admin.getByTestId('cohort-open-Autumn 2026').waitFor({ timeout: 20000 });
 
@@ -638,23 +656,23 @@ await admin.getByTestId('cohort-open-Autumn 2026').waitFor({ timeout: 20000 });
 // path, which also means the params must stay ids — a document param serialises
 // to "[object Object]" in the URL and comes back as that string.
 const path = () => new URL(admin.url()).pathname;
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-courses');
 check('navigating pushes a real URL', path() === '/cohorts', path());
 await tap(admin, 'cohort-open-Autumn 2026');
-await admin.waitForTimeout(1200);
+await admin.waitForURL((u) => /^\/cohorts\/.+/.test(u.pathname), { timeout: 15000 }).catch(() => {});
 const cohortUrl = admin.url();
 check('a cohort is addressable', /^\/cohorts\/.+/.test(path()), path());
 await tap(admin, 'course-open-Hikam Foundations');
-await admin.waitForTimeout(1200);
+await admin.waitForURL((u) => /^\/courses\/.+/.test(u.pathname), { timeout: 15000 }).catch(() => {});
 const courseUrl = admin.url();
 check('a course is addressable', /^\/courses\/.+/.test(path()), path());
 
 await admin.goBack();
-await admin.waitForTimeout(1500);
+await admin.waitForURL((u) => u.href === cohortUrl, { timeout: 15000 }).catch(() => {});
 check('Back returns to the cohort rather than leaving the site', admin.url() === cohortUrl, path());
 await admin.goForward();
-await admin.waitForTimeout(1500);
+await admin.waitForURL((u) => u.href === courseUrl, { timeout: 15000 }).catch(() => {});
 check('Forward returns to the course', admin.url() === courseUrl, path());
 
 // Cold-loading a deep URL must land on that screen, which only works because the
@@ -673,7 +691,7 @@ check(
 // ever, which is what a student would see when a recording they had open is
 // unpublished out from under them.
 await admin.goto(`${WEB}courses/no-such-course-id`, { waitUntil: 'domcontentloaded' });
-await admin.waitForTimeout(6000);
+await sawText(admin, 'not available', 30000).catch(() => {});
 check(
   'a URL pointing at something deleted says so instead of loading for ever',
   (await bodyText(admin)).toLowerCase().includes('not available'),
@@ -681,7 +699,6 @@ check(
 
 // Leave the browser back on the cohort, where the next section starts from.
 await admin.goto(cohortUrl, { waitUntil: 'domcontentloaded' });
-await admin.waitForTimeout(3000);
 
 // Scope ONE course to the manager.
 //
@@ -695,16 +712,15 @@ await admin.waitForTimeout(3000);
 // them, and they stay a manager forever.
 await tap(admin, 'course-open-Hikam Foundations');
 const mgrTick = admin.getByTestId('course-manager-manager@oursabeel.com');
-const tickState = async () => {
-  await admin.waitForTimeout(2500);
-  return mgrTick.getAttribute('aria-checked');
-};
+// The row follows the live course document, which the callable writes: it
+// reads `want` only once the write has landed, or the last state it saw.
+const tickState = (want) => until(() => mgrTick.getAttribute('aria-checked'), (state) => state === want);
 await tap(admin, 'course-manager-manager@oursabeel.com');
-check('assigning a manager ticks the row live, without leaving the screen', (await tickState()) === 'true');
+check('assigning a manager ticks the row live, without leaving the screen', (await tickState('true')) === 'true');
 await tap(admin, 'course-manager-manager@oursabeel.com');
-check('un-assigning clears it — the next write reads the LIVE list', (await tickState()) === 'false');
+check('un-assigning clears it — the next write reads the LIVE list', (await tickState('false')) === 'false');
 await tap(admin, 'course-manager-manager@oursabeel.com');
-check('re-assigning ticks it again', (await tickState()) === 'true');
+check('re-assigning ticks it again', (await tickState('true')) === 'true');
 /*
  * EVERY MANAGER THE COUNT COUNTS IS ON THE LIST, ADMINS INCLUDED. A course's
  * managers get its reminders and its work to grade, and an admin among them
@@ -726,8 +742,7 @@ check(
   (await admin.getByTestId(adminTick).filter({ visible: true }).first().innerText()).includes('· admin'),
 );
 await tap(admin, adminTick);
-await admin.waitForTimeout(2500);
-const withAdmin = await managerFigures();
+const withAdmin = await until(managerFigures, (figures) => figures.ticked === 2 && figures.counted === 2);
 check(
   'an admin ticked as a manager is listed and counted: every manager counted is ticked on the list',
   (await admin.getByTestId(adminTick).getAttribute('aria-checked')) === 'true' &&
@@ -736,8 +751,7 @@ check(
   JSON.stringify(withAdmin),
 );
 await tap(admin, adminTick);
-await admin.waitForTimeout(2500);
-const withoutAdmin = await managerFigures();
+const withoutAdmin = await until(managerFigures, (figures) => figures.ticked === 1 && figures.counted === 1);
 check('…and taken off again', withoutAdmin.ticked === 1 && withoutAdmin.counted === 1, JSON.stringify(withoutAdmin));
 await shot(admin, '05-course-detail');
 
@@ -760,7 +774,7 @@ await shot(mgr, '06-my-courses');
 
 // --------------------------------------------------------------- enrolment --
 console.log('\nEnrolment');
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'students-add');
 await admin.getByTestId('student-name').fill('Fatima Ahmed');
@@ -776,7 +790,6 @@ await shot(admin, '07-students');
 
 await openHikam(admin);
 await sawText(admin, 'Fatima Ahmed');
-await admin.waitForTimeout(1200);
 check('the roster shows the enrolled student', await showsText(admin, 'Fatima Ahmed'));
 await shot(admin, '08-roster');
 
@@ -837,9 +850,13 @@ check('a create sheet closes itself on success', !(await shows(admin, 'session-c
  * count on the navigation. Checked here, before attendance is taken, because
  * this is the one moment in the whole suite when that state exists.
  */
-await goHome(admin);
+await goHome(admin, 0);
 await admin.getByTestId('tab-today-badge').waitFor({ timeout: 20000 });
-const queueText = await bodyText(admin);
+// The queue's rows are read next, and may land after the badge does.
+const queueText = await until(
+  () => bodyText(admin),
+  (text) => /attendance not taken/i.test(text) && /Session 1/.test(text),
+);
 check(
   'Today counts a session whose attendance is not taken, and names it',
   (await admin.getByTestId('tab-today-badge').innerText()).trim() === '1' &&
@@ -908,7 +925,7 @@ check(
  * the row is what a manager sees every morning, and a control that changes a
  * field without changing the screen has fixed nothing.
  */
-await goHome(admin);
+await goHome(admin, 0);
 const sessionOneId = (await readCollection('sessions')).find(
   (d) => d.fields.title?.stringValue === 'Session 1',
 )?.name.split('/').pop();
@@ -936,7 +953,7 @@ await tap(admin, 'nav-sessions');
 await tap(admin, 'session-open-Session 1');
 await tap(admin, 'session-recorded-after-all');
 await sawText(admin, 'No recording yet', 20000);
-await goHome(admin);
+await goHome(admin, 0);
 await queueRow.waitFor({ timeout: 20000 });
 check('and "it was recorded after all" puts it back', await queueRow.isVisible());
 
@@ -991,16 +1008,12 @@ check('the recording is linked to its session', !!rf.sessionId?.stringValue);
 // submitted attendance, so it grants the excused student. This is the one place
 // the real onRecordingWritten runs (the integration tests exercise the logic).
 await tap(admin, 'recording-published');
-await admin.waitForTimeout(2500);
+await until(() => readCollection('recordings'), (docs) => docs[0]?.fields.status?.stringValue === 'published');
 check(
   'publishing sets the status',
   (await readCollection('recordings'))[0].fields.status.stringValue === 'published',
 );
-let assignments = [];
-for (let i = 0; i < 20 && assignments.length === 0; i++) {
-  await admin.waitForTimeout(500);
-  assignments = await activeAssignments();
-}
+const assignments = await until(activeAssignments, (found) => found.length > 0);
 check(
   'publishing fans out a grant to the EXCUSED student (real trigger)',
   assignments.length === 1,
@@ -1012,8 +1025,8 @@ await shot(admin, '11-session-published');
 // `next-up-`, not `task-`: the home screen promotes the most urgent recording
 // still open to a hero card and drops it from the grouped list, so while this
 // one is incomplete and in date it exists under that handle and no other.
-await goHome(student);
-await student.getByTestId('next-up-Session 1').waitFor({ timeout: 10000 });
+await goHome(student, 0);
+await student.getByTestId('next-up-Session 1').waitFor({ timeout: 15000 });
 /*
  * ON A SLOW LINK: the file is held back six seconds, as a long recording's
  * index is on a phone's connection. Play is greyed out no longer: a tap is
@@ -1051,9 +1064,9 @@ const elapsedSeconds = async (page) => {
   return (m || 0) * 60 + (s || 0);
 };
 
-// No second tap: it starts by itself.
-await student.waitForTimeout(8000);
-const advanced = await elapsedSeconds(student);
+// No second tap: it starts by itself. The check is a floor, so the readout is
+// polled until it clears it; a recording that never starts stays at its start.
+const advanced = await until(() => elapsedSeconds(student), (seconds) => seconds >= 3, 30000);
 check(
   'the recording starts by itself once it can, and plays (a signed URL streamed)',
   advanced >= 3,
@@ -1062,8 +1075,7 @@ check(
 
 // Skip forward, then confirm progress is persisted.
 await tap(student, 'player-forward');
-await student.waitForTimeout(2500);
-const progressDocs = await readCollection('listeningProgress');
+const progressDocs = await until(() => readCollection('listeningProgress'), (docs) => docs.length === 1);
 check('progress is persisted for the student', progressDocs.length === 1,
   `${progressDocs.length} progress docs`);
 
@@ -1096,8 +1108,7 @@ await student.waitForTimeout(1000);
  */
 const bookmarkedAt = await elapsedSeconds(student);
 await tap(student, 'player-bookmark');
-await student.waitForTimeout(1500);
-const marks = await readCollection('bookmarks');
+const marks = await until(() => readCollection('bookmarks'), (docs) => docs.length === 1);
 const bookmarkSec = Math.floor(Number(marks[0]?.fields.positionMs?.integerValue) / 1000);
 check(
   'a student bookmarks their place, and the player says it is bookmarked here',
@@ -1207,16 +1218,23 @@ await patchField('recordings', recordingDocId, 'title', 'Session 1');
 await student.waitForFunction(() => document.querySelector('[data-testid="player-title"]')?.textContent?.includes('Session 1'), null, { timeout: 15000 });
 
 await tap(student, 'player-play');
-await student.waitForTimeout(4000);
-const videoPlayed = await elapsedSeconds(student);
+const videoPlayed = await until(() => elapsedSeconds(student), (seconds) => seconds >= afterSwitch + 2);
 check('the video plays', videoPlayed >= afterSwitch + 2, `${afterSwitch}s → ${videoPlayed}s`);
 // The icon over the picture's corner: the picture fills the screen, and
 // leaving it puts the picture back where it was.
 await tap(student, 'player-fullscreen');
-await student.waitForTimeout(800);
+await student
+  .waitForFunction(() => document.fullscreenElement?.tagName === 'VIDEO', null, { timeout: 15000 })
+  .catch(() => {});
 const full = await student.evaluate(() => document.fullscreenElement?.tagName ?? null);
 await student.evaluate(() => document.exitFullscreen?.());
-await student.waitForTimeout(800);
+await student
+  .waitForFunction(
+    () => !document.fullscreenElement && !!document.querySelector('[data-testid="player-video"] video'),
+    null,
+    { timeout: 15000 },
+  )
+  .catch(() => {});
 const back = await student.evaluate(
   () => !document.fullscreenElement && !!document.querySelector('[data-testid="player-video"] video'),
 );
@@ -1262,7 +1280,7 @@ await student.waitForTimeout(1500);
  * playback at all. A two-hour lecture that stops because someone checked their
  * attendance record is the bug this proves is gone.
  */
-await goHome(student);
+await goHome(student, 0);
 await tap(student, 'next-up-Session 1');
 await student.getByTestId('player-play').waitFor({ timeout: 25000 });
 await tap(student, 'player-play');
@@ -1296,7 +1314,8 @@ const keyStart = await elapsedSeconds(student);
 await scrubber.focus();
 await student.keyboard.press('ArrowRight');
 await student.keyboard.press('ArrowRight');
-await student.waitForTimeout(1500);
+// Paused, and each press moves it five seconds: it stops where it lands.
+await until(() => elapsedSeconds(student), (seconds) => seconds >= keyStart + 9);
 const keyEnd = await elapsedSeconds(student);
 const announced = await scrubber.evaluate((el) => ({
   tab: el.getAttribute('tabindex'),
@@ -1326,17 +1345,15 @@ await student.addInitScript(() => {
     return real(action, handler);
   };
 });
-await goHome(student);
+await goHome(student, 0);
 await tap(student, 'next-up-Session 1');
 await student.getByTestId('player-play').waitFor({ timeout: 25000 });
 await student.waitForTimeout(1500);
 const remoteFrom = await elapsedSeconds(student);
 await student.evaluate(() => window.__mediaActions.seekforward?.({ action: 'seekforward' }));
-await student.waitForTimeout(1200);
-const remoteForward = await elapsedSeconds(student);
+const remoteForward = await until(() => elapsedSeconds(student), (seconds) => seconds - remoteFrom === 30);
 await student.evaluate(() => window.__mediaActions.seekbackward?.({ action: 'seekbackward' }));
-await student.waitForTimeout(1200);
-const remoteBack = await elapsedSeconds(student);
+const remoteBack = await until(() => elapsedSeconds(student), (seconds) => remoteForward - seconds === 15);
 check(
   'the notification’s forward and back move the recording 30 seconds on and 15 back, as the app’s buttons do',
   remoteForward - remoteFrom === 30 && remoteForward - remoteBack === 15,
@@ -1425,7 +1442,7 @@ check(
  * shared computer is shown nothing of where the last one was: the recording
  * opens at the start. The bookmark is the account's, and is offered.
  */
-await goHome(student);
+await goHome(student, 0);
 await tap(student, 'next-up-Session 1');
 await student.getByTestId('player-play').waitFor({ timeout: 25000 });
 await student.waitForTimeout(2500);
@@ -1446,11 +1463,10 @@ await shot(student, '13-at-bookmark');
  * AND A RELOAD RESUMES WHERE THIS DEVICE WAS: kept on the device every
  * second, it needs nothing from the server.
  */
-await goHome(student);
+await goHome(student, 0);
 await tap(student, 'next-up-Session 1');
 await student.getByTestId('player-play').waitFor({ timeout: 25000 });
-await student.waitForTimeout(2500);
-const resumedAt = await elapsedSeconds(student);
+const resumedAt = await until(() => elapsedSeconds(student), (seconds) => Math.abs(seconds - atBookmark) <= 2);
 check(
   'playback RESUMES where this device left off after a reload',
   Math.abs(resumedAt - atBookmark) <= 2,
@@ -1509,8 +1525,8 @@ check(
 
 // Back to `task-`: once complete it leaves the hero (which only ever promotes
 // something still to do) and joins the grouped list under Completed.
-await goHome(student);
-await student.getByTestId('task-Session 1').waitFor({ timeout: 8000 });
+await goHome(student, 0);
+await student.getByTestId('task-Session 1').waitFor({ timeout: 15000 });
 /*
  * THE GROUP, not the word.
  *
@@ -1593,7 +1609,7 @@ console.log('\nEnrollment-onward (no retroactive assignment)');
 // A genuinely late student: enrolled AFTER Session 1's attendance was submitted,
 // so they are not in its snapshot and get no obligation for it. This is the
 // replacement for the old "catch-up" path — accountability is attendance-driven.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'students-add');
 await admin.getByTestId('student-name').fill('Bilal Khan');
@@ -1628,11 +1644,7 @@ check(
 // the already-published recording — without disturbing Fatima's completion.
 await tap(admin, 'att-Bilal Khan-excused');
 await tap(admin, 'att-submit');
-let afterResubmit = [];
-for (let i = 0; i < 20 && afterResubmit.length < 2; i++) {
-  await admin.waitForTimeout(500);
-  afterResubmit = await activeAssignments();
-}
+const afterResubmit = await until(activeAssignments, (found) => found.length >= 2);
 check(
   're-submitting attendance with the late student EXCUSED grants them (onSessionWritten)',
   afterResubmit.length === 2,
@@ -1649,8 +1661,7 @@ console.log('\nRecording ledger, override');
 await tap(admin, 'recording-ledger');
 await admin.getByTestId('ledger-filter-all').waitFor({ timeout: 10000 });
 await tap(admin, 'ledger-filter-all');
-await admin.waitForTimeout(1000);
-let ledgerText = await bodyText(admin);
+let ledgerText = await until(() => bodyText(admin), (text) => /Fatima Ahmed/.test(text) && /Bilal Khan/.test(text));
 check(
   'the recording ledger lists the accountable roster (Fatima + Bilal, both absent)',
   /Fatima Ahmed/.test(ledgerText) && /Bilal Khan/.test(ledgerText),
@@ -1669,11 +1680,7 @@ await tap(admin, 'override-complete-Bilal Khan');
 // later; so it reported a failure in a feature that worked. Waiting for the
 // thing you expect instead of for a duration is this repo's own rule, and it
 // also makes the happy path faster than the old sleep.
-let overrides = await readCollection('completionOverrides');
-for (let i = 0; i < 30 && overrides.length === 0; i++) {
-  await admin.waitForTimeout(500);
-  overrides = await readCollection('completionOverrides');
-}
+const overrides = await until(() => readCollection('completionOverrides'), (docs) => docs.length > 0);
 /*
  * AND IT NAMES THE STUDENT IT WAS MADE FOR.
  *
@@ -1702,7 +1709,11 @@ check(
 );
 
 await tap(admin, 'ledger-filter-all');
-await admin.waitForTimeout(1000);
+await admin
+  .getByTestId('ledger-row-Bilal Khan')
+  .filter({ hasText: 'Completed (override)' })
+  .waitFor({ timeout: 15000 })
+  .catch(() => {});
 ledgerText = await bodyText(admin);
 check(
   'the overridden student now shows Completed (override) on the ledger',
@@ -1796,7 +1807,7 @@ await overridden.context().close();
 // point: a denial renders as an EMPTY ledger, not an error, so asserting the
 // roster is present is what distinguishes "allowed" from "silently refused" —
 // and `listenerDenials` (asserted at the end of this file) catches the rest.
-await goHome(mgr);
+await goHome(mgr, 0);
 await tap(mgr, 'tab-courses');
 await tap(mgr, 'course-open-Hikam Foundations');
 await tap(mgr, 'nav-sessions');
@@ -1826,8 +1837,10 @@ await openHikam(admin);
 await tap(admin, 'nav-attendance');
 // Defaults to the "By session" view; the two cuts are a toggle, not stacked.
 await admin.getByTestId('attendance-tab-sessions').waitFor({ timeout: 10000 });
-await admin.waitForTimeout(1000);
-const sessionsView = await bodyText(admin);
+const sessionsView = await until(
+  () => bodyText(admin),
+  (text) => /Session 1/.test(text) && /1 of 1 sessions taken/.test(text),
+);
 check(
   'the by-session view shows the session and the taken state',
   /Session 1/.test(sessionsView) && /1 of 1 sessions taken/.test(sessionsView),
@@ -1891,8 +1904,10 @@ check(
 // The override is in the audit trail with its reason.
 await openHikam(admin);
 await tap(admin, 'nav-audit');
-await admin.waitForTimeout(1500);
-const auditText = await bodyText(admin);
+const auditText = await until(
+  () => bodyText(admin),
+  (text) => /Overrode completion/.test(text) && /Attended the class live/.test(text),
+);
 check(
   'the course audit view shows the override with its reason',
   /Overrode completion/.test(auditText) && /Attended the class live/.test(auditText),
@@ -1901,7 +1916,7 @@ await shot(admin, '18-audit');
 
 // The institute-wide view names each entry's course, with its term since a
 // course name recurs from term to term, where it printed the course's id.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-more');
 await tap(admin, 'more-audit');
 await admin.getByTestId('audit-list').waitFor({ timeout: 15000 });
@@ -1999,7 +2014,7 @@ await admin.goBack();
 await tap(admin, 'leave-confirm');
 await admin.getByTestId('coursework-new').filter({ visible: true }).first().waitFor({ timeout: 15000 });
 const heldGone = async () => (await readCollection('attachmentUploads')).length === 0;
-for (let i = 0; i < 20 && !(await heldGone()); i++) await admin.waitForTimeout(500);
+await until(heldGone, (gone) => gone);
 check(
   'Discard leaves, and nothing was created — nor kept of the file it held',
   !(await readCollection('coursework')).some((c) => c.fields.title.stringValue === ABANDONED) && (await heldGone()),
@@ -2141,7 +2156,7 @@ check(
 await patchField('coursework', cwId, 'title', CW);
 
 // The student: it is on To do, and the worksheet is on it.
-await goHome(student);
+await goHome(student, 0);
 const cwCard = student.locator(`[data-testid="next-up-${CW}"], [data-testid="task-${CW}"]`).filter({ visible: true }).first();
 await cwCard.waitFor({ timeout: 20000 });
 check('the posted assignment is on the student’s To do', await cwCard.isVisible());
@@ -2193,14 +2208,11 @@ check('an answer typed just before leaving is kept', answerKept && draftNote.inc
  * run of text the caret was in, and the whole run became the link; and the
  * link button had no way to take a link off.
  */
-const storedNote = async (wanted) => {
-  for (let i = 0; i < 20; i++) {
-    const note = (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue ?? '';
-    if (wanted(note)) return note;
-    await student.waitForTimeout(500);
-  }
-  return (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue ?? '';
-};
+const storedNote = (wanted) =>
+  until(
+    async () => (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue ?? '',
+    wanted,
+  );
 await student.getByTestId('work-note').click();
 await student.keyboard.press('ControlOrMeta+End');
 await student.keyboard.type(' My source is ');
@@ -2253,8 +2265,10 @@ const followed = await noteHas(secondDevice, 'Finished on the first device.');
 await secondDevice.getByTestId('work-note').click();
 await secondDevice.keyboard.press('Control+End');
 await secondDevice.keyboard.type(' Checked on the second.');
-await secondDevice.waitForTimeout(2500);
-const bothNotes = (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue ?? '';
+const bothNotes = await until(
+  async () => (await readCollection('drafts')).find((d) => d.fields.courseworkId?.stringValue === cwId)?.fields.note?.stringValue ?? '',
+  (note) => note.includes('Finished on the first device.') && note.includes('Checked on the second.'),
+);
 check(
   'an answer open on two devices keeps what each one wrote',
   followed && bothNotes.includes('Finished on the first device.') && bothNotes.includes('Checked on the second.'),
@@ -2819,7 +2833,7 @@ check(
 );
 // The cohort's page keeps the running course in view and folds the archived
 // one into a closed section at the bottom.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-courses');
 await tap(admin, 'cohort-open-Autumn 2026');
 await admin.getByTestId('course-open-Arabic I').waitFor({ timeout: 20000 });
@@ -2845,7 +2859,7 @@ check(
 
 // cohort-archive lives INSIDE the cohort now, mirroring a course: the list is a
 // list, and the settings are on the thing they belong to.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-courses');
 await tap(admin, 'cohort-open-Autumn 2026');
 await tap(admin, 'cohort-archive');
@@ -2879,7 +2893,7 @@ check(
 // Hikam Foundations is archived at this point (the cascade block above left it
 // so) and Arabic I is live. A new student is enrolled into something that is
 // running, so the create sheet offers only the live course.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'students-add');
 await admin.getByTestId('student-course-Arabic I').waitFor({ timeout: 20000 });
@@ -2897,7 +2911,7 @@ await admin.waitForTimeout(800);
 // zero-read admin arm of the enrollments rule permits (a manager walks their own
 // courses instead — rules.structure.test.ts owns that boundary).
 console.log('\nStudent page');
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'student-open-bilal@example.com');
 await admin.getByTestId('student-course-open-Hikam Foundations').waitFor({ timeout: 20000 });
@@ -2930,12 +2944,14 @@ bilalOpen.on('load', () => bilalLoads++);
 
 // Disabling moves them into a section that is CLOSED, and closed means
 // unmounted: the row must be unreachable until the section is expanded.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'student-open-bilal@example.com');
 await tap(admin, 'student-actions');
 await tap(admin, 'student-access');
-await admin.waitForTimeout(2500);
+// His page says so, then empties its cache and starts again: what it says and
+// keeps is read once it has.
+await until(() => bilalLoads, (loads) => loads >= 1, 30000);
 const toldDisabled = await bilalOpen
   .getByText('That account has been disabled', { exact: false })
   .first()
@@ -2969,7 +2985,7 @@ check(
   JSON.stringify({ bilalLoads, bilalCache }),
 );
 await bilalOpen.context().close();
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 // The Disabled section appears only once somebody is in it — that is the
 // change landing; a count of zero on a list that has not loaded proves nothing.
@@ -2990,18 +3006,23 @@ await shot(admin, '20b-students-disabled');
 await tap(admin, 'student-open-bilal@example.com');
 await tap(admin, 'student-actions');
 await tap(admin, 'student-access');
-await admin.waitForTimeout(2500);
+await until(
+  async () => (await readCollection('students')).find((d) => d.fields.email?.stringValue === 'bilal@example.com')?.fields.status?.stringValue,
+  (status) => status === 'active',
+);
 
 // The MANAGER's view of the same page is a DIFFERENT query shape, and the one
 // that can fail closed: they may not query a student's enrollments across
 // courses, so the screen walks the courses they manage and asks about one course
 // at a time. A denial here is an empty section, not an error — so assert the
 // course actually appears.
-await goHome(mgr);
+await goHome(mgr, 0);
 await tap(mgr, 'tab-people');
 await tap(mgr, 'student-open-fatima@example.com');
-await mgr.waitForTimeout(3500);
-const mgrStudent = (await bodyText(mgr)).toLowerCase();
+const mgrStudent = await until(
+  async () => (await bodyText(mgr)).toLowerCase(),
+  (text) => text.includes('fatima ahmed') && text.includes('courses you manage') && text.includes('hikam foundations'),
+);
 check('a manager can open a student page', mgrStudent.includes('fatima ahmed'));
 check(
   'it is scoped to the courses they manage, and says so',
@@ -3032,7 +3053,7 @@ await closeSheet(mgr);
 // and a genuine "not enrolled" both leave the row unrendered, so the empty state
 // appeared either way while every non-matching course fired a permission denial
 // into the banner and into Sentry. Assert the absence of the banner too.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'students-add');
 await admin.getByTestId('student-name').fill('Zayd Noor');
@@ -3040,7 +3061,7 @@ await admin.getByTestId('student-email').fill('zayd@example.com');
 await tap(admin, 'student-create');
 await admin.getByTestId('student-open-zayd@example.com').waitFor({ timeout: 20000 });
 
-await goHome(mgr);
+await goHome(mgr, 0);
 await tap(mgr, 'tab-people');
 await tap(mgr, 'student-open-zayd@example.com');
 await mgr.waitForTimeout(3500);
@@ -3068,24 +3089,28 @@ await closeSheet(mgr);
  * account is disabled. Zayd's sign-in and address go; his name stays, under
  * Deleted, with nothing left to do to him but read his record.
  */
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'student-open-zayd@example.com');
 await tap(admin, 'student-actions');
 const deleteWhileActive = await admin.getByTestId('student-delete').count();
 await tap(admin, 'student-access');
 await admin.getByTestId('student-actions').filter({ visible: true }).first().waitFor({ timeout: 10000 });
+// The page runs one action at a time, and the disabling callable is still
+// answering after the account reads as disabled: a delete pressed then is
+// dropped. Nothing on the page shows when it has answered.
 await admin.waitForTimeout(2500);
 await tap(admin, 'student-actions');
 await tap(admin, 'student-delete');
 await tap(admin, 'student-delete-confirm');
-let zaydDoc;
-for (let i = 0; i < 40 && !zaydDoc; i++) {
-  zaydDoc = (await readCollection('students')).find(
-    (d) => d.fields.displayName?.stringValue === 'Zayd Noor' && d.fields.status?.stringValue === 'deleted',
-  );
-  if (!zaydDoc) await admin.waitForTimeout(500);
-}
+const zaydDoc = await until(
+  async () =>
+    (await readCollection('students')).find(
+      (d) => d.fields.displayName?.stringValue === 'Zayd Noor' && d.fields.status?.stringValue === 'deleted',
+    ),
+  (found) => !!found,
+  20000,
+);
 const zaydUid = zaydDoc?.name.split('/').pop();
 const zaydLookup = await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/projects/${EMULATOR_PROJECT_ID}/accounts:lookup`, {
   method: 'POST',
@@ -3109,7 +3134,7 @@ check(
     (await admin.getByTestId('student-delete').count()) === 0,
 );
 await closeSheet(admin);
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'students-deleted');
 check('…and is listed under Deleted', await shows(admin, `student-open-${zaydUid}`));
@@ -3131,6 +3156,10 @@ const stillEnrolled = (await readCollection('enrollments')).filter(
 ).length;
 await tap(admin, 'roster-remove-bilal@example.com');
 await tap(admin, 'roster-remove-confirm-bilal@example.com');
+// Not a poll on the enrolment: the removing callable still has the student's
+// grants to switch off after it writes, and the page runs one action at a
+// time, so the + below, pressed before it answers, would be dropped. Nothing on
+// the page shows when it has answered.
 await admin.waitForTimeout(2500);
 const afterRemove = (await readCollection('enrollments')).filter(
   (e) => e.fields.active?.booleanValue === true,
@@ -3174,14 +3203,15 @@ await openHikam(admin);
 await tap(admin, 'nav-sessions');
 await tap(admin, 'session-open-Session 1');
 const sessionUrl = admin.url();
+const COURSE_PATH = /^\/courses\/[^/]+$/;
+const onCourse = (page) => {
+  const p = new URL(page.url()).pathname;
+  return COURSE_PATH.test(p) ? p : `NOT the course page: ${p}`;
+};
 // Named per screen, not one shared id: react-navigation keeps the screen below
 // mounted, so a bare `up-to-course` matches the one on Sessions as well.
 await tap(admin, 'up-to-course-from-session');
-await admin.waitForTimeout(2500);
-const onCourse = (page) => {
-  const p = new URL(page.url()).pathname;
-  return /^\/courses\/[^/]+$/.test(p) ? p : `NOT the course page: ${p}`;
-};
+await admin.waitForURL((u) => COURSE_PATH.test(u.pathname), { timeout: 15000 }).catch(() => {});
 check(
   'the course name on a session leads to the course',
   onCourse(admin).startsWith('/courses/'),
@@ -3193,9 +3223,8 @@ check(
 // header draws no back arrow. That is the whole reason this link exists rather
 // than leaning on Back.
 await admin.goto(sessionUrl, { waitUntil: 'domcontentloaded' });
-await admin.waitForTimeout(3500);
 await tap(admin, 'up-to-course-from-session');
-await admin.waitForTimeout(2500);
+await admin.waitForURL((u) => COURSE_PATH.test(u.pathname), { timeout: 15000 }).catch(() => {});
 check(
   '…including from a session opened cold by URL, which has no Back',
   onCourse(admin).startsWith('/courses/'),
@@ -3205,7 +3234,7 @@ check(
 await openHikam(admin);
 await tap(admin, 'nav-attendance');
 await tap(admin, 'up-to-course-from-attendance');
-await admin.waitForTimeout(2500);
+await admin.waitForURL((u) => COURSE_PATH.test(u.pathname), { timeout: 15000 }).catch(() => {});
 check('and the same from the attendance report', onCourse(admin).startsWith('/courses/'), onCourse(admin));
 
 console.log('\nRole boundaries');
@@ -3287,7 +3316,8 @@ const dueToday = todayInZone(INSTITUTE_TIMEZONE);
 const sessDoc = (await readCollection('sessions'))[0];
 const sessId = sessDoc.name.split('/').pop();
 await patchField('sessions', sessId, 'dueDate', dueToday);
-await new Promise((r) => setTimeout(r, 5000));
+// onSessionWritten carries the date down to the session's grants.
+await until(activeAssignments, (grants) => grants.length > 0 && grants.every((a) => a.fields.dueDate?.stringValue === dueToday), 30000);
 /** The instant `HH:MM:SS` falls on the due date in the institute's zone. */
 const atInstitute = (hms) => {
   const asUtc = new Date(`${dueToday}T${hms}Z`);
@@ -3309,8 +3339,16 @@ async function lateNight() {
   await page.waitForTimeout(3000);
   return { ctx, page };
 }
-const pastMidnight = (page) =>
-  page.waitForFunction((day) => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) > day, dueToday, { timeout: 60000, polling: 1000 });
+/**
+ * Midnight passes in the page: its clock jumps to a second after, firing the
+ * timers due on the way, as a laptop lid opened after midnight would. The
+ * recording itself plays in real time throughout.
+ */
+const pastMidnight = async (page) => {
+  const left = atInstitute('23:59:59').getTime() + 2000 - (await page.evaluate(() => Date.now()));
+  if (left > 0) await page.clock.fastForward(left);
+  await page.waitForFunction((day) => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) > day, dueToday, { timeout: 60000, polling: 1000 });
+};
 // Playing as midnight passes: plays on, says so, and closes once it stops.
 const playing = await lateNight();
 await pastMidnight(playing.page);
@@ -3353,11 +3391,10 @@ check(
 await paused.ctx.close();
 // And now well past, for the checks that follow.
 await patchField('sessions', sessId, 'dueDate', '2020-01-01');
-await new Promise((r) => setTimeout(r, 5000));
 // A FLOOR AS WELL AS A PREDICATE. `[].every()` is true, so if the reconcile
 // deactivated every grant instead of re-dating it — the regression this names —
 // an empty array would have read as a pass.
-const dated = await activeAssignments();
+const dated = await until(activeAssignments, (grants) => grants.length > 0 && grants.every((a) => a.fields.dueDate?.stringValue === '2020-01-01'), 30000);
 check(
   'the past due date reaches every grant on the session',
   dated.length > 0 && dated.every((a) => a.fields.dueDate?.stringValue === '2020-01-01'),
@@ -3422,9 +3459,12 @@ await shot(student, '24-past-due-player');
 // Unmark it out of band, so the same grant is now incomplete AND past its
 // deadline — the completion control is behind the closed gate, deliberately.
 await patchField('completions', `${stuToken.localId}_${recId}`, 'completed', false, 'booleanValue');
-await goHome(student);
+await goHome(student, 0);
 await student.getByTestId('task-Session 1').waitFor({ timeout: 20000 });
-const missedHome = await bodyText(student);
+const missedHome = await until(
+  () => bodyText(student),
+  (text) => /missed/i.test(text) && /Closed 2020-01-01/.test(text),
+);
 check(
   'a grant past its due date reads as Missed, with the date it closed',
   /missed/i.test(missedHome) && /Closed 2020-01-01/.test(missedHome),
@@ -3649,7 +3689,7 @@ check(
   tabOf(courseBook, 'Definitions').rows.some((r) => r[0] === 'Missed deadline'),
 );
 
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'student-open-fatima@example.com');
 await tap(admin, 'student-actions');
@@ -3687,7 +3727,7 @@ console.log('\nNotifications');
 // refuse self-writes because role and status ARE the security model there, so
 // this is the one place the rules have to let a client through — worth driving
 // end to end rather than trusting the rules test alone.
-await goHome(student);
+await goHome(student, 0);
 await more(student, 'more-notifications');
 await student.getByTestId('notify-lastDay').waitFor({ timeout: 20000 });
 const notifyText = await bodyText(student);
@@ -3703,8 +3743,10 @@ check(
 );
 
 await tap(student, 'notify-lastDay');
-await student.waitForTimeout(1500);
-const prefs = await readCollection('notifications');
+const prefs = await until(
+  () => readCollection('notifications'),
+  (docs) => docs.length === 1 && docs[0].fields.lastDay?.booleanValue === false,
+);
 check(
   'turning one off writes it, and leaves the other alone',
   prefs.length === 1 &&
@@ -3718,7 +3760,7 @@ check(
 );
 await shot(student, '26-notifications');
 
-await goHome(mgr);
+await goHome(mgr, 0);
 await more(mgr, 'more-notifications');
 await mgr.getByTestId('notify-attendanceMissing').waitFor({ timeout: 20000 });
 const mgrNotify = await bodyText(mgr);
@@ -3736,7 +3778,7 @@ check(
  * something already silent — and turning it off would have looked like it had
  * worked. The screen says who the message goes to instead.
  */
-await goHome(admin);
+await goHome(admin, 0);
 await more(admin, 'more-notifications');
 await admin.getByTestId('notify-none').waitFor({ timeout: 20000 });
 const adminNotify = await bodyText(admin);
@@ -3786,7 +3828,7 @@ const filmPlays = (page) =>
     )
     .then(() => true, () => false);
 
-await goHome(student);
+await goHome(student, 0);
 await more(student, 'more-help');
 await student.getByTestId('help-film-student-to-do').waitFor({ timeout: 20000 });
 const studentFilms = await listedFilms(student);
@@ -3813,7 +3855,7 @@ check('a standing film is drawn whole, above the bar', !!filmFits && filmFits.fi
 await shot(student, '26b-help-film');
 
 for (const [who, page] of [['a manager', mgr], ['an admin', admin]]) {
-  await goHome(page);
+  await goHome(page, 0);
   await more(page, 'more-help');
   await page.getByTestId('help-film-student-to-do').waitFor({ timeout: 20000 });
   const films = await listedFilms(page);
@@ -3833,32 +3875,32 @@ check('a student’s film plays for a teacher, on a link signed for them', await
 console.log('\nRecording library');
 // The cohort and course dropdowns, driven as the real web controls they are:
 // `<select>`s, which is what gives them keyboard and type-ahead for free.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-library');
 await admin.getByTestId('library-play-Session 1').waitFor({ timeout: 20000 });
 check('the library lists the recording with nothing chosen', await shows(admin, 'library-play-Session 1'));
 check('…and offers no clear control when nothing is narrowing', (await admin.getByTestId('library-clear').count()) === 0);
 await admin.getByTestId('library-cohort').selectOption({ label: 'Autumn 2026' });
-await admin.waitForTimeout(600);
+await admin.getByTestId('library-clear').filter({ visible: true }).first().waitFor({ timeout: 15000 }).catch(() => {});
 check(
   'choosing the cohort alone keeps every recording in it',
   (await shows(admin, 'library-play-Session 1')) && (await shows(admin, 'library-clear')),
 );
 // Inside a chosen cohort the course list carries no cohort suffix.
 await admin.getByTestId('library-course').selectOption({ label: 'Arabic I' });
-await admin.waitForTimeout(600);
+await sawText(admin, 'No recordings match these filters', 15000).catch(() => {});
 check(
   'choosing a course narrows to that course — the other course\'s recording is gone',
   (await admin.getByTestId('library-play-Session 1').filter({ visible: true }).count()) === 0 &&
     (await showsText(admin, 'No recordings match these filters')),
 );
 await admin.getByTestId('library-course').selectOption({ label: 'Hikam Foundations' });
-await admin.waitForTimeout(600);
+await admin.getByTestId('library-play-Session 1').filter({ visible: true }).first().waitFor({ timeout: 15000 }).catch(() => {});
 check('choosing the recording\'s own course shows it', await shows(admin, 'library-play-Session 1'));
 await admin.getByTestId('library-course').selectOption({ label: 'Arabic I' });
-await admin.waitForTimeout(600);
+await sawText(admin, 'No recordings match these filters', 15000).catch(() => {});
 await tap(admin, 'library-clear');
-await admin.waitForTimeout(600);
+await admin.getByTestId('library-clear').first().waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
 check(
   'Clear filters restores the whole library and removes itself',
   (await shows(admin, 'library-play-Session 1')) &&
@@ -3895,19 +3937,26 @@ console.log('\nStudent history');
 // the course over the course of this run — every kind of row the page reads,
 // in that order. It is read out of the audit log the same run wrote, which is
 // the only place it is recorded.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'student-open-bilal@example.com');
 await admin.getByTestId('student-history').waitFor({ timeout: 20000 });
-await admin.waitForTimeout(2500);
-const history = await bodyText(admin);
-const order = [
+const historyLines = [
   'Account created',
   'Enrolled in Hikam Foundations · Autumn 2026',
   'Account disabled',
   'Account re-enabled',
   'Removed from Hikam Foundations · Autumn 2026',
-].map((line) => history.indexOf(line));
+];
+// The rows arrive from the audit log: read once they are all there, in order.
+const history = await until(
+  () => bodyText(admin),
+  (text) => {
+    const at = historyLines.map((line) => text.indexOf(line));
+    return at.every((i, n) => i >= 0 && (n === 0 || i > at[n - 1])) && (text.match(/by Faisal Shah/g) ?? []).length >= 5;
+  },
+);
+const order = historyLines.map((line) => history.indexOf(line));
 check(
   'the student\'s page tells their story in order: created, enrolled, disabled, re-enabled, removed',
   order.every((i, n) => i >= 0 && (n === 0 || i > order[n - 1])),
@@ -3936,7 +3985,7 @@ check(
 // A manager reads the same page pinned to their own courses: Fatima's creation
 // into Hikam Foundations is in their course, so it shows; a course-less row
 // never can, and the lede says what the list is.
-await goHome(mgr);
+await goHome(mgr, 0);
 await tap(mgr, 'tab-people');
 await tap(mgr, 'student-open-fatima@example.com');
 await mgr.getByTestId('student-history').waitFor({ timeout: 20000 });
@@ -3985,7 +4034,7 @@ console.log('\nDisabled staff');
 // the sign-out their own listeners would otherwise meet cannot count as a
 // refused subscription below.
 await mgr.close();
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'segment-staff');
 await tap(admin, 'staff-actions-manager@oursabeel.com');
@@ -4009,7 +4058,7 @@ check(
 );
 await shot(admin, '29-staff-disabled');
 await tap(admin, 'staff-access-manager@oursabeel.com');
-await admin.waitForTimeout(2500);
+await until(() => admin.getByTestId('staff-disabled').count(), (count) => count === 0);
 check(
   're-enabling from inside the section puts them back in the main list',
   (await admin.getByTestId('staff-disabled').count()) === 0 &&
@@ -4118,11 +4167,7 @@ const answered = [await askFor(NOBODY), await askFor(FIRST_ADMIN_EMAIL), await a
 await shot(asker, '58-password-link');
 check('the sign-in screen gives every address the same answer: unknown, staff, student', answered.every(Boolean), JSON.stringify(answered));
 // Asked last, so once the student's link exists the two before it are settled.
-let fatimaLinks = before.fatima;
-for (let i = 0; i < 60 && fatimaLinks === before.fatima; i += 1) {
-  await asker.waitForTimeout(500);
-  fatimaLinks = await linksFor('fatima@example.com');
-}
+const fatimaLinks = await until(() => linksFor('fatima@example.com'), (count) => count !== before.fatima, 30000, 500);
 check(
   'afterwards a link is made for the student, and none for staff or an unknown address',
   fatimaLinks === before.fatima + 1 && (await linksFor(FIRST_ADMIN_EMAIL)) === before.staff && (await linksFor(NOBODY)) === before.nobody,
@@ -4147,7 +4192,7 @@ check('More → Change password sends the student one link for their own account
 await selfLink.context().close();
 
 // Staff resend from the student's page, and the student's history says so.
-await goHome(admin);
+await goHome(admin, 0);
 await tap(admin, 'tab-people');
 await tap(admin, 'student-open-fatima@example.com');
 const beforeResend = await linksFor('fatima@example.com');
@@ -4219,7 +4264,7 @@ const leftFreely = await onToDo(reporter, 10000).then(() => true, () => false);
 check('with nothing unsent, Back leaves without asking', leftFreely && !(await shows(reporter, 'leave-stay')));
 await reporter.context().close();
 
-await goHome(admin);
+await goHome(admin, 0);
 await more(admin, 'more-report');
 await admin.getByTestId('report-text').filter({ visible: true }).first().waitFor({ timeout: 20000 });
 await admin.getByTestId('report-text').fill('The recording for Session 1 has someone else’s meeting in it.');
@@ -4317,7 +4362,13 @@ await shippedPage.getByTestId('signin-password').fill('StudentPass123!');
 await tap(shippedPage, 'signin-student');
 await onToDo(shippedPage);
 await tap(shippedPage, 'tab-classes');
-await shippedPage.waitForTimeout(2000);
+await shippedPage
+  .waitForFunction(
+    () => [...document.fonts].some((f) => f.family.replace(/"/g, '') === 'sabeel-icons' && f.status === 'loaded'),
+    null,
+    { timeout: 15000 },
+  )
+  .catch(() => {});
 const shippedIcons = await shippedPage.evaluate(async () => {
   await document.fonts.ready;
   return [...document.fonts].filter((f) => f.family.replace(/"/g, '') === 'sabeel-icons').map((f) => f.status);

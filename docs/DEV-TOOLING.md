@@ -379,6 +379,12 @@ in an ellipsis) to go, and fails `<screen> finished loading` if one is still
 there after 15 s. It once photographed and measured the course screen with its
 assignments still being counted.
 
+**Four tours run at once**, each a population at one width in a browser
+context of its own, the staff tours first since each is two thirds of a
+width's time. They can run side by side because no tour writes: they open
+editors and sheets but never save one, and play nothing. A tour that starts
+saving would make the screens depend on which tour finished first.
+
 **It needs nothing running.** The runner starts the emulator suite and its own
 Expo web dev server on port **61311** (the block's `sweep`, not `test:e2e`'s
 61310) and kills both on the way out, and it never touches a world somebody
