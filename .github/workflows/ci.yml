@@ -33,6 +33,40 @@ jobs:
           shellcheck --version
           "$RUNNER_TEMP/actionlint" -color
 
+  # Whether the pull request changes documentation alone (sabeel-ci
+  # docs-only). Then integration and browser skip, and build-test passes over
+  # them; quality runs either way, as its lint and unit tests read documents.
+  changes:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      docs-only: ${{ steps.changes.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
+      - name: Does the pull request change documentation alone
+        id: changes
+        run: sabeel-ci docs-only
+
   quality:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
@@ -91,8 +125,8 @@ jobs:
         run: npm test
 
   integration:
-    if: github.event.pull_request.draft != true
-    needs: quality
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -150,8 +184,8 @@ jobs:
         run: npm run test:emulator
 
   browser:
-    if: github.event.pull_request.draft != true
-    needs: quality
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -228,15 +262,22 @@ jobs:
           key: firebase-emulators-${{ runner.os }}-${{ steps.firebase-cli.outputs.version }}
       - name: Emulator secret placeholders
         run: sabeel-ci emulator-secrets
-      # An apt mirror can stall a download indefinitely (one held this step
-      # for 45 minutes). apt's own timeouts make it fail instead, and the
-      # install runs once more. Stopping it from outside is no use: the
-      # apt-get it starts runs as root, outlives the kill and keeps the lock.
-      - name: Install Chromium
-        timeout-minutes: 15
+      # Playwright's Chromium, kept per Playwright version. The libraries it
+      # needs are on GitHub's Ubuntu image already, so apt is not run: its
+      # mirrors held this step for over 5 minutes in one run in 10.
+      # From its package.json: `npx playwright --version` prints npm's.
+      - name: Which Playwright
+        id: playwright
         run: |
-          echo 'Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null
-          npx playwright install --with-deps chromium || { sleep 15; npx playwright install --with-deps chromium; }
+          version=$(node -p "require('playwright/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Chromium
+        timeout-minutes: 10
+        run: npx --no playwright install chromium || { sleep 15; npx --no playwright install chromium; }
       - name: Browser suite
         env:
           SUITE: ${{ matrix.suite }}
@@ -261,9 +302,13 @@ jobs:
           path: shots/
           retention-days: 7
 
+  # Every job must pass, but for integration and browser on a pull request
+  # the changes job found to be documentation alone, which skip. Anything
+  # else skipped or cancelled fails it, as a skipped required check would
+  # otherwise pass.
   build-test:
     if: always() && github.event.pull_request.draft != true
-    needs: [workflow-validation, quality, integration, browser]
+    needs: [workflow-validation, changes, quality, integration, browser]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -271,4 +316,9 @@ jobs:
         env:
           JOB_RESULTS: ${{ toJSON(needs) }}
         run: |
-          node -e 'const jobs = Object.values(JSON.parse(process.env.JOB_RESULTS)); if (!jobs.length || jobs.some(job => job.result !== "success")) process.exit(1);'
+          node -e '
+            const jobs = JSON.parse(process.env.JOB_RESULTS);
+            const names = ["workflow-validation", "changes", "quality", "integration", "browser"];
+            const docsOnly = jobs.changes?.result === "success" && jobs.changes.outputs?.["docs-only"] === "true";
+            const passed = (name) => jobs[name]?.result === "success" || (docsOnly && ["integration", "browser"].includes(name) && jobs[name]?.result === "skipped");
+            if (Object.keys(jobs).length !== names.length || !names.every(passed)) process.exit(1);'

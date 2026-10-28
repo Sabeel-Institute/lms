@@ -26,8 +26,43 @@ env:
   SENTRY_DISABLE_AUTO_UPLOAD: "true"
 
 jobs:
-  compatibility:
+  # Whether the pull request changes documentation alone (sabeel-ci
+  # docs-only): then nothing below is built, and premerge-builds passes over
+  # it.
+  changes:
     if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      docs-only: ${{ steps.changes.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
+      - name: Does the pull request change documentation alone
+        id: changes
+        run: sabeel-ci docs-only
+
+  compatibility:
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -63,7 +98,8 @@ jobs:
   # request. A platform whose inputs compiled leaves only its JavaScript to
   # check, which the javascript job compiles on every run.
   fingerprint:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -114,7 +150,6 @@ jobs:
           lookup-only: true
 
   javascript:
-    if: github.event.pull_request.draft != true
     needs: compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -146,7 +181,7 @@ jobs:
         run: sabeel-ci ci-premerge bundles
 
   android:
-    if: github.event.pull_request.draft != true && needs.fingerprint.outputs.android-compiled != 'true'
+    if: needs.fingerprint.outputs.android-compiled != 'true'
     needs: [compatibility, fingerprint]
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -194,7 +229,7 @@ jobs:
           key: ${{ needs.fingerprint.outputs.android }}
 
   ios:
-    if: github.event.pull_request.draft != true && needs.fingerprint.outputs.ios-compiled != 'true'
+    if: needs.fingerprint.outputs.ios-compiled != 'true'
     needs: [compatibility, fingerprint]
     runs-on: macos-26
     timeout-minutes: 90
@@ -232,11 +267,12 @@ jobs:
           key: ${{ needs.fingerprint.outputs.ios }}
 
   # Every job must pass, but for a platform the fingerprint job found
-  # compiled already, which is skipped. Anything else skipped or cancelled
-  # fails it, as a skipped required check would otherwise pass.
+  # compiled already, which is skipped, and all of them on a pull request
+  # the changes job found to be documentation alone. Anything else skipped
+  # or cancelled fails it, as a skipped required check would otherwise pass.
   premerge-builds:
     if: always() && github.event.pull_request.draft != true
-    needs: [compatibility, fingerprint, javascript, android, ios]
+    needs: [changes, compatibility, fingerprint, javascript, android, ios]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -246,7 +282,9 @@ jobs:
         run: |
           node -e '
             const jobs = JSON.parse(process.env.JOB_RESULTS);
-            const names = ["compatibility", "fingerprint", "javascript", "android", "ios"];
+            const names = ["changes", "compatibility", "fingerprint", "javascript", "android", "ios"];
+            const docsOnly = jobs.changes?.result === "success" && jobs.changes.outputs?.["docs-only"] === "true";
             const compiled = (name) => jobs.fingerprint?.result === "success" && jobs.fingerprint.outputs?.[name + "-compiled"] === "true";
-            const passed = (name) => jobs[name]?.result === "success" || (["android", "ios"].includes(name) && jobs[name]?.result === "skipped" && compiled(name));
+            const skipped = (name) => jobs[name]?.result === "skipped" && name !== "changes" && (docsOnly || (["android", "ios"].includes(name) && compiled(name)));
+            const passed = (name) => jobs[name]?.result === "success" || skipped(name);
             if (Object.keys(jobs).length !== names.length || !names.every(passed)) process.exit(1);'

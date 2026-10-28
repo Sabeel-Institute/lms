@@ -43,7 +43,11 @@ they release.
   audit, unit tests, Firebase-emulator integration tests
   and the browser suites (the flow walkthrough, the multi-width sweep and
   every web notification tapped, `npm run test:e2e`, `npm run test:screens`
-  and `npm run test:e2e:push`) on main pushes and pull requests. Every sweep, pass or fail, leaves a `screens-report` artifact: a
+  and `npm run test:e2e:push`) on main pushes and pull requests.
+  A pull request that changes documentation alone skips the emulator and
+  browser jobs, Native and the Pre-merge builds (ci-tools' README,
+  "Documentation-only pull requests").
+  Every sweep, pass or fail, leaves a `screens-report` artifact: a
   page of every screen at every width with the failed checks beside them and
   what changed against main's latest sweep, before / after / difference. The
   run page's summary lists the failed checks and changed screens and the

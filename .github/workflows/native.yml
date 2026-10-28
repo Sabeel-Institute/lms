@@ -21,6 +21,40 @@ env:
   SENTRY_DISABLE_AUTO_UPLOAD: "true"
 
 jobs:
+  # Whether the pull request changes documentation alone (sabeel-ci
+  # docs-only): then neither platform runs, and the native check passes over
+  # them.
+  changes:
+    if: github.repository_owner == 'Sabeel-Institute'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      docs-only: ${{ steps.changes.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: ci-tools, at the commit package-lock.json pins
+        run: |
+          sha=$(jq -er '.packages["node_modules/@sabeel-institute/ci-tools"].resolved | capture("#(?<sha>[0-9a-f]{40})$").sha' package-lock.json)
+          git clone --quiet --no-checkout https://github.com/Sabeel-Institute/ci-tools.git "$RUNNER_TEMP/ci-tools"
+          if ! git -C "$RUNNER_TEMP/ci-tools" merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::ci-tools $sha is not on ci-tools' main branch"
+            exit 1
+          fi
+          git -C "$RUNNER_TEMP/ci-tools" checkout --quiet --detach "$sha"
+          npm ci --prefix "$RUNNER_TEMP/ci-tools" --omit=dev --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/ci-tools-bin"
+          ln -s "$RUNNER_TEMP/ci-tools/bin/sabeel-ci.mjs" "$RUNNER_TEMP/ci-tools-bin/sabeel-ci"
+          echo "$RUNNER_TEMP/ci-tools-bin" >> "$GITHUB_PATH"
+      - name: Does the pull request change documentation alone
+        id: changes
+        run: sabeel-ci docs-only
+
   # The Expo fingerprint of each platform's native inputs: the key its debug
   # build is kept under (the native-fingerprint command). A debug build loads
   # its JavaScript from Metro, so a commit that changes no native input runs
@@ -71,7 +105,8 @@ jobs:
           lookup-only: true
 
   android:
-    needs: fingerprint
+    needs: [changes, fingerprint]
+    if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -185,8 +220,8 @@ jobs:
   # On a main push it runs only to keep a build for new native inputs, and
   # runs the flows on it while it is there.
   ios:
-    needs: fingerprint
-    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || needs.fingerprint.outputs.ios-kept != 'true'
+    needs: [changes, fingerprint]
+    if: needs.changes.outputs.docs-only != 'true' && (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || needs.fingerprint.outputs.ios-kept != 'true')
     runs-on: macos-26
     timeout-minutes: 120
     steps:
@@ -277,12 +312,13 @@ jobs:
           path: shots/native/
           retention-days: 14
 
-  # The check main's ruleset requires. A pull request runs both platforms;
-  # a skipped or cancelled one fails it, as a skipped required check would
+  # The check main's ruleset requires. A pull request runs both platforms,
+  # unless the changes job found it to be documentation alone; any other
+  # skipped or cancelled platform fails it, as a skipped required check would
   # otherwise pass.
   native:
     if: always() && github.event_name == 'pull_request'
-    needs: [android, ios]
+    needs: [changes, android, ios]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -290,4 +326,9 @@ jobs:
         env:
           JOB_RESULTS: ${{ toJSON(needs) }}
         run: |
-          node -e 'const jobs = Object.values(JSON.parse(process.env.JOB_RESULTS)); if (jobs.length !== 2 || jobs.some(job => job.result !== "success")) process.exit(1);'
+          node -e '
+            const jobs = JSON.parse(process.env.JOB_RESULTS);
+            const names = ["changes", "android", "ios"];
+            const docsOnly = jobs.changes?.result === "success" && jobs.changes.outputs?.["docs-only"] === "true";
+            const passed = (name) => jobs[name]?.result === "success" || (docsOnly && name !== "changes" && jobs[name]?.result === "skipped");
+            if (Object.keys(jobs).length !== names.length || !names.every(passed)) process.exit(1);'
