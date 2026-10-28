@@ -123,6 +123,18 @@ jobs:
           done
           echo "IOS_PROFILE_NAME=$NAME" >> "$GITHUB_ENV"
           echo "profile: $NAME ($UUID), expires $(plutil -extract ExpirationDate raw "$RUNNER_TEMP/profile.plist")"
+      # React Native's prebuilt iOS binaries, kept on main by Native and
+      # Pre-merge Builds; pod install checks each against Maven's SHA-1. A
+      # job holding the signing secrets reads this cache and never writes it.
+      - name: React Native's version
+        id: react-native
+        working-directory: app
+        run: echo "version=$(node -p "require('react-native/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: React Native's iOS binaries, if kept for this version
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/Library/Caches/ReactNative
+          key: react-native-ios-${{ steps.react-native.outputs.version }}
       # Every gate runs first (the profile is for this app and unexpired, the
       # identity can sign), then the twenty-minute part. It uploads nothing.
       - name: Build
