@@ -3997,7 +3997,7 @@ check(
     mgrHistory.includes('Account created') &&
     mgrHistory.includes('Enrolled in Hikam Foundations · Autumn 2026'),
 );
-check('…without a single refused read', !mgrHistory.includes('live data error'));
+check('…without a single refused read', !mgrHistory.includes('Live data error'));
 
 // The manager's student workbook is the one export whose reads are NOT the
 // admin's: a course list by managerUids, the student's enrolment asked course
