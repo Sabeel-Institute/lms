@@ -728,7 +728,7 @@ check('re-assigning ticks it again', (await tickState('true')) === 'true');
  * offered, marked; ticked, it is listed and counted. It is taken off again, so
  * the rest of the run sees an admin who manages no class.
  */
-const adminTick = 'course-manager-faisal.shah@oursabeel.com';
+const adminTick = `course-manager-${FIRST_ADMIN_EMAIL}`;
 const managerFigures = () =>
   admin.evaluate(() => {
     const rows = [...document.querySelectorAll('[data-testid^="course-manager-"]')].filter((e) => e.checkVisibility());
@@ -3997,7 +3997,7 @@ check(
     mgrHistory.includes('Account created') &&
     mgrHistory.includes('Enrolled in Hikam Foundations · Autumn 2026'),
 );
-check('…without a single refused read', !mgrHistory.includes('live data error'));
+check('…without a single refused read', !mgrHistory.includes('Live data error'));
 
 // The manager's student workbook is the one export whose reads are NOT the
 // admin's: a course list by managerUids, the student's enrolment asked course

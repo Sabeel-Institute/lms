@@ -13,6 +13,7 @@
  * The narration is written for adults, in the app's own words: required,
  * listen by, missed, hand in — never anything childish or punitive.
  */
+import { FIRST_ADMIN_EMAIL } from '@sabeel/shared';
 import { AUDIO_FIXTURE } from '../lib/media-fixtures.mjs';
 
 /** A small PDF to attach: a worksheet, as a teacher or a student would. */
@@ -258,7 +259,7 @@ export const TUTORIALS = [
     steps: [
       { say: 'Courses lists the cohorts: each a term, and the courses taught in it.', do: (t) => t.tap('tab-courses') },
       { say: 'Open a cohort to see its courses. The plus adds one, and the pencil renames the cohort.', do: async (t) => { await t.tap('cohort-open-Autumn 2026'); await t.highlight('courses-add'); } },
-      { say: 'On a course, tick who manages it: a manager sees only the courses they are ticked on, and an admin who teaches the course can be ticked too.', do: async (t) => { await t.tap('course-open-Hikam Foundations'); await t.highlight('course-manager-faisal.shah@oursabeel.com'); } },
+      { say: 'On a course, tick who manages it: a manager sees only the courses they are ticked on, and an admin who teaches the course can be ticked too.', do: async (t) => { await t.tap('course-open-Hikam Foundations'); await t.highlight(`course-manager-${FIRST_ADMIN_EMAIL}`); } },
       { say: 'Its settings decide whether recordings stay open after the course is archived, and archive it when the term ends.', do: (t) => t.highlight('course-archived-access') },
     ],
   },
