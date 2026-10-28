@@ -346,8 +346,20 @@ checks stay green. Authorization lives in the rules tests below. The e2e check
 names say "the manager's class list omits…" rather than "a manager cannot
 see…" for exactly that reason.
 
-Two more things that cost time here:
+Three more things that cost time here:
 
+- **The run's first staff sign-in can stick on "Setting up your account"**,
+  and the walkthrough then fails at its first gate check, "Waiting for
+  approval". The account is right: `onUserCreate` sets the claims, then
+  creates the `staffUsers` record. On a stack that has just started, the
+  blocking functions are cold, so the sign-in takes a couple of seconds, and
+  the trigger's claims can land before the gate's first poll. The app then
+  listens to `staffUsers/{uid}` before the record exists, is told it does
+  not exist, and never hears of its creation, however many times the poll
+  refreshes the token and restarts the stream. When the first poll finds no
+  role, it reads the record only after it exists, and the run passes.
+  Measured on this machine: 5 of 10 first sign-ins on a fresh stack, none of
+  23 on a warm one, never in CI. Run it again.
 - **`page.goBack()` works, and is worth asserting.** The navigator has a
   `linking` config, so every screen has a URL and the stack IS browser history.
   Reloading a deep URL restores that screen rather than Home — `goto(WEB)` still
