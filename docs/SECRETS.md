@@ -133,8 +133,8 @@ attachment or on other storage.
 
 ## The collected copy: `~/.config/secrets-vault/`
 
-Every secret file of Faisal's projects, from this machine and the Mac,
-copied into one folder (mode 700) for him to keep in a password manager.
+Every secret file of the owner's projects on this machine, copied into one
+folder (mode 700) to keep in a password manager.
 `sabeel/` holds `apple/`, `google-play/`, `review/` (the store review
 account's password, held nowhere else; `docs/STORE-RELEASE.md`), and one
 folder per app (`lms/`, `kanban/`, `time-tracker/`, `recording-app/`), each

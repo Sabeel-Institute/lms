@@ -1,10 +1,12 @@
 # iOS — building and checking the iPhone app
 
 The app is one Expo codebase on three surfaces: web, Android and iOS. Linux
-builds web and Android; **iOS builds with Xcode**, on GitHub's macOS runners for
-every release ("Builds on GitHub") and on the Mac for simulator work. This file
-is the iPhone app's runbook, written for whoever builds it, including a Claude
-Code session that has none of the context of the one that set it up.
+builds web and Android; **iOS builds with Xcode**, which needs macOS. The
+project has no Mac of its own: GitHub's macOS runners build every release
+("Builds on GitHub") and run the simulator flows (the Native workflow), and
+the local sections are for a Mac when one is used. This file is the iPhone
+app's runbook, written for whoever builds it, including a Claude Code session
+that has none of the context of the one that set it up.
 
 Bundle id `com.sabeelinstitute.lms`, the same as the Android package
 (`functions/test/unit/projectIdentity.test.ts` holds them equal). Firebase
@@ -104,32 +106,21 @@ All gitignored. Without each, something builds and quietly does not work.
 | `app/.env.local` | `EXPO_PUBLIC_SENTRY_DSN_NATIVE`, which `app/src/sentry.ts` reads on every native platform (iOS reports to the same React Native Sentry project as Android, `sentry.projects.native` in `ci-tools.json`) | the app ships with crash reporting off |
 | `app/.env.sentry-build-plugin` | `SENTRY_AUTH_TOKEN`, `IOS_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, optional `ASC_KEY_PATH` | `build-ios` refuses to build (no token, no team); no upload |
 | `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` | the App Store Connect API key (NOT the APNs key) | `-allowProvisioningUpdates` cannot sign; no upload |
-| `~/.apns/AuthKey_<key id>.p8` | the APNs key, for `npx sabeel-ci send-test-push --apple` (the deployed functions read theirs from Secret Manager) | no real send from the Mac |
+| `~/.apns/AuthKey_<key id>.p8` | the APNs key, for `npx sabeel-ci send-test-push --apple` (the deployed functions read theirs from Secret Manager) | no real send |
 
 `sabeel-ci build-ios` reads `app/.env.sentry-build-plugin` (parsed, not
 sourced; a variable already in the environment wins). Never print or commit any
 of these values.
 
-## The Mac
-
-A rented Mac, reached over ssh: `ssh user300503@tx477.macincloud.com`. A
-Claude Code session there, `mac-lms`, runs inside `screen`
-(`claude --remote-control mac-lms`); `screen -ls` lists it and `screen -r`
-reattaches. It does the simulator checks and anything else that needs a live
-Mac, on a branch it pushes; release builds do not need it.
-
-## The Mac's toolchain
-
-Homebrew's prefix on this Mac belongs to another account, so `brew install`
-fails; user-level tools go under `~/.local` and `~/opt`.
+## What a Mac needs
 
 | Tool | Where | Used by |
 |---|---|---|
 | Xcode, CocoaPods | system | every iOS build |
-| Firebase CLI, idb, idb_companion (a wrapper that execs the real binary), Maestro, uv, shellcheck | `~/.local/bin` | emulators, driving the simulator |
-| JDK 21 | `/opt/homebrew/opt/openjdk@21`, which `npx sabeel-ci jdk21` finds by itself | the Firestore and Auth emulators |
-| SeaweedFS 4.47 `darwin_arm64` | `~/opt/seaweedfs-4.47/weed`, the path `scripts/lib/media-store.mjs` reads | the local media store |
-| ffmpeg (static arm64 build) | `~/.local/bin/ffmpeg` | the seed's video fixture |
+| Firebase CLI, idb, idb_companion, Maestro | on `PATH` | emulators, driving the simulator |
+| JDK 21 | where `npx sabeel-ci jdk21` finds it: `java_home -v 21` or Homebrew's openjdk@21 | the Firestore and Auth emulators |
+| SeaweedFS 4.47 `darwin_arm64` | `~/opt/seaweedfs-4.47/weed`, the path `scripts/lib/media-store.mjs` reads (`docs/DEV-TOOLING.md`) | the local media store |
+| ffmpeg | on `PATH` | the seed's video fixture |
 
 The port guards (`sabeel-ci free-emulator-ports`, `preflight-metro`) use
 `lsof` on macOS, where `ss` and `/proc` do not exist.
@@ -148,7 +139,7 @@ flowchart LR
   SIM -->|JS bundle| METRO
 ```
 
-The simulator shares the Mac's loopback, so `127.0.0.1` reaches the emulators and
+The simulator shares its Mac's loopback, so `127.0.0.1` reaches the emulators and
 the signed media URLs as they are — there is no `adb reverse` step on iOS.
 
 ```bash
@@ -173,11 +164,11 @@ xcrun simctl launch booted com.sabeelinstitute.lms
 - **`EXPO_PUBLIC_*` in a debug build come from the environment that started
   Metro.** If the dev sign-in row is missing, Metro was started without
   the flag: restart it with `--clear`.
-- **On this Mac, Metro does not see an edit while it runs.** It answers a
-  relaunch with "Bundled … (1 module)" and serves the file as it was when Metro
-  started — measured with a probe constant appended to a source file, with and
-  without watchman running. After any JS edit, restart Metro (as above), then
-  relaunch the app:
+- **Metro can miss an edit while it runs** (seen on a Mac reached over ssh,
+  with and without watchman running, measured with a probe constant appended
+  to a source file). It answers a relaunch with "Bundled … (1 module)" and
+  serves the file as it was when Metro started. After any JS edit, restart
+  Metro (as above), then relaunch the app:
   `xcrun simctl terminate booted com.sabeelinstitute.lms && xcrun simctl launch booted com.sabeelinstitute.lms`.
   To prove what is served, fetch the bundle the app loads and grep it:
   `curl -s 'http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&minify=false' | grep -c '<new code>'`.
@@ -188,7 +179,7 @@ xcrun simctl launch booted com.sabeelinstitute.lms
 
 ## Driving the simulator
 
-This Mac is reached over ssh, so every simulator is headless. How to drive one,
+On a Mac reached over ssh every simulator is headless. How to drive one,
 what it can stand in for and what it cannot show are the stack skill's "On a
 headless iOS simulator" (`~/.claude/skills/expo-firebase-stack/SKILL.md`), with
 its tools: `tools/sim-ui.py` reads and taps the screen by `testID` through idb,
@@ -253,7 +244,7 @@ opens the path. A tap from outside the app cannot be driven here (above).
 `npm run build:ios` (`sabeel-ci build-ios`) archives and exports a signed App
 Store `.ipa` to `build/ios/export` with no Xcode UI, and never uploads.
 GitHub runs it for every build ("Builds on GitHub"), and TestFlight takes
-only the iOS workflow's build of the release tag; on the Mac it runs by hand,
+only the iOS workflow's build of the release tag; on a Mac it runs by hand,
 to check a release builds there.
 
 ```bash
@@ -329,16 +320,18 @@ for another bundle id, without the production push entitlement, with
 in its JavaScript.
 
 **The pods are pinned** by `app/Podfile.lock`, which `build-ios` copies into
-the generated `app/ios/` before `pod install`, on the Mac and on GitHub alike.
-Without it every clean checkout resolved the third-party pods afresh, and the
-Mac, which kept an older lock, built other versions than GitHub from the same
-commit (AppCheckCore 11.3.1 and GoogleUtilities 8.1.2 against 11.3.2 and 8.1.5).
-The install runs with `--repo-update`: the Mac's local specs index had gone
-stale (it knew no GoogleUtilities past 8.1.2), which is how it resolved older
-pods, and against the pin a plain `pod install` fails there.
+the generated `app/ios/` before `pod install`, on a Mac and on GitHub alike.
+Without it every clean checkout resolves the third-party pods afresh, and a
+machine with an older lock builds other versions than GitHub from the same
+commit (seen: AppCheckCore 11.3.1 and GoogleUtilities 8.1.2 against 11.3.2
+and 8.1.5). The install runs with `--repo-update`: a stale local specs index
+resolves older pods, and against the pin a plain `pod install` fails on it.
 If `pod install` resolves anything else, the build stops; when a native
 dependency changed on purpose, `cp app/ios/Podfile.lock app/Podfile.lock`,
-commit, and build again. Two builds of the same commit then differ only in
+commit, and build again. Without a Mac, edit the `PODS:` versions in
+`app/Podfile.lock` by hand to the new package versions, after diffing the old
+and new podspecs for changed dependencies; Pre-merge's iOS job (`sabeel-ci
+pods --check`) proves the edit. Two builds of the same commit then differ only in
 their signatures, Xcode's per-build ids, and the commit label, which also
 shifts a few bytes of the compiled JavaScript.
 
@@ -350,11 +343,11 @@ away, until Apple's per-team certificate limit stopped every build.
 
 | Secret | What | From |
 |---|---|---|
-| `IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD` | The Apple Distribution certificate and private key, base64, and its password | `~/.config/sabeel-lms/ios-distribution/` on Faisal's machine |
+| `IOS_DIST_P12`, `IOS_DIST_P12_PASSWORD` | The Apple Distribution certificate and private key, base64, and its password | `~/.config/sabeel-lms/ios-distribution/` on the owner's machine |
 | `IOS_PROFILE` | The App Store profile "Sabeel LMS App Store CI", base64 | the same folder |
 | `ASC_KEY_P8` | The App Store Connect API key (Admin) | `~/.appstoreconnect/private_keys/AuthKey_W37AZSR3Q5.p8` |
-| `BUILD_ENV` | `app/.env.sentry-build-plugin`, its `NAME=value` lines only; the Android release build reads it too | the Mac's copy |
-| `APP_ENV_LOCAL` | `app/.env.local`, its `NAME=value` lines only | |
+| `BUILD_ENV` | `app/.env.sentry-build-plugin`, its `NAME=value` lines only; the Android release build reads it too | the owner's checkout |
+| `APP_ENV_LOCAL` | `app/.env.local`, its `NAME=value` lines only | the owner's checkout |
 
 Set one again with `gh secret set NAME --env release-build -R Sabeel-Institute/lms < file`
 (`base64 -w0 file |` for the binary ones). Keep comment lines out of the

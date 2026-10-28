@@ -27,9 +27,8 @@ notifications go to: empty (nobody) while the live site is bug-hunted, then
 | App Store Connect | Admin or App Manager | TestFlight testers and the app record (`docs/IOS-BUILD.md`) |
 | `~/.config/secrets-vault/` | a copy | the release keystore, the Play publishing key, the Apple files (`docs/SECRETS.md`) |
 
-Builds need no Apple login: `ios.yml` signs and uploads with the secrets in
-GitHub. The Mac is needed only for simulator checks (`docs/IOS-BUILD.md`,
-"The Mac").
+Builds need no Apple login and no Mac: `ios.yml` signs and uploads with the
+secrets in GitHub.
 
 ## The device pass, before any of it
 
@@ -274,14 +273,14 @@ every Sabeel app. In order:
    itself (`docs/IOS-BUILD.md`, "TestFlight testers"). The App Store is not
    yet a release home: the app is in TestFlight only.
 
-   **Check it before and after the upload.** Before: the Mac session runs the
-   simulator loop on the release commit (`docs/IOS-BUILD.md`): a student signs
-   in, plays audio and video through Home and the lock, changes version and
-   speed, and keeps a bookmark and the place across a kill. After: install
+   **Check it before and after the upload.** Before: the Native workflow's
+   iOS flows pass on the release tag (a student signs in, and a recording
+   keeps playing in the background and resumes its place). After: install
    the build from TestFlight on an iPhone and confirm the sign-in label reads
-   `v<version> · <commit>`. The lock-screen controls and a notification tapped
-   with the app closed have no simulator stand-in; they are checked on that
-   phone.
+   `v<version> · <commit>`. Then, as a student, play audio and video through
+   Home and the lock, change version and speed, keep a bookmark and the place
+   across a kill, and use the lock-screen controls and a notification tapped
+   with the app closed.
 
 ## Demo data in the live project
 

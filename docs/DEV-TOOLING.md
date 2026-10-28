@@ -263,7 +263,7 @@ test double: `docs/plans/MEDIA-ON-CLOUDFLARE.md`.
 - **Install:** release 4.47, `linux_amd64.tar.gz` from GitHub, sha256
   `31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d`, unpacked
   to `~/opt/seaweedfs-4.47/weed`. `WEED_BIN` overrides the path; CI installs the
-  same release and checks the digest. On the Mac it is `darwin_arm64.tar.gz`,
+  same release and checks the digest. On a Mac it is `darwin_arm64.tar.gz`,
   sha256 `3ad466db33e83d0b103f90a06997feeb1cc42fd536e6cbdcdded975778f64fda`,
   unpacked to the same path.
 - **`weed server`, not `weed mini`.** Mini also starts an admin server and a
