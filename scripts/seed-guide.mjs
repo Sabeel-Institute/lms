@@ -10,7 +10,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 import { putLocalObject } from './lib/media-store.mjs';
 import { AUDIO_FIXTURE, MEDIA_FIXTURES, ensureAudioFixture, ensureSlideVideo } from './lib/media-fixtures.mjs';
-import { NEW_STAFF_ACCESS, RULES_VERSION, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
+import { FIRST_ADMIN_EMAIL, NEW_STAFF_ACCESS, RULES_VERSION, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
 
 // The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
 const STACK = config(fileURLToPath(new URL('..', import.meta.url)));
@@ -35,11 +35,10 @@ const ACCEPTED={ rulesAcceptedAt:now-89*day, rulesVersion:RULES_VERSION };
 // no provider (the shape `onUserCreate` ignores) and its claims set, the
 // capture's dev sign-in LINKS the Google credential to this account — same
 // email, same uid — and lands on the admin home without `bootstrapAdmin`.
-const ADMIN_EMAIL='faisal.shah@oursabeel.com';
-const adminUser=await auth.createUser({ email:ADMIN_EMAIL, displayName:'Faisal Shah' });
+const adminUser=await auth.createUser({ email:FIRST_ADMIN_EMAIL, displayName:'Faisal Shah' });
 await new Promise(r=>setTimeout(r,300));
 await auth.setCustomUserClaims(adminUser.uid,{ role:'admin', status:'active' });
-await db.collection('staffUsers').doc(adminUser.uid).set({ email:ADMIN_EMAIL, displayName:'Faisal Shah', photoUrl:null, role:'admin', status:'active', createdAt:now-90*day, approvedAt:now-90*day, ...ACCEPTED });
+await db.collection('staffUsers').doc(adminUser.uid).set({ email:FIRST_ADMIN_EMAIL, displayName:'Faisal Shah', photoUrl:null, role:'admin', status:'active', createdAt:now-90*day, approvedAt:now-90*day, ...ACCEPTED });
 const ADMIN=adminUser.uid;
 
 // ---- students ----

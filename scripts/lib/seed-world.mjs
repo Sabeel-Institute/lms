@@ -27,6 +27,7 @@ import { emulatorProject } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { putLocalObject } from './media-store.mjs';
 import { VIDEO_FIXTURE, ensureVideoFixture } from './media-fixtures.mjs';
 import {
+  FIRST_ADMIN_EMAIL,
   HELP_VARIANTS,
   INSTITUTE_TIMEZONE,
   RULES_VERSION,
@@ -272,7 +273,7 @@ export async function seedWorld({ db, auth }) {
     return uid;
   }
 
-  const adminUid = await provisionStaff('faisal.shah@oursabeel.com', 'admin');
+  const adminUid = await provisionStaff(FIRST_ADMIN_EMAIL, 'admin');
   const managerUid = await provisionStaff('manager@oursabeel.com', 'manager');
 
   /*
