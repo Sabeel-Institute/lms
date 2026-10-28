@@ -271,7 +271,7 @@ jobs:
         with:
           path: ~/native-build
           key: ${{ needs.fingerprint.outputs.ios }}
-      # pod install takes React Native's prebuilt iOS binaries (160 MB from
+      # pod install takes React Native's prebuilt iOS binaries (200 MB from
       # Maven Central, which can stall for hours) from this folder when they
       # are there, after checking each against Maven's SHA-1. Kept per React
       # Native version, and only after a build that fetched them succeeded.
