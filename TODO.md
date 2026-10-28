@@ -15,7 +15,7 @@ cannot be minted against the emulator at all.
 
 - [ ] **Back up `~/.config/secrets-vault/`** into your password manager
       or other secure storage: every secret file of your projects, Sabeel
-      and personal, from this machine and the Mac. Its README marks the irreplaceable ones (the
+      and personal, from this machine. Its README marks the irreplaceable ones (the
       LMS and time-tracker release keys, both Apple keys). Run
       `bash ~/.config/secrets-vault/vault.sh verify` first; store it again
       whenever a secret changes.

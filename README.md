@@ -39,7 +39,7 @@ and Google Play internal testing. Not started: admin backend stats. See
 | [Brand](docs/BRAND.md) | Option 1 palette, accessibility cuts, single light theme |
 | [Dev tooling](docs/DEV-TOOLING.md) | What each script guards against; expected output |
 | [Deploy](docs/DEPLOY.md) | Deploy order, the release recipe, first-deploy traps |
-| [iOS build](docs/IOS-BUILD.md) | The iPhone app: GitHub builds, TestFlight, the Mac |
+| [iOS build](docs/IOS-BUILD.md) | The iPhone app: GitHub builds, TestFlight, the simulator on a Mac |
 | [Store release](docs/STORE-RELEASE.md) | This app's App Store and Play answers, the review account, what is left before submitting |
 | [Plans](docs/plans/) | Switchover, media on Cloudflare, video and parts |
 | [Secrets](docs/SECRETS.md) | What is and is not a secret; key names only |
