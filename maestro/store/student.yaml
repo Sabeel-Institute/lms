@@ -1,0 +1,185 @@
+# The student's four store screenshots: To do, a recording playing audio only
+# at 1.25x, an assignment with a draft answer and the teacher's attachment, and
+# an assignment returned with its grade and feedback. Seeded by
+# scripts/seed-guide.mjs; run, on Android or the iPhone simulator, by
+#
+#   npx sabeel-ci native-e2e --seed scripts/seed-guide.mjs --clean-status-bar maestro/store
+#
+# Every step that moves the app on checks that it did (ci-tools/tap-until.yaml,
+# back-until.yaml), and each screenshot is taken after its screen's key text has
+# shown and a moment has passed. A card's texts are one accessibility label on
+# iOS, and Maestro matches the whole label, so texts inside a card or a row are
+# matched as part of one. The shared steps are copied into maestro/ci-tools by
+# the harness, one directory up from here.
+appId: ${APP_ID}
+name: Store screenshots, the student
+---
+# Fatima Ahmed signs in with her password, from a fresh start each try.
+- retry:
+    maxRetries: 2
+    commands:
+      - launchApp:
+          clearState: true
+      - extendedWaitUntil:
+          visible: "Dev sign-in \\(emulator only\\)"
+          timeout: 180000
+      - tapOn:
+          id: "signin-email"
+      - inputText: "fatima.ahmed@example.com"
+      - assertVisible:
+          id: "signin-email"
+          text: "fatima\\.ahmed@example\\.com"
+      - tapOn:
+          id: "signin-password"
+      - inputText: "HikamStudent1"
+      - runFlow:
+          when:
+            platform: iOS
+          commands:
+            - assertVisible:
+                id: "signin-password"
+                text: "•{13}"
+      - pressKey: Enter
+      - extendedWaitUntil:
+          visible: "Play Session 3 — Patience in Hardship[\\s\\S]*"
+          timeout: 120000
+
+# 1. To do. The notification card, if it draws, is waved away first.
+- extendedWaitUntil:
+    visible: "Not now"
+    timeout: 8000
+    optional: true
+# A busy CI simulator drops a tap that lands before the screen takes input,
+# so the card is tapped again while it is still there.
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            visible: "Not now"
+          commands:
+            - tapOn: "Not now"
+      - extendedWaitUntil:
+          notVisible: "Not now"
+          timeout: 10000
+- extendedWaitUntil:
+    visible: "Open Reflection on the first hikma[\\s\\S]*"
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 3
+- takeScreenshot: 1-todo
+
+# 2. The recording, audio only, at 1.25x, playing.
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Play Session 3 — Patience in Hardship[\\s\\S]*"
+      EXPECT: "Audio only"
+      SECONDS: 30
+# The choices wait for the file; the picture's Full screen button is gone once
+# the audio is the file being played.
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            visible: "Full screen"
+          commands:
+            - tapOn: "Audio only"
+      - extendedWaitUntil:
+          notVisible: "Full screen"
+          timeout: 15000
+# The title slides when it is longer than its line; a tap shows it whole.
+- tapOn:
+    id: "player-title"
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Play"
+      EXPECT: "Pause"
+      SECONDS: 60
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Playback speed: 1×"
+      EXPECT: "1\\.25×"
+      SECONDS: 15
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "1\\.25×"
+      EXPECT: "Playback speed: 1\\.25×"
+      SECONDS: 15
+- extendedWaitUntil:
+    visible:
+      id: "player-elapsed"
+      text: "0:0[5-9]|0:[1-5][0-9]|[1-9][0-9]*:[0-5][0-9]"
+    timeout: 60000
+- extendedWaitUntil:
+    visible: "Pause"
+    timeout: 15000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 2
+- takeScreenshot: 2-player
+# Back to the list, and the docked player closed, so no later screen shows it.
+- runFlow:
+    file: ../ci-tools/back-until.yaml
+    env:
+      FROM: "Audio only"
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            visible: "Stop playing"
+          commands:
+            - tapOn: "Stop playing"
+      - extendedWaitUntil:
+          notVisible: "Stop playing"
+          timeout: 15000
+
+# 3. The assignment with her draft answer and the teacher's file, scrolled to
+# where both are on screen.
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Open Memorize the first hikma[\\s\\S]*"
+      EXPECT: "[\\s\\S]*First hikma, vowelled\\.pdf[\\s\\S]*"
+      SECONDS: 30
+- scrollUntilVisible:
+    element:
+      id: "work-hand-in"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Saved\\. Only you can see this until you hand it in\\.[\\s\\S]*"
+    timeout: 30000
+- assertVisible: "[\\s\\S]*First hikma, vowelled\\.pdf[\\s\\S]*"
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 3
+- takeScreenshot: 3-assignment
+- runFlow:
+    file: ../ci-tools/back-until.yaml
+    env:
+      FROM: "Saved\\. Only you can see this until you hand it in\\.[\\s\\S]*"
+
+# 4. The returned assignment: grade and feedback.
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Open Reflection on the first hikma[\\s\\S]*"
+      EXPECT: "A thoughtful reflection[\\s\\S]*"
+      SECONDS: 30
+- extendedWaitUntil:
+    visible: "9/10"
+    timeout: 15000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 3
+- takeScreenshot: 4-returned

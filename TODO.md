@@ -17,17 +17,6 @@ The forms no API reaches, for the LMS's first App Store and Play submission.
 Every answer is in `docs/STORE-RELEASE.md`; the table each step names holds
 it. The agent does everything else ("The way to submission" there).
 
-**First, so the agent can start on Play:**
-
-- [ ] Play Console → **Users and permissions** → the service account
-      `sabeel-play-publisher@sabeel-institute-kanban.iam.gserviceaccount.com`
-      → **App permissions** → Sabeel Institute LMS → tick **Release to
-      production, exclude devices, and use Play App Signing** and **Manage
-      store presence** → Apply → Save changes.
-- [ ] Tell the agent the review contact phone (in `+1…` form) and roughly
-      how many students and staff will use the app (the unlisted request
-      asks).
-
 **Play Console, Sabeel Institute LMS** (answers: "App content (console)"
 and "Store settings and listing"):
 

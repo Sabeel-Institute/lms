@@ -1,0 +1,138 @@
+# The staff's two store screenshots: a session's register in Hikam Foundations
+# with its students marked, and a student's hand-in being graded. Seeded by
+# scripts/seed-guide.mjs; run, on Android or the iPhone simulator, by
+#
+#   npx sabeel-ci native-e2e --seed scripts/seed-guide.mjs --clean-status-bar maestro/store
+#
+# Every step that moves the app on checks that it did (ci-tools/tap-until.yaml,
+# back-until.yaml), and each screenshot is taken after its screen's key text has
+# shown and a moment has passed. A card's texts are one accessibility label on
+# iOS, and Maestro matches the whole label, so texts inside a card or a row are
+# matched as part of one. The shared steps are copied into maestro/ci-tools by
+# the harness, one directory up from here.
+appId: ${APP_ID}
+name: Store screenshots, the staff
+---
+# The admin, by the sign-in screen's dev row.
+- retry:
+    maxRetries: 2
+    commands:
+      - launchApp:
+          clearState: true
+      - extendedWaitUntil:
+          visible: "Dev sign-in \\(emulator only\\)"
+          timeout: 180000
+# The dev row is under the fold of a phone's sign-in screen.
+- scrollUntilVisible:
+    element: "as faisal.shah \\(first admin\\)"
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "as faisal.shah \\(first admin\\)"
+      EXPECT: "ATTENDANCE NOT TAKEN[\\s\\S]*"
+      SECONDS: 60
+- extendedWaitUntil:
+    visible: "Not now"
+    timeout: 8000
+    optional: true
+# A busy CI simulator drops a tap that lands before the screen takes input,
+# so the card is tapped again while it is still there.
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            visible: "Not now"
+          commands:
+            - tapOn: "Not now"
+      - extendedWaitUntil:
+          notVisible: "Not now"
+          timeout: 10000
+
+# 5. The register of a session taken: Courses, the cohort, the course, Sessions.
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Courses"
+      EXPECT: "Open Autumn 2026"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Open Autumn 2026"
+      EXPECT: "Open Hikam Foundations"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Open Hikam Foundations"
+      EXPECT: "Sessions[\\s\\S]*"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Sessions[\\s\\S]*"
+      EXPECT: "Open Session 3 — Patience in Hardship[\\s\\S]*"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Open Session 3 — Patience in Hardship[\\s\\S]*"
+      EXPECT: "Submitted\\. Only excused students get the recording\\.[\\s\\S]*"
+      SECONDS: 30
+# On Android's shorter screen, scrolled slowly (a fling would carry it a
+# different way each time) until the class notes are off the top and the
+# register's heading is under the header. An iPhone shows the notes and the
+# register together unscrolled.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - retry:
+          maxRetries: 2
+          commands:
+            - swipe:
+                start: 50%, 72%
+                end: 50%, 40%
+                duration: 2000
+            - extendedWaitUntil:
+                notVisible: "Focus on the section about gratitude[\\s\\S]*"
+                timeout: 5000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 3
+- takeScreenshot: 5-register
+
+# 6. Grading: Today's To grade row (named for its section first, "To grade:
+# Memorize the first hikma, …"), the assignment, Bilal Khan's hand-in.
+# By the tab's id: with a badge, its name is "Today, 1 blocking access".
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "tab-today"
+      - extendedWaitUntil:
+          visible: "ATTENDANCE NOT TAKEN[\\s\\S]*"
+          timeout: 30000
+- scrollUntilVisible:
+    element: "To grade: Memorize the first hikma[\\s\\S]*"
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "To grade: Memorize the first hikma[\\s\\S]*"
+      EXPECT: "Open Bilal Khan.s work[\\s\\S]*"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Open Bilal Khan.s work[\\s\\S]*"
+      EXPECT: "Page 1\\.png[\\s\\S]*"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 3
+- takeScreenshot: 6-grading
