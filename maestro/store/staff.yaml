@@ -105,7 +105,8 @@ name: Store screenshots, the staff
       SECONDS: 3
 - takeScreenshot: 5-register
 
-# 6. Grading: Today's To grade row, the assignment, Bilal Khan's hand-in.
+# 6. Grading: Today's To grade row (named for its section first, "To grade:
+# Memorize the first hikma, …"), the assignment, Bilal Khan's hand-in.
 # By the tab's id: with a badge, its name is "Today, 1 blocking access".
 - retry:
     maxRetries: 2
@@ -116,12 +117,12 @@ name: Store screenshots, the staff
           visible: "ATTENDANCE NOT TAKEN[\\s\\S]*"
           timeout: 30000
 - scrollUntilVisible:
-    element: "[\\s\\S]*Memorize the first hikma[\\s\\S]*"
+    element: "To grade: Memorize the first hikma[\\s\\S]*"
     timeout: 30000
 - runFlow:
     file: ../ci-tools/tap-until.yaml
     env:
-      TARGET: "[\\s\\S]*Memorize the first hikma[\\s\\S]*"
+      TARGET: "To grade: Memorize the first hikma[\\s\\S]*"
       EXPECT: "Open Bilal Khan.s work[\\s\\S]*"
       SECONDS: 30
 - runFlow:

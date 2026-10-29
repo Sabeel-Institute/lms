@@ -148,7 +148,7 @@ name: Store screenshots, the student
     file: ../ci-tools/tap-until.yaml
     env:
       TARGET: "Open Memorize the first hikma[\\s\\S]*"
-      EXPECT: "First hikma, vowelled\\.pdf[\\s\\S]*"
+      EXPECT: "[\\s\\S]*First hikma, vowelled\\.pdf[\\s\\S]*"
       SECONDS: 30
 - scrollUntilVisible:
     element:
@@ -157,7 +157,7 @@ name: Store screenshots, the student
 - extendedWaitUntil:
     visible: "Saved\\. Only you can see this until you hand it in\\.[\\s\\S]*"
     timeout: 30000
-- assertVisible: "First hikma, vowelled\\.pdf[\\s\\S]*"
+- assertVisible: "[\\s\\S]*First hikma, vowelled\\.pdf[\\s\\S]*"
 - runFlow:
     file: ../ci-tools/wait.yaml
     env:
