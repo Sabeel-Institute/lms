@@ -132,6 +132,16 @@ export const PRIVACY_URL = `${WEB_APP_URL}privacy`;
 export const DOWNLOAD_PAGE_URL = 'https://play.google.com/apps/internaltest/4701751467577150757';
 
 /**
+ * The app's page in each store, where a retired build sends its owner to
+ * update (`UpdateScreen`). Play's listing page serves internal testers and,
+ * from the production release, everyone; the App Store page exists once App
+ * Review approves the app, and unlisted distribution keeps the same address.
+ * The ids are the store records' (`docs/STORE-RELEASE.md`).
+ */
+export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.sabeelinstitute.lms';
+export const APP_STORE_URL = 'https://apps.apple.com/app/id6823374038';
+
+/**
  * The oldest Android build still allowed to run, read from `config/app` at
  * launch and compared with the build's own `versionCode`.
  *

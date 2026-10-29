@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Linking, StyleSheet, Text } from 'react-native';
-import { APP_NAME, DOWNLOAD_PAGE_URL } from '@sabeel/shared';
+import { Linking, Platform, StyleSheet, Text } from 'react-native';
+import { APP_NAME, APP_STORE_URL, PLAY_STORE_URL } from '@sabeel/shared';
 import { Button, Card, Notice, Screen } from '../components/ui';
 import { BUILD_LABEL } from '../buildInfo';
 import { acceptRules } from '../conduct';
@@ -129,6 +129,12 @@ export function RulesScreen() {
   );
 }
 
+/** Each phone updates from its own store; the web has no floor, so never shows the update screen. */
+const UPDATE_STORE =
+  Platform.OS === 'ios'
+    ? { label: 'Open the App Store', url: APP_STORE_URL }
+    : { label: 'Open Google Play', url: PLAY_STORE_URL };
+
 /**
  * A build the institute has retired.
  *
@@ -146,8 +152,8 @@ export function UpdateScreen({ signedIn }: { signedIn: boolean }) {
         </Notice>
         <Button
           testID="update-open-download"
-          label="Open Google Play"
-          onPress={() => void Linking.openURL(DOWNLOAD_PAGE_URL)}
+          label={UPDATE_STORE.label}
+          onPress={() => void Linking.openURL(UPDATE_STORE.url)}
         />
         {signedIn ? (
           <Button label="Sign out" variant="secondary" onPress={() => void signOut()} />

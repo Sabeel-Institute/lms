@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { APP_NAME, FIRST_ADMIN_LOCAL_PART } from '@sabeel/shared';
+import { APP_NAME, FIRST_ADMIN_LOCAL_PART, PRIVACY_URL } from '@sabeel/shared';
 import { auth } from '../firebase';
 import { redirectFailure, signInWithGoogle } from '../auth/google';
 import { DISABLED_ACCOUNT, REFUSED_ACCOUNT, signInMessage } from '../auth/signInMessage';
@@ -153,6 +153,19 @@ export function SignInScreen({ ended }: { ended: SessionEnd | null }) {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {info ? <Notice tone="info">{info}</Notice> : null}
 
+      {/* Reachable before sign-in, by a reviewer with no account (Apple
+          5.1.1(i)). The privacy policy and never the support page, which
+          tells newcomers to sign in on the website first: the account-creation
+          pointer docs/STORE-RELEASE.md, decision 1, forbids. */}
+      <Pressable
+        testID="signin-privacy"
+        accessibilityRole="link"
+        onPress={() => void Linking.openURL(PRIVACY_URL).catch(() => undefined)}
+        style={styles.privacy}
+      >
+        <Text style={styles.linkText}>Privacy policy</Text>
+      </Pressable>
+
       {devSignInAvailable ? <DevRow busy={busy !== null} run={(fn) => void run('dev', fn)} /> : null}
 
       {/* Every Sabeel app shows its version + build commit here, so a screenshot
@@ -219,6 +232,7 @@ const styles = StyleSheet.create({
   // This app's link treatment (ledeLink in ui.tsx): accent and underline.
   linkText: { fontSize: 15, color: t.text.accent, textDecorationLine: 'underline' },
   linkMuted: { color: t.text.secondary, textDecorationLine: 'none' },
+  privacy: { alignSelf: 'center', minHeight: 44, paddingHorizontal: 4, justifyContent: 'center', marginTop: spacing(6) },
   devRow: {
     marginTop: spacing(8),
     padding: spacing(3),

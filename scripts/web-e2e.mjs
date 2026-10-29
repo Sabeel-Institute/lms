@@ -43,6 +43,7 @@ import {
   HELP_VIDEOS,
   INSTITUTE_TIMEZONE,
   PASSWORD_LINK_ANSWER,
+  PRIVACY_URL,
   RULES_VERSION,
   SIGN_UP_REFUSED,
   helpVideoKey,
@@ -411,6 +412,17 @@ console.log('\nIdentity');
 const admin = await newSession('admin');
 await shot(admin, '01-signin');
 check('sign-in screen renders', (await bodyText(admin)).includes('Sign in with Google'));
+
+// The privacy policy is one tap from the sign-in screen, where a reviewer with
+// no account reaches it (Apple 5.1.1(i)). The live page is not this stack's to
+// serve, so its tab is answered here and only the address it opened judged.
+await admin.context().route(PRIVACY_URL, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: 'privacy' }));
+const privacyTab = admin.waitForEvent('popup', { timeout: 20000 }).catch(() => null);
+await tap(admin, 'signin-privacy');
+const privacyOpened = await privacyTab;
+check('the sign-in screen opens the privacy policy in a tab of its own', privacyOpened?.url() === PRIVACY_URL, privacyOpened?.url());
+await privacyOpened?.close();
+await admin.context().unroute(PRIVACY_URL);
 
 await tap(admin, 'dev-signin-first-admin');
 // A minute, not the usual twenty seconds: the run's first sign-in meets both

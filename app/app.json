@@ -94,7 +94,7 @@
           },
           {
             "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeCrashData",
-            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeLinked": false,
             "NSPrivacyCollectedDataTypeTracking": false,
             "NSPrivacyCollectedDataTypePurposes": [
               "NSPrivacyCollectedDataTypePurposeAppFunctionality"
@@ -135,7 +135,9 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Sabeel Institute LMS uses the camera so you can photograph your work and hand it in with an assignment."
+          "cameraPermission": "Sabeel Institute LMS uses the camera so you can photograph your work and hand it in with an assignment.",
+          "photosPermission": false,
+          "microphonePermission": false
         }
       ],
       "@react-native-community/datetimepicker",
