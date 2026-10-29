@@ -1,5 +1,8 @@
 <resources>
-  <color name="splashscreen_background">#FFFFFF</color>
+  <!-- Warm Ivory (docs/BRAND.md), the window's background behind the app
+       and at launch: below Android 12 the whole launch screen, and from 12
+       on the ground the system draws the launcher icon on. -->
+  <color name="splashscreen_background">#F6EBDD</color>
   <color name="colorPrimary">#023c69</color>
   <color name="iconBackground">#F6EBDD</color>
   <!-- Dark Raspberry, the brand identity colour (docs/BRAND.md). Native
