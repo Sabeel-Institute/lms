@@ -11,6 +11,69 @@ cannot be minted against the emulator at all.
 
 ---
 
+## The store consoles (open)
+
+The forms no API reaches, for the LMS's first App Store and Play submission.
+Every answer is in `docs/STORE-RELEASE.md`; the table each step names holds
+it. The agent does everything else ("The way to submission" there).
+
+**First, so the agent can start on Play:**
+
+- [ ] Play Console → **Users and permissions** → the service account
+      `sabeel-play-publisher@sabeel-institute-kanban.iam.gserviceaccount.com`
+      → **App permissions** → Sabeel Institute LMS → tick **Release to
+      production, exclude devices, and use Play App Signing** and **Manage
+      store presence** → Apply → Save changes.
+- [ ] Tell the agent the review contact phone (in `+1…` form) and roughly
+      how many students and staff will use the app (the unlisted request
+      asks).
+
+**Play Console, Sabeel Institute LMS** (answers: "App content (console)"
+and "Store settings and listing"):
+
+- [ ] Policy → **App content** → Privacy policy: the URL → Save.
+- [ ] App content → **App access** → "All or some functionality is
+      restricted" → Add new instructions: name "Student account", the
+      username, the password from
+      `~/.config/secrets-vault/sabeel/review/lms-app-review.txt` (the
+      `password=` line), the instructions text → Save.
+- [ ] App content → **Ads** → No → Save.
+- [ ] App content → **Content rating** → Start questionnaire: the email,
+      the category, the answers → Save → Submit.
+- [ ] App content → **Target audience and content** → 18 and over only →
+      tick **Restrict minor access** → the listing does not appeal to
+      children → Save.
+- [ ] App content → **News apps** → No; **Government apps** → No;
+      **Financial features** → none; **Health apps** → none;
+      **Advertising ID** → No.
+- [ ] App content → **Data safety**: the Data safety table, then the
+      answers above it (encrypted in transit Yes, deletion on request Yes,
+      the app does not let users create an account) → Save → Submit.
+- [ ] Grow users → Store presence → **Store settings**: category Education;
+      tags; **External marketing** off → Save.
+- [ ] Settings → **Catalog settings** → opt out of distribution to
+      third-party US stores.
+- [ ] **Later**, when the agent says the video is up: App content →
+      **Foreground service permissions** → Media playback, the description,
+      the impact and the video link.
+- [ ] **Later**, at the production release: Test and release → Production →
+      **Countries/regions** → United States only.
+
+**App Store Connect** (answers: "App Privacy (web)", "Pricing and
+Availability"):
+
+- [ ] Apps → Sabeel Institute LMS → **App Privacy** → Get Started → yes,
+      data is collected → tick each type in the table → for each: purpose
+      App Functionality, linked to the user Yes (Crash Data and Other
+      Diagnostic Data: No), tracking No → Publish.
+- [ ] **Business** → Agreements, Compliance → **Digital Services Act** →
+      "This is not a trader account" (the app is not offered in the EU).
+- [ ] The app → **Pricing and Availability** → untick the iPhone app on
+      Mac (Apple silicon) and on Apple Vision Pro → Save.
+- [ ] **Later**, after the agent submits the version: the unlisted request
+      at `https://developer.apple.com/contact/request/unlisted-app/`
+      ("The unlisted request" in `docs/STORE-RELEASE.md`).
+
 ## The iPhone app (open)
 
 - [ ] **Back up `~/.config/secrets-vault/`** into your password manager

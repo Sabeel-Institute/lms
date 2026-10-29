@@ -119,7 +119,8 @@ one; the screen answers the same way whatever address you type, and the email
 comes only to a student's address.
 
 The **Staff** line at the bottom is only for teachers and administrators — you
-don't need it.
+don't need it. **Privacy policy**, under it, opens the institute's privacy
+policy, before or after you sign in.
 
 ## 1.2 To do — everything you owe
 

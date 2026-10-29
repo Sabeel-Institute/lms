@@ -588,10 +588,12 @@ machine's gitignored `app/.env.sentry-build-plugin` (`BUILD_ENV` in CI;
 ## Retiring old builds
 
 Every Android and iPhone build reads `config/app.minVersionCode` before sign-in
-and shows an update screen — with the Play internal testing track — when its own
-versionCode (its version's code; the iPhone build carries the same number) is
-below it. On a Play or TestFlight install that screen opens Google Play; what a
-store build should do is decided in `docs/STORE-RELEASE.md`. After a release
+and shows an update screen when its own versionCode (its version's code; the
+iPhone build carries the same number) is below it. The screen opens the app's
+page in its own store: Google Play's listing on Android (`PLAY_STORE_URL`),
+the App Store's on an iPhone (`APP_STORE_URL`). Until App Review approves the
+app that App Store page does not exist, and a TestFlight install updates from
+TestFlight. After a release
 that older builds can no longer run against (a rules change refusing a
 listener they still open is the case that made this exist), raise the floor by
 hand:
