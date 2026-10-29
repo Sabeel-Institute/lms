@@ -9,6 +9,26 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    # By hand, it can also take store screenshots: a flow directory of their
+    # own, a seed with a richer world, the iPhone model, and a clean status
+    # bar (native-e2e --seed, --clean-status-bar).
+    inputs:
+      flows:
+        description: Maestro flow or directory
+        type: string
+        default: maestro
+      seed:
+        description: Seed script in place of scripts/seed-emulators.mjs
+        type: string
+        default: ""
+      ios-simulator:
+        description: iPhone model to run on, such as iPhone 17 Pro Max (default the newest)
+        type: string
+        default: ""
+      clean-status-bar:
+        description: Status bar at 9:41 with full signal and battery
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -207,8 +227,18 @@ jobs:
         run: sabeel-ci ci-avd
       - name: Install Maestro
         run: sabeel-ci install-maestro
+      # A seed given by hand may draw what it shows in a browser, as LMS's
+      # guide world does.
+      - name: Install Chromium for a seed given by hand
+        if: inputs.seed != ''
+        timeout-minutes: 10
+        run: npx --no playwright install chromium || { sleep 15; npx --no playwright install chromium; }
       - name: Native flows
-        run: sabeel-ci native-e2e --build ~/native-build
+        env:
+          FLOWS: ${{ inputs.flows || 'maestro' }}
+          SEED: ${{ inputs.seed }}
+          CLEAN_STATUS_BAR: ${{ inputs.clean-status-bar && 'true' || '' }}
+        run: sabeel-ci native-e2e --build ~/native-build ${SEED:+--seed "$SEED"} ${CLEAN_STATUS_BAR:+--clean-status-bar} "$FLOWS"
       - name: Screens, Maestro's report and logs
         if: always()
         uses: actions/upload-artifact@v7
@@ -224,6 +254,8 @@ jobs:
     if: needs.changes.outputs.docs-only != 'true' && (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || needs.fingerprint.outputs.ios-kept != 'true')
     runs-on: macos-26
     timeout-minutes: 120
+    env:
+      IOS_SIMULATOR: ${{ inputs.ios-simulator }}
     steps:
       # Spotlight indexes every file the install and the build write, on a
       # runner whose few cores the simulator already saturates (load averages
@@ -324,8 +356,18 @@ jobs:
           echo "WEED_BIN=$RUNNER_TEMP/seaweedfs/weed" >> "$GITHUB_ENV"
       - name: Install Maestro
         run: sabeel-ci install-maestro
+      # A seed given by hand may draw what it shows in a browser, as LMS's
+      # guide world does.
+      - name: Install Chromium for a seed given by hand
+        if: inputs.seed != ''
+        timeout-minutes: 10
+        run: npx --no playwright install chromium || { sleep 15; npx --no playwright install chromium; }
       - name: Native flows on the iOS simulator
-        run: sabeel-ci native-e2e --ios --build ~/native-build
+        env:
+          FLOWS: ${{ inputs.flows || 'maestro' }}
+          SEED: ${{ inputs.seed }}
+          CLEAN_STATUS_BAR: ${{ inputs.clean-status-bar && 'true' || '' }}
+        run: sabeel-ci native-e2e --ios --build ~/native-build ${SEED:+--seed "$SEED"} ${CLEAN_STATUS_BAR:+--clean-status-bar} "$FLOWS"
       - name: Screens, Maestro's report and logs
         if: always()
         uses: actions/upload-artifact@v7
