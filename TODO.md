@@ -514,8 +514,6 @@ class at import time — no auto-map by topic).
 
 ## Before the store release
 
-- [ ] **Splash screen.** The app icon is in place (`app/assets/icon.png`); no
-      splash is configured.
 - [ ] **Retention policy** decision. The brief says recordings are kept
       indefinitely; an R2 lifecycle rule (`cloudflare/media-bucket/`) is cheap
       to add but the policy is yours. Audio is affordable at any plausible
