@@ -107,9 +107,24 @@ phone, with real content, before calling a colour decision done.
 Phase 0's token screen exists for exactly this: it is screenshotted on the AVD
 and on a web export, and read.
 
-## Pending
+## The app icon
 
-Logo, app icon and splash assets are not yet supplied (see `TODO.md`). The logo
-is Arabic calligraphy reading *Sabeel* with gold accent strokes — one asset on
-the ivory canvas, no plate and no tint, because a flat `tintColor` throws the
-gold away.
+The brand's own icon (the `sabeel-brand` skill): the logo's raspberry
+calligraphy alone, centred on Warm Ivory, no badge. The LMS is the Sabeel app
+the public installs from the stores; the staff apps (Kanban, the Time Tracker)
+carry the earlier mark with a badge each. The square icon has the calligraphy
+across 76% of the tile; Android's adaptive foreground has it across 76% of
+the 72dp a launcher shows, inside the safe circle.
+
+`app/assets/icon.png`, `adaptive-icon.png` and `favicon.png`, and the Android
+mipmaps Gradle compiles (`android/` is committed, so `app.json` alone changes
+nothing a build sees), all come from one generator in the Kanban repository:
+
+```sh
+uv run scripts/make-app-icons.py lms --repo ../lms   # in sabeel-institute-kanban
+```
+
+It re-proves the geometry on every run; the images are not edited by hand.
+iOS takes `icon.png` through `app.json` when `ios/` is generated. The Android
+notification icon (`drawable/ic_notification.xml`) is a separate silhouette,
+a microphone, because Android draws it from its alpha channel alone.
