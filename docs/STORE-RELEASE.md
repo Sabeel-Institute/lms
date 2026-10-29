@@ -19,14 +19,16 @@ and ship: [DEPLOY.md](DEPLOY.md) and [IOS-BUILD.md](IOS-BUILD.md).
 | **Web** | `https://oursabeel-lms.web.app`, where accounts are made |
 
 **Destination** (Faisal, 2026-10-16; skill decision 9): the App Store,
-**unlisted**, and Google Play **production**, a public listing, since Play has
-no unlisted. Play's nearest alternatives do not fit: a closed testing track
+**unlisted**, and Google Play **production**, a public listing in the United
+States only, since Play has no unlisted. Play's nearest alternatives do not fit: a closed testing track
 needs every student's Google account on a tester list, and a managed Google
 Play private app installs only on devices the institute manages. Until then,
 TestFlight internal testing and Play internal testing.
 
-**Order.** The skill sends Kanban to App Review first and alone. The LMS is
-prepared now; whether it goes first in Kanban's place is open (Open, below).
+**Order** (Faisal, 2026-10-29): the LMS goes to both stores first and alone,
+as version 1.0.0, because students, who are not institute staff, must be able
+to install it. Kanban and the Time Tracker, staff-only with a set number of
+accounts, stay on TestFlight and Play internal testing.
 
 ## How the LMS keeps the shared decisions
 
@@ -336,7 +338,7 @@ and with the privacy policy.
 | Field | Answer | Set by |
 |---|---|---|
 | Price | Free | API |
-| Availability | United States only | API |
+| Availability | United States only (Faisal, 2026-10-29): every student is in the US (§ 7). Canada would add no store requirement but would bring Canadian privacy law into the privacy policy's review | API |
 | Distribution method | Public until Apple approves the unlisted request, then Unlisted (§ "The way to submission") | web, Account Holder's request |
 | iPhone app on Mac (Apple silicon), on Apple Vision Pro | Off: neither is tested | web |
 
@@ -344,7 +346,7 @@ and with the privacy policy.
 
 | Field | Answer | Set by |
 |---|---|---|
-| Version | The build's version. Apple declines unlisted requests for an app "in a beta or prerelease state", so the first store version is **1.0.0**, not 0.x (Open) | API |
+| Version | **1.0.0** (Faisal, 2026-10-29): Apple declines unlisted requests for an app "in a beta or prerelease state". The build carries the same version | API |
 | Copyright | 2026 Sabeel Institute | API |
 | Promotional text (170), description (4000), keywords (100 bytes) | Listing copy, below | API |
 | Support URL | `https://oursabeel-lms.web.app/support` | API |
@@ -377,7 +379,7 @@ tracks" only. **Console** means only a person signed in to Play Console can.
 | Content rating | Email `faisal.shah@oursabeel.com`; category Reference, News, or Educational (if the list offers it; otherwise All Other App Types). Users interact or exchange content: Yes. Fully moderated before others see it: No. Shares the user's location: No. Digital purchases: No. Web browser or search engine: No. Violence, sexual content, language, controlled substances, gambling: No |
 | Target audience | 18 and over only; **Restrict minor access** on; the listing does not appeal to children |
 | News app | No |
-| Data safety | Below. Submitted by the API as the console's CSV, which needs the console's exported template once |
+| Data safety | Below |
 | Government apps | No |
 | Financial features | My app doesn't provide any financial features |
 | Health apps | My app doesn't provide any health features |
@@ -416,7 +418,7 @@ not allow users to create an account (§ 1).
 | Feature graphic | 1024 × 500, no alpha, in the brand | API |
 | Phone screenshots | Six at 1080 × 1920. Play refuses a long side more than twice the short one, so a 20:9 phone's 1080 × 2400 does not pass | API |
 | Tablet screenshots, video | none | |
-| Countries | United States | console |
+| Countries | United States only | console |
 
 ### The production release
 
@@ -571,7 +573,7 @@ others need Faisal's console login, approval or judgment.
 |---|---|---|---|
 | 1 | Privacy link on the sign-in screen; the update screen opens each phone's store; no unused iOS purpose strings; privacy manifest matched to the policy | Agent | built (#74) |
 | 2 | Merge #74 | Faisal | |
-| 3 | The decisions under Open | Faisal | |
+| 3 | First and alone, 1.0.0, United States only; console forms by Faisal | Faisal | decided 2026-10-29 |
 | 4 | Listing copy (above), approved | Faisal | drafted |
 | 5 | Screenshots, icon, feature graphic, both videos | Agent | |
 | 6 | The review account renewed: due dates moved on, the assignment posted again through the staff screens so the reviewer receives it (a direct write gave it no hand-in record) | Faisal on the web, about 5 minutes; or the agent, given an admin session | |
@@ -581,9 +583,9 @@ others need Faisal's console login, approval or judgment.
 | 10 | The reviewer signed in to check, then `rulesAcceptedAt` and `rulesVersion` cleared on its record | Agent | |
 | 11 | One live Report a problem, checked at `apps-reports@` with Reply-To set | Agent sends; Faisal confirms arrival | |
 | 12 | App Store Connect: every API field above, screenshots, the attachment, the build | Agent | |
-| 13 | App Store Connect web: App Privacy, DSA status, Mac and Vision Pro off | Faisal, or the agent in a browser Faisal has signed in to | |
-| 14 | Play Console: the service account's two permissions; App content; category, tags, external marketing, catalog opt-out; countries | Faisal, or the agent in a browser Faisal has signed in to | |
-| 15 | Play API: listing, graphics, contact details, Data safety | Agent | |
+| 13 | App Store Connect web: App Privacy, DSA status, Mac and Vision Pro off (`TODO.md`, "The store consoles") | Faisal | |
+| 14 | Play Console: the service account's two permissions; App content; category, tags, external marketing, catalog opt-out; countries (`TODO.md`, "The store consoles") | Faisal | |
+| 15 | Play API: listing, graphics, contact details | Agent, once step 14 grants the permissions | |
 | 16 | A lawyer's answer on Texas SB 2420 (skill, decision 5), and someone who did not write it reads the privacy policy | Faisal | |
 | 17 | Submit the App Store version | Agent, on Faisal's go-ahead | |
 | 18 | The unlisted request | Faisal (Account Holder); answers above | |
@@ -592,14 +594,6 @@ others need Faisal's console login, approval or judgment.
 
 ## Open
 
-- **Which app goes first.** The skill sends Kanban first and alone; the LMS
-  in its place is the same one-app-at-a-time rule.
-- **The version.** 1.0.0 for the first store release (Apple declines
-  unlisted requests for prerelease apps), so the versionCode becomes
-  1000000.
-- **Countries.** United States only, on both stores: every student is in
-  the US (§ 7), and it keeps the EU's trader page and Korea's requirements
-  out of scope.
 - **Public contact address.** Play publishes a contact email on the listing;
   `privacy@oursabeel.com` is the one the support page already gives.
 - **Where the background playback video lives.** Hosting, under an unlinked
