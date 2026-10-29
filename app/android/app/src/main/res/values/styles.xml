@@ -7,11 +7,13 @@
     <item name="colorPrimary">@color/colorPrimary</item>
     <item name="android:statusBarColor">@android:color/transparent</item>
     <item name="android:navigationBarColor">@android:color/transparent</item>
-  </style>
-  <!-- The launch window, until MainActivity sets AppTheme. A single colour,
-       so Android 12 and later draw the launcher icon on it, and earlier
-       versions show it plain; a bitmap here is stretched to the window. -->
-  <style name="Theme.App.SplashScreen" parent="AppTheme">
+    <!-- Ivory behind the app too, as its screens are: the theme's own white
+         showed for the second between the launch screen and the first one. -->
     <item name="android:windowBackground">@color/splashscreen_background</item>
   </style>
+  <!-- The launch window, until MainActivity sets AppTheme. Its background, a
+       single colour from AppTheme, is what Android 12 and later draw the
+       launcher icon on and earlier versions show plain; a bitmap there is
+       stretched to the window. -->
+  <style name="Theme.App.SplashScreen" parent="AppTheme" />
 </resources>

@@ -1,7 +1,7 @@
 <resources>
-  <!-- Warm Ivory (docs/BRAND.md), the launch window's background: below
-       Android 12 the whole launch screen, and from 12 on the ground the
-       system draws the launcher icon on. -->
+  <!-- Warm Ivory (docs/BRAND.md), the window's background behind the app
+       and at launch: below Android 12 the whole launch screen, and from 12
+       on the ground the system draws the launcher icon on. -->
   <color name="splashscreen_background">#F6EBDD</color>
   <color name="colorPrimary">#023c69</color>
   <color name="iconBackground">#F6EBDD</color>
