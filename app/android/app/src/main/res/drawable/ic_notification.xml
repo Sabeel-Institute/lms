@@ -9,8 +9,8 @@
   existed (observed on a device, 2026-08-28).
 
   So this is a silhouette by construction: transparent ground, one opaque glyph.
-  The glyph is the microphone from the app icon's badge, which is the only part
-  of the mark that reads at 24dp — the Arabic wordmark does not.
+  The glyph is a microphone, for the class recordings: the app icon is the
+  brand's calligraphy alone, and calligraphy does not read at 24dp.
 
   A vector rather than five PNGs: it stays crisp at every density, and it is the
   only form of this asset that is reviewable in a diff.
