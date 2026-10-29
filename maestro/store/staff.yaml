@@ -132,7 +132,8 @@ name: Store screenshots, the staff
     file: ../ci-tools/tap-until.yaml
     env:
       TARGET: "Open Bilal Khan.s work[\\s\\S]*"
-      EXPECT: "Page 1\\.png[\\s\\S]*"
+      # Anywhere in its row: on iOS the row's name carries more than the file name.
+      EXPECT: "[\\s\\S]*Page 1\\.png[\\s\\S]*"
       SECONDS: 30
 - runFlow:
     file: ../ci-tools/wait.yaml
