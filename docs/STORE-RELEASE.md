@@ -13,8 +13,8 @@ and ship: [DEPLOY.md](DEPLOY.md) and [IOS-BUILD.md](IOS-BUILD.md).
 
 | | |
 |---|---|
-| **iPhone** | TestFlight internal testing: build 3003 (v0.3.3), VALID, the latest. App Store Connect app 6823374038, SKU `sabeel-lms`, bundle id `com.sabeelinstitute.lms`, has one App Store version record, "1.0", in Prepare for Submission: no metadata, no age rating, no App Privacy, nothing submitted. The build number is the version's code (0.3.3 is `"3003"`), which `npx sabeel-ci release` writes with the version |
-| **Android, Play** | App `com.sabeelinstitute.lms`, signed by Play with the LMS's own release key (§ 8). Internal testing: v0.3.3 (versionCode 3003); testers the email list "Sabeel staff". The store listing holds only the title. No production release |
+| **iPhone** | TestFlight internal testing: build 3003 (v0.3.3), VALID, the latest. App Store Connect app 6823374038, SKU `sabeel-lms`, bundle id `com.sabeelinstitute.lms`: version 1.0.0 in Prepare for Submission, with every field the API sets below (listing copy, age rating 4+, category, price, United States only, manual release, App Review information). Not yet: App Privacy, screenshots, the review attachment, a 1.0.0 build; nothing submitted. The build number is the version's code (0.3.3 is `"3003"`), which `npx sabeel-ci release` writes with the version |
+| **Android, Play** | App `com.sabeelinstitute.lms`, signed by Play with the LMS's own release key (§ 8). Internal testing: v0.3.3 (versionCode 3003); testers the email list "Sabeel staff". The store listing holds only the title: the service account has "Manage store presence" and "Release to production" (granted 2026-10-29), and the listing copy, contact details and graphics go up once Play applies the first. No production release |
 | **Android, APK** | v0.3.3 on this repo's GitHub releases |
 | **Web** | `https://oursabeel-lms.web.app`, where accounts are made |
 
@@ -105,7 +105,7 @@ reviewer." No reviewer code exists in this repo.
 | Class | "Sample Class", the reviewer enrolled |
 | Session | "Session 1", the reviewer marked **excused**; due date **2027-02-12** |
 | Recording | "Session 1 recording", published on Session 1: one part in two versions, a video version and Audio only |
-| Assignment | "Summary in your own words", posted to Sample Class; due date **2026-11-14** |
+| Assignment | "Summary in your own words", posted to Sample Class; due date **2027-02-12** |
 | Password | Only in the owner's vault, `~/.config/secrets-vault/sabeel/review/lms-app-review.txt`, and at submission in App Store Connect's App Review Information sign-in fields and Play Console's App access. Never in a repository, a chat or a log |
 
 In production the documents have the ids `app-review` (cohort),
@@ -482,6 +482,30 @@ student. Store screenshots show the app in use, not the sign-in screen
 | Staff walkthrough video, App Review attachment | The AVD, signed in as staff on the emulators, recording started after sign-in so the dev sign-in row never shows | The register, publishing a recording, posting an assignment, grading and returning it, then Report a problem, about two minutes |
 | Background playback video, Play's foreground-service declaration | The AVD | A student taps a recording, it plays, the screen locks, the media notification's controls pause and resume it |
 
+The screenshots are Maestro flows, `maestro/store/student.yaml` (1 to 4) and
+`staff.yaml` (5 and 6), run by `native-e2e` over the guide world under a clean
+status bar (9:41, full signal and battery). Maestro runs only the flows
+directly in the directory it is given, so the tests in `maestro/` never run
+them. On the AVD, at a display size Play accepts:
+
+```sh
+adb shell wm size 1080x1920
+npx sabeel-ci native-e2e --seed scripts/seed-guide.mjs --clean-status-bar maestro/store
+adb shell wm size reset
+```
+
+On iPhones, Native started by hand on GitHub, once per model (the 6.9-inch
+and the 6.3-inch):
+
+```sh
+gh workflow run native.yml --ref <branch> -f flows=maestro/store \
+  -f seed=scripts/seed-guide.mjs -f ios-simulator="iPhone 17 Pro Max" \
+  -f clean-status-bar=true
+```
+
+The PNGs are in `shots/native/` locally and in the run's `native-ios-<sha>`
+artifact.
+
 The background playback video needs a public address with no sign-in; it is
 served from Hosting, under a path no page links to (Open).
 
@@ -556,7 +580,8 @@ report it asks:
   them, and a public listing would show the app to people who can never sign
   in.
 - **Audience:** the institute's students and staff, all adults, in the
-  United States; about [number] people (Faisal to give).
+  United States; about 40 people: 10 staff and 30 students (Faisal,
+  2026-10-29).
 - **Devices:** personal, unmanaged iPhones.
 
 Developers report App Review sometimes rejects an organisation-only app under
@@ -572,19 +597,19 @@ others need Faisal's console login, approval or judgment.
 | # | Step | Who | Status |
 |---|---|---|---|
 | 1 | Privacy link on the sign-in screen; the update screen opens each phone's store; no unused iOS purpose strings; privacy manifest matched to the policy | Agent | built (#74) |
-| 2 | Merge #74 | Faisal | |
+| 2 | Merge #74 | Faisal | done |
 | 3 | First and alone, 1.0.0, United States only; console forms by Faisal | Faisal | decided 2026-10-29 |
 | 4 | Listing copy (above), approved | Faisal | drafted |
-| 5 | Screenshots, icon, feature graphic, both videos | Agent | |
-| 6 | The review account renewed: due dates moved on, the assignment posted again through the staff screens so the reviewer receives it (a direct write gave it no hand-in record) | Faisal on the web, about 5 minutes; or the agent, given an admin session | |
+| 5 | Screenshots, icon, feature graphic, both videos | Agent | icon (#75) and feature graphic made; Android screenshots taken, a re-shoot for the status bar to come; iPhone after ci-tools#46 |
+| 6 | The review account renewed: due dates moved on, the assignment posted again so the reviewer receives it (a direct write gave it no hand-in record) | Agent | done 2026-10-29, with the server's own code; both due dates 2027-02-12 |
 | 7 | Release 1.0.0: the release pull request, Play internal testing, TestFlight | Agent opens it; Faisal merges and gives the go-ahead | |
 | 8 | Device pass on the Android release APK (AVD): the reviewer's path, background playback, the update screen | Agent | |
 | 9 | On an iPhone, from TestFlight: lock-screen controls, a notification tapped with the app closed, a personal Google account refused (and no Auth record) | Faisal, about 10 minutes | |
 | 10 | The reviewer signed in to check, then `rulesAcceptedAt` and `rulesVersion` cleared on its record | Agent | |
 | 11 | One live Report a problem, checked at `apps-reports@` with Reply-To set | Agent sends; Faisal confirms arrival | |
-| 12 | App Store Connect: every API field above, screenshots, the attachment, the build | Agent | |
+| 12 | App Store Connect: every API field above, screenshots, the attachment, the build | Agent | API fields done 2026-10-29 |
 | 13 | App Store Connect web: App Privacy, DSA status, Mac and Vision Pro off (`TODO.md`, "The store consoles") | Faisal | |
-| 14 | Play Console: the service account's two permissions; App content; category, tags, external marketing, catalog opt-out; countries (`TODO.md`, "The store consoles") | Faisal | |
+| 14 | Play Console: the service account's two permissions; App content; category, tags, external marketing, catalog opt-out; countries (`TODO.md`, "The store consoles") | Faisal | permissions granted 2026-10-29 |
 | 15 | Play API: listing, graphics, contact details | Agent, once step 14 grants the permissions | |
 | 16 | A lawyer's answer on Texas SB 2420 (skill, decision 5), and someone who did not write it reads the privacy policy | Faisal | |
 | 17 | Submit the App Store version | Agent, on Faisal's go-ahead | |
