@@ -45,6 +45,20 @@ request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
 it). What was checked before and after each release is in the verification
 log below.
 
+### 2026-10-29 — The version for the App Store and Google Play — v1.0.0
+
+- **A new app icon**: the institute's calligraphy on ivory, the mark the
+  rest of Sabeel Institute's material carries.
+- **The Android app opens on ivory, with the icon**, where it showed a
+  placeholder image.
+- **The privacy policy is on the sign-in screen**, to read before signing
+  in.
+- **"Update needed" opens the App Store on an iPhone and Google Play on
+  Android**, where it opened the download page.
+- **The iPhone app no longer declares photo-library or microphone access.**
+  It never used either: it takes photos with the camera and picks files.
+- Firebase, Sentry and the AWS SDK are updated.
+
 ### 2026-10-26 — Back after leaving unsaved work goes where it should — v0.3.3
 
 - **On the website, Back after "Leave without saving?" now goes to the right
