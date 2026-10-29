@@ -118,13 +118,20 @@ the 72dp a launcher shows, inside the safe circle.
 
 `app/assets/icon.png`, `adaptive-icon.png` and `favicon.png`, and the Android
 mipmaps Gradle compiles (`android/` is committed, so `app.json` alone changes
-nothing a build sees), all come from one generator in the Kanban repository:
+nothing a build sees), all come from the brand repository's generator,
+`skills/sabeel-brand/tools/make-app-icons.py` in
+[Sabeel-Institute/brand](https://github.com/Sabeel-Institute/brand) (the
+`sabeel-brand` skill, "The apps' icons"), which cuts the calligraphy from the
+brand logo on every run:
 
 ```sh
-uv run scripts/make-app-icons.py lms --repo ../lms   # in sabeel-institute-kanban
+cd ../brand
+uv run skills/sabeel-brand/tools/make-app-icons.py lms --repo ../lms
+uv run skills/sabeel-brand/tools/make-app-icons.py lms --repo ../lms --check   # compare, write nothing
 ```
 
-It re-proves the geometry on every run; the images are not edited by hand.
+It re-proves the geometry on every run, and `--check` lists any icon file
+here that is not what it makes; the images are not edited by hand.
 iOS takes `icon.png` through `app.json` when `ios/` is generated. The Android
 notification icon (`drawable/ic_notification.xml`) is a separate silhouette,
 a microphone, because Android draws it from its alpha channel alone.
