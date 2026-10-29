@@ -49,14 +49,19 @@ name: Store screenshots, the student
     visible: "Not now"
     timeout: 8000
     optional: true
-- runFlow:
-    when:
-      visible: "Not now"
+# A busy CI simulator drops a tap that lands before the screen takes input,
+# so the card is tapped again while it is still there.
+- retry:
+    maxRetries: 3
     commands:
-      - tapOn: "Not now"
-- extendedWaitUntil:
-    notVisible: "Not now"
-    timeout: 15000
+      - runFlow:
+          when:
+            visible: "Not now"
+          commands:
+            - tapOn: "Not now"
+      - extendedWaitUntil:
+          notVisible: "Not now"
+          timeout: 10000
 - extendedWaitUntil:
     visible: "Open Reflection on the first hikma[\\s\\S]*"
     timeout: 30000
