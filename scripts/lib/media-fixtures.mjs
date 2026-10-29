@@ -125,30 +125,46 @@ export function wordFile(text) {
  * over the audio fixture's sound. It has to read as VIDEO at
  * a glance: a plain cream slide in the app's own colours was taken for one
  * more card on the page.
+ *
+ * The slide is drawn by a browser and ffmpeg only holds it for the length of
+ * the audio: ffmpeg's text filter needs a build with FreeType, which neither
+ * CI's static Linux build nor Homebrew's has, so the guide world's seed failed
+ * there while it passed here.
  */
-export function ensureSlideVideo(path, title) {
+export async function ensureSlideVideo(path, title) {
   ensureAudioFixture();
   if (existsSync(path)) return;
-  const esc = (t) => t.replace(/[\\':]/g, (c) => `\\${c}`);
-  const text = (t, x, y, size, color = 'white') =>
-    `drawtext=text='${esc(t)}':fontcolor=${color}:fontsize=${size}:x=${x}:y=${y}`;
-  const filters = [
-    text(title, 40, 40, 26),
-    'drawbox=x=40:y=84:w=160:h=3:color=0xC9A227:t=fill',
-    text('•  Patience is a light that does not go out', 56, 120, 18, '0xE5E7EB'),
-    text('•  Gratitude in ease, patience in hardship', 56, 156, 18, '0xE5E7EB'),
-    text('•  Read the passage before next week', 56, 192, 18, '0xE5E7EB'),
-    // The speaker top right, where Zoom's "slides and speaker" layout puts
-    // them — clear of the player's fullscreen icon in the opposite corner.
-    'drawbox=x=490:y=20:w=130:h=96:color=0x4B5563:t=fill',
-    'drawbox=x=538:y=38:w=34:h=34:color=0x9CA3AF:t=fill',
-    'drawbox=x=520:y=78:w=70:h=38:color=0x9CA3AF:t=fill',
-    text('Teacher', 496, 24, 12, '0xE5E7EB'),
-  ].join(',');
+  const slide = path.replace(/\.mp4$/, '.png');
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch();
+  try {
+    const page = await (await browser.newContext({ viewport: { width: 640, height: 360 } })).newPage();
+    const esc = (t) => t.replace(/[&<>]/g, (c) => `&#${c.charCodeAt(0)};`);
+    const bullets = [
+      'Patience is a light that does not go out',
+      'Gratitude in ease, patience in hardship',
+      'Read the passage before next week',
+    ];
+    await page.setContent(`<html><body style="margin:0;width:640px;height:360px;background:#1F2937;
+      font-family:sans-serif;position:relative;overflow:hidden">
+      <div style="position:absolute;left:40px;top:34px;color:#fff;font-size:26px">${esc(title)}</div>
+      <div style="position:absolute;left:40px;top:84px;width:160px;height:3px;background:#C9A227"></div>
+      ${bullets.map((b, i) => `<div style="position:absolute;left:56px;top:${114 + 36 * i}px;color:#E5E7EB;font-size:18px">•&nbsp;&nbsp;${esc(b)}</div>`).join('')}
+      <!-- The speaker top right, where Zoom's "slides and speaker" layout puts
+           them, clear of the player's fullscreen icon in the opposite corner. -->
+      <div style="position:absolute;left:490px;top:20px;width:130px;height:96px;background:#4B5563"></div>
+      <div style="position:absolute;left:538px;top:38px;width:34px;height:34px;background:#9CA3AF"></div>
+      <div style="position:absolute;left:520px;top:78px;width:70px;height:38px;background:#9CA3AF"></div>
+      <div style="position:absolute;left:496px;top:22px;color:#E5E7EB;font-size:12px">Teacher</div>
+      </body></html>`);
+    mkdirSync(dirname(slide), { recursive: true });
+    await page.screenshot({ path: slide, type: 'png' });
+  } finally {
+    await browser.close();
+  }
   ffmpeg([
-    '-f', 'lavfi', '-i', `color=c=0x1F2937:size=640x360:rate=1:duration=${AUDIO_SECONDS}`,
-    '-i', AUDIO_FIXTURE, '-vf', filters,
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+    '-loop', '1', '-framerate', '1', '-i', slide, '-i', AUDIO_FIXTURE,
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'stillimage', '-pix_fmt', 'yuv420p',
     '-c:a', 'copy', '-shortest', '-movflags', '+faststart', path,
   ]);
 }

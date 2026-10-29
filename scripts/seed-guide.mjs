@@ -109,7 +109,7 @@ async function mkSession(courseId, sid, rid, title, { status='published', dueOff
   // start on — so the manual shows the versions and a "Watch by" card.
   if (slides) {
     const file=`${MEDIA_FIXTURES}/guide-${rid}.mp4`;
-    ensureSlideVideo(file, slides);
+    await ensureSlideVideo(file, slides);
     const key=mediaStorageKey(rid, 'video1');
     await putLocalObject(key, readFileSync(file), 'video/mp4');
     media.video1={ ...media.audio1, id:'video1', version:'speaker', kind:'video', storageKey:key,
