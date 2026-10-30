@@ -9,8 +9,11 @@
   existed (observed on a device, 2026-08-28).
 
   So this is a silhouette by construction: transparent ground, one opaque glyph.
-  The glyph is a microphone, for the class recordings: the app icon is the
-  brand's calligraphy alone, and calligraphy does not read at 24dp.
+  The glyph is the mortarboard from the app icon's badge, the part of the
+  icon that still reads at 24dp; the calligraphy does not. Its geometry is the
+  badge glyph's (Sabeel-Institute/brand, skills/sabeel-brand/tools/
+  make-app-icons.py, kind "cap"), mapped from its -100..100 space onto the
+  24dp viewport at 0.15, so its 11-unit tassel is a 1.65dp stroke.
 
   A vector rather than five PNGs: it stays crisp at every density, and it is the
   only form of this asset that is reviewable in a diff.
@@ -21,32 +24,24 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
 
-  <!-- Capsule body: two semicircles joined by straight sides. -->
+  <!-- The board. -->
   <path
       android:fillColor="#FFFFFFFF"
-      android:pathData="M9,5 A3,3 0 0 1 15,5 L15,11 A3,3 0 0 1 9,11 Z" />
+      android:pathData="M2.7,10.275 L12.0,6.075 L21.3,10.275 L12.0,14.475 Z" />
 
-  <!-- Cradle: a half-circle under the body, r=5.5 across an 11-wide chord. -->
+  <!-- The cap beneath it. -->
+  <path
+      android:fillColor="#FFFFFFFF"
+      android:pathData="M6.6,12.675 L6.6,16.275 C6.6,18.375 17.4,18.375 17.4,16.275 L17.4,12.675 L12.0,15.075 Z" />
+
+  <!-- The tassel's cord and its end. -->
   <path
       android:fillColor="#00000000"
       android:strokeColor="#FFFFFFFF"
-      android:strokeWidth="1.8"
+      android:strokeWidth="1.65"
       android:strokeLineCap="round"
-      android:pathData="M6.5,11 A5.5,5.5 0 0 0 17.5,11" />
-
-  <!-- Stem, from the bottom of the cradle. -->
+      android:pathData="M19.2,11.175 L19.2,15.675" />
   <path
-      android:fillColor="#00000000"
-      android:strokeColor="#FFFFFFFF"
-      android:strokeWidth="1.8"
-      android:strokeLineCap="round"
-      android:pathData="M12,16.5 L12,20.5" />
-
-  <!-- Foot. -->
-  <path
-      android:fillColor="#00000000"
-      android:strokeColor="#FFFFFFFF"
-      android:strokeWidth="1.8"
-      android:strokeLineCap="round"
-      android:pathData="M8.5,20.5 L15.5,20.5" />
+      android:fillColor="#FFFFFFFF"
+      android:pathData="M18.15,16.875 a1.05,1.05 0 1,0 2.1,0 a1.05,1.05 0 1,0 -2.1,0" />
 </vector>

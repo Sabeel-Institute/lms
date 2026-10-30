@@ -109,20 +109,20 @@ and on a web export, and read.
 
 ## The app icon
 
-The brand's own icon (the `sabeel-brand` skill): the logo's raspberry
-calligraphy alone, centred on Warm Ivory, no badge. The LMS is the Sabeel app
-the public installs from the stores; the staff apps (Kanban, the Time Tracker)
-carry the earlier mark with a badge each. The square icon has the calligraphy
-across 76% of the tile; Android's adaptive foreground has it across 76% of
-the 72dp a launcher shows, inside the safe circle.
+The Sabeel apps' family: the calligraphy before 2026-09-28, black, on Warm
+Ivory, with a Dark Raspberry badge saying which app, here a mortarboard
+(Kanban carries a board, the Time Tracker a stopwatch). Raspberry is spent on
+the badge alone. Android's adaptive foreground keeps the composition inside
+the central 72dp a launcher shows; the square icon (the iPhone, an older
+launcher, the Play listing, the website's tab) shows the whole tile, so it is
+drawn 1.35 times larger.
 
 `app/assets/icon.png`, `adaptive-icon.png` and `favicon.png`, and the Android
 mipmaps Gradle compiles (`android/` is committed, so `app.json` alone changes
 nothing a build sees), all come from the brand repository's generator,
 `skills/sabeel-brand/tools/make-app-icons.py` in
 [Sabeel-Institute/brand](https://github.com/Sabeel-Institute/brand) (the
-`sabeel-brand` skill, "The apps' icons"), which cuts the calligraphy from the
-brand logo on every run:
+`sabeel-brand` skill, "The apps' icons"):
 
 ```sh
 cd ../brand
@@ -133,5 +133,5 @@ uv run skills/sabeel-brand/tools/make-app-icons.py lms --repo ../lms --check   #
 It re-proves the geometry on every run, and `--check` lists any icon file
 here that is not what it makes; the images are not edited by hand.
 iOS takes `icon.png` through `app.json` when `ios/` is generated. The Android
-notification icon (`drawable/ic_notification.xml`) is a separate silhouette,
-a microphone, because Android draws it from its alpha channel alone.
+notification icon (`drawable/ic_notification.xml`) is the badge's mortarboard
+as a silhouette, because Android draws it from its alpha channel alone.
