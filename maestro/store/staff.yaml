@@ -116,8 +116,11 @@ name: Store screenshots, the staff
       - extendedWaitUntil:
           visible: "ATTENDANCE NOT TAKEN[\\s\\S]*"
           timeout: 30000
+# Centred, not merely visible: low on a tall iPhone the row sits under the
+# tab bar, which takes the tap (it opened Library).
 - scrollUntilVisible:
     element: "To grade: Memorize the first hikma[\\s\\S]*"
+    centerElement: true
     timeout: 30000
 - runFlow:
     file: ../ci-tools/tap-until.yaml
@@ -129,7 +132,8 @@ name: Store screenshots, the staff
     file: ../ci-tools/tap-until.yaml
     env:
       TARGET: "Open Bilal Khan.s work[\\s\\S]*"
-      EXPECT: "Page 1\\.png[\\s\\S]*"
+      # Anywhere in its row: on iOS the row's name carries more than the file name.
+      EXPECT: "[\\s\\S]*Page 1\\.png[\\s\\S]*"
       SECONDS: 30
 - runFlow:
     file: ../ci-tools/wait.yaml
