@@ -55,8 +55,6 @@ and "Store settings and listing"):
 - [ ] **Later**, after the agent submits the version: the unlisted request
       at `https://developer.apple.com/contact/request/unlisted-app/`
       ("The unlisted request" in `docs/STORE-RELEASE.md`).
-- [ ] Confirm the test report of 2026-10-29 reached `apps-reports@` with
-      Reply-To set to `apps-reviewer@oursabeel.com`.
 
 ## The iPhone app (open)
 

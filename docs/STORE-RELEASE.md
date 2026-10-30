@@ -13,7 +13,7 @@ and ship: [DEPLOY.md](DEPLOY.md) and [IOS-BUILD.md](IOS-BUILD.md).
 
 | | |
 |---|---|
-| **iPhone** | TestFlight internal testing: v1.0.0 (build 1000000) uploaded from the tag on 2026-10-29. App Store Connect app 6823374038, SKU `sabeel-lms`, bundle id `com.sabeelinstitute.lms`: version 1.0.0 in Prepare for Submission, with every field the API sets below (listing copy, age rating 4+, category, price, United States only, manual release, App Review information). Not yet: App Privacy, screenshots, the review attachment, the build attached to the version; nothing submitted. The build number is the version's code (1.0.0 is `"1000000"`), which `npx sabeel-ci release` writes with the version |
+| **iPhone** | TestFlight internal testing: v1.0.0 (build 1000000) uploaded from the tag on 2026-10-29. App Store Connect app 6823374038, SKU `sabeel-lms`, bundle id `com.sabeelinstitute.lms`: version 1.0.0 in Prepare for Submission, with every field the API sets below (listing copy, age rating 4+, category, price, United States only, manual release, App Review information). App Privacy, DSA status, screenshots (6.9 and 6.3 inch), the staff walkthrough attachment and build 1000000 are in; Mac and Vision Pro are off. Ready to submit; nothing submitted. The build number is the version's code (1.0.0 is `"1000000"`), which `npx sabeel-ci release` writes with the version |
 | **Android, Play** | App `com.sabeelinstitute.lms`, signed by Play with the LMS's own release key (§ 8). Internal testing: v1.0.0 (versionCode 1000000), shipped 2026-10-29; testers the email list "Sabeel staff". A **draft app** until its first production release is published. The listing (copy, contact details, icon, feature graphic, six screenshots) went up through the API on 2026-10-29, and Play sent it for review at once, as it does every change to a draft app. The service account's LMS permissions: release to production and testing tracks, tester lists, store presence, and "Edit and delete draft apps", without which a draft app's listing refuses it (403). No production release |
 | **Android, APK** | v1.0.0 on this repo's GitHub releases (Play's universal APK) |
 | **Web** | `https://oursabeel-lms.web.app`, where accounts are made |
@@ -395,7 +395,7 @@ not allow users to create an account (§ 1).
 | Category | Type | Required or optional | Purposes |
 |---|---|---|---|
 | Personal info | Name, Email address, User IDs | Required | App functionality, Account management |
-| Photos and videos | Photos | Optional | App functionality |
+| Photos and videos | Photos, Videos (staff upload class videos) | Optional | App functionality |
 | Audio files | Voice or sound recordings | Optional | App functionality |
 | Files and docs | Files and docs | Optional | App functionality |
 | App activity | App interactions (listening); Other user-generated content (answers, feedback, reports) | Required | App functionality |
@@ -601,18 +601,18 @@ others need Faisal's console login, approval or judgment.
 | 2 | Merge #74 | Faisal | done |
 | 3 | First and alone, 1.0.0, United States only; console forms by Faisal | Faisal | decided 2026-10-29 |
 | 4 | Listing copy (above), approved | Faisal | drafted |
-| 5 | Screenshots, icon, feature graphic, both videos | Agent | icon (#75) and feature graphic made; Android screenshots taken, a re-shoot for the status bar to come; iPhone after ci-tools#46 |
+| 5 | Screenshots, icon, feature graphic, both videos | Agent | done 2026-10-29; the background playback video needs a public link (Faisal) |
 | 6 | The review account renewed: due dates moved on, the assignment posted again so the reviewer receives it (a direct write gave it no hand-in record) | Agent | done 2026-10-29, with the server's own code; both due dates 2027-02-12 |
 | 7 | Release 1.0.0: the release pull request, Play internal testing, TestFlight | Agent opens it; Faisal merges and gives the go-ahead | done 2026-10-29: Play internal testing, GitHub release, web, TestFlight |
 | 8 | Device pass on the Android release APK (AVD): the reviewer's path, background playback, the update screen | Agent | done 2026-10-29 on 1.0.0 (Play's APK), and the background playback video recorded; the update screen not yet |
 | 9 | On an iPhone, from TestFlight: lock-screen controls, a notification tapped with the app closed, a personal Google account refused (and no Auth record) | Faisal, about 10 minutes | |
 | 10 | The reviewer signed in to check, then `rulesAcceptedAt` and `rulesVersion` cleared on its record | Agent | done 2026-10-29: rules, recording, assignment checked; agreement and listening progress cleared |
-| 11 | One live Report a problem, checked at `apps-reports@` with Reply-To set | Agent sends; Faisal confirms arrival | |
-| 12 | App Store Connect: every API field above, screenshots, the attachment, the build | Agent | API fields done 2026-10-29 |
-| 13 | App Store Connect web: App Privacy, DSA status, Mac and Vision Pro off (`TODO.md`, "The store consoles") | Faisal | |
+| 11 | One live Report a problem, checked at `apps-reports@` with Reply-To set | Agent sends; Faisal confirms arrival | done 2026-10-29: it arrived, Reply-To the reviewer |
+| 12 | App Store Connect: every API field above, screenshots, the attachment, the build | Agent | done 2026-10-29: 6.9-inch and 6.3-inch screenshots, the staff walkthrough attached, build 1000000 |
+| 13 | App Store Connect web: App Privacy, DSA status, Mac and Vision Pro off (`TODO.md`, "The store consoles") | Faisal | done 2026-10-29 |
 | 14 | Play Console: the service account's permissions (with "Edit and delete draft apps"); App content; category, tags, external marketing, catalog opt-out; countries (`TODO.md`, "The store consoles") | Faisal | permissions granted 2026-10-29 |
 | 15 | Play API: listing, graphics, contact details | Agent, once step 14 grants the permissions | done 2026-10-29 |
-| 16 | A lawyer's answer on Texas SB 2420 (skill, decision 5), and someone who did not write it reads the privacy policy | Faisal | |
+| 16 | A lawyer's answer on Texas SB 2420 (skill, decision 5), and someone who did not write it reads the privacy policy | Faisal | SB 2420: no lawyer (Faisal, 2026-10-29: the app is for adults, not children) |
 | 17 | Submit the App Store version | Agent, on Faisal's go-ahead | |
 | 18 | The unlisted request | Faisal (Account Holder); answers above | |
 | 19 | Play production release: the agent creates it as a draft; Faisal sends it for review from Publishing overview (a draft app's first release) | Agent, then Faisal, on Faisal's go-ahead | |
