@@ -45,6 +45,15 @@ request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
 it). What was checked before and after each release is in the verification
 log below.
 
+### 2026-10-29 — The app icon carries a mortarboard — v1.0.1
+
+- **The app icon carries a mortarboard** beside the institute's
+  calligraphy: the badge each Sabeel app is known by on a phone, as
+  Kanban's board and the Time Tracker's stopwatch are.
+- **On an iPhone, the icon fills its tile**, where it left a wide empty
+  border.
+- **Android's notification icon is the mortarboard** too.
+
 ### 2026-10-29 — The version for the App Store and Google Play — v1.0.0
 
 - **A new app icon**: the institute's calligraphy on ivory, the mark the

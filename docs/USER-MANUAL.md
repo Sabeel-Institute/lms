@@ -1,6 +1,6 @@
 # Sabeel Institute LMS — User Manual
 
-*For app version 1.0.0 · October 2026*
+*For app version 1.0.1 · October 2026*
 
 Welcome! This guide explains everything the Sabeel Institute LMS app can do —
 from playing a class you missed and handing in an assignment to taking

@@ -3,7 +3,7 @@
     "name": "Sabeel Institute LMS",
     "slug": "sabeel-institute-lms",
     "scheme": "sabeellms",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "platforms": [
@@ -14,7 +14,7 @@
     "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "com.sabeelinstitute.lms",
-      "buildNumber": "1000000",
+      "buildNumber": "1000001",
       "supportsTablet": false,
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
