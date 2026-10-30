@@ -42,23 +42,16 @@ and "Store settings and listing"):
       tags; **External marketing** off → Save.
 - [ ] Settings → **Catalog settings** → opt out of distribution to
       third-party US stores.
-- [ ] **Later**, when the agent says the video is up: App content →
-      **Foreground service permissions** → Media playback, the description,
-      the impact and the video link.
+- [ ] Upload the background playback video (the agent sent it,
+      `play-background-playback.mp4`) unlisted to YouTube, or to Drive with
+      "anyone with the link"; then App content → **Foreground service
+      permissions** → Media playback, the description, the impact and that
+      link.
 - [ ] **Later**, at the production release: Test and release → Production →
       **Countries/regions** → United States only.
 
-**App Store Connect** (answers: "App Privacy (web)", "Pricing and
-Availability"):
+**App Store Connect:**
 
-- [ ] Apps → Sabeel Institute LMS → **App Privacy** → Get Started → yes,
-      data is collected → tick each type in the table → for each: purpose
-      App Functionality, linked to the user Yes (Crash Data and Other
-      Diagnostic Data: No), tracking No → Publish.
-- [ ] **Business** → Agreements, Compliance → **Digital Services Act** →
-      "This is not a trader account" (the app is not offered in the EU).
-- [ ] The app → **Pricing and Availability** → untick the iPhone app on
-      Mac (Apple silicon) and on Apple Vision Pro → Save.
 - [ ] **Later**, after the agent submits the version: the unlisted request
       at `https://developer.apple.com/contact/request/unlisted-app/`
       ("The unlisted request" in `docs/STORE-RELEASE.md`).
