@@ -9,13 +9,13 @@ whose numbered decisions this file follows. When the two disagree about a
 shared decision, the skill wins and this file is the one to fix. How to build
 and ship: [DEPLOY.md](DEPLOY.md) and [IOS-BUILD.md](IOS-BUILD.md).
 
-## Where it stands (2026-10-29)
+## Where it stands (2026-10-30)
 
 | | |
 |---|---|
-| **iPhone** | TestFlight internal testing: v1.0.0 (build 1000000) uploaded from the tag on 2026-10-29. App Store Connect app 6823374038, SKU `sabeel-lms`, bundle id `com.sabeelinstitute.lms`: version 1.0.0 in Prepare for Submission, with every field the API sets below (listing copy, age rating 4+, category, price, United States only, manual release, App Review information). App Privacy, DSA status, screenshots (6.9 and 6.3 inch), the staff walkthrough attachment and build 1000000 are in; Mac and Vision Pro are off. Ready to submit; nothing submitted. The build number is the version's code (1.0.0 is `"1000000"`), which `npx sabeel-ci release` writes with the version |
-| **Android, Play** | App `com.sabeelinstitute.lms`, signed by Play with the LMS's own release key (§ 8). Internal testing: v1.0.0 (versionCode 1000000), shipped 2026-10-29; testers the email list "Sabeel staff". A **draft app** until its first production release is published. The listing (copy, contact details, icon, feature graphic, six screenshots) went up through the API on 2026-10-29, and Play sent it for review at once, as it does every change to a draft app. The service account's LMS permissions: release to production and testing tracks, tester lists, store presence, and "Edit and delete draft apps", without which a draft app's listing refuses it (403). No production release |
-| **Android, APK** | v1.0.0 on this repo's GitHub releases (Play's universal APK) |
+| **iPhone** | TestFlight internal testing: v1.0.1 (build 1000001) uploaded from the tag on 2026-10-30. App Store Connect app 6823374038, SKU `sabeel-lms`, bundle id `com.sabeelinstitute.lms`: version 1.0.1 in Prepare for Submission, with every field the API sets below (listing copy, age rating 4+, category, price, United States only, manual release, App Review information). App Privacy, DSA status, screenshots (6.9 and 6.3 inch), the staff walkthrough attachment and build 1000001 are in; Mac and Vision Pro are off. Ready to submit; nothing submitted. The build number is the version's code (1.0.1 is `"1000001"`), which `npx sabeel-ci release` writes with the version |
+| **Android, Play** | App `com.sabeelinstitute.lms`, signed by Play with the LMS's own release key (§ 8). Internal testing: v1.0.1 (versionCode 1000001), shipped 2026-10-30; testers the email list "Sabeel staff". A **draft app** until its first production release is published. The listing (copy, contact details, icon, feature graphic, six screenshots) went up through the API on 2026-10-29 (the icon replaced with the mortarboard one on 2026-10-30), and Play sent it for review at once, as it does every change to a draft app. The service account's LMS permissions: release to production and testing tracks, tester lists, store presence, and "Edit and delete draft apps", without which a draft app's listing refuses it (403). No production release |
+| **Android, APK** | v1.0.1 on this repo's GitHub releases (Play's universal APK) |
 | **Web** | `https://oursabeel-lms.web.app`, where accounts are made |
 
 **Destination** (Faisal, 2026-10-16; skill decision 9): the App Store,
@@ -26,7 +26,7 @@ Play private app installs only on devices the institute manages. Until then,
 TestFlight internal testing and Play internal testing.
 
 **Order** (Faisal, 2026-10-29): the LMS goes to both stores first and alone,
-as version 1.0.0, because students, who are not institute staff, must be able
+as version 1.0, because students, who are not institute staff, must be able
 to install it. Kanban and the Time Tracker, staff-only with a set number of
 accounts, stay on TestFlight and Play internal testing.
 
@@ -342,18 +342,18 @@ and with the privacy policy.
 | Distribution method | Public until Apple approves the unlisted request, then Unlisted (§ "The way to submission") | web, Account Holder's request |
 | iPhone app on Mac (Apple silicon), on Apple Vision Pro | Off: neither is tested | web |
 
-### The version (1.0.0)
+### The version (1.0.1)
 
 | Field | Answer | Set by |
 |---|---|---|
-| Version | **1.0.0** (Faisal, 2026-10-29): Apple declines unlisted requests for an app "in a beta or prerelease state". The build carries the same version | API |
+| Version | **1.0.1**: 1.0 (Faisal, 2026-10-29), because Apple declines unlisted requests for an app "in a beta or prerelease state"; 1.0.1 carries the mortarboard icon. The build carries the same version | API |
 | Copyright | 2026 Sabeel Institute | API |
 | Promotional text (170), description (4000), keywords (100 bytes) | Listing copy, below | API |
 | Support URL | `https://oursabeel-lms.web.app/support` | API |
 | Marketing URL | none | |
 | Screenshots | 6.9-inch (1320 × 2868) and 6.3-inch (1206 × 2622), six each, PNG with no alpha channel. Apple's page names both as required in different places, so both go up | API |
 | App previews | none | |
-| Build | The 1.0.0 build from TestFlight | API |
+| Build | The 1.0.1 build from TestFlight | API |
 | Export compliance | Answered by `ITSAppUsesNonExemptEncryption: false` (§ 10) | |
 | Sign-in required, user name, password | Yes; `apps-reviewer@oursabeel.com` and the vault's password | API |
 | Review contact | Faisal Shah, `faisal.shah@oursabeel.com`, phone in `+1…` form (Apple refuses any other) | API |
@@ -422,7 +422,7 @@ not allow users to create an account (§ 1).
 
 ### The production release
 
-The 1.0.0 bundle, already on internal testing, promoted to production with
+The 1.0.1 bundle, already on internal testing, promoted to production with
 the note "First release on Google Play." A first production release cannot be
 staged or held by managed publishing; Play reviews it in up to seven days,
 and a change sent while it waits restarts the clock. On a draft app the API
@@ -599,16 +599,16 @@ others need Faisal's console login, approval or judgment.
 |---|---|---|---|
 | 1 | Privacy link on the sign-in screen; the update screen opens each phone's store; no unused iOS purpose strings; privacy manifest matched to the policy | Agent | built (#74) |
 | 2 | Merge #74 | Faisal | done |
-| 3 | First and alone, 1.0.0, United States only; console forms by Faisal | Faisal | decided 2026-10-29 |
+| 3 | First and alone, 1.0, United States only; console forms by Faisal | Faisal | decided 2026-10-29 |
 | 4 | Listing copy (above), approved | Faisal | drafted |
 | 5 | Screenshots, icon, feature graphic, both videos | Agent | done 2026-10-29; the background playback video needs a public link (Faisal) |
 | 6 | The review account renewed: due dates moved on, the assignment posted again so the reviewer receives it (a direct write gave it no hand-in record) | Agent | done 2026-10-29, with the server's own code; both due dates 2027-02-12 |
-| 7 | Release 1.0.0: the release pull request, Play internal testing, TestFlight | Agent opens it; Faisal merges and gives the go-ahead | done 2026-10-29: Play internal testing, GitHub release, web, TestFlight |
-| 8 | Device pass on the Android release APK (AVD): the reviewer's path, background playback, the update screen | Agent | done 2026-10-29 on 1.0.0 (Play's APK), and the background playback video recorded; the update screen not yet |
+| 7 | Release 1.0.0, then 1.0.1 for the icon: the release pull request, Play internal testing, TestFlight | Agent opens it; Faisal merges and gives the go-ahead | done: 1.0.0 on 2026-10-29, 1.0.1 on 2026-10-30 (Play internal testing, GitHub release, web, TestFlight) |
+| 8 | Device pass on the Android release APK (AVD): the reviewer's path, background playback, the update screen | Agent | done 2026-10-29 on 1.0.0 (Play's APK), and the background playback video recorded; the update screen not yet. 1.0.1 changes only the icon: the release check's five cold starts passed on Play's APK, and the launcher shows the mortarboard |
 | 9 | On an iPhone, from TestFlight: lock-screen controls, a notification tapped with the app closed, a personal Google account refused (and no Auth record) | Faisal, about 10 minutes | |
 | 10 | The reviewer signed in to check, then `rulesAcceptedAt` and `rulesVersion` cleared on its record | Agent | done 2026-10-29: rules, recording, assignment checked; agreement and listening progress cleared |
 | 11 | One live Report a problem, checked at `apps-reports@` with Reply-To set | Agent sends; Faisal confirms arrival | done 2026-10-29: it arrived, Reply-To the reviewer |
-| 12 | App Store Connect: every API field above, screenshots, the attachment, the build | Agent | done 2026-10-29: 6.9-inch and 6.3-inch screenshots, the staff walkthrough attached, build 1000000 |
+| 12 | App Store Connect: every API field above, screenshots, the attachment, the build | Agent | done 2026-10-29: 6.9-inch and 6.3-inch screenshots, the staff walkthrough attached; build 1000001 (2026-10-30) |
 | 13 | App Store Connect web: App Privacy, DSA status, Mac and Vision Pro off (`TODO.md`, "The store consoles") | Faisal | done 2026-10-29 |
 | 14 | Play Console: the service account's permissions (with "Edit and delete draft apps"); App content; category, tags, external marketing, catalog opt-out; countries (`TODO.md`, "The store consoles") | Faisal | permissions granted 2026-10-29 |
 | 15 | Play API: listing, graphics, contact details | Agent, once step 14 grants the permissions | done 2026-10-29 |
