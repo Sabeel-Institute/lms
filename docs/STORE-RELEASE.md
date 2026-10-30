@@ -480,7 +480,7 @@ student. Store screenshots show the app in use, not the sign-in screen
 | iPhone screenshots, 1320 × 2868 and 1206 × 2622 | The iPhone simulator on GitHub's macOS runner | 1 To do; 2 the player, playing, with Audio only and speed; 3 an assignment with an answer and attachments; 4 returned work with grade and feedback; 5 staff: the register; 6 staff: grading |
 | Android screenshots, 1080 × 1920 | The AVD at that display size | The same six |
 | Play icon and feature graphic | From the app icon and the brand (`sabeel-brand` skill) | |
-| Staff walkthrough video, App Review attachment | The AVD, signed in as staff on the emulators, recording started after sign-in so the dev sign-in row never shows | The register, publishing a recording, posting an assignment, grading and returning it, then Report a problem, about two minutes |
+| Staff walkthrough video, App Review attachment | `maestro/store/staff-walkthrough.yaml` on the AVD over the guide world, recorded from the host (`adb emu screenrecord`) from the moment the flow photographs `00-recording-starts`, so the dev sign-in row never shows | The register kept and submitted, an assignment posted, work graded and returned: about two minutes |
 | Background playback video, Play's foreground-service declaration | The AVD | A student taps a recording, it plays, the screen locks, the media notification's controls pause and resume it |
 
 The screenshots are Maestro flows, `maestro/store/student.yaml` (1 to 4) and
@@ -539,7 +539,7 @@ Audio only (playback continues with the screen locked), mark it complete,
 and open and hand in the assignment "Summary in your own words". Staff and
 administrator roles are granted only to the institute's own Workspace
 accounts; the attached video shows the staff screens: keeping the register,
-publishing a recording, posting an assignment and grading it.
+posting an assignment and grading the work handed in.
 
 All content is visible only to members an administrator has added to the
 same class, and a student's work only to that student and the class's

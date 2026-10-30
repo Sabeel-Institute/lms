@@ -1,0 +1,347 @@
+# The staff walkthrough video for the App Store review: one unhurried take of
+# the staff screens, showing the three things the review notes promise. The
+# register is kept (Today, a session, marks, Submit attendance); an
+# assignment is posted (Hikam Foundations, the due date the form offers, a
+# week out); and work handed in is graded and returned. Publishing is left
+# out: the guide world's one unpublished recording is an import flagged as
+# truncated, and a video publishing it anyway would show the wrong thing.
+# Seeded by scripts/seed-guide.mjs; run by
+#
+#   npx sabeel-ci native-e2e --seed scripts/seed-guide.mjs --clean-status-bar \
+#     maestro/store/staff-walkthrough.yaml
+#
+# and recorded from the host: the sign-in below is the dev row, which must not
+# be in the video, so the recorder starts when 00-recording-starts.png appears
+# in shots/native/ and the flow waits eight seconds for it.
+#
+# Every step that moves the app on checks that it did (ci-tools/tap-until.yaml,
+# an id looked for after a tap, or a text only the next screen shows). Pacing:
+# Maestro holds each screen for about two seconds after a tap while it settles,
+# and ci-tools/wait.yaml adds one to three where there is something to read.
+#
+# Maestro measures an extendedWaitUntil's timeout from the last tap, swipe or
+# scroll, so ci-tools/wait.yaml run after only checks, a screenshot or another
+# wait returns as soon as those have used its seconds up. Each wait below
+# follows a tap, a swipe or a scroll, directly or past a check that returned
+# at once; the one before the recording starts has a tap of its own.
+appId: ${APP_ID}
+name: Store walkthrough video, the staff
+---
+# ---------------------------------------------------------------------------
+# Not recorded: the admin, by the sign-in screen's dev row; the notifications
+# card declined.
+# ---------------------------------------------------------------------------
+- retry:
+    maxRetries: 2
+    commands:
+      - launchApp:
+          clearState: true
+      - extendedWaitUntil:
+          visible: "Dev sign-in \\(emulator only\\)"
+          timeout: 180000
+# The dev row is under the fold of a phone's sign-in screen.
+- scrollUntilVisible:
+    element: "as faisal.shah \\(first admin\\)"
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "as faisal.shah \\(first admin\\)"
+      EXPECT: "ATTENDANCE NOT TAKEN[\\s\\S]*"
+      SECONDS: 60
+- extendedWaitUntil:
+    visible: "Not now"
+    timeout: 8000
+    optional: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            visible: "Not now"
+          commands:
+            - tapOn: "Not now"
+      - extendedWaitUntil:
+          notVisible: "Not now"
+          timeout: 10000
+
+# The host starts the recorder when 00-recording-starts.png appears; Today is
+# the first screen it records. The tap on the tab that is already open does
+# nothing, and is what starts the wait's clock.
+- tapOn:
+    id: "tab-today"
+- takeScreenshot: 00-recording-starts
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 8
+
+# ---------------------------------------------------------------------------
+# 1. The register: Today's "Attendance not taken", the session, three marks,
+#    Submit attendance and its confirmation.
+# ---------------------------------------------------------------------------
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "[\\s\\S]*Session 5 — Reliance and Trust[\\s\\S]*"
+      EXPECT: "ATTENDANCE"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 1
+# A mark is a tap on one of a row's three buttons, checked on the button (a
+# radio that reads back as checked). Tapping it again changes nothing.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "att-Bilal Khan-absent"
+      - assertVisible:
+          id: "att-Bilal Khan-absent"
+          checked: true
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "att-Fatima Ahmed-excused"
+      - assertVisible:
+          id: "att-Fatima Ahmed-excused"
+          checked: true
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "att-Maryam Iqbal-excused"
+      - assertVisible:
+          id: "att-Maryam Iqbal-excused"
+          checked: true
+# Down the rest of the class to the button.
+- scrollUntilVisible:
+    element:
+      id: "att-submit"
+    speed: 30
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 1
+- tapOn:
+    id: "att-submit"
+# The confirmation is above the roster: back up to it, and read it.
+- swipe:
+    start: 50%, 30%
+    end: 50%, 85%
+    duration: 800
+- swipe:
+    start: 50%, 30%
+    end: 50%, 85%
+    duration: 800
+- extendedWaitUntil:
+    visible: "Attendance submitted for .*"
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 2
+# Today again: the register's row is gone and the blocking badge with it. By
+# the tab's id: with a badge, its name is "Today, 1 blocking access".
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "tab-today"
+      - extendedWaitUntil:
+          notVisible: "ATTENDANCE NOT TAKEN[\\s\\S]*"
+          timeout: 30000
+- extendedWaitUntil:
+    visible: "WAITING TO PUBLISH[\\s\\S]*"
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 1
+
+# ---------------------------------------------------------------------------
+# 2. Posting an assignment: Courses, the cohort, Hikam Foundations,
+#    Assignments, New assignment; a title, the instructions, the due date the
+#    form offers (a week out); Post.
+# ---------------------------------------------------------------------------
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "tab-courses"
+      - extendedWaitUntil:
+          visible: "Open Autumn 2026"
+          timeout: 30000
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Open Autumn 2026"
+      EXPECT: "Open Hikam Foundations"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Open Hikam Foundations"
+      EXPECT: "Sessions[\\s\\S]*"
+      SECONDS: 30
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            visible:
+              id: "nav-coursework"
+          commands:
+            - tapOn:
+                id: "nav-coursework"
+      - extendedWaitUntil:
+          visible:
+            id: "coursework-new"
+          timeout: 30000
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            visible:
+              id: "coursework-new"
+          commands:
+            - tapOn:
+                id: "coursework-new"
+      - extendedWaitUntil:
+          visible:
+            id: "coursework-title"
+          timeout: 30000
+- tapOn:
+    id: "coursework-title"
+- inputText: "Second hikma reflection"
+- extendedWaitUntil:
+    visible: "Second hikma reflection"
+    timeout: 10000
+# The instructions' box is a native rich-text input with no id; its prompt is
+# what it is found by.
+- tapOn: "What to do, and what to hand in"
+- inputText: "Write a short reflection."
+- extendedWaitUntil:
+    visible: "Write a short reflection."
+    timeout: 10000
+- hideKeyboard
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 1
+# Down to the dates and Post.
+- scrollUntilVisible:
+    element:
+      id: "coursework-post"
+    speed: 30
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 2
+- tapOn:
+    id: "coursework-post"
+# Posted: the form is gone and the assignment's own page, with its eight
+# students, is open.
+- extendedWaitUntil:
+    notVisible:
+      id: "coursework-post"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Students \\(8\\)"
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 2
+
+# ---------------------------------------------------------------------------
+# 3. Grading: Today's To grade, Memorize the first hikma, Bilal Khan's
+#    hand-in; a grade, a line of feedback, Return now.
+# ---------------------------------------------------------------------------
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "tab-today"
+      - extendedWaitUntil:
+          visible: "TO GRADE[\\s\\S]*"
+          timeout: 30000
+- scrollUntilVisible:
+    element: "To grade: Memorize the first hikma[\\s\\S]*"
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "To grade: Memorize the first hikma[\\s\\S]*"
+      EXPECT: "Open Bilal Khan.s work[\\s\\S]*"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/tap-until.yaml
+    env:
+      TARGET: "Open Bilal Khan.s work[\\s\\S]*"
+      EXPECT: "Page 1\\.png[\\s\\S]*"
+      SECONDS: 30
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 2
+- scrollUntilVisible:
+    element:
+      id: "grade-points"
+    speed: 30
+    timeout: 30000
+- tapOn:
+    id: "grade-points"
+- inputText: "8"
+# The feedback box is above the number pad.
+- tapOn:
+    id: "grade-feedback"
+- inputText: "Well recited, thank you."
+- hideKeyboard
+# Saved as it is typed, as a draft only staff see; Return now is offered once
+# there is a grade on the screen.
+- extendedWaitUntil:
+    visible: "Saved · only staff see this[\\s\\S]*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "grade-return"
+    timeout: 15000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 1
+- tapOn:
+    id: "grade-return"
+- extendedWaitUntil:
+    notVisible:
+      id: "grade-return"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Returned\\. To change the grade[\\s\\S]*"
+    timeout: 30000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 2
+
+# ---------------------------------------------------------------------------
+# End on Today, held.
+# ---------------------------------------------------------------------------
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "tab-today"
+      - extendedWaitUntil:
+          visible: "TO GRADE[\\s\\S]*"
+          timeout: 30000
+- runFlow:
+    file: ../ci-tools/wait.yaml
+    env:
+      SECONDS: 3
