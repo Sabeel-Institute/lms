@@ -3,11 +3,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRoomy } from '../useWidth';
 import { getTheme, spacing } from '../theme';
+import { pickerDate, toYmd } from './dateFieldValue';
 
 const t = getTheme();
 
 /**
- * Native side of the date seam (web sibling: DateField.web.tsx).
+ * Android side of the date seam (iOS: DateField.ios.tsx, web:
+ * DateField.web.tsx). Android's picker is a dialog with OK and Cancel, so the
+ * field shows it on press and hides it on its first answer.
  *
  * A calendar picker instead of a hand-typed `YYYY-MM-DD` — the value stays a
  * date-only string so nothing downstream changes. Optional: a Clear control
@@ -60,7 +63,7 @@ export function DateField({ label, value, onChange }: DateFieldProps) {
    * Parsed as LOCAL midnight so the picker opens on the stored day; a due date
    * is a plain calendar date, never a UTC instant.
    */
-  const current = useMemo(() => (value ? new Date(`${value}T00:00:00`) : new Date()), [value]);
+  const current = useMemo(() => pickerDate(value), [value]);
 
   return (
     // The same reading cap `Field` takes — a ten-character date has no business
@@ -100,14 +103,6 @@ export function DateField({ label, value, onChange }: DateFieldProps) {
       ) : null}
     </View>
   );
-}
-
-/** Local calendar date → YYYY-MM-DD, without the UTC shift toISOString brings. */
-function toYmd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
 }
 
 const styles = StyleSheet.create({
