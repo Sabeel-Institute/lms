@@ -45,6 +45,27 @@ request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
 it). What was checked before and after each release is in the verification
 log below.
 
+### 2026-11-12 — Give a recording to one student — v1.1.0
+
+- **Teachers can give a recording to one student**, from the recording's
+  Progress page: for a student who was at the class and wants more time
+  with it, until a date the teacher chooses. Excusing someone stays the only
+  thing that makes listening required.
+- **Students find it on To do under Optional**, open until its date. It is
+  never the one at the top, there is nothing to mark, and it counts nowhere.
+  A student who missed a recording and is given it again sees it both as
+  Missed and as open again.
+- **One message when it is given**, if notifications are on. Moving the date
+  and taking it back are silent.
+- **Any teacher of the class can change the date or take it back.** If two
+  teachers save the same student's date at once, the second is told what the
+  first set and can save again on purpose.
+- **Archive, Unpublish and a corrected register now ask first** when they
+  would close a recording to a student who can play it right now.
+- **Today says "Listen-by date in N days"** where it said "Access closes".
+- **The app must be updated to this version.** Older versions show the
+  update screen.
+
 ### 2026-10-29 — The app icon carries a mortarboard — v1.0.1
 
 - **The app icon carries a mortarboard** beside the institute's
