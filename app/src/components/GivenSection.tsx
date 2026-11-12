@@ -233,7 +233,9 @@ function GiveSheet({
     });
 
   return (
-    <Sheet visible={visible} title="Give this recording" onClose={close} closeLabel="Cancel">
+    // Close, not Cancel: the list stays open for the next student, and what
+    // was given stays given.
+    <Sheet visible={visible} title="Give this recording" onClose={close}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {done ? <Notice tone="success">{done}</Notice> : null}
       <DateField label="Open until" value={date} onChange={setDate} />

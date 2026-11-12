@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  closesNow,
   completionShown,
   giveAction,
   givenChanged,
@@ -294,5 +295,68 @@ describe('the messages', () => {
       'When a recording is opened to you, because you were excused or your teacher gave it to you.',
     );
     expect(NOTIFICATION_DESCRIPTION.lastDay).toBe("On the morning of a recording's listen-by date, if you have not finished it.");
+  });
+});
+
+describe('closesNow', () => {
+  const published = 'published';
+  const live = open;
+  const roster = [
+    { uid: 'excusedOpen', enrolled: true, active: true },
+    { uid: 'given', enrolled: true, active: true },
+    { uid: 'givenEnded', enrolled: true, active: true },
+    { uid: 'present', enrolled: true, active: true },
+    { uid: 'disabled', enrolled: true, active: false },
+    { uid: 'left', enrolled: false, active: true },
+    { uid: 'excusedAndGiven', enrolled: true, active: true },
+  ];
+  const session: RegisterFacts = {
+    attendanceSubmittedAt: 1,
+    attendance: {
+      excusedOpen: 'excused',
+      given: 'present',
+      givenEnded: 'present',
+      present: 'present',
+      disabled: 'excused',
+      left: 'excused',
+      excusedAndGiven: 'excused',
+    },
+    dueDate: TOMORROW,
+  };
+  const given = new Map([
+    ['given', { openUntil: '2026-11-20' }],
+    ['givenEnded', { openUntil: YESTERDAY }],
+    ['excusedAndGiven', { openUntil: '2026-11-20' }],
+    ['left', { openUntil: '2026-11-20' }],
+  ]);
+  const ask = (over: Partial<Parameters<typeof closesNow>[0]> = {}) =>
+    closesNow({ students: roster, session, recordingStatus: published, cls: live, given, today: TODAY, ...over });
+
+  it('names everyone who can play it when the recording itself closes, and nobody who cannot', () => {
+    // Not: an ended given recording, a present student, a disabled account,
+    // a student who left.
+    expect(ask().sort()).toEqual(['excusedAndGiven', 'excusedOpen', 'given']);
+    // Nor anyone excused once the session's date has passed.
+    expect(ask({ session: { ...session, dueDate: YESTERDAY } }).sort()).toEqual(['excusedAndGiven', 'given']);
+  });
+
+  it('counts an excused student in the register gap, before any grant exists', () => {
+    // No grants are read at all: the session is enough.
+    expect(ask()).toContain('excusedOpen');
+  });
+
+  it('names nobody when nobody can play it: a draft, or a class closed', () => {
+    expect(ask({ recordingStatus: 'unpublished' })).toEqual([]);
+    expect(ask({ cls: { effectiveActive: false, archivedAccess: false } })).toEqual([]);
+  });
+
+  it('names a student a corrected register takes Excused from, unless they keep it given', () => {
+    const after = { ...session.attendance, excusedOpen: 'present' as const, excusedAndGiven: 'present' as const };
+    expect(ask({ after })).toEqual(['excusedOpen']);
+  });
+
+  it('names nobody for a correction that closes nothing', () => {
+    expect(ask({ after: { ...session.attendance, present: 'absent' as const } })).toEqual([]);
+    expect(ask({ session: { ...session, dueDate: YESTERDAY }, after: { ...session.attendance, excusedOpen: 'present' as const } })).toEqual([]);
   });
 });

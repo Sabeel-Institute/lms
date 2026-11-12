@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RegisterFacts } from '@sabeel/shared';
-import { changedSince, giveResult, givenStatus } from './givenWords';
+import { changedSince, giveResult, givenStatus, namesList } from './givenWords';
 
 /**
  * What a teacher reads about each student given a recording, and what the
@@ -75,5 +75,15 @@ describe('changedSince', () => {
     expect(changedSince({ code: 'functions/failed-precondition', message: 'Take attendance for this session first.' })).toBeUndefined();
     expect(changedSince({ code: 'functions/permission-denied', details: { current: null } })).toBeUndefined();
     expect(changedSince(new Error('offline'))).toBeUndefined();
+  });
+});
+
+describe('namesList', () => {
+  it('names up to three, then counts the rest', () => {
+    expect(namesList(['Aisha'])).toBe('Aisha');
+    expect(namesList(['Aisha', 'Omar'])).toBe('Aisha and Omar');
+    expect(namesList(['Aisha', 'Omar', 'Zayd'])).toBe('Aisha, Omar and Zayd');
+    expect(namesList(['Aisha', 'Omar', 'Zayd', 'Huda'])).toBe('Aisha, Omar, Zayd and 1 other');
+    expect(namesList(['Aisha', 'Omar', 'Zayd', 'Huda', 'Bilal'])).toBe('Aisha, Omar, Zayd and 2 others');
   });
 });

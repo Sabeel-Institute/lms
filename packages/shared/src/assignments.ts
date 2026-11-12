@@ -596,3 +596,41 @@ export function windowLastDay(window: ListenWindow): string | null {
 export function completionShown(window: ListenWindow): boolean {
   return window.state === 'open' && window.required;
 }
+
+/**
+ * WHO WOULD LOSE A RECORDING THEY CAN PLAY RIGHT NOW, if staff go ahead: the
+ * students a confirm names before Archive, Unpublish, or a corrected register
+ * closes it at once (`docs/plans/GIVE-A-RECORDING.md`, "Closing at once").
+ *
+ * "Can play it" is the student's window open, as `canPlayNow` reads it, for
+ * an active account in the class. The excused side is read from the SESSION
+ * (`requiredUntil`), so a register submitted a second ago counts before its
+ * grants exist. A student also holding it given, and open, keeps it through a
+ * corrected register, so is not named; archiving or unpublishing closes both,
+ * so everyone who can play it is.
+ *
+ * `after` is the register as it would be submitted; absent, the recording
+ * itself is what closes.
+ */
+export function closesNow(input: {
+  students: { uid: string; enrolled: boolean; active: boolean }[];
+  session: RegisterFacts;
+  after?: Record<string, 'present' | 'absent' | 'excused'>;
+  recordingStatus: string;
+  cls: { effectiveActive: boolean; archivedAccess: boolean };
+  given: ReadonlyMap<string, Pick<GivenRecordingDoc, 'openUntil'>>;
+  today: string;
+}): string[] {
+  const { students, session, after, recordingStatus, cls, given, today } = input;
+  if (recordingStatus !== 'published' || !canPlayFromCourse(cls)) return [];
+  const canPlay = (uid: string, enrolled: boolean, register: RegisterFacts) => {
+    const until = requiredUntil(uid, { session: register, grant: null, enrolled, recordingStatus, today });
+    const grant = until ? { active: true, dueDate: until } : null;
+    return canPlayNow(cls, listenWindow(grant, given.get(uid) ?? null, enrolled, today), uid);
+  };
+  const next: RegisterFacts | null = after ? { ...session, attendance: after } : null;
+  return students
+    .filter((s) => s.active && s.enrolled && canPlay(s.uid, s.enrolled, session))
+    .filter((s) => (next ? !canPlay(s.uid, s.enrolled, next) : true))
+    .map((s) => s.uid);
+}

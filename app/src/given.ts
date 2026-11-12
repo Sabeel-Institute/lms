@@ -1,6 +1,15 @@
 import { collection, query, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { COLLECTIONS, type GivenExpectation, type GivenRecordingDoc } from '@sabeel/shared';
+import { useMemo } from 'react';
+import {
+  COLLECTIONS,
+  closesNow,
+  type GivenExpectation,
+  type GivenRecordingDoc,
+  type RegisterFacts,
+} from '@sabeel/shared';
+import { useRosterState } from './structure';
+import { useStudentsState } from './students';
 import { db, functions } from './firebase';
 import { useLiveQuery } from './liveQuery';
 import { read } from './documents';
@@ -22,15 +31,19 @@ export interface GivenRow extends GivenRecordingDoc {
  * `recordingId ==`: the class scope is what the staff rule requires. Null
  * until the first snapshot.
  */
-export function useGivenRecordings(recording: { id: string; courseId: string }): Map<string, GivenRow> | null {
+export function useGivenRecordings(recording: { id: string; courseId: string } | null): Map<string, GivenRow> | null {
+  const courseId = recording?.courseId ?? null;
+  const recordingId = recording?.id ?? null;
   return useLiveQuery<Map<string, GivenRow> | null>(
     () =>
-      query(
-        collection(db, COLLECTIONS.givenRecordings),
-        where('courseId', '==', recording.courseId),
-        where('recordingId', '==', recording.id),
-      ),
-    [recording.courseId, recording.id],
+      courseId && recordingId
+        ? query(
+            collection(db, COLLECTIONS.givenRecordings),
+            where('courseId', '==', courseId),
+            where('recordingId', '==', recordingId),
+          )
+        : null,
+    [courseId, recordingId],
     {
       label: 'givenRecordings',
       map: (snap) =>
@@ -65,3 +78,36 @@ export async function takeBackRecording(input: {
   return res.data.outcome;
 }
 
+
+/**
+ * WHO WOULD LOSE THIS RECORDING AT ONCE, for the confirms that ask before
+ * Archive, Unpublish or a corrected register closes it to someone playing it
+ * (`closesNow` in @sabeel/shared). Null until the roster, the accounts and
+ * the given recordings have answered: a confirm that skipped itself because
+ * nothing had loaded would close a recording on someone without asking.
+ */
+export function useWhoLosesIt(
+  session: RegisterFacts & { courseId: string },
+  recording: { id: string; courseId: string; status: string } | null,
+  cls: { effectiveActive: boolean; archivedAccess: boolean },
+  today: string,
+): { closes: (after?: RegisterFacts['attendance']) => string[]; nameOf: (uid: string) => string } | null {
+  const roster = useRosterState(session.courseId);
+  const students = useStudentsState(true);
+  const given = useGivenRecordings(recording);
+  return useMemo(() => {
+    if (!recording) return { closes: () => [], nameOf: (uid: string) => uid };
+    if (!roster || !students || !given) return null;
+    const account = new Map(students.map((s) => [s.uid, s]));
+    const people = roster.map((e) => ({
+      uid: e.studentUid,
+      enrolled: e.active,
+      active: account.get(e.studentUid)?.status === 'active',
+    }));
+    return {
+      closes: (after?: RegisterFacts['attendance']) =>
+        closesNow({ students: people, session, after, recordingStatus: recording.status, cls, given, today }),
+      nameOf: (uid: string) => account.get(uid)?.displayName ?? uid,
+    };
+  }, [recording, roster, students, given, session, cls, today]);
+}

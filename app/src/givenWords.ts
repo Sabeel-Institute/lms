@@ -73,3 +73,11 @@ export function giveResult(outcome: GiveOutcome, name: string, openUntil: string
       return `Open until ${openUntil}.${tonight}`;
   }
 }
+
+/** Up to three names, then how many more: "Aisha, Omar and 2 others". */
+export function namesList(names: string[]): string {
+  if (names.length <= 1) return names.join('');
+  if (names.length <= 3) return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  const rest = names.length - 3;
+  return `${names.slice(0, 3).join(', ')} and ${rest} other${rest === 1 ? '' : 's'}`;
+}
