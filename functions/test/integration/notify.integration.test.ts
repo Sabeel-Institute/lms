@@ -1088,6 +1088,48 @@ describe('recordingGiven', () => {
     ]);
   });
 
+  it('tells a student excused again, after being given it, that it is now required', async () => {
+    await withDevice('s1');
+    await enrol('s1');
+    await seedRecording('r1', 'sess1', 'published');
+    // Excused first: the ready message, and its marker spent.
+    const edge = await seedGrant('s1', 'r1');
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(true);
+    // Corrected to present, then given: "It is not required".
+    await db().collection(COLLECTIONS.assignments).doc(assignmentId('s1', ns('r1'))).update({ active: false });
+    await give('s1', 'r1', '2026-08-25');
+    // Excused again: what is true now is that it is required.
+    await db().collection(COLLECTIONS.assignments).doc(assignmentId('s1', ns('r1'))).update({ active: true });
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(true);
+    expect(outbox.map((o) => o.message).at(-1)).toEqual(
+      recordingRequiredMessage('Hikam Foundations', 'Session 3 — Patience', '2026-08-20', ns('r1')),
+    );
+    // Once for that opening: a retry sends nothing more.
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(false);
+  });
+
+  it('tells it again after a given message, once that given recording has gone', async () => {
+    await presentWorld();
+    // Excused first: the ready message.
+    const edge = await seedGrant('s1', 'r1');
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(true);
+    // Corrected to present, given it ("It is not required"), then taken back.
+    await db().collection(COLLECTIONS.assignments).doc(assignmentId('s1', ns('r1'))).update({ active: false });
+    await new Promise((r) => setTimeout(r, 5));
+    const id = await give('s1', 'r1');
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(true);
+    await db().collection(COLLECTIONS.givenRecordings).doc(id).delete();
+    // Excused again: the last word their phone had was "not required".
+    await db().collection(COLLECTIONS.assignments).doc(assignmentId('s1', ns('r1'))).update({ active: true });
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(true);
+    expect(outbox.map((o) => o.message).at(-1)).toEqual(
+      recordingReadyMessage('Hikam Foundations', 'Session 3 — Patience', '2026-08-20', ns('r1')),
+    );
+    // Once for that given message: corrected and excused once more, nothing.
+    expect(await notifyRecordingReady(db(), edge, TODAY)).toBe(false);
+    expect(outbox).toHaveLength(3);
+  });
+
   it('keeps the excused wording for a student whose given date has passed', async () => {
     await withDevice('s1');
     await seedRecording('r1', 'sess1', 'published');

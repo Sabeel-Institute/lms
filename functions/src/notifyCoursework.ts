@@ -152,16 +152,21 @@ export async function notifyHandInLastDay(db: Firestore, today: string): Promise
   const jobs: SubmissionDoc[] = [];
   const messages = new Map<string, PushMessage>();
   for (const doc of due.docs) {
-    const s = doc.data() as SubmissionDoc;
-    if (!stillWorking(s) || s.closedEarly) continue;
-    if (!cws.has(s.courseworkId)) cws.set(s.courseworkId, await readCw(db, s.courseworkId));
-    const cw = cws.get(s.courseworkId);
-    if (!cw || cw.status !== 'posted') continue;
-    if (!courses.has(cw.courseId)) courses.set(cw.courseId, await readCourse(db, cw.courseId));
-    const course = courses.get(cw.courseId);
-    if (!course?.effectiveActive) continue;
-    jobs.push(s);
-    messages.set(doc.id, handInLastDayMessage(course.name, cw.title, s.dueDate, s.courseworkId));
+    // Each student's reads inside their own guard: one that fails costs their
+    // reminder alone, not every one after it.
+    await attempt(`handInLastDay ${doc.id}`, async () => {
+      const s = doc.data() as SubmissionDoc;
+      if (!stillWorking(s) || s.closedEarly) return false;
+      if (!cws.has(s.courseworkId)) cws.set(s.courseworkId, await readCw(db, s.courseworkId));
+      const cw = cws.get(s.courseworkId);
+      if (!cw || cw.status !== 'posted') return false;
+      if (!courses.has(cw.courseId)) courses.set(cw.courseId, await readCourse(db, cw.courseId));
+      const course = courses.get(cw.courseId);
+      if (!course?.effectiveActive) return false;
+      jobs.push(s);
+      messages.set(doc.id, handInLastDayMessage(course.name, cw.title, s.dueDate, s.courseworkId));
+      return true;
+    });
   }
   return toEach(db, jobs, 'handInLastDay', (s) => messages.get(submissionId(s.studentUid, s.courseworkId)) as PushMessage);
 }

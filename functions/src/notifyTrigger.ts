@@ -153,18 +153,6 @@ export const onAssignmentWritten = onDocumentWritten(
 );
 
 /**
- * The morning sweep: last-day reminders for recordings and for hand-ins, and
- * attendance nobody has taken.
- *
- * 07:00 in the institute timezone, so "today" here is the same civil day the
- * due-date maths uses everywhere else — a UTC schedule would fire the reminder
- * on the wrong side of midnight for half the year.
- *
- * The repo's first scheduled function. It reuses `todayInZone` rather than
- * deriving the date itself, for the same reason the rules do not compute due
- * dates: one implementation of the rollover, or two that drift.
- */
-/**
  * A recording given to a student, or an ended one opened again: one message.
  *
  * ON THE OPENING EDGE ONLY. `givenAt` is set by a give or a reopen and kept by
@@ -178,9 +166,8 @@ export const onGivenRecordingWritten = onDocumentWritten(
     try {
       const before = event.data?.before.data() as GivenRecordingDoc | undefined;
       const after = event.data?.after.data() as GivenRecordingDoc | undefined;
-      if (!after) return;
-      if (before?.givenAt === after.givenAt) return;
-      await notifyRecordingGiven(getFirestore(), event.params.givenId, after.givenAt, todayInZone(INSTITUTE_TIMEZONE));
+      if (!opensIt(before, after)) return;
+      await notifyRecordingGiven(getFirestore(), event.params.givenId, (after as GivenRecordingDoc).givenAt, todayInZone(INSTITUTE_TIMEZONE));
     } catch (e) {
       await reportError(e, { source: 'onGivenRecordingWritten' });
       throw e;
@@ -188,15 +175,48 @@ export const onGivenRecordingWritten = onDocumentWritten(
   },
 );
 
+/**
+ * Is this write an OPENING: a give, or a new date on one that had ended? Not a
+ * move (which keeps `givenAt`), and not a take back (no `after`).
+ */
+export function opensIt(before: Pick<GivenRecordingDoc, 'givenAt'> | undefined, after: Pick<GivenRecordingDoc, 'givenAt'> | undefined): boolean {
+  return !!after && before?.givenAt !== after.givenAt;
+}
+
+/**
+ * The morning sweep: last-day reminders for recordings and for hand-ins, and
+ * attendance nobody has taken.
+ *
+ * 07:00 in the institute timezone, so "today" here is the same civil day the
+ * due-date maths uses everywhere else — a UTC schedule would fire the reminder
+ * on the wrong side of midnight for half the year.
+ *
+ * The repo's first scheduled function. It reuses `todayInZone` rather than
+ * deriving the date itself, for the same reason the rules do not compute due
+ * dates: one implementation of the rollover, or two that drift.
+ *
+ * EACH SWEEP ON ITS OWN: one that fails (its query refused, say) is reported
+ * and the others still run. Run one after another in one `try`, a failure in
+ * the first cost the day its hand-in and attendance reminders too, with no
+ * retry for a schedule.
+ */
 export const onMorning = onSchedule(
   { schedule: '0 7 * * *', timeZone: INSTITUTE_TIMEZONE, secrets: [SENTRY_DSN, ...PUSH_SECRETS] },
   async () => {
     try {
       const db = getFirestore();
       const today = todayInZone(INSTITUTE_TIMEZONE);
-      const lastDay = await notifyLastDay(db, today);
-      const handIn = await notifyHandInLastDay(db, today);
-      const attendance = await notifyAttendanceMissing(db, today);
+      const sweep = async (name: string, run: () => Promise<number>) => {
+        try {
+          return await run();
+        } catch (e) {
+          await reportError(e, { source: `onMorning:${name}` });
+          return 'failed';
+        }
+      };
+      const lastDay = await sweep('lastDay', () => notifyLastDay(db, today));
+      const handIn = await sweep('handInLastDay', () => notifyHandInLastDay(db, today));
+      const attendance = await sweep('attendanceMissing', () => notifyAttendanceMissing(db, today));
       console.log(`morning sweep ${today}: ${lastDay} last-day, ${handIn} hand-in, ${attendance} attendance`);
     } catch (e) {
       await reportError(e, { source: 'onMorning' });
