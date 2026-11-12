@@ -106,14 +106,19 @@ name: Student signs in, listens, and changes the password
 
 # A recording a teacher gave: on To do under Optional, it plays, and there is
 # nothing to mark (the seed gives this student a session they attended).
+# Centred, not merely visible: at the bottom edge the card sits under the
+# docked bar of the recording played above, and a tap there reopens that one.
+# The check names THIS player's own line, "open until": "Bookmark this place"
+# is on every player, so it passed over the wrong one on iOS.
 - scrollUntilVisible:
     element: "Play Session 10 — Thankfulness in Ease, optional[\\s\\S]*"
+    centerElement: true
     timeout: 30000
 - runFlow:
     file: ci-tools/tap-until.yaml
     env:
       TARGET: "Play Session 10 — Thankfulness in Ease, optional[\\s\\S]*"
-      EXPECT: "Bookmark this place"
+      EXPECT: "[\\s\\S]*open until[\\s\\S]*"
       SECONDS: 30
 - runFlow:
     file: ci-tools/tap-until.yaml
