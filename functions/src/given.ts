@@ -78,7 +78,7 @@ function expectation(value: unknown): GivenExpectation {
   return { givenAt: v.givenAt as number, openUntil: v.openUntil };
 }
 
-export function validateGive(data: unknown): GiveInput {
+function validateGive(data: unknown): GiveInput {
   const d = (data ?? {}) as Record<string, unknown>;
   const recordingId = docId(d.recordingId, 'recordingId');
   const studentUid = docId(d.studentUid, 'studentUid');
@@ -89,7 +89,7 @@ export function validateGive(data: unknown): GiveInput {
   return { recordingId, studentUid, openUntil: d.openUntil, expect: expectation(d.expect) };
 }
 
-export function validateTakeBack(data: unknown): TakeBackInput {
+function validateTakeBack(data: unknown): TakeBackInput {
   const d = (data ?? {}) as Record<string, unknown>;
   const recordingId = docId(d.recordingId, 'recordingId');
   const studentUid = docId(d.studentUid, 'studentUid');
