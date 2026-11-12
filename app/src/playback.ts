@@ -21,6 +21,7 @@ import { forgetProgress, journaledFor, journaledProgress, journalProgress, type 
 import { keepPlace, keptPlace } from './placeStore';
 import type { Player } from './playerTypes';
 import { readIfExists } from './documents';
+import { captureError } from './sentry';
 
 interface Minted {
   url: string;
@@ -393,6 +394,10 @@ async function writeProgress(save: Save): Promise<void> {
     // of the install.
     if ((e as { code?: string } | null)?.code === 'permission-denied') {
       void forgetProgress(id, save.sitting, save.updatedAt);
+      if (listenOpenFor === who.recordingId && !refusalsReported.has(save.sitting)) {
+        refusalsReported.add(save.sitting);
+        captureError(e, { source: 'progress-refused-while-open', recordingId: who.recordingId });
+      }
       return;
     }
     // A failed write must not break playback. The next tick retries — but only
@@ -400,6 +405,22 @@ async function writeProgress(save: Save): Promise<void> {
     // journal record for the next launch.
     if (generation === gen) dirty = true;
   }
+}
+
+/**
+ * THE RECORDING A STUDENT MAY PLAY RIGHT NOW, as the player and the docked
+ * bar last worked out their window (`noteListenOpen`). A save refused while it
+ * is open is not the student losing access, which refuses saves too and is
+ * the app working: it is the rules and the window disagreeing, which would
+ * otherwise drop their listening without a word. Reported once a sitting.
+ */
+let listenOpenFor: string | null = null;
+const refusalsReported = new Set<string>();
+
+/** The player and the docked bar say whether a student's window for this recording is open. */
+export function noteListenOpen(recordingId: string, open: boolean): void {
+  if (open) listenOpenFor = recordingId;
+  else if (listenOpenFor === recordingId) listenOpenFor = null;
 }
 
 /** The subject of the open session, if it is a student's. */

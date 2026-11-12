@@ -5,6 +5,7 @@ import {
   SKIP_FORWARD_MS,
   closePlayback,
   formatClock,
+  noteListenOpen,
   playback,
   usePlayback,
 } from '../playback';
@@ -104,6 +105,11 @@ export function MiniPlayer({
   const shut = !!course.value && decided && !canPlayNow(course.value, window, student);
   const revoked = !!now && ((loaded.resolved && !loaded.value) || (course.resolved && shut));
   const lastDay = window ? windowLastDay(window) : null;
+  const windowOpen = window?.state === 'open';
+  const playingId = now?.recordingId ?? null;
+  useEffect(() => {
+    if (student && playingId && window !== null) noteListenOpen(playingId, windowOpen);
+  }, [student, playingId, window, windowOpen]);
   /*
    * A recording playing when the student's own deadline passes plays on to
    * the end and closes once it stops, as the player screen lets it (see

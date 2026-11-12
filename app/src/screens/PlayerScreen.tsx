@@ -28,6 +28,7 @@ import {
   PLAYBACK_RATES,
   closePlayback,
   formatClock,
+  noteListenOpen,
   openPlayback,
   playback,
   usePlayback,
@@ -89,6 +90,10 @@ export function PlayerScreen({
   // The day whose midnight closes it: the later of the dates held, so a file
   // playing then plays on to its end on the day that actually closes it.
   const lastDay = window ? windowLastDay(window) : null;
+  const windowOpen = window?.state === 'open';
+  useEffect(() => {
+    if (studentUid !== null && window !== null) noteListenOpen(recording.id, windowOpen);
+  }, [studentUid, window, windowOpen, recording.id]);
   // WHICH of the two, derived by ELIMINATION rather than by re-testing the
   // deadline. Spelling `studentUid !== null && isOverdue(dueDate, today)` here
   // would put half of `canPlayNow` in a second place, free to disagree with the
