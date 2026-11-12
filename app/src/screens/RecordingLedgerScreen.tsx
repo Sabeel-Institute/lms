@@ -282,7 +282,7 @@ function ListenerRow({ row: r, givenUntil }: { row: LedgerRow; givenUntil: strin
           {listened ? (
             <Text style={styles.sub}>
               {listenedText(r.listenedPct)}
-              {r.lastListened ? ` · last ${fmtDate(r.lastListened)}` : ''}
+              {r.lastListened ? ` · last\u00A0${unbreakableDate(fmtDate(r.lastListened))}` : ''}
               {givenUntil ? ` · given until\u00A0${unbreakableDate(givenUntil)}` : ''}
             </Text>
           ) : null}
@@ -340,7 +340,7 @@ function LedgerRowCard({
       {/* THE STATUS LEADS, in its colour: it is what the row is read for. */}
       <Text style={[styles.status, statusStyle(outcome)]}>{statusLabel(r, outcome, closedBy)}</Text>
       {` · ${listenedText(r.listenedPct)}`}
-      {r.lastListened ? ` · last ${fmtDate(r.lastListened)}` : ''}
+      {r.lastListened ? ` · last\u00A0${unbreakableDate(fmtDate(r.lastListened))}` : ''}
       {r.pending ? ' · pending sync' : ''}
       {givenUntil ? ` · given until\u00A0${unbreakableDate(givenUntil)}` : ''}
     </Text>
