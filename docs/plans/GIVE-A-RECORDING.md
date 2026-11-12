@@ -288,7 +288,7 @@ counts.
 |---|---|---|
 | Move a session's listen-by date | Nobody: a past date is refused, and today stays open to midnight | Nothing, as today |
 | Move a given date | Nobody, the same way | Nothing |
-| Take back | That student | Always: "Take back from <name>? It stops at once if they are listening." (call 8) |
+| Take back | That student | Always: "Take back from <name>? If they are listening, it stops." (call 8) |
 | ⋮ Archive or Unpublish | Everyone who can play it | New, while anyone can: "Archive <title>? It closes now for <n> students who can play it." (Unpublish the same.) After the session's listen-by date it adds "To publish it again, first move its listen-by date forward, which reopens it to the students you excused." With nobody able to play it, the move runs at once, as today |
 | Submit a corrected register | Each student it takes Excused from while they can play the session's recording, unless they also hold it given and open | New, when anyone is named: "Submit? <Title> closes now for <names>." (up to three names, then "and <n> others") |
 | Archive a class with listening off; turn listening off on an archived class; archive a cohort | Everyone in it who can play | Nothing new: each states its effect beside the control, by the decision in `CoursesScreen.tsx` (call 11) |
@@ -722,6 +722,15 @@ regex), asserts Pause, then `assertNotVisible: { id: "mark-complete" }`; the
 Native workflow runs it on the iOS simulator. A notification tapped from the
 shade needs a real send, which a debug build never makes; that one check is
 the owner's, on their own phone, if they want it.
+
+**Found on the AVD, 2026-11-12:** with the screen locked, a take back
+reaches the app only when it comes back to the foreground. A given
+recording playing on a locked phone went on playing 20 s after the take
+back (`dumpsys media_session`: PLAYING), and stopped as soon as the phone
+was unlocked. Excused access behaves the same when a recording is
+unpublished; the minted link lasts its hours either way, inside the threat
+model. The take back confirm therefore says "If they are listening, it
+stops.", not "at once", and the manual says when.
 
 ### An older client
 

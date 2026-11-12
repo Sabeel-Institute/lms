@@ -367,7 +367,7 @@ function RowSheet({
           confirmTestID={`given-takeback-confirm-${name}`}
           label="Take back"
           confirmLabel="Take back"
-          warning={`Take back from ${name}? It stops at once if they are listening.`}
+          warning={`Take back from ${name}? If they are listening, it stops.`}
           busy={active === 'take'}
           onConfirm={takeBack}
         >

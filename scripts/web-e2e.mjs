@@ -2089,7 +2089,7 @@ check(
 );
 await tap(admin, 'given-edit-Fatima Ahmed');
 await tap(admin, 'given-takeback-Fatima Ahmed');
-check('take back asks first', await seesText(admin, 'Take back from Fatima Ahmed? It stops at once if they are listening.'));
+check('take back asks first', await seesText(admin, 'Take back from Fatima Ahmed? If they are listening, it stops.'));
 await tap(admin, 'given-takeback-confirm-Fatima Ahmed');
 const gStopped = await until(
   () =>

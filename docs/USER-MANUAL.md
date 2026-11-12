@@ -261,7 +261,7 @@ Closing it with the **×** is what stops playback.
 there is nothing to mark, so in place of **Mark complete** it says "This one is
 optional, so there is nothing to mark." If you had missed it, it also says that
 its listen-by date has gone and that listening now does not change your record.
-If the teacher takes it back while you are listening, it stops.
+If the teacher takes it back while you are listening, it stops (on a locked phone, as soon as you open the app again).
 
 ## 1.4 Marking a recording complete
 
@@ -847,8 +847,8 @@ under **Optional**, and nothing is required of them or counted.
 - Each row says **Open until**, **Ended**, **Required until … then open until**
   when you gave it first and excused them after, or why it is closed. Tap the
   pencil to move the date, earlier or later, or to give an ended one a new
-  date, or to **Take back**, which asks first because it stops it at once if
-  they are listening.
+  date, or to **Take back**, which asks first because it stops it if they
+  are listening (on a locked phone, when they next open the app).
 - Any teacher of the class can change or take back what a colleague gave. If
   you both save the same row at once, the second is told the date the other set,
   and saving again uses theirs on purpose.
