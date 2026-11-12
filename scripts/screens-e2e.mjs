@@ -1171,7 +1171,35 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 58;
+const STAFF_SCREENS = 61;
+
+/**
+ * A RECORDING GIVEN TO STUDENTS, as staff meet it: Progress with Given to
+ * holding a row of each kind (open, ended, required now with a later date),
+ * the give list, and one row's sheet. For admin and manager alike: a manager's
+ * read of the class's given recordings is the one that can fail closed.
+ */
+async function tourGiven(page, tag, visit, openCourse) {
+  const openGivenLedger = async () => {
+    await openCourse();
+    await tap(byId(page, 'nav-sessions'));
+    await tap(byId(page, `session-open-${world.given.title}`));
+    await tap(byId(page, 'recording-ledger'));
+  };
+  await visit('given-to', openGivenLedger, `given-row-${STUDENT.name}`);
+  const rows = await page.getByTestId(/^given-row-/).filter({ visible: true }).allInnerTexts().catch(() => []);
+  check(`${tag} Given to says open, ended and required-then-open, one row each`,
+    rows.some((r) => /Open until/.test(r)) && rows.some((r) => /Ended /.test(r)) && rows.some((r) => /Required until .*, then open until/.test(r)),
+    rows.join(' | ').replace(/\n/g, ' ').slice(0, 240));
+  await visit('give-sheet', async () => {
+    await openGivenLedger();
+    await tap(byId(page, 'given-add'));
+  }, 'give-submit');
+  await visit('given-row-sheet', async () => {
+    await openGivenLedger();
+    await tap(byId(page, `given-edit-${STUDENT.name}`));
+  }, `given-save-${STUDENT.name}`);
+}
 
 async function tourStaff(page, tag) {
   const counter = { seen: 0 };
@@ -1456,6 +1484,7 @@ async function tourStaff(page, tag) {
   }, `ledger-row-${STUDENT.name}`);
   check(`${tag} an open grant on an archived class reads as closed, not as still to do`,
     /Closed \(course archived\)/.test(await byId(page, `ledger-row-${STUDENT.name}`).innerText().catch(() => '')));
+  await tourGiven(page, tag, visit, openCourse);
   /*
    * THE PICKER'S ROWS, FROM A ZOOM THAT ANSWERS AT THE BROWSER.
    *
@@ -1603,7 +1632,7 @@ async function tourStaff(page, tag) {
     `${counter.seen}/${STAFF_SCREENS}`);
 }
 
-const MANAGER_SCREENS = 12;
+const MANAGER_SCREENS = 15;
 
 /**
  * A manager sees the same screens with fewer rows AND fewer controls, which is a
@@ -1684,6 +1713,7 @@ async function tourManager(page, tag) {
     await tap(byId(page, 'recording-ledger'));
     await tap(byId(page, `override-open-${STUDENT.name}`));
   }, `override-reason-${STUDENT.name}`);
+  await tourGiven(page, tag, visit, openCourse);
   // The staff switch row, which only a manager has — see the note on the admin's
   // notifications visit above.
   await visit('notifications', async () => {
@@ -1696,7 +1726,7 @@ async function tourManager(page, tag) {
     `${counter.seen}/${MANAGER_SCREENS}`);
 }
 
-const STUDENT_SCREENS = 16;
+const STUDENT_SCREENS = 19;
 
 async function tourStudent(page, tag) {
   const counter = { seen: 0 };
@@ -1763,6 +1793,19 @@ async function tourStudent(page, tag) {
     // to `my-classes` if the bar stops rendering, every geometric check passes,
     // and the tour still reports having toured it.
   }, 'mini-player');
+  // RECORDINGS A TEACHER GAVE: open, under Optional; the one they missed and
+  // were given again, with its note; and one whose given date has passed,
+  // reached as an open tab receives a tapped message (a `push-open` message to
+  // the service worker listener), so Back exists.
+  await visit('player-optional', () => tap(byId(page, `optional-${world.given.title}`)), 'optional-completion');
+  await visit('player-missed-given', () => tap(byId(page, `optional-${missed.title}`)), 'optional-completion');
+  await visit('player-given-ended', async () => {
+    await page.evaluate((path) => {
+      navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'push-open', data: { path } } }));
+    }, `play/${world.givenEnded.recId}`);
+  }, 'player-title');
+  check(`${tag} a given recording past its date says until when it was open`,
+    /This recording was open to you until/.test(await page.locator('body').innerText().catch(() => '')));
   // An assignment in each state its screen has: open with a draft saved,
   // past due (the late-work sentence), handed in (Take back), and returned
   // (the grade). Reached from To do, as a student reaches them.

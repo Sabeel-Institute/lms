@@ -2023,7 +2023,7 @@ const twelveOut = addDays(todayG, 12);
 const fourteenOut = addDays(todayG, 14);
 await patchField('givenRecordings', `${giveeUid}_${gRecId}`, 'openUntil', twelveOut);
 await until(
-  () => admin.getByTestId('given-row-Fatima Ahmed').first().innerText().catch(() => ''),
+  () => admin.getByTestId('given-row-Fatima Ahmed').first().innerText().then((t) => t.replace(/\u2011/g, '-'), () => ''),
   (text) => text.includes(twelveOut),
 );
 await admin.getByLabel('Open until').filter({ visible: true }).first().fill(fourteenOut);

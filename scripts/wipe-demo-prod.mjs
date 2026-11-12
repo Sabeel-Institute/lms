@@ -101,7 +101,7 @@ const chunk = (items, size) => {
 const FLAGGED = ['cohorts','courses','sessions','recordings','students','enrollments',
   'completions','listeningProgress','completionOverrides','completionEvents','auditLog','staffUsers',
   'coursework','submissions','grades','submissionEvents'];
-const BY_REFERENCE = ['sessions','recordings','enrollments','attendanceRecords','assignments',
+const BY_REFERENCE = ['sessions','recordings','enrollments','attendanceRecords','assignments','givenRecordings',
   'completions','completionEvents','listeningProgress','bookmarks','completionOverrides','auditLog',
   'submissions','grades','submissionEvents','drafts','attachmentUploads'];
 

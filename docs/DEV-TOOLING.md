@@ -378,6 +378,24 @@ Three more things that cost time here:
   not. Prefer the helpers; when a direct locator is unavoidable, add the filter
   to it.
 
+**Two techniques the "Giving a recording" block uses, both reusable:**
+
+- **Watch the media elements, not the screen.** "Take back stops the audio at
+  once" lives in the `<video>` the web player creates
+  (`document.createElement('video')`, `player.web.ts`), not in anything drawn.
+  An init script on the student's context wraps `document.createElement` and
+  keeps every `audio`/`video` it makes in `window.__media`; the check is that
+  every one is `paused`, has no `src` and has `networkState === 0`, after a
+  positive control (one was playing) taken just before, or a player that never
+  played would pass.
+- **Watch for a control that must never appear, with a MutationObserver.**
+  "Mark complete is never drawn" for a given recording cannot be checked by
+  looking once: it could flash while the reads are still answering. The same
+  init script observes `document` for any node (or `data-testid` change)
+  carrying `mark-complete` and counts it in `window.__marks`; the check is that
+  the count is 0 after the player has settled. Init scripts run on the next
+  document, so the page is loaded again (`goHome`) after adding one.
+
 ## The screens sweep
 
 `npm run test:screens` (`scripts/e2e-stack.sh screens` →
@@ -474,6 +492,13 @@ that it is good.
   ledger's override and a roster removal each add rows that exist in no other
   state, and 320px is where they run out of room. They are toured as their own
   entries rather than trusted because the screen underneath them measured fine.
+  The same goes for a recording given to one student: Progress with **Given
+  to** holding an open, an ended and a required-then-open row, the give list
+  and a row's sheet (admin and manager), and the student's optional player,
+  the one missed and given again, and the one whose given date has passed,
+  reached by a `push-open` message to the service worker listener as an open
+  tab receives a tapped notification, so Back exists. `seed-world` gives them:
+  two sessions the demo student attended, and Session 1 given again.
 - **The one absolute-width check: no fixed-format control squashed below its own
   widget.** Everything else in the sweep is relative, so a control can sit inside
   its container, overlap nothing, clip nothing, and still be too narrow to read.

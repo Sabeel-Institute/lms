@@ -36,8 +36,11 @@ import {
   dueDateMovedMessage,
   handInLastDayMessage,
   lastDayMessage,
+  lastRequiredDayMessage,
   newAssignmentMessage,
+  recordingGivenMessage,
   recordingReadyMessage,
+  recordingRequiredMessage,
   workReturnedMessage,
 } from '@sabeel/shared';
 import { byId, resetEmulators, seedWorld, tap } from './lib/seed-world.mjs';
@@ -87,7 +90,7 @@ await resetEmulators();
 // this suite reads back can be gone before it looks.
 const browser = await chromium.launch({ channel: 'chromium', args: ['--disable-features=NativeNotifications,SystemNotifications'] });
 const world = await seedWorld({ db, auth });
-const { STUDENT, STUDENT_PASSWORD, dueSoon, blocking } = world;
+const { STUDENT, STUDENT_PASSWORD, dueSoon, blocking, given } = world;
 
 // ---- what the server would send, about things in the seeded world ----------
 const session = (await db.doc(`sessions/${blocking.id}`).get()).data();
@@ -106,6 +109,15 @@ const onRecording = (rec) => async (page) =>
   (await visible(byId(page, 'player-scrubber')))
   && (await text(byId(page, 'player-title'))).includes(rec.title)
   && new URL(page.url()).pathname === `/play/${rec.recId}`;
+/**
+ * A student lands on a recording given to them: the optional player, saying
+ * there is nothing to mark, with no Mark complete, its title, its address.
+ */
+const onGiven = (rec) => async (page) =>
+  (await visible(byId(page, 'optional-completion')))
+  && (await byId(page, 'mark-complete').count()) === 0
+  && (await text(byId(page, 'player-title'))).includes(rec.title)
+  && new URL(page.url()).pathname === `/play/${rec.recId}`;
 /** A student lands on the assignment: the control its state offers, its title, its address. */
 const onWork = (cw, anchor) => async (page) =>
   (await visible(byId(page, anchor)))
@@ -120,7 +132,10 @@ const onSession = async (page) =>
 const DUE = '2026-11-02';
 const STUDENT_CASES = [
   { kind: 'recordingReady', message: recordingReadyMessage(courseName, dueSoon.title, DUE, dueSoon.recId), landed: onRecording(dueSoon) },
+  { kind: 'recordingReady (given)', message: recordingGivenMessage(courseName, given.title, DUE, given.recId), landed: onGiven(given) },
+  { kind: 'recordingReady (now required)', message: recordingRequiredMessage(courseName, dueSoon.title, DUE, dueSoon.recId), landed: onRecording(dueSoon) },
   { kind: 'lastDay', message: lastDayMessage(courseName, dueSoon.title, DUE, dueSoon.recId), landed: onRecording(dueSoon) },
+  { kind: 'lastDay (given later)', message: lastRequiredDayMessage(courseName, dueSoon.title, DUE, dueSoon.recId), landed: onRecording(dueSoon) },
   { kind: 'assignmentPosted', message: newAssignmentMessage(courseName, toDo.title, DUE, toDo.id), landed: onWork(toDo, 'work-hand-in') },
   { kind: 'assignmentPosted (due date moved)', message: dueDateMovedMessage(courseName, pastDue.title, DUE, pastDue.id), landed: onWork(pastDue, 'work-hand-in') },
   { kind: 'handInLastDay', message: handInLastDayMessage(courseName, toDo.title, DUE, toDo.id), landed: onWork(toDo, 'work-hand-in') },
