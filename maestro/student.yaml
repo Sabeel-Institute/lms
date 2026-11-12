@@ -1,5 +1,6 @@
 # A student: a password sign-in, a recording that keeps playing in the
-# background and resumes its place, the class list and Change password.
+# background and resumes its place, a recording a teacher gave, the class
+# list and Change password.
 # Seeded by scripts/seed-emulators.mjs; run by `npx sabeel-ci native-e2e`.
 #
 # On a busy CI simulator a tap or a keystroke can land before the screen takes
@@ -102,6 +103,40 @@ name: Student signs in, listens, and changes the password
     file: ci-tools/back-until.yaml
     env:
       FROM: "Bookmark this place"
+
+# A recording a teacher gave: on To do under Optional, it plays, and there is
+# nothing to mark (the seed gives this student a session they attended).
+- scrollUntilVisible:
+    element: "Play Session 10 — Thankfulness in Ease, optional[\\s\\S]*"
+    timeout: 30000
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Play Session 10 — Thankfulness in Ease, optional[\\s\\S]*"
+      EXPECT: "Bookmark this place"
+      SECONDS: 30
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Play"
+      EXPECT: "Pause"
+      SECONDS: 60
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Pause"
+      EXPECT: "Play"
+      SECONDS: 15
+- scrollUntilVisible:
+    element: "This one is optional, so there is nothing to mark\\."
+    timeout: 20000
+- assertNotVisible:
+    id: "mark-complete"
+- takeScreenshot: 03b-optional
+- runFlow:
+    file: ci-tools/back-until.yaml
+    env:
+      FROM: "This one is optional, so there is nothing to mark\\."
 
 # The classes, and Change password reports what really happened.
 - runFlow:

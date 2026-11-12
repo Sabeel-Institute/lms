@@ -187,6 +187,19 @@ export const TUTORIALS = [
     ],
   },
   {
+    id: 'staff-give',
+    as: 'admin',
+    start: async (t) => { await t.openSession('Session 4 — Sincerity of Intention'); await t.scrollTo('recording-ledger'); },
+    steps: [
+      { say: 'A student who was at the class can still be given its recording, to go over it again. Open its Progress.', do: (t) => t.tap('recording-ledger') },
+      { say: 'The plus beside Given to opens the class list.', do: (t) => t.tap('given-add') },
+      { say: 'Choose the last day it stays open. They can play it through the whole of that day.', do: (t) => t.highlightText('They can play it through the end of that day') },
+      { say: 'Pick one student, then tap Give.', do: async (t) => { await t.tap('give-pick-Fatima Ahmed'); await t.tap('give-submit'); } },
+      { say: 'It is on their To do under Optional, and they get a message. Nothing is required of them, and it is not counted.', do: (t) => t.highlightText('Given to Fatima Ahmed until') },
+      { say: 'The pencil on their row moves the date, or takes it back.', do: async (t) => { await t.closeSheet(); await t.highlight('given-edit-Fatima Ahmed'); } },
+    ],
+  },
+  {
     id: 'staff-assignment',
     as: 'admin',
     start: (t) => t.openCourseNav('nav-coursework'),
