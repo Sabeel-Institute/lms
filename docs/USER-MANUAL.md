@@ -1068,15 +1068,15 @@ The file's **Definitions** tab reads:
 | Term | Meaning |
 |---|---|
 | **Held** | Registers submitted in which the student was marked, whatever the session’s date: a newcomer marked on an earlier session’s register, to catch them up, counts too. A session whose register was never taken is not held for anyone. |
-| **Present / Absent / Excused** | The mark on the register. Excused is the only mark that opens the recording and requires it. |
+| **Present / Absent / Excused** | The mark on the register. Excused is the only mark that requires the recording. A recording staff give to one student is not counted here. |
 | **Attendance rate** | Present ÷ Held. |
 | **Required** | Excused sessions whose recording is published — one recording the student must play and mark complete by its due date. A recording that has been archived or unpublished is withdrawn: it counts nowhere, and the Sessions tab says so. |
 | **Completed** | The student marked the recording complete, or staff overrode it as complete (the override’s reason is recorded). |
 | **Still open** | Not yet completed, and the due date has not passed. |
-| **Missed deadline** | Not completed by the due date. Access has closed; nothing further can happen to it unless the date is moved. |
+| **Missed deadline** | Not completed by the due date. Nothing further counts toward it unless the date is moved. |
 | **Closed** | Neither done nor missed: a required recording the student could not play when its date came, because they were out of the class or the class was archived with its recordings closed (or cannot play now, for either reason, with its date still ahead); an assignment still open when its course was archived. |
 | **Catch-up rate** | Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone. |
-| **Played** | Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark. |
+| **Played** | Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark. It includes any listening after the due date. |
 | **Assigned** | Students an assignment went to, less any a teacher marked not required. Someone who left the class counts only if they handed something in first. |
 | **Handed in** | Work given in, graded or not and late or not, and work graded on paper with nothing handed in. |
 | **Late** | Handed in after the student’s due date: their own date, if they were given more time. |

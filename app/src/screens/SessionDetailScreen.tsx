@@ -321,8 +321,8 @@ function AttendanceSection({ session }: { session: SessionRow }) {
             : activeUids.length === 0
               ? 'Enrol students in this course first — attendance is taken from its roster.'
               : session.attendanceSubmittedAt
-              ? 'Submitted. Only excused students get the recording.'
-              : 'Everyone starts as Present — mark who was away, and excuse whoever should listen to the recording. Only excusing grants access, and nothing is granted until you submit.'}
+              ? 'Submitted. The students you excused must play the recording. To let anyone else play it, give it to them from its Progress page.'
+              : 'Everyone starts as Present — mark who was away, and excuse whoever should listen to the recording. Nothing opens to anyone until you submit.'}
         </Text>
         {!listed ? null : activeUids.length === 0 ? (
           <Empty>No students enrolled in this course yet.</Empty>
@@ -595,7 +595,7 @@ function RecordingCard({
    *
    * `allowedTransitions` describes the recording's own lifecycle; the server
    * additionally refuses to publish onto a session whose listen-by date has gone
-   * ("Move it before publishing, or nobody will be able to open it"). So an
+   * ("Move it before publishing, or the students you excused will not be able to open it"). So an
    * end-of-term ARCHIVED recording — the case the manual calls reversible with
    * "one tap puts it back" — drew a Publish button that could only ever return
    * an error. This app's rule is that a control which cannot succeed is not
@@ -874,7 +874,7 @@ function RecordingCard({
             no Publish to explain. */}
         {moves.includes('published') && deadlinePassed ? (
           <Notice tone="info">
-            This session&apos;s due date has passed, so publishing would give nobody access.
+            This session&apos;s due date has passed, so the students you excused could not open it.
             Move the date forward on the session above first.
           </Notice>
         ) : null}
@@ -903,7 +903,7 @@ const LABELS: Record<RecordingStatus, string> = {
 /** What each move in the ⋮ does, under its name. */
 const MOVE_DETAIL: Record<RecordingStatus, string> = {
   draft: 'Not visible to students. Fix it, then publish it again.',
-  published: 'Opens it to the students you excused.',
+  published: 'Opens it to the students you excused. You can then give it to others from Progress.',
   archived: 'Closes it to students and takes it out of the course totals. Publish puts it back.',
   unpublished: 'Closes it to students. It goes back to draft before it is published again.',
   needsAttention: 'Marks it as needing a fix before it can be published.',

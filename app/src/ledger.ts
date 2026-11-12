@@ -23,7 +23,7 @@ import {
 } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useListenerFailed, useLiveQuery } from './liveQuery';
-import { useStudentsState } from './students';
+import { useStudentsState, type StudentRow } from './students';
 import { useCourseSessionsState } from './sessions';
 import { useRosterState, type CourseRow, type EnrollmentRow } from './structure';
 import type { RecordingRow } from './recordings';
@@ -157,6 +157,10 @@ export interface RecordingLedger {
   loading: boolean;
   /** A listener was refused, so the roster will never arrive. Not `loading`. */
   failed: boolean;
+  /** Every grant the recording made, by student, active or not; null until read. */
+  grants: Map<string, AssignmentDoc> | null;
+  /** The students the page names, from the same read the rows use; null until read. */
+  students: StudentRow[] | null;
   /** Excused, so granted the recording and required to listen — the only people
    *  who can open it at all. On a recording that is no longer published these
    *  are the grants as they stood when it closed: the term's record. */
@@ -367,6 +371,8 @@ export function useRecordingLedger(
     return {
       loading,
       failed: unknown && failed,
+      grants: assignments,
+      students,
       accountable,
       attendees,
       absentees,

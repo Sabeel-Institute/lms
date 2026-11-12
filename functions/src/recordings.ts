@@ -201,7 +201,7 @@ export async function applyRecordingStatus(input: SetStatusInput) {
     if (session && session.dueDate < todayInZone(INSTITUTE_TIMEZONE)) {
       throw new HttpsError(
         'failed-precondition',
-        "This session's due date has passed. Move it before publishing, or nobody will be able to open it.",
+        "This session's due date has passed. Move it before publishing, or the students you excused will not be able to open it.",
       );
     }
   }
