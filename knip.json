@@ -24,6 +24,7 @@
         "metro.config.js",
         "src/**/*.web.ts",
         "src/**/*.web.tsx",
+        "src/**/*.ios.tsx",
         "public/firebase-messaging-sw.js"
       ],
       "project": [

@@ -57,76 +57,87 @@ name: Staff work through the day
       SECONDS: 30
 - takeScreenshot: 03-more
 
-# THE GIVE LIST'S DATE, on Android: the one date field that sits in a sheet
-# (a Modal) rather than on a screen, so the system's date dialog has to open
-# above it and hand its date back. iOS draws the picker in place; the browser
-# suites and the sweep hold the sheet's layout.
+# THE GIVE LIST'S DATE: the one date field that sits in a sheet rather than
+# on a screen. On Android the system's date dialog has to open above the sheet
+# and hand its date back; on iOS the field opens its own sheet with the
+# calendar (DateField.ios.tsx), above the give list, and Done hands it back.
+# More is a sheet over the screen it came from: closed by its ×, or the tab
+# bar under it takes no tap.
+- tapOn: "Close"
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Courses"
+      EXPECT: "Add a cohort"
+      SECONDS: 30
+- tapOn:
+    id: "cohort-open-Autumn 2026"
+- extendedWaitUntil:
+    visible:
+      id: "course-open-Hikam Foundations"
+    timeout: 30000
+- tapOn:
+    id: "course-open-Hikam Foundations"
+- extendedWaitUntil:
+    visible:
+      id: "nav-sessions"
+    timeout: 30000
+- tapOn:
+    id: "nav-sessions"
+- scrollUntilVisible:
+    element:
+      id: "session-open-Session 10 — Thankfulness in Ease"
+    centerElement: true
+    timeout: 30000
+- tapOn:
+    id: "session-open-Session 10 — Thankfulness in Ease"
+- scrollUntilVisible:
+    element:
+      id: "recording-ledger"
+    centerElement: true
+    timeout: 30000
+- tapOn:
+    id: "recording-ledger"
+- scrollUntilVisible:
+    element:
+      id: "given-add"
+    centerElement: true
+    timeout: 30000
+- tapOn:
+    id: "given-add"
+- extendedWaitUntil:
+    visible:
+      id: "datefield-open"
+    timeout: 20000
+- takeScreenshot: 04-give-list
+- tapOn:
+    id: "datefield-open"
 - runFlow:
     when:
       platform: Android
     commands:
-      # More is a sheet over the screen it came from: closed first, or the
-      # tab bar under it takes no tap.
-      - pressKey: Back
-      - runFlow:
-          file: ci-tools/tap-until.yaml
-          env:
-            TARGET: "Courses"
-            EXPECT: "Add a cohort"
-            SECONDS: 30
-      - tapOn:
-          id: "cohort-open-Autumn 2026"
-      - extendedWaitUntil:
-          visible:
-            id: "course-open-Hikam Foundations"
-          timeout: 30000
-      - tapOn:
-          id: "course-open-Hikam Foundations"
-      - extendedWaitUntil:
-          visible:
-            id: "nav-sessions"
-          timeout: 30000
-      - tapOn:
-          id: "nav-sessions"
-      - scrollUntilVisible:
-          element:
-            id: "session-open-Session 10 — Thankfulness in Ease"
-          centerElement: true
-          timeout: 30000
-      - tapOn:
-          id: "session-open-Session 10 — Thankfulness in Ease"
-      - scrollUntilVisible:
-          element:
-            id: "recording-ledger"
-          centerElement: true
-          timeout: 30000
-      - tapOn:
-          id: "recording-ledger"
-      - scrollUntilVisible:
-          element:
-            id: "given-add"
-          centerElement: true
-          timeout: 30000
-      - tapOn:
-          id: "given-add"
-      - extendedWaitUntil:
-          visible:
-            id: "datefield-open"
-          timeout: 20000
-      - takeScreenshot: 04-give-list
-      - tapOn:
-          id: "datefield-open"
       - extendedWaitUntil:
           visible: "OK"
           timeout: 20000
       - takeScreenshot: 05-date-dialog
       - tapOn: "OK"
-      # Back in the sheet, with a date in the field and Give on offer.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
       - extendedWaitUntil:
           visible:
-            id: "datefield-open"
-            text: "Open until: \\d{4}-\\d{2}-\\d{2}"
+            id: "datefield-done"
           timeout: 20000
-      - assertVisible:
-          id: "give-submit"
-      - takeScreenshot: 06-date-chosen
+      - takeScreenshot: 05-date-sheet
+      - tapOn:
+          id: "datefield-done"
+# Back in the give list, with a date in the field and Give on offer.
+- extendedWaitUntil:
+    visible:
+      id: "datefield-open"
+      text: "Open until: \\d{4}-\\d{2}-\\d{2}"
+    timeout: 20000
+- assertVisible:
+    id: "give-submit"
+- takeScreenshot: 06-date-chosen
