@@ -955,9 +955,19 @@ async function goHome(page, homeMarker) {
   await page.keyboard.press('Escape').catch(() => undefined);
   await page.waitForTimeout(150);
   const firstTab = byId(page, homeMarker);
+  // A screen left holding unsaved work (the register's marks, under its
+  // confirm) asks before letting go: the tour leaves it, as it has seen it.
+  const leaveIfAsked = async () => {
+    const leave = byId(page, 'leave-confirm');
+    if (await leave.isVisible().catch(() => false)) {
+      await leave.click();
+      await page.waitForTimeout(350);
+    }
+  };
   if (await firstTab.isVisible().catch(() => false)) {
     await firstTab.click();
     await page.waitForTimeout(350);
+    await leaveIfAsked();
     return;
   }
   for (let i = 0; i < 16; i += 1) {
@@ -1171,7 +1181,7 @@ const READ_ONLY_SCREENS = new Set([
   'notifications-none',
 ]);
 
-const STAFF_SCREENS = 61;
+const STAFF_SCREENS = 63;
 
 /**
  * A RECORDING GIVEN TO STUDENTS, as staff meet it: Progress with Given to
@@ -1199,6 +1209,24 @@ async function tourGiven(page, tag, visit, openCourse) {
     await openGivenLedger();
     await tap(byId(page, `given-edit-${STUDENT.name}`));
   }, `given-save-${STUDENT.name}`);
+  // THE TWO CONFIRMS, each in its own state: a control that appears in one
+  // state is measured in that state (CLAUDE.md). On Session 2, open to the
+  // excused; nothing is confirmed, so the world is unchanged.
+  const openDueSoon = async () => {
+    await openCourse();
+    await tap(byId(page, 'nav-sessions'));
+    await tap(byId(page, `session-open-${world.dueSoon.title}`));
+  };
+  await visit('recording-close-confirm', async () => {
+    await openDueSoon();
+    await tap(byId(page, 'recording-actions'));
+    await tap(byId(page, 'recording-archived'));
+  }, 'recording-close-confirm');
+  await visit('register-close-confirm', async () => {
+    await openDueSoon();
+    await tap(byId(page, `att-${STUDENT.name}-present`));
+    await tap(byId(page, 'att-submit'));
+  }, 'att-submit-confirm');
 }
 
 async function tourStaff(page, tag) {
@@ -1632,7 +1660,7 @@ async function tourStaff(page, tag) {
     `${counter.seen}/${STAFF_SCREENS}`);
 }
 
-const MANAGER_SCREENS = 15;
+const MANAGER_SCREENS = 17;
 
 /**
  * A manager sees the same screens with fewer rows AND fewer controls, which is a
@@ -1732,13 +1760,13 @@ async function tourStudent(page, tag) {
   const counter = { seen: 0 };
   const visit = visitor(page, tag, 'tab-todo', counter);
 
-  // To do, with all six groups on it — Past due, Due soon, Upcoming, Missed,
-  // Archived, Done — and both kinds of work in them. Those group headings ARE
+  // To do, with all seven groups on it — Past due, Due soon, Upcoming,
+  // Optional, Missed, Archived, Done — and both kinds of work in them. Those group headings ARE
   // the layout, and the anchor alone says only that the hero arrived: a group
   // whose seed stopped producing it would leave the screen untested with every
   // geometric check green.
   await visit('home', async () => {}, `next-up-${dueSoon.title}`);
-  for (const group of ['pastDue', 'dueSoon', 'upcoming', 'missed', 'archived', 'done']) {
+  for (const group of ['pastDue', 'dueSoon', 'upcoming', 'optional', 'missed', 'archived', 'done']) {
     check(`${tag} home lists the ${group} group`,
       await byId(page, `group-${group}`).isVisible().catch(() => false));
   }

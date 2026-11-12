@@ -251,7 +251,6 @@ const shapes = [
     () => db.collection('givenRecordings').where('courseId', '==', ID).where('recordingId', '==', ID),
   ],
   ["givenRecordings — a student's own (To do)", () => db.collection('givenRecordings').where('studentUid', '==', ID)],
-  ["givenRecordings — a class's (session page confirms)", () => db.collection('givenRecordings').where('courseId', '==', ID)],
   ["givenRecordings — a recording's, to delete it (cascade)", () => db.collection('givenRecordings').where('recordingId', '==', ID)],
 
   // ---- assignments (coursework). Equality only throughout, so none should

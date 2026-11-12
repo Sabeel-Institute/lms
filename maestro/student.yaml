@@ -108,8 +108,10 @@ name: Student signs in, listens, and changes the password
 # nothing to mark (the seed gives this student a session they attended).
 # Centred, not merely visible: at the bottom edge the card sits under the
 # docked bar of the recording played above, and a tap there reopens that one.
-# The check names THIS player's own line, "open until": "Bookmark this place"
-# is on every player, so it passed over the wrong one on iOS.
+# The check names THIS player's own line, "open until" and its date, joined
+# by a non-breaking space: "Bookmark this place" is on every player, so it
+# passed over the wrong one on iOS, and the To do row's own label says
+# "open until" too, with an ordinary space, so a dropped tap passed as well.
 - scrollUntilVisible:
     element: "Play Session 10 — Thankfulness in Ease, optional[\\s\\S]*"
     centerElement: true
@@ -118,7 +120,7 @@ name: Student signs in, listens, and changes the password
     file: ci-tools/tap-until.yaml
     env:
       TARGET: "Play Session 10 — Thankfulness in Ease, optional[\\s\\S]*"
-      EXPECT: "[\\s\\S]*open until[\\s\\S]*"
+      EXPECT: "[\\s\\S]*open until[^ ][\\s\\S]*"
       SECONDS: 30
 - runFlow:
     file: ci-tools/tap-until.yaml
@@ -126,6 +128,12 @@ name: Student signs in, listens, and changes the password
       TARGET: "Play"
       EXPECT: "Pause"
       SECONDS: 60
+# And it plays: "Pause" shows from the tap, before the server has answered.
+- extendedWaitUntil:
+    visible:
+      id: "player-elapsed"
+      text: "0:0[3-9]|0:[1-5][0-9]|[1-9][0-9]*:[0-5][0-9]"
+    timeout: 60000
 - runFlow:
     file: ci-tools/tap-until.yaml
     env:
