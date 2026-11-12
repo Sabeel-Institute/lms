@@ -110,8 +110,9 @@ Do not silently change any of these.
   the class open one recording to one enrolled student until a date, once the
   session's attendance is submitted (`givenRecordings`, `functions/src/given.ts`,
   `docs/plans/GIVE-A-RECORDING.md`). It sits on To do under Optional, never Next
-  up; it has no Mark complete, no Missed, no reminder, and nothing in the
-  ledger, workbooks or stats reads it. It has no `active` flag: whether it plays
+  up; it has no Mark complete, no Missed, no reminder, and it counts in nothing:
+  the ledger's counts, the workbooks and the stats ignore it (Progress lists it
+  under Given to, apart). It has no `active` flag: whether it plays
   is worked out from its date, the student's enrolment, the recording's status
   and the class's setting (`listenWindow` in `@sabeel/shared`, the one answer
   the player, the docked bar, To do and `getPlaybackUrl` read). A student

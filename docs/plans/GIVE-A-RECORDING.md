@@ -288,9 +288,9 @@ counts.
 |---|---|---|
 | Move a session's listen-by date | Nobody: a past date is refused, and today stays open to midnight | Nothing, as today |
 | Move a given date | Nobody, the same way | Nothing |
-| Take back | That student | Always: "Take back from <name>? If they are listening, it stops." (call 8) |
+| Take back | That student, unless they are required right now | Always: "Take back from <name>? If they are listening, it stops." (call 8); for a student required right now, "Take back from <name>? It stays open to them until <date>, while it is required." |
 | ⋮ Archive or Unpublish | Everyone who can play it | New, while anyone can: "Archive <title>? It closes now for <n> students who can play it." (Unpublish the same.) After the session's listen-by date it adds "To publish it again, first move its listen-by date forward, which reopens it to the students you excused." With nobody able to play it, the move runs at once, as today |
-| Submit a corrected register | Each student it takes Excused from while they can play the session's recording, unless they also hold it given and open | New, when anyone is named: "Submit? <Title> closes now for <names>." (up to three names, then "and <n> others") |
+| Submit a corrected register | Each student it takes Excused from while they can play the session's recording, unless they also hold it given and open | New, when anyone is named: "Submit? <Title> closes now for <names>." (up to three names, then "and <n> others"). Pressed before the reads behind it have answered from the server, it asks anyway, "Submit? Checking who can play <title> right now…", and the sentence follows them ("…closes now for <names>.", or "Nobody who can play <title> right now loses it."); a read refused, "Who can play <title> right now could not be checked, so this may close it to someone." Archive and Unpublish say "Who can play it right now could not be checked." then |
 | Archive a class with listening off; turn listening off on an archived class; archive a cohort | Everyone in it who can play | Nothing new: each states its effect beside the control, by the decision in `CoursesScreen.tsx` (call 11) |
 | Disable an account | That student, for everything | Nothing new: closing their access is the point of it |
 | Hide a file | That file; the recording's other files still play | Nothing new |
@@ -470,9 +470,13 @@ make that explicit.
      `giveRefusal`; write only if something changes. State refusals, a past date
      and a stale `expect` are `failed-precondition`, each with its sheet
      sentence; a malformed call is `invalid-argument`.
-  5. Return `{ outcome: 'opened' | 'moved' | 'reopened' | 'unchanged' |
-     'taken' | 'gone' }`. Audit detail, flat: `{ title, outcome, openUntil,
-     previousOpenUntil }`, or `{ title, openUntil }` for a take back;
+  5. Return `{ outcome: 'opened' | 'moved' | 'reopened' | 'unchanged',
+     current, toldToday }` for a give (`current`, the record as it now stands,
+     which the sheet adopts; `toldToday`, whether the day's message has
+     already gone) and `{ outcome: 'taken' | 'gone' }` for a take back. Audit
+     detail, flat: `{ title, outcome, openUntil, previousOpenUntil }`
+     (`previousOpenUntil` left out for a first give), or `{ title, openUntil }`
+     for a take back;
      `courseId` set; `noop` for `unchanged` and `gone`.
   `requireEnrolled`'s check becomes one pure `assertEnrolled(doc)` in
   `guards.ts`, used inside and outside transactions; `recordingCourseId` moves
@@ -627,6 +631,33 @@ it red. A test that cannot discriminate says so in its file.
 | P21 | Refusals and results say the right sentence | Unit: `giveRefusal` for each cause; e2e: the sheet shows the server's sentence for a required student; for a stale sheet, the change made out of band AFTER the sheet opened and once the row shows it (or a sheet reading the live row passes), then Save again applies the typed date. The sheet reads `e.details` before `errorText`, which drops it | Sheet and server sentences diverging |
 | P22 | The staff screens say who has it and why | e2e and sweep: Given to statuses (open, ended, required overlay, closed, left), the greyed pick row, Save hidden with its sentence, the audit card | — |
 | P23 | Closing at once asks first, and only then | `closesNow` unit table, a row per line of "Closing at once": the register gap; an excused student also holding it given and open, not named; one whose date has passed, a present student, an ended given recording, a disabled account and a class archived with listening off, none counted. e2e, with those non-players enrolled beside one excused-open and one given student: ⋮ Archive asks with 2; Cancel leaves it published and the given student playing; confirming closes it. Unpublish asks the same. After the date, the extra sentence. With nobody able to play it, Archive runs with no question. A register correction naming the excused-open student, Cancel keeps the mark; a correction of one whose date has passed submits with no question; a colleague's submit while the confirm is open closes it. Sweep: both confirms at five widths | Confirm skipped; asking when nobody can play it; counting a student who cannot play it (each kind above); the register confirm reading the grant rather than the session; the confirm outliving a colleague's submit |
+
+### Where the build departs from this table (2026-11-12)
+
+Some checks above were planned and then held another way, or not at all.
+Each is listed so that no row reads as proven when it is not.
+
+- **P7.** The register gap is held by the shared unit tests (`given.test`,
+  "refuses a student who is required right now, including in the register
+  gap", and the `closesNow` cases), not by an integration test. "Given, then
+  excused, shows the Required row only" has no browser test: To do drops the
+  Optional row when `listenWindow` says required (`StudentHomeScreen`), and
+  only `listenWindow`'s precedence is unit-tested. There is no route-gate
+  unit test: the gate is the Player route in `App.tsx`, not a pure function.
+  The held-request run below was not built; the MutationObserver watches
+  the runs that happen (`docs/DEV-TOOLING.md`).
+- **P9.** The browser midnight run is an excused recording's. The given and
+  given-and-excused cases are the unit tables of `listenWindow`, `playsOn`
+  and `requiredPlaysOn` (`app/src/listening.test.ts`), which the player and
+  the docked bar both read.
+- **P12.** The callable's own clock is held by one `.run()` at 7 PM in
+  Chicago, when UTC's day is the next one (`given.integration`).
+- **P21.** The sheet never sends a give for a required student (the pick
+  row is greyed), so the server's sentence for one is not shown in a browser
+  test; `given.integration` holds the server's sentences equal to the shared
+  ones the sheet shows.
+- **Rules mutations.** The `holdsGrant` guard mutation was not run, and no
+  test file carries a note on it.
 
 ### Mark complete never appears (P7)
 

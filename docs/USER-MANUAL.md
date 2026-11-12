@@ -168,8 +168,9 @@ a recording with video, **Listen by** for one that is audio only, **Hand in by**
 for an assignment. Tap a card to open it — except a Missed or Archived
 recording, which can no longer be played and so does not open.
 
-**Every recording has a closing date.** After it passes you can no longer play
-that recording — the card stays on your list marked *Missed*, so you can still
+**Every required recording has a closing date.** After it passes you can no longer play
+that recording, unless your teacher gives it to you again (it then shows under
+**Optional** as well) — the card stays on your list marked *Missed*, so you can still
 see what it was, but the recording is closed. Opening it shows **Your record**: how
 much of it you played, and whether it was marked complete. Nothing you did
 is lost when a recording closes. If you need it reopened, ask your teacher: they
@@ -261,7 +262,7 @@ Closing it with the **×** is what stops playback.
 there is nothing to mark, so in place of **Mark complete** it says "This one is
 optional, so there is nothing to mark." If you had missed it, it also says that
 its listen-by date has gone and that listening now does not change your record.
-If the teacher takes it back while you are listening, it stops (on a locked phone, as soon as you open the app again).
+If the teacher takes it back while you are listening, it stops (on a locked phone, as soon as you open the app again), unless you are required to listen to it: then it stays open until your listen-by date.
 
 ## 1.4 Marking a recording complete
 
@@ -382,7 +383,10 @@ Streaming the recording itself does need a connection, so for a long class on
 the go, a stable network (or Wi-Fi) is your friend — and audio only needs far
 less of it than video. Where you got to is saved even if your phone is locked
 and the signal comes and goes; it reaches your account the next time the app
-is open with a connection.
+is open with a connection, while you still hold the recording. If it was
+closed to you in between (a teacher took back one they gave you, you left the
+class, or it was unpublished), listening done since it was last sent is not
+added.
 
 ## 1.9 Notifications
 
@@ -463,7 +467,7 @@ it has waited.
   import that needs attention, or one that was published and has since been
   unpublished or archived.
 - **No recording yet** — attendance is in, the recording isn't.
-- **Closing soon** — access to a recording ends within the week; a good moment
+- **Closing soon** — a recording's listen-by date is within the week; a good moment
   to see who still hasn't finished.
 - **To grade** — work handed in and not yet graded, in the courses you manage
   (an admin sees it only for courses they are a manager of, so it never buries
@@ -472,11 +476,11 @@ it has waited.
 
 The number on the **Today** tab counts what is blocking access right now: a
 register not yet submitted, and a recording that was published and has since
-been taken back — unpublished, or archived before its due date. A
+been pulled back — unpublished, or archived before its due date. A
 draft that has never been published is waiting on you but is blocking nobody, so
 it is in the list without being in the count. Archiving *after* the due
-date took nothing away from anyone, so it is simply filing and says nothing
-here.
+date leaves nobody required to listen, so it says nothing here; a student
+you gave it to loses it, which the Archive question tells you first.
 
 If you run more courses than one screen can watch at once, Today says so above
 the list — the rest are still there under **Courses**, they are just not in this
@@ -600,14 +604,15 @@ or **Excused**, then tap **Submit attendance**. Everyone starts as *Present*, so
 often you only flip the few who missed. You can re-submit a corrected attendance
 later and everything updates automatically.
 
-**Excusing a student is what gives them the recording.** It is the only mark that
-does:
+**Excusing a student is what makes the recording required of them.** It is the
+only mark that does:
 
 - **Present** — they were there. Nothing is required of them, and the recording
-  is not opened to them.
+  opens to them only if you give it to them (Section 2.6).
 - **Excused** — they missed it with your permission. The recording opens to them
   and playing it is required, until the due date.
-- **Absent** — they missed it without being excused. Nothing is opened to them.
+- **Absent** — they missed it without being excused. Nothing is required of
+  them; you can give it to them too.
 
 So **Mark all excused** is the one-tap shortcut for "everyone must catch up on
 this one." And if someone genuinely needs to catch up on a class you marked them
@@ -723,7 +728,7 @@ Each recording moves through a few states:
 - **Published** — live. The students you excused can now play it, and are on
   the hook for it. Publishing needs at least one file students can play and
   nothing still copying or failed, and it is blocked if the session's due date
-  has already passed, because nobody would be able to open it.
+  has already passed, because the students you excused could not open it.
 - **Needs attention** — flagged for a problem (for example, a Zoom import that
   failed). Publish is blocked until it has a file students can play and no
   failed file: retry the import, or remove the failed file and upload the
@@ -731,12 +736,12 @@ Each recording moves through a few states:
 - **Unpublished** — pulled back from students after being live. It goes back to
   Draft to be fixed, then out again.
 - **Archived** — closed for good, one recording at a time. Like unpublishing,
-  it closes the recording to everyone who was excused, so **Today** raises it
-  if you archive one whose due date has not passed yet. One tap puts it
-  back — while that date is still ahead. Once it has passed, Publish is greyed
-  out and the card says why: publishing then would give nobody access, so move
-  the session's **Due by** date forward first, which reopens it for everyone
-  excused.
+  it closes the recording to everyone who was excused and everyone you gave
+  it to, so **Today** raises it if you archive one whose due date has not
+  passed yet. One tap puts it back — while that date is still ahead. Once it
+  has passed, Publish is greyed out and the card says why: the students you
+  excused could not open it, so move the session's **Due by** date forward
+  first, which reopens it for everyone excused.
 
 **Archiving or unpublishing a recording takes it out of the course totals.**
 Everything that happened on it — who completed it, who missed it — leaves the
@@ -769,11 +774,13 @@ correcting it closes the recording to someone who can play it right now,
   course's assignments — Section 2.14.)
 - **The due date closes it.** After that day the student sees the recording
   on their list marked *Missed*, with the date it closed, and can no longer play
-  it. Move the session's Due by date forward to reopen it. Students see the
+  it unless you give it to them. Move the session's Due by date forward to
+  reopen it for everyone you excused. Students see the
   date as **Watch by** on a recording with video and **Listen by** on one that
   is audio only.
 - **A student who joins late** wasn't on the roster when earlier attendance was
-  taken, so they are **not** retroactively given those older sessions. On an
+  taken, so those older sessions are **not** required of them after the
+  fact. On an
   earlier session's register they appear as *not marked* — correcting somebody
   else's mark there leaves them that way. If you *do* want a latecomer to catch
   up on an earlier one, open that session, mark them **Excused**, and re-submit
@@ -792,7 +799,7 @@ correcting it closes the recording to someone who can play it right now,
 
 Open a recording's **Progress** (from its session, or from the
 library) to see exactly where things stand. Up top, one line of counts:
-**required** (the students you excused, the only ones who can open it),
+**required** (the students you excused),
 **completed**, **not complete**, and **missed**. An archived or unpublished recording keeps this
 page: the counts and rows are the record as it stood when it closed, and a
 grant that was still open then reads *Closed (recording archived)*. It is the
@@ -815,14 +822,14 @@ open it:
   one play it without requiring it, give it to them.
 - **Excused, access closed** — students you excused whose access has since been
   withdrawn: they were unenrolled from the class, or the recording was
-  unpublished or archived. Nothing is required of them, and they can open it
-  only if you give it to them.
-  Re-enrolling them, or publishing the recording again, restores it — for
+  unpublished or archived. Nothing is required of them, and they can't open
+  it. Re-enrolling them, or publishing the recording again, restores it — for
   anything still inside its due date. A session whose date has already
   passed stays closed, so nobody comes back to an obligation they had no chance
   to meet.
-- **Also listened** — progress from someone it isn't required of: a student you
-  gave it to, or one you excused and then corrected to present. Kept as history.
+- **Also listened** — progress from someone not on this session's register,
+  such as a student who joined the class after it and was given the
+  recording. Kept as history.
 
 A student you gave the recording to shows **given until** a date beside their
 listening, on whichever row they are on, while it is open.
@@ -848,13 +855,15 @@ under **Optional**, and nothing is required of them or counted.
   when you gave it first and excused them after, or why it is closed. Tap the
   pencil to move the date, earlier or later, or to give an ended one a new
   date, or to **Take back**, which asks first because it stops it if they
-  are listening (on a locked phone, when they next open the app).
+  are listening (on a locked phone, when they next open the app). A student
+  also required to listen keeps it until that date, and the question says so.
 - Any teacher of the class can change or take back what a colleague gave. If
   you both save the same row at once, the second is told the date the other set,
-  and saving again uses theirs on purpose.
-- The student gets one message when it is given ("… is open to you until …. It
-  is not required."), and another only when an ended one is given a new date.
-  Moving the date and taking it back are silent.
+  and saving again uses the date they typed, on purpose.
+- The student gets a message when it is given ("… is open to you until …. It
+  is not required."), at most one a day, and another for each new opening on a
+  later day: an ended one given a new date, or one given again after a take
+  back. Moving the date and taking it back are silent.
 - Unpublishing or archiving the recording, archiving the class with its
   recordings closed, or the student leaving the class closes it too; undoing
   that opens it again while its date is good.
@@ -1129,7 +1138,7 @@ The file's **Definitions** tab reads:
 | **Required** | Excused sessions whose recording is published — one recording the student must play and mark complete by its due date. A recording that has been archived or unpublished is withdrawn: it counts nowhere, and the Sessions tab says so. |
 | **Completed** | The student marked the recording complete, or staff overrode it as complete (the override’s reason is recorded). |
 | **Still open** | Not yet completed, and the due date has not passed. |
-| **Missed deadline** | Not completed by the due date. Nothing further counts toward it unless the date is moved. |
+| **Missed deadline** | Not completed by the due date. It stays missed unless the date is moved or staff mark it complete. |
 | **Closed** | Neither done nor missed: a required recording the student could not play when its date came, because they were out of the class or the class was archived with its recordings closed (or cannot play now, for either reason, with its date still ahead); an assignment still open when its course was archived. |
 | **Catch-up rate** | Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone. |
 | **Played** | Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark. It includes any listening after the due date. |

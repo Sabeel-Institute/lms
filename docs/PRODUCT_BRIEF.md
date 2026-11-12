@@ -29,7 +29,7 @@ The product should be designed for Android, web, and future iOS support. Initial
 |---|---|
 | **Admin** | Full platform access across all cohorts, classes, students, recordings, staff, settings, audit history, Zoom source configuration, and destructive actions. |
 | **Manager** | Operational staff member assigned class by class. Can manage students, recordings, attendance, assignments and grades, reports, and audit history within assigned classes. Cannot manage staff/admin settings or Zoom source configuration. |
-| **Student** | Adult learner enrolled in one or more classes. Can play the recordings they are given, download them inside the app, mark them complete, hand in assignments, and see the grades returned to them. |
+| **Student** | Adult learner enrolled in one or more classes. Can play the recordings open to them, download them inside the app, mark them complete, hand in assignments, and see the grades returned to them. |
 
 ### Authentication and access
 
@@ -173,7 +173,7 @@ Accountability follows the session's attendance, so it is corrected by re-taking
 
 Permanent deletion of anything carrying **listening history** — a recording with grants, completions or progress behind it, a student, a course, a session — is Admin-only, requires strong confirmation, and is recorded in the audit log. Normal operations should use disable, archive, or unpublish.
 
-Two deletions are deliberately left to a manager, because neither destroys listening history and both are ordinary corrections to their own class: **removing a completion override** they set (the override is a staff judgement, and the audit log keeps the record of setting and removing it, each with its required reason), and **removing a file from an unpublished draft** so a bad one can be replaced. A published recording's playable files are hidden from students rather than removed, and staff may hide, show, reorder and add files in any state. A file no student ever saw — still uploading or copying, or failed — may be removed from a recording in any state: that is cancelling an upload or clearing a failed import. A draft that has ever been published is not one of these — the server checks the collections, not the status.
+Four deletions are deliberately left to a manager, because none destroys listening history and each is an ordinary correction to their own class: **removing a completion override** they set (the override is a staff judgement, and the audit log keeps the record of setting and removing it, each with its required reason), **removing a file from an unpublished draft** so a bad one can be replaced, **deleting an assignment no student has started**, and **taking back a recording given to one student**, which is a permission, not history (the listening stays). A published recording's playable files are hidden from students rather than removed, and staff may hide, show, reorder and add files in any state. A file no student ever saw — still uploading or copying, or failed — may be removed from a recording in any state: that is cancelling an upload or clearing a failed import. A draft that has ever been published is not one of these — the server checks the collections, not the status.
 
 ## Recordings: access and accountability
 
@@ -227,9 +227,9 @@ Decided 2026-11-06 and 2026-11-11 (`docs/plans/GIVE-A-RECORDING.md`). A student 
 
 - **From the recording's Progress page only**, one student at a time, by an admin or a manager of the class, and only once the session's attendance is submitted. Any enrolled student whatever their mark, except one required to listen right now (excused, date not passed). A student who missed is given it after the date, and a teacher who wants it counted marks it complete with the existing override.
 - **An end date is required**, never in the past, with no upper limit; the student plays through the whole of that day. It prefills a week out.
-- **Optional and counted nowhere**: it sits on the student's To do under **Optional**, below what is owed and above Missed, never Next up. No Mark complete, no Missed, no reminder; the ledger, workbooks and stats never read it. A given student's listening still shows on Progress, on their row, with "given until <date>".
+- **Optional and counted nowhere**: it sits on the student's To do under **Optional**, below what is owed and above Missed, never Next up. No Mark complete, no Missed, no reminder; it counts in nothing: the ledger's counts, the workbooks and the stats ignore it (Progress lists it apart, under Given to). A given student's listening still shows on Progress, on their row, with "given until <date>".
 - **One message** when it is given (`recordingReady`, "<Title> is open to you until <date>. It is not required."), at most one a day per student and recording. Moving the date, earlier or later, is silent; a new date on one that has ended sends the message again; taking it back is silent.
-- **Any teacher of the class** may move the date or take it back, whoever gave it. Two people acting on the same row at once never silently overwrite: the second is told what the first did and can act again on purpose. Take back asks first, because it stops the audio at once.
+- **Any teacher of the class** may move the date or take it back, whoever gave it. Two people acting on the same row at once never silently overwrite: the second is told what the first did and can act again on purpose. Take back asks first, because it stops the audio if they are listening (on a locked phone, when the app is next opened); a student required to listen right now keeps it until that date, and the question says so.
 - **Closing follows excused**: unpublishing, archiving, archiving the class with listening off, or the student leaving the class closes it; undoing that opens it again while its date is good. A recording unpublished or archived after its session's listen-by date is published again only by moving that date forward first.
 - **Asking before closing at once**: Archive and Unpublish on a recording, and a corrected register that takes Excused from a student, ask first while someone can play it right now. Archiving a class or a cohort states its effect instead of asking, as archiving always has.
 - Giving, moving and taking back are audited.
@@ -348,8 +348,8 @@ is waiting on them, most urgent first, each row a direct link to the screen
 where the work is done.
 
 Attendance not taken ranks first. The count on the navigation is what is
-blocking access right now — an un-taken register, and a recording taken back
-after students had been given it, whether unpublished or archived before its due
+blocking access right now — an un-taken register, and a recording pulled back
+after it was published, whether unpublished or archived before its due
 date — so a draft appears in the list without appearing in the count. Under the
 excused-only policy an un-taken register grants nobody anything, so a published
 recording sits there that not one student can open — and it is the only failure
@@ -425,7 +425,7 @@ The ledger should help staff find action items without inspecting every student 
 
 ### Primary views
 
-1. **Recording ledger:** split by the session's attendance — the **excused**, shown with completion and missed state; the **present** and the **absent**, of whom it is not required, listed so the ledger still accounts for the whole submitted roster. A residual "also listened" catches listening from someone it is not required of (given it, or excused, listened, then corrected to present). **Given to** lists the students staff gave it to, with each one's date; their listening shows on their own row with "given until".
+1. **Recording ledger:** split by the session's attendance — the **excused**, shown with completion and missed state; the **present** and the **absent**, of whom it is not required, listed so the ledger still accounts for the whole submitted roster. A residual "also listened" catches listening from someone not on the session's register (who joined the class after it and was given the recording). **Given to** lists the students staff gave it to, with each one's date; their listening shows on their own row with "given until".
 2. **Student ledger:** all assigned recordings for a student, filterable by course and status.
 3. **Course-level views:** grouped by cohort/course with incomplete and missed counts.
 4. **Attendance report:** per course, a toggle between a by-session summary (present/absent/excused counts, un-taken sessions flagged) and a by-student summary (attendance tallies + catch-up status: of the sessions each student was excused from, how many recordings are complete/missed). The by-student cut lists **everyone the submitted registers name**, not only the current roster: a student unenrolled mid-term keeps their marks, those marks keep counting in the by-session totals, and they are shown flagged *no longer enrolled* so the two cuts of one report reconcile. A register counts as *not marked* for a student only if it was taken while they were in the class — the same question, asked of the same record, as the course workbook's Register tab.
@@ -484,7 +484,7 @@ A message is shown whether the app is open, in the background, or closed — on 
 - Recording access state and accountability history are retained indefinitely by default unless an Admin deletes or archives data according to policy.
 - Admins and Managers can view audit/change history within their allowed class scopes.
 - Platform-level staff/admin changes belong in Admin surfaces.
-- Permanent deletion is Admin-only, requires strong confirmation, and is audited. Three deletions are a manager's: a completion override they set, a file on an unpublished draft recording, and an assignment no student has started.
+- Permanent deletion is Admin-only, requires strong confirmation, and is audited. Four deletions are a manager's: a completion override they set, a file on an unpublished draft recording, an assignment no student has started, and taking back a recording given to one student (a permission, not history).
 - **Deleting an account** (Faisal's choice, 2026-10-14) is an admin's, on the website, and only for an account already disabled. It removes the sign-in, the email address wherever it is held (the directory row, and the history rows that copied it), and the notification settings; a student leaves their classes and a colleague their courses. The name stays with the academic record, and the person is listed as deleted. Deleting in the Firebase console instead left an active-looking person every action failed on.
 - Posting, editing, closing, returning, changing a returned grade, giving more time and marking work not required are in the audit history. A grade becomes a record only when it is returned: drafts change constantly while a teacher works and are not logged keystroke by keystroke.
 - What students do with assignments — each hand-in and take-back, with its time — is kept in its own history, which staff see on the student's work, rather than in the audit history.

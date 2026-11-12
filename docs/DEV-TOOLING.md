@@ -392,9 +392,13 @@ Three more things that cost time here:
   "Mark complete is never drawn" for a given recording cannot be checked by
   looking once: it could flash while the reads are still answering. The same
   init script observes `document` for any node (or `data-testid` change)
-  carrying `mark-complete` and counts it in `window.__marks`; the check is that
-  the count is 0 after the player has settled. Init scripts run on the next
-  document, so the page is loaded again (`goHome`) after adding one.
+  carrying either face of the completion control (`mark-complete`,
+  `mark-incomplete`) and counts it in `window.__marks`; the check is that the
+  count is 0 after the player has settled. It sees a flash however brief, but
+  only one the run produces: the reads are not slowed, so a flash that needs a
+  slow read is held by the unit tests of the decision (`listening.test.ts`),
+  not here. Init scripts run on the next document, so the page is loaded again
+  (`goHome`) after adding one.
 
 ## The screens sweep
 

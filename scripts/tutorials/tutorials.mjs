@@ -138,7 +138,7 @@ export const TUTORIALS = [
     steps: [
       { say: 'Today is what is waiting on you, across your courses, most urgent first.', do: (t) => t.waitTitle('Today') },
       { say: 'Attendance not taken comes first: until a register is submitted, nobody in that class has access to its recording.', do: (t) => t.highlight('today-att-g-s5') },
-      { say: 'Then recordings waiting to publish, classes with no recording yet, access closing soon, and work to grade.', do: (t) => t.scroll(600) },
+      { say: 'Then recordings waiting to publish, classes with no recording yet, listen-by dates coming up, and work to grade.', do: (t) => t.scroll(600) },
       { say: 'Each row opens the screen where you do it, and leaves Today as soon as it is done.', do: async (t) => { await t.scroll(-600); await t.tap('today-att-g-s5'); } },
     ],
   },
@@ -149,7 +149,7 @@ export const TUTORIALS = [
     steps: [
       { say: 'Attendance is taken on the session.', do: (t) => t.waitFor('att-submit') },
       { say: 'Everyone starts as present. Mark who was away.', do: (t) => t.tap('att-Bilal Khan-absent') },
-      { say: 'Excused is the mark that gives a student the recording, and makes it required, until the due date.', do: (t) => t.tap('att-Fatima Ahmed-excused') },
+      { say: 'Excused is the mark that opens the recording to a student, and makes it required, until the due date.', do: (t) => t.tap('att-Fatima Ahmed-excused') },
       { say: 'Mark all excused when everyone should catch up on this one.', do: (t) => t.highlight('att-mark-all-excused') },
       { say: 'Tap Submit attendance. You can correct it, and submit again, later.', do: (t) => t.tap('att-submit') },
       { say: 'A note at the top of the register confirms it.', do: (t) => t.highlightText('Attendance submitted for') },
@@ -195,7 +195,7 @@ export const TUTORIALS = [
       { say: 'The plus beside Given to opens the class list.', do: (t) => t.tap('given-add') },
       { say: 'Choose the last day it stays open. They can play it through the whole of that day.', do: (t) => t.highlightText('They can play it through the end of that day') },
       { say: 'Pick one student, then tap Give.', do: async (t) => { await t.tap('give-pick-Fatima Ahmed'); await t.tap('give-submit'); } },
-      { say: 'It is on their To do under Optional, and they get a message. Nothing is required of them, and it is not counted.', do: (t) => t.highlightText('Given to Fatima Ahmed until') },
+      { say: 'It is on their To do under Optional, with a message if their notifications are on. Nothing is required of them, and it is not counted.', do: (t) => t.highlightText('Given to Fatima Ahmed until') },
       { say: 'The pencil on their row moves the date, or takes it back.', do: async (t) => { await t.closeSheet(); await t.highlight('given-edit-Fatima Ahmed'); } },
     ],
   },
