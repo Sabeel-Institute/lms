@@ -246,7 +246,8 @@ as for excused access; the app stops using it at once.
   greyed with "Required until <date>; it can be given after that." With
   nobody to pick: "Everyone in this class already has it or is required to
   listen." The sheet stays open after a give: the result line shows, the
-  student leaves the list, the date is kept.
+  student leaves the list, the date is kept. It closes with Close, not
+  Cancel: what was given stays given.
 - **Each row's status**, the first that applies: "Closed (recording
   archived)" / "Closed (recording unpublished)" / "Closed (course archived)"
   (the page's existing `closedReason` spelling) / "Left the class" /
@@ -466,8 +467,9 @@ make that explicit.
   3. Read the recording; `requireCourseScope` on its `courseId`.
   4. One transaction reading the recording again, the class, the session, the
      enrolment, the grant and the given recording; compare `expect`; apply
-     `giveRefusal`; write only if something changes. State refusals and a
-     stale `expect` are `failed-precondition`; past dates `invalid-argument`.
+     `giveRefusal`; write only if something changes. State refusals, a past date
+     and a stale `expect` are `failed-precondition`, each with its sheet
+     sentence; a malformed call is `invalid-argument`.
   5. Return `{ outcome: 'opened' | 'moved' | 'reopened' | 'unchanged' |
      'taken' | 'gone' }`. Audit detail, flat: `{ title, outcome, openUntil,
      previousOpenUntil }`, or `{ title, openUntil }` for a take back;

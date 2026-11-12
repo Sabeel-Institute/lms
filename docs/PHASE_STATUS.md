@@ -133,6 +133,25 @@ the day everyone moves.
 
 ## Decision log
 
+- 2026-11-11 — **A recording can be given to one student, optional and
+  counted nowhere** (`docs/plans/GIVE-A-RECORDING.md`; Faisal, 2026-11-06 and
+  2026-11-11). A student who attended wanted more time, and excusing them
+  would have falsified the register. Staff give one recording to one enrolled
+  student until a date, once attendance is submitted; it is on To do under
+  Optional, never Next up, with no Mark complete, Missed, reminder or count.
+  Excused stays the only thing that makes listening required. A student
+  required to listen right now cannot be given it: one who needs more time
+  shows as Missed when the date passes, is given it then, and is marked
+  complete with the existing override. Moving the date is silent, earlier or
+  later. Any teacher of the class may change or take back what a colleague
+  gave; a stale sheet is refused with what is there now and saving again
+  applies on purpose. Unpublishing or archiving after the session's
+  listen-by date closes given recordings until it is published again (which
+  needs that date moved first). Archive, Unpublish and a corrected register
+  ask before closing a recording to someone who can play it right now;
+  archiving a class or cohort keeps stating its effect instead. The release
+  carrying it raises the minimum version (forced update).
+
 - 2026-10-21 — **One copy of the CI, release and device tooling for the three
   apps** (`Sabeel-Institute/ci-tools`, pinned to a commit in
   `package-lock.json`; `ci-tools.json` says what is this app's). The shared

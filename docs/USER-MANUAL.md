@@ -29,7 +29,9 @@ app draws the same screens, minus the one thing Section 2.11 calls out.
    recording opens to you and becomes *required* — it appears on your
    **To do** list with a date to finish it by, and closes again after it. If you were
    **present**, you don't need it. If you were **absent** without being excused,
-   it isn't opened to you. Being excused is the whole of it.
+   it isn't required of you. Being excused is the whole of what makes one
+   required. A teacher can also **give** you a recording you would like more
+   time with: it is open to you until a date, and nothing is required.
 3. **You mark a recording complete yourself.** The app keeps your place and shows
    how much you've played, but *you* decide when you're done — it is on your
    honor. (The one rule: you have to have pressed play at least once.)
@@ -133,13 +135,13 @@ policy, before or after you sign in.
 list — the **recordings** you need to play and the **assignments** you need to
 hand in — soonest first.
 
-**A recording is opened to you when your teacher marks you *excused* for that
+**A recording is required of you when your teacher marks you *excused* for that
 class.** That is the whole rule. If you were there, you don't need it; if you
-missed a class without being excused, it isn't opened to you. So this one list is
-both what you *may* play and what you *need* to play — there is no
-separate archive to go hunting through. **Assignments** come to everyone in the
-class when the teacher posts them, and to anyone who joins the class by the due
-date.
+missed a class without being excused, it isn't required of you. A teacher can
+also **give** you a recording, for example to go over a class again: it is listed
+under **Optional**, open until a date, and nothing is required of you.
+**Assignments** come to everyone in the class when the teacher posts them, and
+to anyone who joins the class by the due date.
 
 **The one to do next is at the top, in full** — the nearest date still ahead,
 recording or assignment. Late work you can still hand in sits right under it.
@@ -149,6 +151,11 @@ Everything else is grouped so nothing slips past you:
   accepts, late.
 - **Due soon** — due within the next week.
 - **Upcoming** — further off.
+- **Optional** — recordings a teacher gave you, each open until its date. They
+  are never the one at the top, and there is nothing to mark: play them as
+  much as you like until then. After the date they leave the list. A recording
+  you missed and were then given shows twice, as **Missed** and here as **Open
+  again until** a date; listening now does not change the Missed.
 - **Missed** — closed, with the date it closed. Nothing can be done about these,
   so they are set quietly rather than as an alarm.
 - **Archived** — the class has been archived and its recordings closed, so
@@ -185,7 +192,9 @@ next day.
 The title is at the top. A long one slides slowly along its line — or, if your
 phone is set to reduce motion, ends in "…" — and tapping it shows it whole; tap
 again to fold it back. Under it are the day of the class and the last day you
-can play it.
+can play it. When a teacher has given you a required recording until a later
+date, it shows both: the day it is required by, and the day it stays open
+until.
 
 When a recording has video, the picture is at the top of the player. Tap the
 **full-screen icon** in its bottom corner to fill the screen with it. On an Android phone, leaving the
@@ -247,6 +256,12 @@ playing, with play/pause and a 15-second skip back, and tapping it brings you
 back here. On a computer that bar carries the skip forward and the times as
 well.
 Closing it with the **×** is what stops playback.
+
+**A recording a teacher gave you** plays the same way, with one difference:
+there is nothing to mark, so in place of **Mark complete** it says "This one is
+optional, so there is nothing to mark." If you had missed it, it also says that
+its listen-by date has gone and that listening now does not change your record.
+If the teacher takes it back while you are listening, it stops.
 
 ## 1.4 Marking a recording complete
 
@@ -374,11 +389,12 @@ is open with a connection.
 The app can send you five kinds of message, and no more. Tap **More**, then
 **Notifications**, to turn any of them off:
 
-- **A recording is ready for me** — when a class you were excused from has a
-  recording for you. Worth leaving on: it's the only way you'll know
-  one has appeared.
-- **Last day for a recording** — on the morning of the day a recording closes, if you
-  haven't finished it.
+- **A recording is ready for me** — when a recording is opened to you, because
+  you were excused or your teacher gave it to you. Worth leaving on: it's the
+  only way you'll know one has appeared.
+- **Last day for a recording** — on the morning of a recording's listen-by
+  date, if you haven't finished it. A recording a teacher gave you has no
+  reminder of its own.
 - **New assignments** — when a teacher posts an assignment for you, or moves
   its due date.
 - **Last day to hand in** — on the morning an assignment is due, if you haven't
@@ -736,19 +752,21 @@ only when that recording itself should be withdrawn.
 
 Here's the rule that runs the whole ledger:
 
-> **A recording opens to the students marked EXCUSED for its session, and to
-> nobody else** — automatically, once the recording is **published** and its
-> attendance has been **submitted**. The same fact makes it required.
-> It closes again when the session's **Due by** date passes.
+> **A recording is required of the students marked EXCUSED for its session, and
+> of nobody else** — automatically, once the recording is **published** and its
+> attendance has been **submitted**. It opens to them and closes again when the
+> session's **Due by** date passes.
 
-You never give students a recording one by one; the attendance sheet decides who gets it. If
-you correct attendance — flip someone from excused to present, or the reverse —
-access and obligations update to match, and any progress or completion already
-recorded is kept.
+The attendance sheet decides who must play it. If you correct attendance — flip
+someone from excused to present, or the reverse — access and obligations
+update to match, and any progress or completion already recorded is kept. If
+correcting it closes the recording to someone who can play it right now,
+**Submit** asks first, naming them.
 
 - **Being enrolled opens no recording.** A student in the class who was
-  present, or absent without being excused, cannot play the recording at all.
-  (Enrolment does give a student the course's assignments — Section 2.14.)
+  present, or absent without being excused, cannot play the recording unless
+  you give it to them (Section 2.6). (Enrolment does give a student the
+  course's assignments — Section 2.14.)
 - **The due date closes it.** After that day the student sees the recording
   on their list marked *Missed*, with the date it closed, and can no longer play
   it. Move the session's Due by date forward to reopen it. Students see the
@@ -760,7 +778,10 @@ recorded is kept.
   else's mark there leaves them that way. If you *do* want a latecomer to catch
   up on an earlier one, open that session, mark them **Excused**, and re-submit
   attendance.
-- **Unpublishing** a recording closes it to everyone again.
+- **Unpublishing** a recording closes it to everyone again, the students you
+  gave it to included. While someone can play it, **Archive** and **Unpublish**
+  ask first and say how many. After the session's due date, publishing it again
+  needs the date moved forward first, which reopens it to the excused as well.
 
 ## 2.6 The recording ledger — who has caught up
 
@@ -787,21 +808,56 @@ need a nudge.
 Below it, closed sections hold everyone else, each with its count — tap one to
 open it:
 
-- **Present** — the students who were there. The recording is neither required
-  for them nor open to them.
-- **Absent** — marked absent rather than excused, so it was never opened to them.
-  To let one of them catch up, mark them **Excused** on the session and submit
-  again.
+- **Present** — the students who were there. It isn't required of them, and it
+  opens to one of them only if you give it to them.
+- **Absent** — marked absent rather than excused, so it isn't required of them.
+  To require it, mark them **Excused** on the session and submit again. To let
+  one play it without requiring it, give it to them.
 - **Excused, access closed** — students you excused whose access has since been
   withdrawn: they were unenrolled from the class, or the recording was
-  unpublished or archived. Nothing is required of them and they can't open it.
+  unpublished or archived. Nothing is required of them, and they can open it
+  only if you give it to them.
   Re-enrolling them, or publishing the recording again, restores it — for
   anything still inside its due date. A session whose date has already
   passed stays closed, so nobody comes back to an obligation they had no chance
   to meet.
-- **Also listened** — progress from someone who no longer holds the recording,
-  for example a student you excused, who played it, and whom you then corrected
-  to present. Kept as history.
+- **Also listened** — progress from someone it isn't required of: a student you
+  gave it to, or one you excused and then corrected to present. Kept as history.
+
+A student you gave the recording to shows **given until** a date beside their
+listening, on whichever row they are on, while it is open.
+
+### Give a recording to one student
+
+A student who was there sometimes wants more time with the material, and
+excusing them would put the wrong mark on the register. Instead, **give** them
+the recording: it opens to them until a date you choose, sits on their To do
+under **Optional**, and nothing is required of them or counted.
+
+- **Given to** sits under the required list. Tap the **+** beside it, choose the
+  last day it stays open (it starts a week from today; they can play it through
+  the whole of that day), pick one student, and tap **Give to** them. The sheet
+  stays open for the next one.
+- You can give it once the session's attendance is submitted, while the
+  recording is published and the class's recordings are open. A student
+  required to listen right now (excused, with the date still ahead) is greyed:
+  it can be given after that date. If they need more time to finish, let the
+  date pass (they show as Missed), give it to them, and when they have finished
+  mark it complete with an override (Section 2.7).
+- Each row says **Open until**, **Ended**, **Required until … then open until**
+  when you gave it first and excused them after, or why it is closed. Tap the
+  pencil to move the date, earlier or later, or to give an ended one a new
+  date, or to **Take back**, which asks first because it stops it at once if
+  they are listening.
+- Any teacher of the class can change or take back what a colleague gave. If
+  you both save the same row at once, the second is told the date the other set,
+  and saving again uses theirs on purpose.
+- The student gets one message when it is given ("… is open to you until …. It
+  is not required."), and another only when an ended one is given a new date.
+  Moving the date and taking it back are silent.
+- Unpublishing or archiving the recording, archiving the class with its
+  recordings closed, or the student leaving the class closes it too; undoing
+  that opens it again while its date is good.
 
 For a copy you can keep or hand on, export the course's **workbook** from the
 course page (Section 2.13); its **Detail** tab is this ledger for every
@@ -1312,6 +1368,7 @@ where their record can still be opened and exported. It cannot be undone.
 | I want to… | Do this |
 |---|---|
 | **Catch up on a class I missed** | **To do** → tap the card → big round button. |
+| **Play a recording my teacher gave me** | **To do** → **Optional** → tap it. It is open until the date on the card. |
 | **Switch between video and audio** | Tap the version under the player — you carry on from the same moment. |
 | **Pick up where I left off** | Reopen it on the same phone or computer. On another one, tap **Bookmark this place** first, then **Go to bookmark** there. |
 | **Slow down or speed up** | Choose the speed beside the times on the player. |
@@ -1325,7 +1382,9 @@ where their record can still be opened and exported. It cannot be undone.
 | **Take attendance** *(staff)* | Session → mark Present / Absent / Excused → **Submit attendance**. |
 | **Add a recording** *(staff)* | Open the session → **Import from Zoom** → tick files or a quick pick → **Import**. Or **Upload files…** → choose → **Upload N files**. |
 | **Hide a version from students** *(staff)* | Session → the **eye** beside the file. |
-| **Open a recording to students** *(staff)* | Mark them **Excused**, then **Publish** — that is the whole of it. |
+| **Require a recording of students** *(staff)* | Mark them **Excused**, then **Publish** — that is the whole of it. |
+| **Let one student play a recording, without requiring it** *(staff)* | Session → **Progress** → **+** beside **Given to** → the date → pick them → **Give to** them. |
+| **Change or take back what a student was given** *(staff)* | **Progress** → the **pencil** on their row under **Given to** → a new date and **Save**, or **Take back**. |
 | **Change the closing date** *(staff)* | Session → the **pencil** → **Due by**. Moving it forward reopens a closed recording. |
 | **See who's behind** *(staff)* | Session → **Progress** → **Not complete** / **Missed**. |
 | **Post an assignment** *(staff)* | Course → **Assignments** → **+** → title, instructions, date → **Post**. |
