@@ -3,10 +3,14 @@
 //
 // Invariants (born of a real bug in the sibling time-tracker — its
 // docs/POSTMORTEM-2026-07-16-stale-week.md; inherited here, not re-learned):
-//  1. State RESETS to `empty` the moment the subscription inputs change. React
-//     state otherwise persists across dependency changes, so query A's results
-//     would stay on screen while query B's first snapshot is in flight — on a
-//     slow connection that showed one week's entries under another week.
+//  1. State RESETS to `empty` the moment the subscription inputs change — in
+//     the RENDER they change in (`heldFor`), not an effect later. React state
+//     otherwise persists across dependency changes, so query A's results would
+//     stay on screen while query B's first snapshot is in flight — on a slow
+//     connection that showed one week's entries under another week. A reset
+//     in the effect alone still handed A's answer to the first render about B,
+//     and a caller deciding in that render acted on it: the docked bar took a
+//     newly opened recording for the revoked one before it and closed it.
 //  2. Listener errors also reset to `empty`: an empty screen plus a console
 //     warning beats silently-wrong data that never corrects itself.
 import { useEffect, useRef, useState } from 'react';
@@ -19,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import { captureError } from './sentry';
 import { onCacheEnding } from './firestoreInit';
+import { heldFor, type Held } from './heldAnswer';
 
 // ---- Listener-error visibility -------------------------------------------
 // A server-rejected listen (a missing index, a rules denial) otherwise dies as
@@ -245,6 +250,14 @@ export interface LiveQueryOptions<T> {
    */
   includeMetadataChanges?: boolean;
   /**
+   * ANSWERED BY THE SERVER ONLY. The persistent cache answers first, with
+   * what this browser last held, and a decision that warns made from it (who
+   * a recording would close to) missed a colleague's give since. A cached
+   * snapshot is held back, so the answer stays not yet known until the
+   * server's arrives.
+   */
+  confirmed?: boolean;
+  /**
    * Extra Sentry tags naming WHICH subscription of this label failed. Required
    * wherever a screen mounts one listener per row and the label alone cannot
    * identify the failing one — see the note in reportListenerError.
@@ -282,9 +295,10 @@ export interface LiveQueryOptions<T> {
 export function useLiveQuery<T>(
   make: () => Query | null,
   deps: readonly unknown[],
-  { label, map, empty, includeMetadataChanges = false, context, expectDenial, extra }: LiveQueryOptions<T>,
+  { label, map, empty, includeMetadataChanges = false, confirmed = false, context, expectDenial, extra }: LiveQueryOptions<T>,
 ): T {
-  const [value, setValue] = useState<T>(empty);
+  const [held, setHeld] = useState<Held<T>>({ value: empty, resolved: false, deps });
+  const setValue = (value: T) => setHeld({ value, resolved: true, deps });
   // Read at the refusal, not at the subscription: whether a denial is expected
   // can depend on state that moved after the listener was opened.
   const expectDenialRef = useRef(expectDenial);
@@ -296,8 +310,11 @@ export function useLiveQuery<T>(
     const key = subscriptionKey(label, context);
     const unsubscribe = onSnapshot(
       q,
-      { includeMetadataChanges },
+      // Confirmed needs the metadata change too: the server's snapshot of
+      // unchanged data arrives as nothing else.
+      { includeMetadataChanges: includeMetadataChanges || confirmed },
       (snap) => {
+        if (confirmed && snap.metadata.fromCache) return;
         setValue(map(snap));
         forgetListener(key);
       },
@@ -328,7 +345,7 @@ export function useLiveQuery<T>(
     // every input `make` reads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
-  return value;
+  return heldFor(held, deps, empty).value;
 }
 
 export interface LiveDocOptions<T> {
@@ -354,6 +371,8 @@ export interface LiveDocOptions<T> {
    * expected; any other error still reports.
    */
   denialIsAnswer?: boolean;
+  /** Answered by the server only, as `LiveQueryOptions.confirmed`. */
+  confirmed?: boolean;
 }
 
 /**
@@ -381,12 +400,10 @@ export interface LiveDocOptions<T> {
 export function useLiveDocState<T>(
   make: () => DocumentReference | null,
   deps: readonly unknown[],
-  { label, map, empty, context, denialIsAnswer }: LiveDocOptions<T>,
+  { label, map, empty, context, denialIsAnswer, confirmed = false }: LiveDocOptions<T>,
 ): { value: T; resolved: boolean } {
-  const [state, setState] = useState<{ value: T; resolved: boolean }>({
-    value: empty,
-    resolved: false,
-  });
+  const [held, setHeld] = useState<Held<T>>({ value: empty, resolved: false, deps });
+  const setState = (next: { value: T; resolved: boolean }) => setHeld({ ...next, deps });
   useEffect(() => {
     setState({ value: empty, resolved: false });
     const ref = make();
@@ -394,7 +411,9 @@ export function useLiveDocState<T>(
     const key = subscriptionKey(label, context);
     const unsubscribe = onSnapshot(
       ref,
+      { includeMetadataChanges: confirmed },
       (snap) => {
+        if (confirmed && snap.metadata.fromCache) return;
         setState({ value: snap.exists() ? map(snap) : empty, resolved: true });
         forgetListener(key);
       },
@@ -418,6 +437,6 @@ export function useLiveDocState<T>(
     // Same caller-supplied-deps contract as useLiveQuery; see the note there.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
-  return state;
+  return heldFor(held, deps, empty);
 }
 

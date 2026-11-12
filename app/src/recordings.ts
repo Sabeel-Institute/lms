@@ -96,16 +96,33 @@ export function useRecordingState(
   /** A student's read: the rules withhold an unpublished recording from them by
    *  design, so a refusal is the recording going away, not a fault. */
   denialIsAnswer = false,
+  /**
+   * Read again when this changes. A refused listener stays refused, so a
+   * student who opened a recording they did not hold kept "not available"
+   * after being excused or given it, until they left and came back. The
+   * student's player passes what they hold while the recording cannot be
+   * read, so a change in it reads again then, and only then.
+   */
+  attempt = '',
+  /**
+   * From the server only. A read again after a refusal answered first from
+   * the persistent cache, with the copy from before the refusal: the player
+   * drew a recording it was refused, asked for its audio, and was refused.
+   */
+  confirmed = false,
 ) {
   return useLiveDocState<RecordingRow | null>(
     () => (recordingId ? doc(db, COLLECTIONS.recordings, recordingId) : null),
-    [recordingId],
+    // `attempt` is not in the ref: it is when to read the same ref again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [recordingId, attempt],
     {
       label: 'recording',
       context: scope ? { scope } : undefined,
       map: (snap) => ({ id: snap.id, ...read('recordings', snap) }),
       empty: null,
       denialIsAnswer,
+      confirmed,
     },
   );
 }
