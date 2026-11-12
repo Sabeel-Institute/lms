@@ -45,6 +45,14 @@ request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
 it). What was checked before and after each release is in the verification
 log below.
 
+### 2026-11-12 — Choosing a date on an iPhone — v1.1.1
+
+- **On an iPhone, a date field opens the calendar in one tap.** It used to
+  show a small date first that needed a second tap. Pick the day and tap
+  **Done**; **Cancel** leaves the date as it was. This applies to every date
+  field: a session's dates, an assignment's, more time and another try when
+  grading, the Zoom import's range, and giving a recording.
+
 ### 2026-11-12 — Give a recording to one student — v1.1.0
 
 - **Teachers can give a recording to one student**, from the recording's
