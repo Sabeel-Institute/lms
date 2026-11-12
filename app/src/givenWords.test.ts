@@ -14,8 +14,9 @@ const register = (mark: 'present' | 'excused', dueDate = '2026-11-12'): Register
   attendance: { u1: mark },
   dueDate,
 });
+/** Read as a person reads it: the non-breaking hyphens the dates carry, as hyphens. */
 const status = (over: Partial<Parameters<typeof givenStatus>[0]> = {}) =>
-  givenStatus({
+  plain(givenStatus({
     given: { studentUid: 'u1', openUntil: '2026-11-20' },
     closedBy: null,
     enrolled: true,
@@ -24,9 +25,22 @@ const status = (over: Partial<Parameters<typeof givenStatus>[0]> = {}) =>
     recordingStatus: 'published',
     today: TODAY,
     ...over,
-  });
+  }));
+const plain = (text: string) => text.replace(/\u2011/g, '-');
 
 describe('givenStatus', () => {
+  it('keeps each date on one line', () => {
+    expect(givenStatus({
+      given: { studentUid: 'u1', openUntil: '2026-11-20' },
+      closedBy: null,
+      enrolled: true,
+      session: register('present'),
+      grant: null,
+      recordingStatus: 'published',
+      today: TODAY,
+    })).toBe('Open until 2026\u201111\u201120');
+  });
+
   it('says until when it is open, and when it ended', () => {
     expect(status()).toBe('Open until 2026-11-20');
     expect(status({ given: { studentUid: 'u1', openUntil: TODAY } })).toBe(`Open until ${TODAY}`);

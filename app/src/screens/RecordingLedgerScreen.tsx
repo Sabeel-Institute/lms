@@ -7,6 +7,7 @@ import {
   isOverdue,
   isVisibleToStudents,
   todayInZone,
+  unbreakableDate,
   type GrantOutcome,
 } from '@sabeel/shared';
 import {
@@ -282,7 +283,7 @@ function ListenerRow({ row: r, givenUntil }: { row: LedgerRow; givenUntil: strin
             <Text style={styles.sub}>
               {listenedText(r.listenedPct)}
               {r.lastListened ? ` · last ${fmtDate(r.lastListened)}` : ''}
-              {givenUntil ? ` · given until ${givenUntil}` : ''}
+              {givenUntil ? ` · given until\u00A0${unbreakableDate(givenUntil)}` : ''}
             </Text>
           ) : null}
         </View>
@@ -341,7 +342,7 @@ function LedgerRowCard({
       {` · ${listenedText(r.listenedPct)}`}
       {r.lastListened ? ` · last ${fmtDate(r.lastListened)}` : ''}
       {r.pending ? ' · pending sync' : ''}
-      {givenUntil ? ` · given until ${givenUntil}` : ''}
+      {givenUntil ? ` · given until\u00A0${unbreakableDate(givenUntil)}` : ''}
     </Text>
   );
 

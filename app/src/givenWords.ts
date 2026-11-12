@@ -1,6 +1,7 @@
 import {
   isOverdue,
   requiredUntil,
+  unbreakableDate,
   type AssignmentDoc,
   type GivenExpectation,
   type GivenRecordingDoc,
@@ -51,12 +52,16 @@ export function givenStatus(input: {
   const { given, closedBy, enrolled, session, grant, recordingStatus, today } = input;
   if (closedBy) return `Closed (${closedBy})`;
   if (!enrolled) return 'Left the class';
+  // Dates that never break across a line, inside a sentence: see `unbreakableDate`.
+  const d = unbreakableDate;
   const required = requiredUntil(given.studentUid, { session, grant, enrolled, recordingStatus, today });
   if (required) {
-    return given.openUntil > required ? `Required until ${required}, then open until ${given.openUntil}` : `Required until ${required}`;
+    return given.openUntil > required
+      ? `Required until ${d(required)}, then open until ${d(given.openUntil)}`
+      : `Required until ${d(required)}`;
   }
-  if (isOverdue(given.openUntil, today)) return `Ended ${given.openUntil}`;
-  return `Open until ${given.openUntil}`;
+  if (isOverdue(given.openUntil, today)) return `Ended ${d(given.openUntil)}`;
+  return `Open until ${d(given.openUntil)}`;
 }
 
 /** What a give, move or reopen says once it has worked. Never a claim that anything was delivered. */
