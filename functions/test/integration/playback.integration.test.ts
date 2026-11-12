@@ -232,11 +232,6 @@ describe('getPlaybackUrl', () => {
 });
 
 /*
- * THE URL ITSELF: what a leaked link is worth. These run the production signing
- * path against a store that enforces signatures, which the Firebase Storage
- * emulator never could.
- */
-/*
  * A RECORDING STAFF GAVE ONE STUDENT, at the audio: open through the whole of
  * its date on the REAL clock, as production decides it, and closed after, on
  * leaving the class, on unpublishing, and the moment it is taken back.
@@ -299,6 +294,11 @@ describe('getPlaybackUrl, given', () => {
   });
 });
 
+/*
+ * THE URL ITSELF: what a leaked link is worth. These run the production signing
+ * path against a store that enforces signatures, which the Firebase Storage
+ * emulator never could.
+ */
 describe('a playback URL', () => {
   it('stops working when it expires', async () => {
     // TWO SECONDS, not one: the signature carries its start time truncated to

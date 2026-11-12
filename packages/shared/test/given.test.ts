@@ -3,7 +3,7 @@ import {
   closesNow,
   completionShown,
   giveAction,
-  givenChanged,
+  givenChanged as changed,
   giveRefusal,
   givenRecordingId,
   isCalendarDate,
@@ -95,9 +95,12 @@ describe('giveAction', () => {
   });
 });
 
+/** A sentence as a person reads it: its dates' non-breaking hyphens as hyphens. */
+const plain = (text: string | null) => (text === null ? null : text.replace(/\u2011/g, '-'));
+
 describe('giveRefusal', () => {
   const ask = (over: Partial<Parameters<typeof giveRefusal>[0]> = {}) =>
-    giveRefusal({
+    plain(giveRefusal({
       studentUid: 'u1',
       openUntil: TOMORROW,
       today: TODAY,
@@ -105,11 +108,12 @@ describe('giveRefusal', () => {
       recordingStatus: 'published',
       cls: open,
       enrolled: true,
+      accountActive: true,
       grant: null,
       given: null,
       fromPlus: true,
       ...over,
-    });
+    }));
 
   it('gives a present student a date today or later', () => {
     expect(ask()).toBeNull();
@@ -128,6 +132,7 @@ describe('giveRefusal', () => {
     expect(ask({ recordingStatus: 'draft' })).toBe('Only a published recording can be given.');
     expect(ask({ cls: { effectiveActive: false, archivedAccess: false } })).toBe('This class is archived and its recordings are closed.');
     expect(ask({ enrolled: false })).toBe('That student is not in this class.');
+    expect(ask({ accountActive: false })).toBe("That student's account is not active.");
     expect(ask({ openUntil: null })).toBe('Choose the last day it stays open.');
     expect(ask({ openUntil: '2026-02-30' })).toBe('Choose the last day it stays open.');
     expect(ask({ openUntil: YESTERDAY })).toBe('That date has passed. Choose today or a later day.');
@@ -158,6 +163,7 @@ describe('giveRefusal', () => {
 
 describe('givenChanged', () => {
   const seen = { givenAt: 100, openUntil: '2026-11-20' };
+  const givenChanged = (...args: Parameters<typeof changed>) => plain(changed(...args));
 
   it('is silent when the record is as the caller saw it, or the caller expected none', () => {
     expect(givenChanged(seen, { ...seen }, 'save')).toBeNull();
@@ -171,9 +177,10 @@ describe('givenChanged', () => {
     expect(givenChanged(seen, { givenAt: 100, openUntil: '2026-11-27' }, 'save')).toBe(moved);
     expect(givenChanged(seen, { givenAt: 200, openUntil: '2026-11-27' }, 'save')).toBe(moved);
     // Taken back and given again to the same date is still a change: the
-    // caller's sheet was about an opening that no longer exists.
+    // caller's sheet was about an opening that no longer exists. The date did
+    // not change, so it is not said to have.
     expect(givenChanged(seen, { givenAt: 200, openUntil: '2026-11-20' }, 'save')).toBe(
-      'Someone else changed the date to 2026-11-20 just now. Save again to use yours.',
+      'Someone else took it back and gave it again just now. Save again to use yours.',
     );
   });
 
@@ -358,5 +365,34 @@ describe('closesNow', () => {
   it('names nobody for a correction that closes nothing', () => {
     expect(ask({ after: { ...session.attendance, present: 'absent' as const } })).toEqual([]);
     expect(ask({ session: { ...session, dueDate: YESTERDAY }, after: { ...session.attendance, excusedOpen: 'present' as const } })).toEqual([]);
+  });
+});
+
+describe('a date inside a sentence', () => {
+  // Every sentence here is drawn in a narrow sheet or row; a date written
+  // with plain hyphens breaks across a line there ("until 2026-" / "11-19").
+  const brokenDate = /\d{4}-\d{2}-\d{2}/;
+  it('never breaks across a line', () => {
+    const sentences = [
+      giveRefusal({
+        studentUid: 'u1',
+        openUntil: TOMORROW,
+        today: TODAY,
+        session: submitted({ u1: 'excused' }),
+        recordingStatus: 'published',
+        cls: open,
+        enrolled: true,
+        accountActive: true,
+        grant: null,
+        given: null,
+        fromPlus: true,
+      }),
+      changed({ givenAt: 1, openUntil: TOMORROW }, { givenAt: 1, openUntil: '2026-11-27' }, 'save'),
+      changed({ givenAt: 1, openUntil: TOMORROW }, { givenAt: 1, openUntil: '2026-11-27' }, 'takeBack'),
+    ];
+    for (const sentence of sentences) {
+      expect(sentence).not.toBeNull();
+      expect(sentence).not.toMatch(brokenDate);
+    }
   });
 });

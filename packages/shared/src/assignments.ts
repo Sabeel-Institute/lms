@@ -20,9 +20,11 @@ import { DUE_SOON_DAYS } from './constants';
  * session and it has a published recording. So there is no `source` — the
  * reconcile from the session's attendance is the only writer.
  *
- * This document is the whole of a student's access. `firestore.rules` gates the
- * recording's metadata on it, and `getPlaybackUrl` gates the audio on it, so a
- * student who is not excused cannot reach a recording by any route.
+ * This document is the whole of what makes listening required. `firestore.rules`
+ * gates the recording's metadata on it or on a recording staff gave the
+ * student (`GivenRecordingDoc`), and `getPlaybackUrl` gates the audio on the
+ * same two through `listenWindow`; a student holding neither cannot reach a
+ * recording by any route.
  *
  * Document id is `${studentUid}_${recordingId}` — at most one per student per
  * recording, which makes the reconcile idempotent. Written ONLY by the server;
@@ -478,21 +480,24 @@ export function giveRefusal(input: {
   recordingStatus: string;
   cls: { effectiveActive: boolean; archivedAccess: boolean };
   enrolled: boolean;
+  /** The student's account is active: a disabled one is given nothing, as it is enrolled in nothing. */
+  accountActive: boolean;
   grant: Pick<AssignmentDoc, 'active' | 'dueDate'> | null;
   given: Pick<GivenRecordingDoc, 'openUntil'> | null;
   fromPlus: boolean;
 }): string | null {
-  const { studentUid, openUntil, today, session, recordingStatus, cls, enrolled, grant, given, fromPlus } = input;
+  const { studentUid, openUntil, today, session, recordingStatus, cls, enrolled, accountActive, grant, given, fromPlus } = input;
   if (session.attendanceSubmittedAt === null) return 'Take attendance for this session first.';
   if (recordingStatus !== 'published') return 'Only a published recording can be given.';
   if (!canPlayFromCourse(cls)) return 'This class is archived and its recordings are closed.';
   if (!enrolled) return 'That student is not in this class.';
+  if (!accountActive) return "That student's account is not active.";
   if (fromPlus && given) return 'It has already been given to them. Change it from their row.';
   if (!openUntil || !isCalendarDate(openUntil)) return 'Choose the last day it stays open.';
   if (isOverdue(openUntil, today)) return 'That date has passed. Choose today or a later day.';
   if (giveAction(given, today) !== 'move') {
     const until = requiredUntil(studentUid, { session, grant, enrolled, recordingStatus, today });
-    if (until) return `It is required for them until ${until}. It can be given after that.`;
+    if (until) return `It is required for them until ${unbreakableDate(until)}. It can be given after that.`;
   }
   return null;
 }
@@ -528,7 +533,9 @@ export function givenChanged(
   }
   if (current.givenAt === expect.givenAt && current.openUntil === expect.openUntil) return null;
   const again = act === 'takeBack' ? 'Take back again to take it back anyway.' : 'Save again to use yours.';
-  return `Someone else changed the date to ${current.openUntil} just now. ${again}`;
+  // Taken back and given again on the date the sheet showed: the date did not change.
+  if (current.openUntil === expect.openUntil) return `Someone else took it back and gave it again just now. ${again}`;
+  return `Someone else changed the date to ${unbreakableDate(current.openUntil)} just now. ${again}`;
 }
 
 /**

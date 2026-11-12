@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, expect } from 'vitest';
+import { describe, it, beforeAll, expect, vi } from 'vitest';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
@@ -65,6 +65,7 @@ async function world(
     status?: string;
     course?: { effectiveActive: boolean; archivedAccess: boolean };
     enrolled?: Record<string, boolean>;
+    disabled?: string[];
   } = {},
 ): Promise<World> {
   n += 1;
@@ -113,6 +114,18 @@ async function world(
       createdAt: 1,
       updatedAt: 1,
     }),
+    // Each student's account, active unless named disabled: a disabled
+    // account is given nothing, as it is enrolled in nothing new.
+    ...Object.keys(enrolled).map((uid) =>
+      d.collection(COLLECTIONS.students).doc(uid).set({
+        displayName: uid,
+        email: `${uid}@example.com`,
+        role: 'student',
+        status: over.disabled?.includes(uid) ? 'disabled' : 'active',
+        createdAt: 1,
+        createdBy: MGR,
+      }),
+    ),
     ...Object.entries(enrolled).map(([uid, active]) =>
       d.collection(COLLECTIONS.enrollments).doc(enrollmentId(uid, courseId)).set({
         studentUid: uid,
@@ -145,7 +158,8 @@ async function refusal(p: Promise<unknown>): Promise<{ code: string; message: st
     await p;
   } catch (e) {
     const err = e as { code: string; message: string; details?: { current?: unknown } };
-    return { code: err.code, message: err.message, current: err.details?.current };
+    // Read as a person reads it: a date's non-breaking hyphens as hyphens.
+    return { code: err.code, message: err.message.replace(/\u2011/g, '-'), current: err.details?.current };
   }
   throw new Error('expected a refusal');
 }
@@ -199,6 +213,7 @@ describe('giving', () => {
       [{ status: 'unpublished' }, {}, 'Only a published recording can be given.'],
       [{ course: { effectiveActive: false, archivedAccess: false } }, {}, 'This class is archived and its recordings are closed.'],
       [{ enrolled: { [PRESENT]: false } }, {}, 'That student is not in this class.'],
+      [{ disabled: [PRESENT] }, {}, "That student's account is not active."],
       [{}, { openUntil: YESTERDAY }, 'That date has passed. Choose today or a later day.'],
       [{}, { studentUid: EXCUSED }, 'It is required for them until 2099-01-01. It can be given after that.'],
     ];
@@ -267,6 +282,30 @@ describe('changing the date', () => {
   });
 });
 
+describe('one sheet, several actions', () => {
+  it('answers each give and move with the record as it now stands, so the same sheet can act again', async () => {
+    // A sheet that kept what it saw when it opened refused its own next
+    // action as "someone else changed the date". Each answer carries the
+    // record, which the sheet adopts.
+    const w = await world();
+    const opened = await applyGive(MGR, ask(w), TODAY);
+    expect(opened.current).toEqual(seen(await stored(w)));
+    const moved = await applyGive(MGR, ask(w, { openUntil: '2026-12-01', expect: opened.current }), TODAY);
+    expect(moved).toMatchObject({ outcome: 'moved', current: { givenAt: opened.current.givenAt, openUntil: '2026-12-01' } });
+    const again = await applyGive(MGR, ask(w, { openUntil: '2026-12-08', expect: moved.current }), TODAY);
+    expect(again.outcome).toBe('moved');
+    expect((await applyTakeBack({ recordingId: w.recordingId, studentUid: PRESENT, expect: again.current })).outcome).toBe('taken');
+  });
+
+  it('answers a reopen with its new opening', async () => {
+    const w = await world();
+    await applyGive(MGR, ask(w, { openUntil: '2026-11-05' }), '2026-11-01');
+    const reopened = await applyGive(MGR, ask(w, { expect: seen(await stored(w)) }), TODAY);
+    expect(reopened.current).toEqual(seen(await stored(w)));
+    expect((await applyGive(MGR, ask(w, { openUntil: '2026-12-01', expect: reopened.current }), TODAY)).outcome).toBe('moved');
+  });
+});
+
 describe('two people at once', () => {
   it('refuses a move from a sheet a colleague changed underneath, and applies it when made again', async () => {
     const w = await world();
@@ -301,7 +340,7 @@ describe('two people at once', () => {
   it('refuses a give from the list for a student a colleague just gave it to', async () => {
     const w = await world();
     const [a, b] = await Promise.allSettled([applyGive(MGR, ask(w), TODAY), applyGive(MGR2, ask(w, { openUntil: '2026-12-04' }), TODAY)]);
-    const outcomes = [a, b].map((r) => (r.status === 'fulfilled' ? r.value.outcome : (r.reason as Error).message));
+    const outcomes = [a, b].map((r) => (r.status === 'fulfilled' ? r.value.outcome : (r.reason as Error).message.replace(/\u2011/g, '-')));
     expect(outcomes.filter((o) => o === 'opened')).toHaveLength(1);
     expect(outcomes).toContain('It has already been given to them. Change it from their row.');
   });
@@ -333,25 +372,39 @@ describe('the callables', () => {
       (d) => d.data() as AuditEntryDoc,
     );
 
+  it('reads the day on the institute’s clock when it is not told one', async () => {
+    // 7 PM in Chicago on the 10th is 1 AM on the 11th in UTC: a server that
+    // took UTC's day refused "today" all evening while the sheet offered Save.
+    const w = await world();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.parse('2026-11-10T19:00:00-06:00'));
+      const r = await giveRecording.run(await req(MGR, { recordingId: w.recordingId, studentUid: PRESENT, openUntil: TODAY, expect: null }));
+      expect(r.outcome).toBe('opened');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('record giving, moving and taking back in the audit log, and nothing that changed nothing', async () => {
     const w = await world();
     const later = '2099-02-01';
-    expect(await giveRecording.run(await req(MGR, { recordingId: w.recordingId, studentUid: PRESENT, openUntil: later, expect: null }))).toEqual({ outcome: 'opened' });
+    expect(await giveRecording.run(await req(MGR, { recordingId: w.recordingId, studentUid: PRESENT, openUntil: later, expect: null }))).toMatchObject({ outcome: 'opened' });
     const sheet = seen(await stored(w));
     // A colleague, not the giver, moves it: scope is the class's.
     expect(
       await giveRecording.run(await req(MGR2, { recordingId: w.recordingId, studentUid: PRESENT, openUntil: '2099-03-01', expect: sheet })),
-    ).toEqual({ outcome: 'moved' });
+    ).toMatchObject({ outcome: 'moved' });
     const moved = seen(await stored(w));
     expect(
       await giveRecording.run(await req(MGR2, { recordingId: w.recordingId, studentUid: PRESENT, openUntil: '2099-03-01', expect: moved })),
-    ).toEqual({ outcome: 'unchanged' });
+    ).toMatchObject({ outcome: 'unchanged' });
     expect(await takeBackRecording.run(await req(MGR, { recordingId: w.recordingId, studentUid: PRESENT, expect: moved }))).toEqual({ outcome: 'taken' });
     expect(await takeBackRecording.run(await req(MGR, { recordingId: w.recordingId, studentUid: PRESENT, expect: moved }))).toEqual({ outcome: 'gone' });
 
     const gives = (await audits('giveRecording', w.recordingId)).sort((a, b) => a.at - b.at);
     expect(gives.map((a) => a.detail)).toEqual([
-      { title: `Session ${n}`, outcome: 'opened', openUntil: later, previousOpenUntil: null },
+      { title: `Session ${n}`, outcome: 'opened', openUntil: later },
       { title: `Session ${n}`, outcome: 'moved', openUntil: '2099-03-01', previousOpenUntil: later },
     ]);
     expect(gives.every((a) => a.courseId === w.courseId && a.targets.studentUid === PRESENT)).toBe(true);
@@ -373,7 +426,24 @@ describe('the callables', () => {
     expect(
       await refusal(giveRecording.run(await req(MGR, { recordingId: `a/b`, studentUid: PRESENT, openUntil: '2099-02-01', expect: null }))),
     ).toMatchObject({ code: 'invalid-argument' });
+    // A take back always comes from a row, so it always saw one: with none,
+    // it would delete whatever a colleague had just given.
+    await giveRecording.run(await req(MGR, { recordingId: w.recordingId, studentUid: PRESENT, openUntil: '2099-02-01', expect: null }));
+    expect(
+      await refusal(takeBackRecording.run(await req(MGR2, { recordingId: w.recordingId, studentUid: PRESENT, expect: null }))),
+    ).toMatchObject({ code: 'invalid-argument' });
+    expect(await stored(w)).toBeDefined();
+    await applyTakeBack({ recordingId: w.recordingId, studentUid: PRESENT, expect: seen(await stored(w)) });
     expect(await stored(w)).toBeUndefined();
+  });
+
+  it('answer a give with the record the sheet then holds', async () => {
+    const w = await world();
+    const res = (await giveRecording.run(
+      await req(MGR, { recordingId: w.recordingId, studentUid: PRESENT, openUntil: '2099-02-01', expect: null }),
+    )) as { outcome: string; current: unknown; toldToday: boolean };
+    // No phone, so nothing was sent today: the line may promise a message.
+    expect(res).toEqual({ outcome: 'opened', current: seen(await stored(w)), toldToday: false });
   });
 });
 
@@ -393,6 +463,14 @@ describe('the message trigger', () => {
       .catch(() => getAuth().createUser({ uid: PHONE, email: `${PHONE}@example.com` }));
     await db().collection(COLLECTIONS.notifications).doc(PHONE).collection('devices').doc(`tok-${PHONE}`).set({ token: `tok-${PHONE}`, platform: 'web', registeredAt: Date.now() });
   };
+  /*
+   * HOW LONG A SILENCE MEANS NOTHING WAS SENT, and it cannot mean more: a
+   * move's message arriving after this would pass. Nothing the trigger does
+   * on a move can be waited for instead, since doing nothing is the point;
+   * the rule itself, that only an opening sends, is `opensIt`, held without
+   * a clock in `test/unit/sweeps.test.ts`. A real send here takes about a
+   * second (the test above waits for one).
+   */
   const settle = () => new Promise((r) => setTimeout(r, 6000));
 
   it('sends one message for a recording given', async () => {
@@ -402,6 +480,21 @@ describe('the message trigger', () => {
     await applyGive(MGR, ask(w, { studentUid: PHONE, openUntil: addDays(today, 7) }), today);
     const after = await eventually(sent, (q) => q.size > 0);
     expect(after.docs.map((d) => d.id)).toEqual([`recordingReady_${w.recordingId}_given_${today}`]);
+  });
+
+  it('says when the day’s message has already gone, so a give again the same day promises none', async () => {
+    const today = todayInZone(INSTITUTE_TIMEZONE);
+    const w = await world({ attendance: { [PHONE]: 'present' }, enrolled: { [PHONE]: true } });
+    await db().recursiveDelete(db().collection(COLLECTIONS.notifications).doc(PHONE));
+    await phone();
+    const asMgr = async (data: unknown) =>
+      ({ auth: { uid: MGR, token: { role: 'manager', status: 'active' }, rawToken: await idTokenFor(MGR) }, data }) as unknown as CallableRequest;
+    const first = await giveRecording.run(await asMgr({ recordingId: w.recordingId, studentUid: PHONE, openUntil: addDays(today, 7), expect: null }));
+    expect(first).toMatchObject({ outcome: 'opened', toldToday: false });
+    await eventually(sent, (q) => q.size > 0);
+    await takeBackRecording.run(await asMgr({ recordingId: w.recordingId, studentUid: PHONE, expect: first.current }));
+    const again = await giveRecording.run(await asMgr({ recordingId: w.recordingId, studentUid: PHONE, openUntil: addDays(today, 9), expect: null }));
+    expect(again).toMatchObject({ outcome: 'opened', toldToday: true });
   });
 
   it('sends nothing when the date moves, even to a phone registered since the opening', async () => {

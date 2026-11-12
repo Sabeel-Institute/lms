@@ -52,7 +52,7 @@ export const WORKBOOK_DEFINITIONS: readonly [term: string, definition: string][]
   ['Still open', 'Not yet completed, and the due date has not passed.'],
   [
     'Missed deadline',
-    'Not completed by the due date. Nothing further counts toward it unless the date is moved.',
+    'Not completed by the due date. It stays missed unless the date is moved or staff mark it complete.',
   ],
   [
     'Closed',

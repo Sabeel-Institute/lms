@@ -133,11 +133,12 @@ export function enrollmentId(studentUid: string, courseId: string): string {
 /**
  * A student's attendance for one session.
  *
- * `excused` is the ONLY status that gives a student anything. It grants access
+ * `excused` is the ONLY status that makes listening required. It grants access
  * to the session's recording AND makes listening to it required, until the
  * session's due date. `present` needs nothing (they were there) and `absent` is
- * an unexcused miss — neither can open the recording. Staff say "everyone must
- * listen" by excusing everyone.
+ * an unexcused miss — neither opens the recording, though staff may give it to
+ * either (`GivenRecordingDoc`), which requires nothing. Staff say "everyone
+ * must listen" by excusing everyone.
  */
 export type AttendanceStatus = 'present' | 'absent' | 'excused';
 

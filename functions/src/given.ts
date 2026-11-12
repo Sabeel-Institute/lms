@@ -10,6 +10,7 @@ import {
   giveRefusal,
   givenRecordingId,
   isCalendarDate,
+  sentNotificationId,
   todayInZone,
   type AssignmentDoc,
   type CourseDoc,
@@ -18,8 +19,10 @@ import {
   type GivenRecordingDoc,
   type RecordingDoc,
   type SessionDoc,
+  type StudentDoc,
 } from '@sabeel/shared';
 import { auditedCall } from './audited';
+import { givenMessageTarget } from './notifyJobs';
 import { recordingCourseId, requireCourseScope, requireStaff } from './guards';
 
 /**
@@ -93,8 +96,12 @@ function validateTakeBack(data: unknown): TakeBackInput {
   const d = (data ?? {}) as Record<string, unknown>;
   const recordingId = docId(d.recordingId, 'recordingId');
   const studentUid = docId(d.studentUid, 'studentUid');
-  if (!('expect' in d)) throw new HttpsError('invalid-argument', 'expect is required: null, or the record as the sheet showed it.');
-  return { recordingId, studentUid, expect: expectation(d.expect) };
+  // A take back is made from a row, so it always saw one. `null` means "from
+  // the give list" and has no meaning here: accepted, it would delete
+  // whatever a colleague had just given.
+  const expect = 'expect' in d ? expectation(d.expect) : null;
+  if (!expect) throw new HttpsError('invalid-argument', 'expect is required: the record as the sheet showed it.');
+  return { recordingId, studentUid, expect };
 }
 
 /**
@@ -120,7 +127,15 @@ export async function applyGive(
   callerUid: string,
   input: GiveInput,
   today: string = todayInZone(INSTITUTE_TIMEZONE),
-): Promise<{ outcome: GiveOutcome; title: string; courseId: string; openUntil: string; previousOpenUntil: string | null }> {
+): Promise<{
+  outcome: GiveOutcome;
+  title: string;
+  courseId: string;
+  openUntil: string;
+  previousOpenUntil: string | null;
+  /** The record as it now stands, which becomes what the caller's sheet saw. */
+  current: { givenAt: number; openUntil: string };
+}> {
   const db = getFirestore();
   const { recordingId, studentUid, openUntil, expect } = input;
   return db.runTransaction(async (tx) => {
@@ -128,12 +143,13 @@ export async function applyGive(
     if (!recSnap.exists) throw new HttpsError('not-found', 'No such recording.');
     const recording = recSnap.data() as RecordingDoc;
     const givenRef = db.collection(COLLECTIONS.givenRecordings).doc(givenRecordingId(studentUid, recordingId));
-    const [clsSnap, sessionSnap, enrolSnap, grantSnap, givenSnap] = await tx.getAll(
+    const [clsSnap, sessionSnap, enrolSnap, grantSnap, givenSnap, studentSnap] = await tx.getAll(
       db.collection(COLLECTIONS.courses).doc(recording.courseId),
       db.collection(COLLECTIONS.sessions).doc(recording.sessionId),
       db.collection(COLLECTIONS.enrollments).doc(enrollmentId(studentUid, recording.courseId)),
       db.collection(COLLECTIONS.assignments).doc(assignmentId(studentUid, recordingId)),
       givenRef,
+      db.collection(COLLECTIONS.students).doc(studentUid),
     );
     if (!clsSnap.exists) throw new HttpsError('not-found', 'No such class.');
     if (!sessionSnap.exists) throw new HttpsError('not-found', 'No such session.');
@@ -144,7 +160,9 @@ export async function applyGive(
     // saved the same date a moment before — changes nothing, so nothing is
     // refused, written or logged. Before the staleness check, or two people
     // agreeing would be told one of them was out of date.
-    if (current && current.openUntil === openUntil) return { ...result, outcome: 'unchanged' as const };
+    if (current && current.openUntil === openUntil) {
+      return { ...result, outcome: 'unchanged' as const, current: { givenAt: current.givenAt, openUntil } };
+    }
 
     const changed = givenChanged(expect, current, 'save');
     if (changed) throw stale(changed, current);
@@ -158,6 +176,7 @@ export async function applyGive(
       recordingStatus: recording.status,
       cls: clsSnap.data() as CourseDoc,
       enrolled: !!enrolment?.active,
+      accountActive: (studentSnap.data() as StudentDoc | undefined)?.status === 'active',
       grant: grantSnap.exists ? (grantSnap.data() as AssignmentDoc) : null,
       given: current,
       fromPlus: expect === null,
@@ -168,7 +187,7 @@ export async function applyGive(
     if (action === 'move' && current) {
       // A move keeps `givenAt`: the message trigger sends on an opening only.
       tx.update(givenRef, { openUntil });
-      return { ...result, outcome: 'moved' as const };
+      return { ...result, outcome: 'moved' as const, current: { givenAt: current.givenAt, openUntil } };
     }
     const doc: GivenRecordingDoc = {
       studentUid,
@@ -179,13 +198,18 @@ export async function applyGive(
       givenBy: callerUid,
     };
     tx.set(givenRef, doc);
-    return { ...result, outcome: action === 'reopen' ? ('reopened' as const) : ('opened' as const) };
+    return {
+      ...result,
+      outcome: action === 'reopen' ? ('reopened' as const) : ('opened' as const),
+      current: { givenAt: doc.givenAt, openUntil },
+    };
   });
 }
 
 /**
- * Take it back: the record goes, and the recording closes to the student at
- * once. In any state, and silent. One already gone is simply done; one a
+ * Take it back: the record goes, and the recording closes to the student: at
+ * once on an open screen, and on a locked phone when the app is next opened,
+ * which is when the change reaches it. In any state, and silent. One already gone is simply done; one a
  * colleague changed since the sheet opened is refused, so a take back never
  * undoes a date someone else just gave.
  */
@@ -215,10 +239,33 @@ export const giveRecording = auditedCall('giveRecording', async (req, audit) => 
   const courseId = await recordingCourseId(input.recordingId);
   const uid = await requireCourseScope(req, courseId);
   audit.courseId = courseId;
+  // ALREADY TOLD TODAY: an opening sends at most one message a day, so one
+  // given again the same day sends none, and the result line must not
+  // promise one. Read before the write, which the trigger answers.
+  const marker = getFirestore()
+    .collection(COLLECTIONS.notifications)
+    .doc(input.studentUid)
+    .collection('sent')
+    .doc(sentNotificationId('recordingReady', givenMessageTarget(input.recordingId, todayInZone(INSTITUTE_TIMEZONE))));
+  // Wording only, so its failure costs the sentence, not the give.
+  const toldToday = await marker.get().then(
+    (snap) => snap.exists,
+    (e: unknown) => {
+      console.error('giveRecording: the day’s message marker could not be read', e);
+      return false;
+    },
+  );
   const r = await applyGive(uid, input);
-  audit.detail = { title: r.title, outcome: r.outcome, openUntil: r.openUntil, previousOpenUntil: r.previousOpenUntil };
+  // A first give had no date before it: said by leaving it out, not as "null"
+  // on the audit card.
+  audit.detail = {
+    title: r.title,
+    outcome: r.outcome,
+    openUntil: r.openUntil,
+    ...(r.previousOpenUntil === null ? {} : { previousOpenUntil: r.previousOpenUntil }),
+  };
   audit.noop = r.outcome === 'unchanged';
-  return { outcome: r.outcome };
+  return { outcome: r.outcome, current: r.current, toldToday };
 });
 
 export const takeBackRecording = auditedCall('takeBackRecording', async (req, audit) => {
