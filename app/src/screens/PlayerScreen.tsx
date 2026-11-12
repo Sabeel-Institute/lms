@@ -4,9 +4,7 @@ import { Icon, type IconName } from '../icons';
 import {
   canPlayFromCourse,
   canPlayNow,
-  completionShown,
   listenWindow,
-  windowLastDay,
   VERSION_LABELS,
   isPlayable,
   listenedFraction,
@@ -26,7 +24,6 @@ import { Transport } from '../components/Transport';
 import {
   IDLE,
   PLAYBACK_RATES,
-  closePlayback,
   formatClock,
   noteListenOpen,
   openPlayback,
@@ -35,7 +32,8 @@ import {
   type PlaybackState,
 } from '../playback';
 import { setBookmark, useMyBookmark } from '../bookmarks';
-import { playingSinceItsDay, useInstituteDay } from '../instituteDay';
+import { rememberedOpenDay, useInstituteDay } from '../instituteDay';
+import { closedSentence, dateLine, markShown, playsOn, recordShown, requiredPlaysOn } from '../listening';
 import { useCompletion, useMyListening, setCompleted, type ListenReads } from '../completion';
 import { useListenerError } from '../liveQuery';
 import { useOneAtATime } from '../oneAtATime';
@@ -87,9 +85,9 @@ export function PlayerScreen({
   const window: ListenWindow | null =
     studentUid !== null && reads ? listenWindow(reads.grant, reads.given, reads.enrolled, today) : null;
   const allowed = canPlayNow(cls, window, studentUid);
-  // The day whose midnight closes it: the later of the dates held, so a file
-  // playing then plays on to its end on the day that actually closes it.
-  const lastDay = window ? windowLastDay(window) : null;
+  // The last day the window had while open: `playsOn` lets a file finish past
+  // the midnight that closed it, and only that one.
+  const openLastDay = rememberedOpenDay(studentUid, recording.id, window);
   const windowOpen = window?.state === 'open';
   useEffect(() => {
     if (studentUid !== null && window !== null) noteListenOpen(recording.id, windowOpen);
@@ -145,10 +143,13 @@ export function PlayerScreen({
   // Playing since before the day ended, without a stop: paused across
   // midnight and started again, it had begun to play on (`playingSince`).
   const playingThis = session.now?.recordingId === recording.id && session.playing;
-  const finishing = closed && lastDay !== null && playingThis && playingSinceItsDay(session.playingSince, lastDay);
-  useEffect(() => {
-    if (!allowed && !finishing && session.now?.recordingId === recording.id) void closePlayback();
-  }, [allowed, finishing, session.now?.recordingId, recording.id]);
+  const finishing = closed && playingThis && playsOn(window, openLastDay, session.playingSince);
+  // Finishing a required recording past its excused midnight, whether that
+  // closed the window or a later given date keeps it open: still required.
+  const stillRequired = requiredPlaysOn(reads, playingThis, session.playingSince);
+  // STOPPING is the docked bar's guard (`MiniPlayer`), mounted on this screen
+  // too, so one place decides it for whatever is playing: this recording, or
+  // another one playing behind this screen.
 
   // Opening the session is an EFFECT, not a render-time call: this screen is one
   // view onto app-wide playback, and re-entering it for something already
@@ -220,9 +221,7 @@ export function PlayerScreen({
             not see that they had, from the day it closed — they had to ask.
             The transport is gone; the account of what they did is not. A
             recording only given was never required, so has no record. */}
-        {studentUid !== null && window?.state === 'ended' && window.record ? (
-          <ClosedRecord studentUid={studentUid} recording={recording} />
-        ) : null}
+        {studentUid !== null && recordShown(reads) ? <ClosedRecord studentUid={studentUid} recording={recording} /> : null}
       </ScrollView>
     );
   }
@@ -290,9 +289,10 @@ export function PlayerScreen({
         closes={dateLine(studentUid, window, dueDate, playVerb(recording.media))}
       />
       {/* Missed, then given: open again, and the record stands. */}
-      {window?.state === 'open' && !window.required && window.listenByWas ? (
+      {window?.state === 'open' && !window.required && window.listenByWas && !stillRequired ? (
         <Notice tone="info">
-          Its listen-by date was {unbreakableDate(window.listenByWas)}. Listening now does not change your record.
+          Its {playVerb(recording.media).toLowerCase()}-by date was {unbreakableDate(window.listenByWas)}.{' '}
+          {playVerb(recording.media) === 'Watch' ? 'Watching' : 'Listening'} now does not change your record.
         </Notice>
       ) : null}
 
@@ -425,7 +425,7 @@ export function PlayerScreen({
 
       {/* AT THE END, the moment completion is for — said plainly, never as a
           demand: marking complete is the student's own statement. */}
-      {state.ended && window && completionShown(window) ? (
+      {state.ended && markShown(window, stillRequired) ? (
         <Notice tone="info">You have reached the end of this recording. If you have finished it, mark it complete below.</Notice>
       ) : null}
 
@@ -466,7 +466,7 @@ export function PlayerScreen({
           {/* MARK COMPLETE ONLY WHILE LISTENING IS REQUIRED. A given recording
               requires nothing, and a missed one stays missed: what was marked
               before still shows, read-only. */}
-          {window && completionShown(window) ? (
+          {markShown(window, stillRequired) ? (
             <CompletionControl
               studentUid={studentUid}
               recordingId={recording.id}
@@ -496,45 +496,26 @@ export function PlayerScreen({
 }
 
 /**
- * Why a student cannot play this, in the sentence that says what to do about
- * it: the class closed, nothing held, an excused date passed, or a given date
- * passed. Which date closed it is the window's later one.
- */
-function closedSentence(classOpen: boolean, window: ListenWindow | null, reads: ListenReads | null): string {
-  if (!classOpen) {
-    return 'This course has been archived and its recordings are closed. Your record is kept — ask your teacher if you need access again.';
-  }
-  if (window?.state !== 'ended') return 'This recording is not open to you. Ask your teacher if you need it.';
-  const excusedLast = window.record && reads?.grant?.dueDate === window.lastDay;
-  return excusedLast
-    ? `This recording closed on ${window.lastDay}. Your record is kept — ask your teacher if you need it reopened.`
-    : `This recording was open to you until ${window.lastDay}. Ask your teacher if you need it again.`;
-}
-
-/**
- * The date line under the title: for staff the session's due date; for a
- * student, until when it is open, and, when a given date runs past a required
- * one, both — the day it is required by, then the day it stays open until.
- */
-function dateLine(studentUid: string | null, window: ListenWindow | null, dueDate: string | null, verb: string): string | null {
-  if (studentUid === null) return dueDate ? `due\u00A0${unbreakableDate(dueDate)}` : null;
-  if (window?.state !== 'open') return null;
-  if (window.required && window.then) {
-    return `${verb.toLowerCase()} by\u00A0${unbreakableDate(window.until)} · open until\u00A0${unbreakableDate(window.then)}`;
-  }
-  return `${window.required ? 'available' : 'open'} until\u00A0${unbreakableDate(window.until)}`;
-}
-
-/**
  * In place of Mark complete when nothing is required: what was marked while
  * it was, read-only, or why there is nothing to mark.
  */
 function OptionalCompletion({ studentUid, recordingId }: { studentUid: string; recordingId: string }) {
   const { completed, override } = useCompletion(studentUid, recordingId);
-  const done = override ? override.completed : completed;
+  // A teacher's mark is theirs to explain, here as on To do: either way it
+  // shows, with their reason.
+  if (override) {
+    return (
+      <View testID="optional-completion">
+        <Text style={override.completed ? styles.completedText : styles.gateHint}>
+          {override.completed ? '✓ Completed — marked by your teacher' : 'Your teacher has marked this not complete'}
+        </Text>
+        <Text style={styles.gateHint}>{override.reason}</Text>
+      </View>
+    );
+  }
   return (
-    <Text testID="optional-completion" style={done ? styles.completedText : styles.gateHint}>
-      {done ? `✓ Completed${override ? ' — marked by your teacher' : ''}` : 'This one is optional, so there is nothing to mark.'}
+    <Text testID="optional-completion" style={completed ? styles.completedText : styles.gateHint}>
+      {completed ? '✓ Completed' : 'This one is optional, so there is nothing to mark.'}
     </Text>
   );
 }

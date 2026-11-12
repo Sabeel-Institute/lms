@@ -9,8 +9,9 @@ import {
   playback,
   usePlayback,
 } from '../playback';
-import { canPlayFromCourse, canPlayNow, listenWindow, windowLastDay } from '@sabeel/shared';
-import { playingSinceItsDay, useInstituteDay } from '../instituteDay';
+import { canPlayFromCourse, canPlayNow, listenWindow } from '@sabeel/shared';
+import { playsOn } from '../listening';
+import { rememberedOpenDay, useInstituteDay } from '../instituteDay';
 import { useMyListenReads } from '../completion';
 import { useRecordingState } from '../recordings';
 import { useCourseState } from '../structure';
@@ -49,11 +50,18 @@ const t = getTheme();
  */
 export function MiniPlayer({
   onOpen,
+  hidden,
 }: {
-  /** Carries the deadline as well as the id: the player screen gates the audio
-   *  on it, and re-opening without it would draw a live transport for a student
-   *  whose access closed while they were listening. */
+  /** Opens the player: the session's date for staff, nothing for a student,
+   *  whose access the player reads live. */
   onOpen: (recordingId: string, dueDate: string | null) => void;
+  /**
+   * The bar is not drawn (a player screen is open), but it still GUARDS what
+   * is playing. Unmounted there, nothing stopped a recording playing behind the
+   * player of a different one: a take back, an unenrolment or a closed class
+   * reached no one.
+   */
+  hidden: boolean;
 }) {
   const state = usePlayback();
   const wide = useWide();
@@ -82,7 +90,7 @@ export function MiniPlayer({
   // The student's access, live: their grant, what staff gave them and their
   // enrolment. Nothing is carried from when the recording was opened: a
   // listen-by date moved forward since is the documented way a closed session
-  // reopens, and a take back has to stop the audio at once.
+  // reopens, and a take back has to stop the audio as soon as it is read.
   const reads = useMyListenReads(now?.studentUid ?? null, now?.recordingId ?? null, now?.courseId ?? null, 'miniPlayer');
   /*
    * THREE WAYS ACCESS ENDS, and the audio has to stop for all of them:
@@ -104,30 +112,31 @@ export function MiniPlayer({
   const decided = student === null || reads.answered;
   const shut = !!course.value && decided && !canPlayNow(course.value, window, student);
   const revoked = !!now && ((loaded.resolved && !loaded.value) || (course.resolved && shut));
-  const lastDay = window ? windowLastDay(window) : null;
+  const openLastDay = rememberedOpenDay(student, now?.recordingId ?? null, window);
   const windowOpen = window?.state === 'open';
   const playingId = now?.recordingId ?? null;
   useEffect(() => {
     if (student && playingId && window !== null) noteListenOpen(playingId, windowOpen);
   }, [student, playingId, window, windowOpen]);
   /*
-   * A recording playing when the student's own deadline passes plays on to
-   * the end and closes once it stops, as the player screen lets it (see
-   * there). Anything else that shuts it stops it at once.
+   * A recording playing when the student's own last day ends plays on to the
+   * end and closes once it stops (`playsOn`). Anything else that shuts it,
+   * staff taking it away included, stops it at once. THE ONE PLACE THAT STOPS
+   * a recording whose access ended: mounted on every screen, the player's
+   * included.
    */
   const finishing =
     !!now &&
     loaded.value !== null &&
     !!course.value &&
     canPlayFromCourse(course.value) &&
-    lastDay !== null &&
     state.playing &&
-    playingSinceItsDay(state.playingSince, lastDay);
+    playsOn(window, openLastDay, state.playingSince);
   useEffect(() => {
     if (revoked && !finishing) void closePlayback();
   }, [revoked, finishing]);
 
-  if (!now) return null;
+  if (!now || hidden) return null;
 
   const pct = now.durationMs > 0 ? Math.min(1, state.positionMs / now.durationMs) : 0;
   const remaining = Math.max(0, now.durationMs - state.positionMs);

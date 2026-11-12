@@ -198,6 +198,11 @@ export default function App() {
   // The institute's floor for Android builds, read before anything else: a
   // retired build shows the update screen whether or not anyone is signed in.
   const { outdated } = useMinVersion();
+  // Retired while something plays: the update screen replaces the docked bar,
+  // the one thing that would stop it, so it stops here.
+  useEffect(() => {
+    if (outdated) void closePlayback();
+  }, [outdated]);
 
   let content;
   let headerless = true;
@@ -572,7 +577,8 @@ function Shell({
 
   // The mini-player is redundant on the screen that IS the player — showing a
   // one-line summary of what fills the screen behind it is noise.
-  const mini = routeName === 'Player' ? null : <MiniPlayer onOpen={openPlayer} />;
+  // Always mounted: hidden on a player screen, it still guards what plays.
+  const mini = <MiniPlayer onOpen={openPlayer} hidden={routeName === 'Player'} />;
 
   return (
     <NavStateContext.Provider value={onStateChange}>
@@ -1041,6 +1047,9 @@ function Work({ uid }: { uid: string }) {
   );
 }
 
+/** How often a student's player tries again to read a recording it cannot. */
+const RETRY_UNREADABLE_MS = 20_000;
+
 function Play({ studentUid }: { studentUid: string | null }) {
   const { recordingId, dueDate: routeDueDate, itemId } =
     useRoute<RouteProp<RootStackParamList, 'Player'>>().params;
@@ -1049,7 +1058,35 @@ function Play({ studentUid }: { studentUid: string | null }) {
   // on screen rather than waiting for the listener to be torn down.
   // For a student a refusal is the recording being withdrawn — unpublished or
   // archived under them — which is the app working, not a listener fault.
-  const recording = useRecordingState(recordingId, undefined, studentUid !== null);
+  // What the student holds, as the recording is read again when it changes:
+  // its course is known only from the recording, so the grant and the given
+  // record (keyed by the student and the recording alone) are what can say.
+  const held = useMyListenReads(studentUid, recordingId, null);
+  const holding = studentUid === null ? '' : `${held.grant?.active ? 'g' : ''}${held.given ? `v${held.given.givenAt}` : ''}`;
+  // READ AGAIN ONLY WHILE IT CANNOT BE READ: then a change in what they hold
+  // may be what opens it, and so may nothing they hold, a recording published
+  // again under a given one, so it is tried again every little while too.
+  // Read again while it could be read, an excuse or a reopen under a playing
+  // student blanked the player to a spinner and drew it again from nothing.
+  // A read again is the server's answer only: the cache still holds the copy
+  // from before the refusal (`useRecordingState`).
+  const [retry, setRetry] = useState<{ of: string; attempt: string } | null>(null);
+  const [tries, setTries] = useState(0);
+  const again = retry?.of === recordingId ? retry.attempt : null;
+  const recording = useRecordingState(recordingId, undefined, studentUid !== null, again ?? '', again !== null);
+  const gone = recording.resolved && !recording.value;
+  useEffect(() => {
+    if (gone && studentUid !== null) setRetry({ of: recordingId, attempt: `${holding}#${tries}` });
+  }, [gone, holding, tries, recordingId, studentUid]);
+  // WHILE A READ AGAIN IS OUT, the last answer stands: "not available" stays
+  // on screen until the server says otherwise. Drawn as unanswered, the page
+  // flashed a spinner every time it asked, and showed one for good offline.
+  const shown = again !== null && !recording.resolved ? { value: null, resolved: true } : recording;
+  useEffect(() => {
+    if (!gone || studentUid === null) return;
+    const later = setInterval(() => setTries((n) => n + 1), RETRY_UNREADABLE_MS);
+    return () => clearInterval(later);
+  }, [gone, studentUid]);
   const cls = useCourseState(recording.value?.courseId ?? null);
   /*
    * A STUDENT'S ACCESS IS READ LIVE, and waited for: their grant, what staff
@@ -1066,7 +1103,6 @@ function Play({ studentUid }: { studentUid: string | null }) {
     if (reads.answered) setAnswered(recordingId);
   }, [reads.answered, recordingId]);
   const readsReady = studentUid === null || reads.answered || answered === recordingId;
-  const gone = recording.resolved && !recording.value;
   /*
    * STOP THE AUDIO WHEN THE RECORDING GOES AWAY.
    *
@@ -1082,7 +1118,7 @@ function Play({ studentUid }: { studentUid: string | null }) {
     // recording while listening to another one must not stop the other one.
     if (gone && playing === recordingId) void closePlayback();
   }, [gone, playing, recordingId]);
-  const gate = resolve(recording, 'recording') ?? resolve(cls, 'course') ?? (readsReady ? null : <Loading />);
+  const gate = resolve(shown, 'recording') ?? resolve(cls, 'course') ?? (readsReady ? null : <Loading />);
   if (gate || !recording.value || !cls.value) return gate;
   return (
     <PlayerScreen

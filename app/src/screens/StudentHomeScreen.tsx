@@ -204,7 +204,9 @@ export function StudentHomeScreen({
         recording: r.doc,
         cls: r.cls,
         openUntil: g.openUntil,
-        again: window.listenByWas !== null,
+        // Given AFTER the listen-by date had gone: open again. Given before
+        // it and excused since, it never closed, so it is not "again".
+        again: window.listenByWas !== null && todayInZone(INSTITUTE_TIMEZONE, g.givenAt) > window.listenByWas,
       });
     }
     for (const s of work) {

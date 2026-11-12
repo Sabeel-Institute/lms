@@ -924,6 +924,9 @@ function renew(fromMs: number, play: boolean): void {
 export function closePlayback(): Promise<void> {
   const p = player;
   const who = subject();
+  // Closing is access ending, or the student choosing to: a save refused from
+  // here on is not the rules and the window disagreeing.
+  listenOpenFor = null;
   // The place this device is at, kept before anything is torn down. Not
   // before the open has read the kept one (`keepHere` checks): a session
   // closed that soon is still at the zero set at open, and keeping that threw
