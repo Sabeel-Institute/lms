@@ -76,6 +76,8 @@ const studentDenial = (file: MediaItem | undefined, status: RecordingDoc['status
     cls: { effectiveActive: true, archivedAccess: false, managerUids: [] },
     uid: 'stu-1',
     assignment: { active: true, dueDate: '2099-01-01' },
+    given: null,
+    enrolled: true,
     today: '2026-07-07',
   });
 

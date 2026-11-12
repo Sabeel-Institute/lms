@@ -51,8 +51,9 @@ export { getHelpVideoUrl } from './help';
 export { accountExists } from './accountExists';
 export { onRecordingWritten, onSessionWritten } from './assignmentsTrigger';
 export { onCourseworkTallied, onGradeTallied, onSubmissionTallied } from './courseworkTallies';
-export { onAssignmentWritten, onDeviceRegistered, onMorning } from './notifyTrigger';
+export { onAssignmentWritten, onDeviceRegistered, onGivenRecordingWritten, onMorning } from './notifyTrigger';
 export { overrideCompletion, clearCompletionOverride } from './overrides';
+export { giveRecording, takeBackRecording } from './given';
 export { acceptRules, reportProblem } from './conduct';
 export { requestPasswordLink, onPasswordLinkRequested, sendPasswordLink, sendMyPasswordLink } from './passwordLinks';
 

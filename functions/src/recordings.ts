@@ -469,8 +469,12 @@ export async function applyDeleteRecording(recordingId: string) {
   // 1. Dependent docs, chunked under the 500-writes/batch cap (a roster is far
   //    smaller, but a recording old enough to delete could have accumulated a
   //    doc per student across several collections).
+  //    The recording's given recordings go too: permissions rather than
+  //    history, so `hasRecordingHistory` does not count them, but a record
+  //    left pointing at a recording that no longer exists would still sit on
+  //    its student's To do as something to open.
   const commits: Promise<unknown>[] = [];
-  for (const coll of RECORDING_DEPENDENTS) {
+  for (const coll of [...RECORDING_DEPENDENTS, COLLECTIONS.givenRecordings]) {
     const q = await db.collection(coll).where('recordingId', '==', recordingId).get();
     for (let i = 0; i < q.docs.length; i += 400) {
       const batch = db.batch();

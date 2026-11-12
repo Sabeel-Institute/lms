@@ -1,14 +1,24 @@
 import { type Firestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
+  INSTITUTE_TIMEZONE,
   assignmentId,
   attendanceMissingMessage,
   canPlayFromCourse,
   effectiveCompletion,
+  enrollmentId,
+  givenRecordingId,
   isOverdue,
   lastDayMessage,
+  lastRequiredDayMessage,
+  recordingGivenMessage,
   recordingReadyMessage,
+  recordingRequiredMessage,
+  requiredUntil,
+  todayInZone,
   type AssignmentDoc,
+  type EnrollmentDoc,
+  type GivenRecordingDoc,
   type CompletionDoc,
   type CompletionOverrideDoc,
   type CourseDoc,
@@ -91,12 +101,69 @@ export async function notifyRecordingReady(
   // listen" over it would be a message about a door that is locked.
   const course = await courseLookup(db)(assignment.courseId);
   if (!course.playable) return false;
+  // A student who already holds it given was told it was open and not
+  // required; the news now is that it is required.
+  const given = await openGiven(db, assignment.studentUid, assignment.recordingId, today);
+  const message = given
+    ? recordingRequiredMessage(course.name, rec.title, assignment.dueDate, assignment.recordingId)
+    : recordingReadyMessage(course.name, rec.title, assignment.dueDate, assignment.recordingId);
+  return notifyOnce(db, assignment.studentUid, 'recordingReady', assignment.recordingId, message);
+}
+
+/** The student's given recording of this one, if its date has not passed. */
+async function openGiven(db: Firestore, studentUid: string, recordingId: string, today: string): Promise<GivenRecordingDoc | null> {
+  const given = (await db.collection(COLLECTIONS.givenRecordings).doc(givenRecordingId(studentUid, recordingId)).get()).data() as
+    | GivenRecordingDoc
+    | undefined;
+  return given && !isOverdue(given.openUntil, today) ? given : null;
+}
+
+/**
+ * Staff just gave this student a recording, or opened an ended one again:
+ * tell them, once.
+ *
+ * THE EVENT SAYS WHICH OPENING; THE DOCUMENTS SAY WHETHER, as for the excused.
+ * The trigger is retried with the original payload, so everything is read
+ * again here: a record taken back or opened again since (its `givenAt` no
+ * longer this one), a date that has passed, a recording unpublished, a class
+ * archived with listening off, a student who left. And nothing when they are
+ * required right now: the excused message is the one that speaks then.
+ *
+ * At most one a day for a student and a recording: the marker carries the
+ * institute day of the opening, so give, take back and give again in one
+ * afternoon sends one message, and a reopen (only possible once the last date
+ * has passed, so on a later day) sends its own.
+ */
+export async function notifyRecordingGiven(db: Firestore, givenId: string, givenAt: number, today: string): Promise<boolean> {
+  const given = (await db.collection(COLLECTIONS.givenRecordings).doc(givenId).get()).data() as GivenRecordingDoc | undefined;
+  if (!given || given.givenAt !== givenAt) return false;
+  if (isOverdue(given.openUntil, today)) return false;
+  const rec = (await db.collection(COLLECTIONS.recordings).doc(given.recordingId).get()).data() as RecordingDoc | undefined;
+  if (!rec || rec.status !== 'published') return false;
+  const course = await courseLookup(db)(given.courseId);
+  if (!course.playable) return false;
+  const [enrolSnap, sessionSnap, grantSnap] = await Promise.all([
+    db.collection(COLLECTIONS.enrollments).doc(enrollmentId(given.studentUid, given.courseId)).get(),
+    db.collection(COLLECTIONS.sessions).doc(rec.sessionId).get(),
+    db.collection(COLLECTIONS.assignments).doc(assignmentId(given.studentUid, given.recordingId)).get(),
+  ]);
+  if (!(enrolSnap.data() as EnrollmentDoc | undefined)?.active) return false;
+  const session = sessionSnap.data() as SessionDoc | undefined;
+  if (!session) return false;
+  const required = requiredUntil(given.studentUid, {
+    session,
+    grant: (grantSnap.data() as AssignmentDoc | undefined) ?? null,
+    enrolled: true,
+    recordingStatus: rec.status,
+    today,
+  });
+  if (required) return false;
   return notifyOnce(
     db,
-    assignment.studentUid,
+    given.studentUid,
     'recordingReady',
-    assignment.recordingId,
-    recordingReadyMessage(course.name, rec.title, assignment.dueDate, assignment.recordingId),
+    `${given.recordingId}_given_${todayInZone(INSTITUTE_TIMEZONE, givenAt)}`,
+    recordingGivenMessage(course.name, rec.title, given.openUntil, given.recordingId),
   );
 }
 
@@ -166,7 +233,13 @@ export async function notifyLastDay(db: Firestore, today: string): Promise<numbe
     ).data() as RecordingDoc | undefined;
     if (!rec || rec.status !== 'published') continue;
 
-    const message = lastDayMessage(course.name, rec.title, a.dueDate, a.recordingId);
+    // Given until a later date, it does not close today: what ends is the
+    // requirement, and the message says that instead.
+    const given = await openGiven(db, a.studentUid, a.recordingId, today);
+    const message =
+      given && given.openUntil > a.dueDate
+        ? lastRequiredDayMessage(course.name, rec.title, given.openUntil, a.recordingId)
+        : lastDayMessage(course.name, rec.title, a.dueDate, a.recordingId);
     /*
      * ONCE PER DEADLINE, not once per recording. Staff reopen a closed session
      * by moving its listen-by date forward — the documented way back in — and

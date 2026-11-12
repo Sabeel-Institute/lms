@@ -79,6 +79,8 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   setStaffAccess: 'Changed staff access',
   overrideCompletion: 'Overrode completion',
   clearCompletionOverride: 'Removed override',
+  giveRecording: 'Gave a recording or changed its date',
+  takeBackRecording: 'Took back a recording',
   authProvision: 'Staff account created',
   authReject: 'Rejected sign-up',
   deleteAccount: 'Deleted an account',

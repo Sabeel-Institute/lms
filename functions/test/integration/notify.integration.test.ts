@@ -6,7 +6,15 @@ import {
   COLLECTIONS,
   EMULATOR_PROJECT_ID,
   assignmentId,
+  enrollmentId,
+  givenRecordingId,
+  lastDayMessage,
+  lastRequiredDayMessage,
+  recordingGivenMessage,
+  recordingReadyMessage,
+  recordingRequiredMessage,
   type AssignmentDoc,
+  type GivenRecordingDoc,
   type CourseDoc,
   type DeviceTokenDoc,
   type PushMessage,
@@ -17,7 +25,7 @@ import {
 } from '@sabeel/shared';
 import { getAuth } from 'firebase-admin/auth';
 import { setSender, resetSender, type SendOutcome } from '../../src/messaging';
-import { notifyAttendanceMissing, notifyLastDay, notifyRecordingReady } from '../../src/notifyJobs';
+import { notifyAttendanceMissing, notifyLastDay, notifyRecordingGiven, notifyRecordingReady } from '../../src/notifyJobs';
 import { applyStudentAccess } from '../../src/students';
 import { applyStaffAccess } from '../../src/staff';
 import { eventually } from './eventually';
@@ -959,5 +967,160 @@ describe('a token registered to a new account leaves the old one', () => {
     await withDevice('student-a', TOKEN);
     await new Promise((r) => setTimeout(r, 1500));
     expect((await devices('student-a').doc(TOKEN).get()).exists).toBe(true);
+  });
+});
+
+/*
+ * A RECORDING GIVEN TO ONE STUDENT, and the two excused messages that read it.
+ *
+ * Every given date here is behind the REAL clock, with TODAY injected: the
+ * Functions emulator runs `onGivenRecordingWritten` on each seeded record, and
+ * on the real day it finds the date passed and sends nothing, so it never
+ * claims the marker this file's own call is about. A date ahead of the real
+ * clock would race it, and the emulator's sender reports every send delivered.
+ */
+describe('recordingGiven', () => {
+  const GIVEN_AT = Date.parse('2026-08-12T15:00:00Z');
+  const marker = (rid: string, day = '2026-08-12') =>
+    db().collection(COLLECTIONS.notifications).doc('s1').collection('sent').doc(`recordingReady_${ns(rid)}_given_${day}`);
+
+  async function enrol(uid: string, active = true) {
+    await db().collection(COLLECTIONS.enrollments).doc(enrollmentId(uid, COURSE)).set({
+      studentUid: uid,
+      courseId: COURSE,
+      cohortId: COHORT,
+      active,
+      stretches: active ? [{ from: 1, to: null }] : [{ from: 1, to: 2 }],
+      enrolledBy: ADMIN,
+    });
+  }
+  async function give(uid: string, rid: string, openUntil = '2026-08-25', givenAt = GIVEN_AT) {
+    const doc: GivenRecordingDoc = { studentUid: uid, recordingId: ns(rid), courseId: COURSE, openUntil, givenAt, givenBy: 'mgr1' };
+    await db().collection(COLLECTIONS.givenRecordings).doc(givenRecordingId(uid, ns(rid))).set(doc);
+    return givenRecordingId(uid, ns(rid));
+  }
+  /** A present student's world: the register taken, the recording published, enrolled, a phone. */
+  async function presentWorld() {
+    await withDevice('s1');
+    await enrol('s1');
+    await seedSession('sess1', { attendance: { s1: 'present' }, attendanceSubmittedAt: 1, recordingId: ns('r1') });
+    await seedRecording('r1', 'sess1', 'published');
+  }
+
+  it('tells a given student it is open until its date and not required, once', async () => {
+    await presentWorld();
+    const id = await give('s1', 'r1');
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(true);
+    expect(outbox.map((o) => o.message)).toEqual([recordingGivenMessage('Hikam Foundations', 'Session 3 — Patience', '2026-08-25', ns('r1'))]);
+    expect((await marker('r1').get()).exists).toBe(true);
+    // A retry of the same event sends nothing more.
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(false);
+    expect(outbox).toHaveLength(1);
+  });
+
+  it('sends at most one a day, however often it is given and taken back', async () => {
+    await presentWorld();
+    const id = await give('s1', 'r1');
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(true);
+    await db().collection(COLLECTIONS.givenRecordings).doc(id).delete();
+    const later = GIVEN_AT + 3_600_000;
+    await give('s1', 'r1', '2026-08-25', later);
+    expect(await notifyRecordingGiven(db(), id, later, TODAY)).toBe(false);
+    // A reopening on a later day is its own message.
+    const nextDay = GIVEN_AT + 86_400_000;
+    await give('s1', 'r1', '2026-08-25', nextDay);
+    expect(await notifyRecordingGiven(db(), id, nextDay, '2026-08-13')).toBe(true);
+    expect(outbox).toHaveLength(2);
+  });
+
+  it('says nothing about an opening since replaced, taken back, or past its date', async () => {
+    await presentWorld();
+    const id = await give('s1', 'r1');
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT - 1, TODAY)).toBe(false);
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, '2026-08-26')).toBe(false);
+    await db().collection(COLLECTIONS.givenRecordings).doc(id).delete();
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(false);
+    expect(outbox).toHaveLength(0);
+  });
+
+  it('says nothing for a recording unpublished, a class closed, or a student who left', async () => {
+    await presentWorld();
+    const id = await give('s1', 'r1');
+    await db().collection(COLLECTIONS.recordings).doc(ns('r1')).update({ status: 'unpublished' });
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(false);
+    await db().collection(COLLECTIONS.recordings).doc(ns('r1')).update({ status: 'published' });
+    await enrol('s1', false);
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(false);
+    await enrol('s1');
+    await db().collection(COLLECTIONS.courses).doc(COURSE).update({ effectiveActive: false, archivedAccess: false });
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(false);
+    expect(outbox).toHaveLength(0);
+    expect((await marker('r1').get()).exists).toBe(false);
+  });
+
+  it('says nothing to a student required to listen right now: the excused message speaks then', async () => {
+    await withDevice('s1');
+    await enrol('s1');
+    await seedSession('sess1', { attendance: { s1: 'excused' }, attendanceSubmittedAt: 1, recordingId: ns('r1') });
+    await seedRecording('r1', 'sess1', 'published');
+    const id = await give('s1', 'r1');
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(false);
+    expect(outbox).toHaveLength(0);
+  });
+
+  it('claims no marker when the student has no phone, so a later one still hears', async () => {
+    await enrol('s1');
+    await seedSession('sess1', { attendance: { s1: 'present' }, attendanceSubmittedAt: 1, recordingId: ns('r1') });
+    await seedRecording('r1', 'sess1', 'published');
+    const id = await give('s1', 'r1');
+    expect(await notifyRecordingGiven(db(), id, GIVEN_AT, TODAY)).toBe(false);
+    expect((await marker('r1').get()).exists).toBe(false);
+  });
+
+  it('tells an excused student already holding it given that it is now required', async () => {
+    await withDevice('s1');
+    await enrol('s1');
+    await seedRecording('r1', 'sess1', 'published');
+    await give('s1', 'r1', '2026-08-25');
+    expect(await notifyRecordingReady(db(), await seedGrant('s1', 'r1'), TODAY)).toBe(true);
+    expect(outbox.map((o) => o.message)).toEqual([
+      recordingRequiredMessage('Hikam Foundations', 'Session 3 — Patience', '2026-08-20', ns('r1')),
+    ]);
+  });
+
+  it('keeps the excused wording for a student whose given date has passed', async () => {
+    await withDevice('s1');
+    await seedRecording('r1', 'sess1', 'published');
+    await give('s1', 'r1', '2026-08-01');
+    expect(await notifyRecordingReady(db(), await seedGrant('s1', 'r1'), TODAY)).toBe(true);
+    expect(outbox[0].message).toEqual(recordingReadyMessage('Hikam Foundations', 'Session 3 — Patience', '2026-08-20', ns('r1')));
+  });
+
+  it('on a last required day, says it stays open when given later, and sends no reminder of its own', async () => {
+    const LAST = '2026-08-20';
+    await withDevice('s1');
+    await withDevice('s2');
+    await enrol('s1');
+    await enrol('s2');
+    await seedRecording('r1', 'sess1', 'published');
+    await db().collection(COLLECTIONS.assignments).doc(assignmentId('s1', ns('r1'))).set(grant('s1', 'r1', LAST));
+    await give('s1', 'r1', '2026-08-30');
+    // s2 holds it given only, with this as its last day: no reminder.
+    await give('s2', 'r1', LAST);
+    expect(await notifyLastDay(db(), LAST)).toBe(1);
+    expect(outbox.map((o) => [o.tokens, o.message])).toEqual([
+      [['tok-s1'], lastRequiredDayMessage('Hikam Foundations', 'Session 3 — Patience', '2026-08-30', ns('r1'))],
+    ]);
+  });
+
+  it('on a last day with a given date no later, keeps the closing wording', async () => {
+    const LAST = '2026-08-20';
+    await withDevice('s1');
+    await enrol('s1');
+    await seedRecording('r1', 'sess1', 'published');
+    await db().collection(COLLECTIONS.assignments).doc(assignmentId('s1', ns('r1'))).set(grant('s1', 'r1', LAST));
+    await give('s1', 'r1', LAST);
+    expect(await notifyLastDay(db(), LAST)).toBe(1);
+    expect(outbox[0].message).toEqual(lastDayMessage('Hikam Foundations', 'Session 3 — Patience', LAST, ns('r1')));
   });
 });

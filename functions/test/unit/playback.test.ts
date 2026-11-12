@@ -19,6 +19,8 @@ const ask = (over: Partial<Parameters<typeof playbackDenial>[0]>) =>
     cls: activeCourse,
     uid: 'stu',
     assignment: granted,
+    given: null,
+    enrolled: true,
     today: TODAY,
     ...over,
   });
@@ -70,6 +72,36 @@ describe('students', () => {
 
   it('may NOT play a hidden file, even in a recording they may play', () => {
     expect(ask({ item: { status: 'ready', hidden: true } })).toBe('no-media');
+  });
+});
+
+describe('students given a recording', () => {
+  const given = { openUntil: '2026-07-30' };
+
+  it('may play a recording staff gave them, while enrolled, through the end of its date and not after', () => {
+    expect(ask({ assignment: null, given, enrolled: true })).toBeNull();
+    expect(ask({ assignment: null, given: { openUntil: TODAY }, enrolled: true })).toBeNull();
+    expect(ask({ assignment: null, given: { openUntil: '2026-07-24' }, enrolled: true })).toBe('given-ended');
+  });
+
+  it('may not play it once they have left the class', () => {
+    expect(ask({ assignment: null, given, enrolled: false })).toBe('not-assigned');
+  });
+
+  it('may not play it unpublished, or from a class archived with listening off', () => {
+    expect(ask({ assignment: null, given, enrolled: true, recording: { status: 'unpublished' } })).toBe('not-published');
+    expect(ask({ assignment: null, given, enrolled: true, cls: archivedClosed })).toBe('class-listening-off');
+    expect(ask({ assignment: null, given, enrolled: true, cls: archivedOpen })).toBeNull();
+  });
+
+  it('may play a missed recording again under a later given date', () => {
+    // Excused until the 20th and missed; given until the 30th.
+    expect(ask({ assignment: { active: true, dueDate: '2026-07-20' }, given, enrolled: true })).toBeNull();
+  });
+
+  it('is told the excused sentence when the excused date was the later one, and the given one otherwise', () => {
+    expect(ask({ assignment: { active: true, dueDate: '2026-07-24' }, given: { openUntil: '2026-07-20' }, enrolled: true })).toBe('past-due');
+    expect(ask({ assignment: { active: true, dueDate: '2026-07-20' }, given: { openUntil: '2026-07-24' }, enrolled: true })).toBe('given-ended');
   });
 });
 

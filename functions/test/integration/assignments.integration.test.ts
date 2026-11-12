@@ -444,6 +444,8 @@ describe('unenrolment', () => {
         cls: { effectiveActive: true, archivedAccess: false, managerUids: [] },
         uid: 's1',
         assignment: (await getAssignment('s1', 'r1')) ?? null,
+        given: null,
+        enrolled: true,
         today: '2026-07-10',
       });
 
@@ -551,6 +553,8 @@ describe('unenrolment', () => {
         cls: { effectiveActive: true, archivedAccess: false, managerUids: [] },
         uid: 's1',
         assignment: (await getAssignment('s1', 'r1')) ?? null,
+        given: null,
+        enrolled: true,
         today: '2026-07-10',
       });
 
@@ -600,6 +604,8 @@ describe('unenrolment', () => {
         cls: { effectiveActive: true, archivedAccess: false, managerUids: [] },
         uid,
         assignment: (await getAssignment(uid, 'r1')) ?? null,
+        given: null,
+        enrolled: true,
         today: '2026-07-10',
       });
     expect(await canPlay('s1')).toBeNull(); // granted, before anything changes

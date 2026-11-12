@@ -437,12 +437,17 @@ describe('applyDeleteRecording', () => {
     const key = await keyOf(id);
     await seedDeps(id);
     expect(await depCount(id)).toBe(DEPS.length);
+    // A given recording is a permission, not history, and goes with it: left
+    // behind it would sit on its student's To do pointing at nothing.
+    const given = getFirestore().collection(COLLECTIONS.givenRecordings).doc(`stu-given_${id}`);
+    await given.set({ studentUid: 'stu-given', recordingId: id, courseId: 'any', openUntil: '2099-01-01', givenAt: 1, givenBy: ADMIN });
 
     await applyDeleteRecording(id);
 
     expect(await objectExists(key)).toBe(false);
     expect(await recExists(id)).toBe(false);
     expect(await depCount(id)).toBe(0);
+    expect((await given.get()).exists).toBe(false);
     expect((await session(sessionId)).recordingId).toBeNull(); // session freed for a new recording
   });
 

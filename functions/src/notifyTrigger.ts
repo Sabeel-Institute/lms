@@ -7,8 +7,9 @@ import {
   INSTITUTE_TIMEZONE,
   todayInZone,
   type AssignmentDoc,
+  type GivenRecordingDoc,
 } from '@sabeel/shared';
-import { notifyAttendanceMissing, notifyLastDay, notifyRecordingReady } from './notifyJobs';
+import { notifyAttendanceMissing, notifyLastDay, notifyRecordingGiven, notifyRecordingReady } from './notifyJobs';
 import { notifyHandInLastDay } from './notifyCoursework';
 import { reportError } from './sentry';
 import { SENTRY_DSN } from './reported';
@@ -163,6 +164,30 @@ export const onAssignmentWritten = onDocumentWritten(
  * deriving the date itself, for the same reason the rules do not compute due
  * dates: one implementation of the rollover, or two that drift.
  */
+/**
+ * A recording given to a student, or an ended one opened again: one message.
+ *
+ * ON THE OPENING EDGE ONLY. `givenAt` is set by a give or a reopen and kept by
+ * a move, so a date moved earlier or later sends nothing, and a take back (no
+ * `after`) is silent. Retried, as `onAssignmentWritten` is, and for the same
+ * reason the job re-reads everything rather than trusting the payload.
+ */
+export const onGivenRecordingWritten = onDocumentWritten(
+  { document: `${COLLECTIONS.givenRecordings}/{givenId}`, secrets: [SENTRY_DSN, ...PUSH_SECRETS], retry: true },
+  async (event) => {
+    try {
+      const before = event.data?.before.data() as GivenRecordingDoc | undefined;
+      const after = event.data?.after.data() as GivenRecordingDoc | undefined;
+      if (!after) return;
+      if (before?.givenAt === after.givenAt) return;
+      await notifyRecordingGiven(getFirestore(), event.params.givenId, after.givenAt, todayInZone(INSTITUTE_TIMEZONE));
+    } catch (e) {
+      await reportError(e, { source: 'onGivenRecordingWritten' });
+      throw e;
+    }
+  },
+);
+
 export const onMorning = onSchedule(
   { schedule: '0 7 * * *', timeZone: INSTITUTE_TIMEZONE, secrets: [SENTRY_DSN, ...PUSH_SECRETS] },
   async () => {

@@ -6,12 +6,16 @@ import {
   INSTITUTE_TIMEZONE,
   assignmentId,
   canPlayFromCourse,
-  hasRecordingAccess,
+  enrollmentId,
+  givenRecordingId,
   isStaffRole,
+  listenWindow,
   SIGNED_URL_TTL_MS,
   todayInZone,
   type AssignmentDoc,
   type CourseDoc,
+  type EnrollmentDoc,
+  type GivenRecordingDoc,
   type MediaItem,
   type RecordingDoc,
   type TokenClaims,
@@ -22,6 +26,7 @@ export type PlaybackDenial =
   | 'not-published'
   | 'not-assigned'
   | 'past-due'
+  | 'given-ended'
   | 'class-listening-off'
   | 'not-your-class'
   | 'no-media';
@@ -32,10 +37,13 @@ export type PlaybackDenial =
  * Pure, so every branch is unit-testable without an emulator or a signing
  * service. `playbackDenial` returning null means allowed.
  *
- * A student's whole entitlement is their assignment: it exists because they were
- * marked excused, and it is in date until the session's due date. Enrolment is
- * not consulted, because it cannot add anything an assignment does not already
- * prove — unenrolling deactivates them (`deactivateStudentAssignmentsInCourse`).
+ * A student plays under their assignment — it exists because they were marked
+ * excused, and it is in date until the session's due date — or under a
+ * recording staff gave them, in date until its own. `listenWindow` in
+ * @sabeel/shared decides between them, the same function the player and To do
+ * read. Enrolment matters to the given arm only: unenrolling already
+ * deactivates an assignment (`deactivateStudentAssignmentsInCourse`), while a
+ * given recording has no flag and is closed by the enrolment itself.
  */
 export function playbackDenial(input: {
   claims: TokenClaims;
@@ -45,9 +53,12 @@ export function playbackDenial(input: {
   cls: Pick<CourseDoc, 'effectiveActive' | 'archivedAccess' | 'managerUids'>;
   uid: string;
   assignment: Pick<AssignmentDoc, 'active' | 'dueDate'> | null;
+  given: Pick<GivenRecordingDoc, 'openUntil'> | null;
+  /** Whether the student's enrolment in the recording's class is active; read only when `given` is set. */
+  enrolled: boolean;
   today: string;
 }): PlaybackDenial | null {
-  const { claims, recording, item, cls, uid, assignment, today } = input;
+  const { claims, recording, item, cls, uid, assignment, given, enrolled, today } = input;
   if (!item || item.status !== 'ready') return 'no-media';
 
   if (isStaffRole(claims.role)) {
@@ -57,13 +68,18 @@ export function playbackDenial(input: {
     return cls.managerUids.includes(uid) ? null : 'not-your-class';
   }
 
-  // Students: only published recordings, only ones granted to them, and only
-  // until the deadline they were given. A hidden file is withdrawn from them
+  // Students: only published recordings, only ones excused or given to them,
+  // and only until the date that holds. A hidden file is withdrawn from them
   // even inside a recording they may play; staff still hear it to decide.
   if (item.hidden) return 'no-media';
   if (recording.status !== 'published') return 'not-published';
-  if (!assignment || !assignment.active) return 'not-assigned';
-  if (!hasRecordingAccess(assignment, today)) return 'past-due';
+  const window = listenWindow(assignment, given, enrolled, today);
+  if (window.state === 'none') return 'not-assigned';
+  if (window.state === 'ended') {
+    // The excused date being the later one is the excused record's sentence;
+    // a given recording that ran later has its own.
+    return window.record && assignment?.dueDate === window.lastDay ? 'past-due' : 'given-ended';
+  }
   // The archived-access rule from Phase 1 still does its work on top: an
   // archived class turns listening off unless staff deliberately kept it on.
   if (!canPlayFromCourse(cls)) return 'class-listening-off';
@@ -75,6 +91,7 @@ const MESSAGES: Record<PlaybackDenial, string> = {
   'not-published': 'That recording is not published.',
   'not-assigned': 'That recording is not open to you.',
   'past-due': 'The due date for this recording has passed.',
+  'given-ended': 'This recording is no longer open to you.',
   'class-listening-off': 'This class is archived and its recordings are closed.',
   'not-your-class': 'You are not assigned to that class.',
 };
@@ -109,11 +126,21 @@ export const getPlaybackUrl = reportedCall(async (req) => {
     const recording = recSnap.data() as RecordingDoc;
     const item = recording.media[itemId] ?? null;
 
-    const [clsSnap, asgSnap] = await Promise.all([
+    const [clsSnap, asgSnap, givenSnap] = await Promise.all([
       db.collection(COLLECTIONS.courses).doc(recording.courseId).get(),
       db.collection(COLLECTIONS.assignments).doc(assignmentId(req.auth.uid, recordingId)).get(),
+      db.collection(COLLECTIONS.givenRecordings).doc(givenRecordingId(req.auth.uid, recordingId)).get(),
     ]);
     if (!clsSnap.exists) throw new HttpsError('not-found', 'No such class.');
+    // The enrolment only when there is a given recording: it closes that arm
+    // alone, and every excused play would otherwise pay for the read.
+    const enrolled = givenSnap.exists
+      ? !!(
+          (await db.collection(COLLECTIONS.enrollments).doc(enrollmentId(req.auth.uid, recording.courseId)).get()).data() as
+            | EnrollmentDoc
+            | undefined
+        )?.active
+      : false;
 
     const denial = playbackDenial({
       claims,
@@ -122,6 +149,8 @@ export const getPlaybackUrl = reportedCall(async (req) => {
       cls: clsSnap.data() as CourseDoc,
       uid: req.auth.uid,
       assignment: asgSnap.exists ? (asgSnap.data() as AssignmentDoc) : null,
+      given: givenSnap.exists ? (givenSnap.data() as GivenRecordingDoc) : null,
+      enrolled,
       today: todayInZone(INSTITUTE_TIMEZONE),
     });
     if (denial) throw new HttpsError('permission-denied', MESSAGES[denial]);

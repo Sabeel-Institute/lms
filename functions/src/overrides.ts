@@ -6,10 +6,9 @@ import {
   overrideId,
   type CompletionOverrideDoc,
   type EnrollmentDoc,
-  type RecordingDoc,
 } from '@sabeel/shared';
 import { auditedCall } from './audited';
-import { requireCourseScope } from './guards';
+import { assertEnrolled, recordingCourseId, requireCourseScope } from './guards';
 
 export interface OverrideInput {
   studentUid: string;
@@ -52,21 +51,12 @@ function overrideReason(value: unknown, missing: string): string {
   return reason;
 }
 
-async function recordingCourseId(recordingId: string): Promise<string> {
-  const snap = await getFirestore().collection(COLLECTIONS.recordings).doc(recordingId).get();
-  if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
-  return (snap.data() as RecordingDoc).courseId;
-}
-
 async function requireEnrolled(studentUid: string, courseId: string): Promise<void> {
   const snap = await getFirestore()
     .collection(COLLECTIONS.enrollments)
     .doc(enrollmentId(studentUid, courseId))
     .get();
-  const enrol = snap.data() as EnrollmentDoc | undefined;
-  if (!enrol || !enrol.active) {
-    throw new HttpsError('failed-precondition', 'That student is not in this class.');
-  }
+  assertEnrolled(snap.data() as EnrollmentDoc | undefined);
 }
 
 /**

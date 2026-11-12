@@ -1,7 +1,7 @@
 import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { COLLECTIONS, type Role, type TokenClaims } from '@sabeel/shared';
+import { COLLECTIONS, type EnrollmentDoc, type RecordingDoc, type Role, type TokenClaims } from '@sabeel/shared';
 
 /**
  * The account behind the token is still live — checked against the user
@@ -149,4 +149,24 @@ export async function requireCourseScope(
     throw new HttpsError('permission-denied', 'You are not assigned to that class.');
   }
   return uid;
+}
+
+/**
+ * The class a recording belongs to, read fresh: the scope a staff call on a
+ * recording is checked against, never one the caller sent.
+ */
+export async function recordingCourseId(recordingId: string): Promise<string> {
+  const snap = await getFirestore().collection(COLLECTIONS.recordings).doc(recordingId).get();
+  if (!snap.exists) throw new HttpsError('not-found', 'No such recording.');
+  return (snap.data() as RecordingDoc).courseId;
+}
+
+/**
+ * The student is in the class: their enrolment exists and is active. Pure, so
+ * it serves a read made inside a transaction as well as one outside it.
+ */
+export function assertEnrolled(enrolment: Pick<EnrollmentDoc, 'active'> | undefined): void {
+  if (!enrolment?.active) {
+    throw new HttpsError('failed-precondition', 'That student is not in this class.');
+  }
 }

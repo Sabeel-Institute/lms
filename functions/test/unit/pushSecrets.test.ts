@@ -49,6 +49,7 @@ describe('push senders', () => {
     // knowingly, and the next test covers whatever is found.
     expect(senders()).toEqual([
       'onAssignmentWritten',
+      'onGivenRecordingWritten',
       'onMorning',
       'postCoursework',
       'returnWork',
