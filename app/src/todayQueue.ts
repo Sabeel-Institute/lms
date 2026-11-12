@@ -341,7 +341,7 @@ export function buildTodayQueue({
           // the same descending comparison the overdue rows use.
           age: -left,
           detail:
-            left === 0 ? 'Access closes today' : `Access closes in ${left} ${left === 1 ? 'day' : 'days'}`,
+            left === 0 ? 'Listen-by date today' : `Listen-by date in ${left} ${left === 1 ? 'day' : 'days'}`,
         });
       }
     }

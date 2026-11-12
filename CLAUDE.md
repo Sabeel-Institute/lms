@@ -99,22 +99,36 @@ Do not silently change any of these.
   picker shows what a choice costs to keep before anything is copied, and
   "Audio only" is always one tap away in the player. Plan:
   `docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md`.
-- **Being marked EXCUSED is the whole of a student's entitlement.** One
+- **Being marked EXCUSED is the whole of what makes listening required.** One
   `assignments` document both grants access to a recording and requires listening
   to it, and it lapses when the session's due date passes. Enrolment opens no
   recording (it does give a student the class's assignments, which have nothing
-  to do with the register); `present` and `absent` open nothing at all. "Everyone must listen"
-  is said by excusing everyone. Access and accountability were separate until
-  2026-08-14 and are now deliberately one fact — see the decision log; do not
-  re-split them.
+  to do with the register); `present` and `absent` open nothing. "Everyone must
+  listen" is said by excusing everyone. Access and accountability for the excused
+  are deliberately one fact — see the decision log; do not re-split them.
+- **A recording given to one student is optional and counted nowhere.** Staff of
+  the class open one recording to one enrolled student until a date, once the
+  session's attendance is submitted (`givenRecordings`, `functions/src/given.ts`,
+  `docs/plans/GIVE-A-RECORDING.md`). It sits on To do under Optional, never Next
+  up; it has no Mark complete, no Missed, no reminder, and it counts in nothing:
+  the ledger's counts, the workbooks and the stats ignore it (Progress lists it
+  under Given to, apart). It has no `active` flag: whether it plays
+  is worked out from its date, the student's enrolment, the recording's status
+  and the class's setting (`listenWindow` in `@sabeel/shared`, the one answer
+  the player, the docked bar, To do and `getPlaybackUrl` read). A student
+  required to listen right now cannot be given it. Any admin or manager of the
+  class may move its date or take it back, whoever gave it; each call names
+  what its sheet saw (`expect`), so a colleague's change is refused, never
+  overwritten.
 - **A session's due date is required, and is never written in the past.** It is
   the day access closes, so a blank one would mean permanent access. It may
   BECOME past by the passage of time — that is how a recording closes — but no
   callable will write one that has already gone, and none will excuse a student
   for a session whose deadline has passed. Nothing is ever born expired.
 - **The deadline is enforced at the AUDIO, not in the rules.** `firestore.rules`
-  gates a recording's metadata on an active assignment; `getPlaybackUrl` gates the
-  audio on the date. Comparing `request.time` to a `YYYY-MM-DD` string in the
+  gates a recording's metadata on an active assignment or a given recording;
+  `getPlaybackUrl` gates the audio on the date (the grant's, or the given
+  recording's `openUntil`, which is never written in the past either). Comparing `request.time` to a `YYYY-MM-DD` string in the
   institute timezone would be a second copy of the maths in `@sabeel/shared`, free
   to drift. Enforced **at minting**, precisely: a URL issued late on the last day
   works for its full twelve hours and nothing revokes it — inside the threat
@@ -164,11 +178,12 @@ Do not silently change any of these.
   `docs/STORE-RELEASE.md`.
 - **Disable, archive, unpublish — don't delete.** Permanent deletion of anything
   carrying **listening history** is admin-only, needs strong confirmation, and is
-  audited. Three deletions are deliberately a manager's: removing a completion
+  audited. Four deletions are deliberately a manager's: removing a completion
   override they set; removing a file from an unpublished draft so a bad one can
-  be replaced; and deleting an assignment no student has started (once any
+  be replaced; deleting an assignment no student has started (once any
   student has a draft, a hand-in, a grade or a teacher's mark on it, only an
-  admin may). A published recording's playable files are hidden, never removed;
+  admin may); and taking back a recording given to one student, which is a
+  permission, not history (the listening stays). A published recording's playable files are hidden, never removed;
   a file no student ever saw (still arriving, or failed) can be removed from any
   recording. None destroys history, all are audited, and all are ordinary
   corrections to their own class — see `docs/PRODUCT_BRIEF.md`.

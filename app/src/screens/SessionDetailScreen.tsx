@@ -50,7 +50,9 @@ import { useLeaveGuard } from '../components/LeaveGuard';
 import { useOneAtATime } from '../oneAtATime';
 import { MediaList } from '../components/MediaList';
 import { retryZoomImport } from '../zoom';
-import { sortByName, useRosterState, type EnrollmentRow } from '../structure';
+import { sortByName, useRosterState, type CourseRow, type EnrollmentRow } from '../structure';
+import { useWhoLosesIt } from '../given';
+import { namesList } from '../givenWords';
 import { useStudentsState } from '../students';
 import { useWide } from '../useWidth';
 import { getTheme, spacing } from '../theme';
@@ -84,7 +86,7 @@ export function SessionDetailScreen({
   onImportZoom,
 }: {
   sessionId: string;
-  cls: { id: string; name: string };
+  cls: CourseRow;
   isAdmin: boolean;
   onOpenCourse: () => void;
   onOpenLedger: (recording: RecordingRow) => void;
@@ -137,10 +139,11 @@ export function SessionDetailScreen({
           <Text style={styles.notes}>{session.notes}</Text>
         </Card>
       ) : null}
-      <AttendanceSection session={session} />
+      <AttendanceSection session={session} recording={recordingState} cls={cls} />
       <RecordingSection
         session={session}
         recording={recording}
+        cls={cls}
         checking={!recording && session.recordingId !== null && !recordingState.resolved}
         isAdmin={isAdmin}
         onOpenLedger={onOpenLedger}
@@ -230,7 +233,16 @@ function SessionEditor({ session, isAdmin, onClose }: { session: SessionRow; isA
 
 // ------------------------------------------------------------ attendance --
 
-function AttendanceSection({ session }: { session: SessionRow }) {
+function AttendanceSection({
+  session,
+  recording: recordingState,
+  cls,
+}: {
+  session: SessionRow;
+  recording: { value: RecordingRow | null; resolved: boolean };
+  cls: CourseRow;
+}) {
+  const recording = recordingState.value;
   const wide = useWide();
   // `null` until the roster listener answers: "Enrol students first" is a
   // claim about the class, and the register said it on every cold load.
@@ -292,7 +304,23 @@ function AttendanceSection({ session }: { session: SessionRow }) {
     },
   });
 
-  const submit = () =>
+  /*
+   * A CORRECTION THAT CLOSES THE RECORDING TO SOMEONE PLAYING IT ASKS FIRST
+   * (owner, 2026-11-11), naming them: taking Excused from a student whose date
+   * is still ahead stops their recording at once, unless they also hold it
+   * given. Read from the register as it would be submitted, against the one
+   * on the server; until those reads answer, a correction asks anyway, and
+   * the sentence follows them while it is open, as Archive's does. The
+   * confirm closes if a colleague submits underneath it, since the marks it
+   * would send are cleared then.
+   */
+  const who = useWhoLosesIt(session, recordingState, cls, todayInZone(INSTITUTE_TIMEZONE));
+  const correcting = session.attendanceSubmittedAt !== null;
+  const losing = !correcting ? [] : who === null || who === 'unchecked' ? who : who.closes(attendancePayload(session, activeUids, marks));
+  const losingNames = Array.isArray(losing) && who && who !== 'unchecked' ? namesList(losing.map(who.nameOf)) : '';
+  /** Open: the register's submitted time as it was when the confirm opened. */
+  const [confirm, setConfirm] = useState<{ at: number | null } | null>(null);
+  const submitNow = () =>
     void once('submit', async () => {
       setError(null);
       setInfo(null);
@@ -300,11 +328,20 @@ function AttendanceSection({ session }: { session: SessionRow }) {
         const attendance = attendancePayload(session, activeUids, marks);
         const res = await submitAttendance({ sessionId: session.id, attendance });
         setMarks({});
+        setConfirm(null);
         setInfo(`Attendance submitted for ${res.marked} student${res.marked === 1 ? '' : 's'}.`);
       } catch (e) {
         setError(errorText(e));
       }
     });
+  const submit = () => {
+    if (Array.isArray(losing) && losing.length === 0) {
+      submitNow();
+      return;
+    }
+    setConfirm({ at: session.attendanceSubmittedAt });
+  };
+  const title = recording?.title ?? 'the recording';
 
   return (
     <>
@@ -321,8 +358,8 @@ function AttendanceSection({ session }: { session: SessionRow }) {
             : activeUids.length === 0
               ? 'Enrol students in this course first — attendance is taken from its roster.'
               : session.attendanceSubmittedAt
-              ? 'Submitted. Only excused students get the recording.'
-              : 'Everyone starts as Present — mark who was away, and excuse whoever should listen to the recording. Only excusing grants access, and nothing is granted until you submit.'}
+              ? 'Submitted. The students you excused must play the recording. To let anyone else play it, give it to them from its Progress page.'
+              : 'Everyone starts as Present — mark who was away, and excuse whoever should listen to the recording. Nothing opens to anyone until you submit.'}
         </Text>
         {!listed ? null : activeUids.length === 0 ? (
           <Empty>No students enrolled in this course yet.</Empty>
@@ -339,6 +376,26 @@ function AttendanceSection({ session }: { session: SessionRow }) {
               for nothing and makes the reader's eye travel down two lines per
               student instead of across one. Same markup, one flex direction.
             */}
+            <ConfirmDanger
+              enabled={confirm === null || confirm.at === session.attendanceSubmittedAt}
+              opened={{ open: confirm !== null, close: () => setConfirm(null) }}
+              label="Submit attendance"
+              confirmLabel="Submit"
+              warning={
+                !confirm
+                  ? ''
+                  : losing === null
+                    ? `Submit? Checking who can play ${title} right now…`
+                    : losing === 'unchecked'
+                      ? `Submit? Who can play ${title} right now could not be checked, so this may close it to someone.`
+                      : losing.length > 0
+                        ? `Submit? ${recording?.title ?? 'The recording'} closes now for ${losingNames}.`
+                        : `Submit? Nobody who can play ${title} right now loses it.`
+              }
+              busy={busy}
+              confirmTestID="att-submit-confirm"
+              onConfirm={submitNow}
+            >
             {activeUids.map((uid) => (
               <View
                 key={uid}
@@ -389,6 +446,7 @@ function AttendanceSection({ session }: { session: SessionRow }) {
                 onPress={markAllExcused}
               />
             </Row>
+            </ConfirmDanger>
           </>
         )}
       </Card>
@@ -401,6 +459,7 @@ function AttendanceSection({ session }: { session: SessionRow }) {
 function RecordingSection({
   session,
   recording,
+  cls,
   checking,
   isAdmin,
   onOpenLedger,
@@ -409,6 +468,7 @@ function RecordingSection({
 }: {
   session: SessionRow;
   recording: RecordingRow | null;
+  cls: CourseRow;
   /** The session has a recording, and it has not answered yet. */
   checking: boolean;
   isAdmin: boolean;
@@ -542,6 +602,7 @@ function RecordingSection({
           <RecordingCard
             recording={recording}
             session={session}
+            cls={cls}
             isAdmin={isAdmin}
             busy={busy}
             uploading={uploading}
@@ -562,6 +623,7 @@ function RecordingSection({
 function RecordingCard({
   recording: r,
   session,
+  cls,
   isAdmin,
   busy,
   uploading,
@@ -575,6 +637,7 @@ function RecordingCard({
 }: {
   recording: RecordingRow;
   session: SessionRow;
+  cls: CourseRow;
   isAdmin: boolean;
   busy: string | null;
   uploading: boolean;
@@ -595,7 +658,7 @@ function RecordingCard({
    *
    * `allowedTransitions` describes the recording's own lifecycle; the server
    * additionally refuses to publish onto a session whose listen-by date has gone
-   * ("Move it before publishing, or nobody will be able to open it"). So an
+   * ("Move it before publishing, or the students you excused will not be able to open it"). So an
    * end-of-term ARCHIVED recording — the case the manual calls reversible with
    * "one tap puts it back" — drew a Publish button that could only ever return
    * an error. This app's rule is that a control which cannot succeed is not
@@ -650,6 +713,35 @@ function RecordingCard({
   const [adding, setAdding] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  /*
+   * ARCHIVE AND UNPUBLISH ASK FIRST WHILE SOMEONE CAN PLAY IT (owner,
+   * 2026-11-11): either closes it at once, to the excused and to the students
+   * it was given to, mid-sentence if they are listening. With nobody able to
+   * play it the move runs as it always has. The count is live while the
+   * confirm is open; until the reads behind it answer, it asks anyway.
+   */
+  const [closing, setClosing] = useState<RecordingStatus | null>(null);
+  const who = useWhoLosesIt(session, { value: r, resolved: true }, cls, todayInZone(INSTITUTE_TIMEZONE));
+  const losing = who === 'unchecked' ? who : who ? who.closes().length : null;
+  const closingWarning = closing
+    ? `${LABELS[closing]} ${r.title}? ${
+        losing === null
+          ? 'Checking who can play it…'
+          : losing === 'unchecked'
+            ? 'Who can play it right now could not be checked.'
+            : losing === 0
+            ? 'Nobody can play it right now.'
+            : `It closes now for ${losing} student${losing === 1 ? '' : 's'} who can play it.`
+      }${deadlinePassed ? ' To publish it again, first move its listen-by date forward, which reopens it to the students you excused.' : ''}`
+    : '';
+  const move = (to: RecordingStatus) => {
+    const closes = r.status === 'published' && (to === 'archived' || to === 'unpublished');
+    if (closes && (losing === null || losing === 'unchecked' || losing > 0)) {
+      setClosing(to);
+      return;
+    }
+    onRun(`status-${r.id}`, () => setRecordingStatus({ recordingId: r.id, status: to }));
+  };
   const fromMenu = (fn: () => void) => {
     setMenuOpen(false);
     fn();
@@ -727,7 +819,7 @@ function RecordingCard({
               busy={busy === `status-${r.id}`}
               // Off while a delete is being confirmed: a confirmation that
               // leaves Archive and Unpublish operable beside it is not one.
-              disabled={uploading || confirmDelete}
+              disabled={uploading || confirmDelete || closing !== null}
               onPress={() => setMenuOpen(true)}
             />
           </View>
@@ -758,9 +850,7 @@ function RecordingCard({
             testID={`recording-${to}`}
             label={LABELS[to]}
             detail={MOVE_DETAIL[to]}
-            onPress={() =>
-              fromMenu(() => onRun(`status-${r.id}`, () => setRecordingStatus({ recordingId: r.id, status: to })))
-            }
+            onPress={() => fromMenu(() => move(to))}
           />
         ))}
         {canDelete ? (
@@ -788,6 +878,23 @@ function RecordingCard({
         confirmTestID="recording-delete-confirm"
         onConfirm={() => onRun(`del-${r.id}`, () => deleteRecording({ recordingId: r.id }))}
       >
+        <ConfirmDanger
+          enabled={r.status === 'published'}
+          opened={{ open: closing !== null, close: () => setClosing(null) }}
+          label={closing ? LABELS[closing] : 'Archive'}
+          confirmLabel={closing ? LABELS[closing] : 'Archive'}
+          warning={closingWarning}
+          busy={busy === `status-${r.id}`}
+          confirmTestID="recording-close-confirm"
+          onConfirm={() => {
+            const to = closing;
+            if (!to) return;
+            onRun(`status-${r.id}`, async () => {
+              await setRecordingStatus({ recordingId: r.id, status: to });
+              setClosing(null);
+            });
+          }}
+        >
         {/* EVERY action on this card belongs inside the confirm, so opening it
             replaces all of them. These sat outside at first and stayed
             tappable underneath "discard this?" — the exact flaw ConfirmDanger
@@ -874,7 +981,7 @@ function RecordingCard({
             no Publish to explain. */}
         {moves.includes('published') && deadlinePassed ? (
           <Notice tone="info">
-            This session&apos;s due date has passed, so publishing would give nobody access.
+            This session&apos;s due date has passed, so the students you excused could not open it.
             Move the date forward on the session above first.
           </Notice>
         ) : null}
@@ -887,6 +994,7 @@ function RecordingCard({
                 : 'Add a file students can play before publishing.'}
           </Notice>
         ) : null}
+        </ConfirmDanger>
       </ConfirmDanger>
     </>
   );
@@ -903,7 +1011,7 @@ const LABELS: Record<RecordingStatus, string> = {
 /** What each move in the ⋮ does, under its name. */
 const MOVE_DETAIL: Record<RecordingStatus, string> = {
   draft: 'Not visible to students. Fix it, then publish it again.',
-  published: 'Opens it to the students you excused.',
+  published: 'Opens it to the students you excused. You can then give it to others from Progress.',
   archived: 'Closes it to students and takes it out of the course totals. Publish puts it back.',
   unpublished: 'Closes it to students. It goes back to draft before it is published again.',
   needsAttention: 'Marks it as needing a fix before it can be published.',

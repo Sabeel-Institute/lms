@@ -11,6 +11,8 @@ import { DONE_DAYS, TODO_ORDER, type TodoBucket } from '@sabeel/shared';
  *    a recording's date, an assignment's due date, or for late work the last
  *    day it is taken.
  *  - Past due, Due soon, Upcoming: what can still be done.
+ *  - Optional: recordings staff gave the student, open until a date and
+ *    required by nothing, so never Next up.
  *  - Missed, Archived: closed without being done, kept quietly as the record.
  *  - Done: the last two weeks of finished work, newest first. Older work is
  *    on each class page.
@@ -29,6 +31,7 @@ const TODO_LABELS: Record<TodoBucket, string> = {
   pastDue: 'Past due',
   dueSoon: 'Due soon',
   upcoming: 'Upcoming',
+  optional: 'Optional',
   missed: 'Missed',
   archived: 'Archived',
   done: 'Done',

@@ -53,9 +53,13 @@ export const COLLECTIONS = {
    *  change (`CourseworkTally`), keyed by the assignment's id: a course's pages
    *  read these instead of every piece of work in the course. Staff only. */
   courseworkTallies: 'courseworkTallies',
-  /** Required-listening obligations, and the ONLY thing granting a student
-   *  access to a recording (the excused of a session, until the due date). */
+  /** Required-listening obligations: the excused of a session, until its due
+   *  date. The only thing that makes listening required. */
   assignments: 'assignments',
+  /** A recording staff opened to one student until a date: optional, counted
+   *  nowhere, server-written (`giveRecording`). With `assignments`, the only
+   *  ways a student can play a recording. */
+  givenRecordings: 'givenRecordings',
   /** How much of a recording a student has listened to, and when last:
    *  each sitting's listening, added up. Client-written. */
   listeningProgress: 'listeningProgress',

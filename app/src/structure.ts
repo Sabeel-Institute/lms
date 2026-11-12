@@ -295,7 +295,8 @@ export function sortByName<T>(rows: T[], nameOf: (row: T) => string): T[] {
  *  `null` until the listener answers, so an empty sentence is never printed for
  *  a question not yet answered.
  */
-export function useRosterState(courseId: string | null): EnrollmentRow[] | null {
+/** `confirmed`: from the server only (`LiveQueryOptions.confirmed`). */
+export function useRosterState(courseId: string | null, confirmed = false): EnrollmentRow[] | null {
   return useLiveQuery<EnrollmentRow[] | null>(
     () =>
       courseId
@@ -304,8 +305,11 @@ export function useRosterState(courseId: string | null): EnrollmentRow[] | null 
     [courseId],
     {
       label: 'roster',
+      // Its own key: the ordinary roster's, torn down elsewhere, forgot this one's refusal.
+      context: confirmed ? { scope: 'confirmed' } : undefined,
       map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('enrollments', d) })),
       empty: null,
+      confirmed,
     },
   );
 }

@@ -13,6 +13,33 @@ const e = (key: string, bucket: TodoBucket, deadline: string | null, doneAt: num
 });
 
 describe('To do', () => {
+  it('never leads with an optional recording, however soon it closes', () => {
+    // A recording a teacher gave is open until a date but required by nothing:
+    // Next up is for what is owed.
+    const { next, groups } = arrangeTodo(
+      [e('given today', 'optional', '2026-10-13'), e('owed later', 'upcoming', '2026-10-31')],
+      NOW,
+    );
+    expect(next?.key).toBe('owed later');
+    expect(arrangeTodo([e('given today', 'optional', '2026-10-13')], NOW).next).toBeNull();
+    expect(groups.map((g) => [g.bucket, g.label])).toEqual([['optional', 'Optional']]);
+  });
+
+  it('puts Optional below what is owed and above the record, nearest date first', () => {
+    const { groups } = arrangeTodo(
+      [
+        e('missed', 'missed', null),
+        e('given later', 'optional', '2026-10-30'),
+        e('given soon', 'optional', '2026-10-15'),
+        e('upcoming', 'upcoming', '2026-10-23'),
+        e('lead', 'dueSoon', '2026-10-13'),
+      ],
+      NOW,
+    );
+    expect(groups.map((g) => g.bucket)).toEqual(['upcoming', 'optional', 'missed']);
+    expect(groups.find((g) => g.bucket === 'optional')?.items.map((i) => i.key)).toEqual(['given soon', 'given later']);
+  });
+
   it('leads with the nearest day anything open closes, whatever its kind', () => {
     const { next } = arrangeTodo(
       [e('recording', 'upcoming', '2026-10-31'), e('memorize', 'dueSoon', '2026-10-13'), e('late letters', 'pastDue', '2026-10-17')],

@@ -20,7 +20,8 @@ import { addressKey } from './passwordLinks';
  * - Goes: the Auth user; the address on their directory row (and a
  *   colleague's photo); the address copied into the audit rows about them,
  *   their creation and their first sign-in; the count of password links
- *   asked for at that address; their notification settings and devices.
+ *   asked for at that address; their notification settings and devices; the
+ *   recordings staff gave them, which are permissions, not history.
  * - Changes: a student leaves every class they are in, as removing them from
  *   it would; a colleague stops managing the courses they managed.
  * - Stays: their name, and everything they did or had done to them —
@@ -53,6 +54,10 @@ export async function deleteAccountRecord(callerUid: string, uid: string): Promi
   }
 
   await db.recursiveDelete(db.collection(COLLECTIONS.notifications).doc(uid));
+  if (population === 'student') {
+    const given = await db.collection(COLLECTIONS.givenRecordings).where('studentUid', '==', uid).get();
+    await Promise.all(given.docs.map((d) => d.ref.delete()));
+  }
 
   // Their address, wherever the history copied it: a student's creation is
   // filed under `studentUid`, a colleague's first sign-in under `uid`.

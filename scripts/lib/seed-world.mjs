@@ -491,7 +491,7 @@ export async function seedWorld({ db, auth }) {
    */
   async function seedSession(id, recId, title, opts) {
     const { courseId = COURSE, cohortId = COHORT, daysAgo, dueOffset, status = 'published', notes = '',
-      roster = students, present = 0, absent = [], attention = null, media = null } = opts;
+      roster = students, present = 0, absent = [], attention = null, media = null, studentMark = 'excused' } = opts;
     const date = iso(now - daysAgo * DAY);
     // Never null: the due date is the day access closes, so a session cannot be
     // without one. A past one is planted directly, which no callable will do —
@@ -511,7 +511,7 @@ export async function seedWorld({ db, auth }) {
       roster.map((s, i) => [
         s.uid,
         absent.includes(s.uid) ? 'absent'
-          : s.uid === STUDENT.uid ? 'excused'
+          : s.uid === STUDENT.uid ? studentMark
           : i <= present ? 'present'
           : 'excused',
       ]),
@@ -656,6 +656,28 @@ export async function seedWorld({ db, auth }) {
     attendanceSubmittedAt: now - 2 * DAY, notRecorded: false,
     createdAt: now - 2 * DAY, createdBy: adminUid, updatedAt: now - 2 * DAY,
   });
+  /*
+   * RECORDINGS GIVEN TO ONE STUDENT (docs/plans/GIVE-A-RECORDING.md). Two
+   * sessions the demo student ATTENDED, so neither is required of them: one
+   * given and open, one given and ended. And Session 1, which they missed,
+   * given again, so To do shows Missed and Optional for one recording. On
+   * Session 10's Progress page, Given to holds a row of each kind: open, ended
+   * and required now with a later date. The existing sessions are untouched;
+   * the To do buckets depend on them.
+   */
+  const given = await seedSession('sw-g1', 'sw-g1r', 'Session 10 — Thankfulness in Ease',
+    { daysAgo: 3, dueOffset: 11, present: 3, studentMark: 'present' });
+  const givenEnded = await seedSession('sw-g2', 'sw-g2r', 'Session 11 — The Station of Repentance',
+    { daysAgo: 20, dueOffset: -6, present: 3, studentMark: 'present' });
+  const giveTo = (uid, recId, openUntil) =>
+    db.collection('givenRecordings').doc(`${uid}_${recId}`).set({
+      studentUid: uid, recordingId: recId, courseId: COURSE, openUntil, givenAt: now - 2 * DAY, givenBy: managerUid,
+    });
+  await giveTo(STUDENT.uid, given.recId, iso(now + 10 * DAY));
+  await giveTo(students[1].uid, given.recId, iso(now - 1 * DAY));
+  await giveTo(students[5].uid, given.recId, iso(now + 20 * DAY));
+  await giveTo(STUDENT.uid, givenEnded.recId, iso(now - 2 * DAY));
+  await giveTo(STUDENT.uid, missed.recId, iso(now + 5 * DAY));
   await seedSession('sw-a1', 'sw-a1r', 'Lesson 1 — The Arabic Alphabet',
     { courseId: LONG_COURSE, daysAgo: 9, dueOffset: 5, roster: students.slice(0, 4), present: 2 });
   /**
@@ -853,7 +875,7 @@ export async function seedWorld({ db, auth }) {
   // returned and four were read; the rest were a standing invitation to reach
   // past the fixture's own vocabulary into its internals.
   return {
-    STUDENT, DISABLED_STUDENT, DELETED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived,
+    STUDENT, DISABLED_STUDENT, DELETED_STUDENT, STUDENT_PASSWORD, missed, dueSoon, blocking, archived, given, givenEnded,
     HISTORY_ROW, HISTORY_ROW_MANAGED, PENDING_DATE,
     /** A classmate whose hand-in on "Memorize the first hikma" is still to grade. */
     TO_GRADE: students[2],

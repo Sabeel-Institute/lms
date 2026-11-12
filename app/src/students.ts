@@ -41,7 +41,8 @@ const NO_STUDENTS: StudentRow[] = [];
 
 /** The `State` variant: `null` until the listener answers, so an empty sentence is
  *  never printed for a question not yet answered. */
-export function useStudentsState(enabled: boolean): StudentRow[] | null {
+/** `confirmed`: from the server only (`LiveQueryOptions.confirmed`). */
+export function useStudentsState(enabled: boolean, confirmed = false): StudentRow[] | null {
   return useLiveQuery<StudentRow[] | null>(
     () =>
       enabled
@@ -50,8 +51,11 @@ export function useStudentsState(enabled: boolean): StudentRow[] | null {
     [enabled],
     {
       label: 'students',
+      // Its own key: the ordinary list's, torn down elsewhere, forgot this one's refusal.
+      context: confirmed ? { scope: 'confirmed' } : undefined,
       map: (snap) => snap.docs.map((d) => ({ uid: d.id, ...read('students', d) })),
       empty: null,
+      confirmed,
     },
   );
 }

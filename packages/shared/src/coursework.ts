@@ -471,10 +471,10 @@ export function leftWithNothingIn(sub: Pick<SubmissionDoc, 'active' | 'state' | 
  * The group a piece of work sits in on the student's To do, or null when it
  * is not on To do at all (not required: it stays on the class page).
  */
-export type TodoBucket = 'pastDue' | 'dueSoon' | 'upcoming' | 'missed' | 'archived' | 'done';
+export type TodoBucket = 'pastDue' | 'dueSoon' | 'upcoming' | 'optional' | 'missed' | 'archived' | 'done';
 
 /** Open work first, the record after: the order the groups are drawn in. */
-export const TODO_ORDER: TodoBucket[] = ['pastDue', 'dueSoon', 'upcoming', 'missed', 'archived', 'done'];
+export const TODO_ORDER: TodoBucket[] = ['pastDue', 'dueSoon', 'upcoming', 'optional', 'missed', 'archived', 'done'];
 
 /** How long finished work stays in Done; older work is on the class page. */
 export const DONE_DAYS = 14;

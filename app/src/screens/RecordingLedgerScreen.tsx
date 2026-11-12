@@ -6,6 +6,7 @@ import {
   grantOutcome,
   isVisibleToStudents,
   todayInZone,
+  unbreakableDate,
   type GrantOutcome,
 } from '@sabeel/shared';
 import {
@@ -32,7 +33,10 @@ import {
   type LedgerRow,
   type RequiredRow,
 } from '../ledger';
-import { useCohortName, type CourseRow } from '../structure';
+import { useCohortName, useRosterState, type CourseRow } from '../structure';
+import { GivenSection } from '../components/GivenSection';
+import { useGivenRecordings } from '../given';
+import { givenOpen, type ClosedBy } from '../givenWords';
 import type { SessionRow } from '../sessions';
 import type { RecordingRow } from '../recordings';
 import { getTheme, spacing } from '../theme';
@@ -67,12 +71,25 @@ export function RecordingLedgerScreen({
   const outcomeOf = (r: RequiredRow) => grantOutcome(r, today, cls, INSTITUTE_TIMEZONE, recordingOpen);
   // Reached from the cross-cohort library, where the course name alone is ambiguous.
   const cohortName = useCohortName()(cls.cohortId);
-  const { loading, failed, accountable, attendees, absentees, lapsed, otherListeners, rollup } = useRecordingLedger(
+  const { loading, failed, grants, students, accountable, attendees, absentees, lapsed, otherListeners, rollup } = useRecordingLedger(
     recording,
     session,
     cls,
     today,
   );
+  // Who staff gave it to, and the class's roster the give list is drawn from.
+  const given = useGivenRecordings(recording);
+  const roster = useRosterState(cls.id);
+  // A given student's listening shows where it always has, with the reason
+  // beside it: "· given until <date>" while what they were given plays, by
+  // the same answer the Given to row gives (`givenOpen`).
+  const inClass = useMemo(() => new Set((roster ?? []).filter((e) => e.active).map((e) => e.studentUid)), [roster]);
+  const activeAccount = useMemo(() => new Set((students ?? []).filter((s) => s.status === 'active').map((s) => s.uid)), [students]);
+  const givenUntil = (uid: string) => {
+    const g = given?.get(uid);
+    const facts = g && { given: g, closedBy, enrolled: inClass.has(uid), accountActive: activeAccount.has(uid), today };
+    return facts && givenOpen(facts) ? facts.given.openUntil : null;
+  };
   const [filter, setFilter] = useState<LedgerFilter>('notComplete');
   const { active: busy, run: once } = useOneAtATime();
   const [error, setError] = useState<string | null>(null);
@@ -148,13 +165,13 @@ export function RecordingLedgerScreen({
               ? 'The roster for this recording could not be read. The message above says why.'
               : accountable.length === 0
               ? lapsed.length > 0
-                ? 'Nobody holds this recording now — every grant from this session has lapsed. See below.'
+                ? "Nobody is required to play it now: every excused student's access has lapsed. See below."
                 : session.attendanceSubmittedAt === null
                   ? // A register never taken is not a register with nobody excused:
                     // the grants come from the submit, and Today counts this
                     // session as blocking for exactly that reason.
                     'Attendance has not been taken for this session, so nobody has been granted this recording yet. Take attendance on the session.'
-                  : 'No one was excused from this session, so nobody has been granted this recording.'
+                  : 'No one was excused from this session, so it is required of nobody.'
               : filter === 'missed'
                 ? 'Nobody missed the deadline — nice.'
                 : 'Everyone required has completed this — nice.'}
@@ -168,12 +185,25 @@ export function RecordingLedgerScreen({
               recordingId={recording.id}
               outcome={outcomeOf(r)}
               closedBy={closedBy}
+              givenUntil={givenUntil(r.studentUid)}
               busy={busy}
               onRun={run}
             />
           ))}
         </Grid>
       )}
+
+      <GivenSection
+        recording={recording}
+        session={session}
+        cls={cls}
+        today={today}
+        closedBy={closedBy}
+        given={given}
+        grants={grants}
+        roster={roster}
+        students={students}
+      />
 
       {/* FOR REFERENCE, AND CLOSED: nothing in these is asked of anyone, so
           they wait below the list that is, each with its count and the reason
@@ -182,20 +212,21 @@ export function RecordingLedgerScreen({
         {attendees.length > 0 ? (
           <Collapsible testID="ledger-present" title="Present" count={attendees.length}>
             <Notice tone="info">
-              They were at the session, so this recording is neither required for them nor open to
-              them.
+              They were at the session, so it isn&apos;t required of them. It opens to one of them only
+              if you give it to them.
             </Notice>
-            <ListenerRows rows={attendees} />
+            <ListenerRows rows={attendees} givenUntil={givenUntil} />
           </Collapsible>
         ) : null}
 
         {absentees.length > 0 ? (
           <Collapsible testID="ledger-absent" title="Absent" count={absentees.length}>
             <Notice tone="info">
-              Marked absent rather than excused, so the recording was not opened to them. To let
-              someone catch up, mark them excused on the session and submit again.
+              Marked absent rather than excused, so it isn&apos;t required of them. To require it, mark
+              them excused on the session and submit again. To let one play it without requiring it,
+              give it to them.
             </Notice>
-            <ListenerRows rows={absentees} />
+            <ListenerRows rows={absentees} givenUntil={givenUntil} />
           </Collapsible>
         ) : null}
 
@@ -207,17 +238,18 @@ export function RecordingLedgerScreen({
               can&apos;t open it. Re-enrolling them restores it — for anything still inside its
               listen-by date.
             </Notice>
-            <ListenerRows rows={lapsed} />
+            <ListenerRows rows={lapsed} givenUntil={givenUntil} />
           </Collapsible>
         ) : null}
 
         {otherListeners.length > 0 ? (
           <Collapsible testID="ledger-also" title="Also listened" count={otherListeners.length}>
             <Notice tone="info">
-              Listening from someone who holds no current grant — for example, excused and listening,
-              then corrected to present. Kept as history; does not count toward accountability.
+              Listening from someone not on this session&apos;s register, such as a student who joined
+              the class after it and was given the recording. Kept as history; it does not count toward
+              accountability.
             </Notice>
-            <ListenerRows rows={otherListeners} />
+            <ListenerRows rows={otherListeners} givenUntil={givenUntil} />
           </Collapsible>
         ) : null}
       </View>
@@ -229,32 +261,33 @@ export function RecordingLedgerScreen({
  * A read-only row — present, absent, and other listeners; no accountability.
  *
  * SILENT WHERE THERE IS NOTHING TO REPORT. The section above these rows says
- * this recording is neither required for them nor open to them, and then every
- * name carried "0% listened · not started" — a shortfall printed against people
- * of whom nothing was asked. Someone who listened anyway is worth showing;
+ * this recording is not required of them, and then every name carried "0%
+ * listened · not started" — a shortfall printed against people of whom nothing
+ * was asked. Someone who listened anyway, or was given it, is worth showing;
  * someone who did not is simply not in this story.
  */
-function ListenerRows({ rows }: { rows: LedgerRow[] }) {
+function ListenerRows({ rows, givenUntil }: { rows: LedgerRow[]; givenUntil: (uid: string) => string | null }) {
   return (
     <Grid min={300} rows>
       {rows.map((r) => (
-        <ListenerRow key={r.studentUid} row={r} />
+        <ListenerRow key={r.studentUid} row={r} givenUntil={givenUntil(r.studentUid)} />
       ))}
     </Grid>
   );
 }
 
-function ListenerRow({ row: r }: { row: LedgerRow }) {
-  const listened = r.listenedPct !== 0 || !!r.lastListened;
+function ListenerRow({ row: r, givenUntil }: { row: LedgerRow; givenUntil: string | null }) {
+  const listened = r.listenedPct !== 0 || !!r.lastListened || givenUntil !== null;
   return (
-    <View style={[styles.row, useGridCell()]}>
+    <View testID={`listener-row-${r.name}`} style={[styles.row, useGridCell()]}>
       <View style={styles.rowHead}>
         <View style={styles.rowText}>
           <Text style={styles.name}>{r.name}</Text>
           {listened ? (
             <Text style={styles.sub}>
               {listenedText(r.listenedPct)}
-              {r.lastListened ? ` · last ${fmtDate(r.lastListened)}` : ''}
+              {r.lastListened ? ` · last\u00A0${unbreakableDate(fmtDate(r.lastListened))}` : ''}
+              {givenUntil ? ` · given until\u00A0${unbreakableDate(givenUntil)}` : ''}
             </Text>
           ) : null}
         </View>
@@ -269,6 +302,7 @@ function LedgerRowCard({
   recordingId,
   outcome,
   closedBy,
+  givenUntil,
   busy,
   onRun,
 }: {
@@ -276,6 +310,7 @@ function LedgerRowCard({
   recordingId: string;
   outcome: GrantOutcome;
   closedBy: ClosedBy;
+  givenUntil: string | null;
   busy: string | null;
   onRun: (key: string, fn: () => Promise<unknown>, shown: (text: string | null) => void) => void;
 }) {
@@ -309,8 +344,9 @@ function LedgerRowCard({
       {/* THE STATUS LEADS, in its colour: it is what the row is read for. */}
       <Text style={[styles.status, statusStyle(outcome)]}>{statusLabel(r, outcome, closedBy)}</Text>
       {` · ${listenedText(r.listenedPct)}`}
-      {r.lastListened ? ` · last ${fmtDate(r.lastListened)}` : ''}
+      {r.lastListened ? ` · last\u00A0${unbreakableDate(fmtDate(r.lastListened))}` : ''}
       {r.pending ? ' · pending sync' : ''}
+      {givenUntil ? ` · given until\u00A0${unbreakableDate(givenUntil)}` : ''}
     </Text>
   );
 
@@ -404,8 +440,6 @@ function listenedText(pct: number | null): string {
  * itself leaving the published state, or its class being archived with
  * listening off. Null while a student could still open it.
  */
-type ClosedBy = 'recording archived' | 'recording unpublished' | 'course archived' | null;
-
 function closedReason(recording: RecordingRow, cls: CourseRow): ClosedBy {
   if (recording.status === 'archived') return 'recording archived';
   if (!isVisibleToStudents(recording.status)) return 'recording unpublished';

@@ -239,7 +239,7 @@ describe('what becomes work', () => {
       [recording('r1', 'published')],
     );
     expect(q.items[0].kind).toBe('closing');
-    expect(q.items[0].detail).toBe('Access closes in 2 days');
+    expect(q.items[0].detail).toBe('Listen-by date in 2 days');
   });
 
   /*

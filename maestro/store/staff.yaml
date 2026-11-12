@@ -79,7 +79,7 @@ name: Store screenshots, the staff
     file: ../ci-tools/tap-until.yaml
     env:
       TARGET: "Open Session 3 — Patience in Hardship[\\s\\S]*"
-      EXPECT: "Submitted\\. Only excused students get the recording\\.[\\s\\S]*"
+      EXPECT: "Submitted\\. The students you excused must play the recording\\.[\\s\\S]*"
       SECONDS: 30
 # On Android's shorter screen, scrolled slowly (a fling would carry it a
 # different way each time) until the class notes are off the top and the

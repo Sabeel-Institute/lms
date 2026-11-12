@@ -245,6 +245,13 @@ const shapes = [
     () =>
       db.collection('listeningProgress').where('courseId', '==', ID).where('recordingId', '==', ID),
   ],
+  // ---- given recordings (docs/plans/GIVE-A-RECORDING.md) ----
+  [
+    "givenRecordings — a recording's (Progress, Given to)",
+    () => db.collection('givenRecordings').where('courseId', '==', ID).where('recordingId', '==', ID),
+  ],
+  ["givenRecordings — a student's own (To do)", () => db.collection('givenRecordings').where('studentUid', '==', ID)],
+  ["givenRecordings — a recording's, to delete it (cascade)", () => db.collection('givenRecordings').where('recordingId', '==', ID)],
 
   // ---- assignments (coursework). Equality only throughout, so none should
   // need a composite index; listed so a range or an orderBy added later is

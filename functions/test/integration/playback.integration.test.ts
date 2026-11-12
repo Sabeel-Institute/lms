@@ -2,7 +2,17 @@ import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { CallableRequest } from 'firebase-functions/v2/https';
-import { COLLECTIONS, EMULATOR_PROJECT_ID, assignmentId, mediaStorageKey } from '@sabeel/shared';
+import {
+  COLLECTIONS,
+  EMULATOR_PROJECT_ID,
+  INSTITUTE_TIMEZONE,
+  addDays,
+  assignmentId,
+  enrollmentId,
+  givenRecordingId,
+  mediaStorageKey,
+  todayInZone,
+} from '@sabeel/shared';
 import { getPlaybackUrl } from '../../src/playback';
 import { signGet } from '../../src/mediaStore';
 import { idTokenFor } from './emulatorToken';
@@ -71,6 +81,8 @@ beforeEach(async () => {
   const d = db();
   for (const id of [STUDENT, OTHER_STUDENT]) {
     await d.collection(COLLECTIONS.assignments).doc(assignmentId(id, RECORDING)).delete();
+    await d.collection(COLLECTIONS.givenRecordings).doc(givenRecordingId(id, RECORDING)).delete();
+    await d.collection(COLLECTIONS.enrollments).doc(enrollmentId(id, COURSE)).delete();
   }
   await d.collection(COLLECTIONS.courses).doc(COURSE).set({
     cohortId: 'cohort-play',
@@ -216,6 +228,69 @@ describe('getPlaybackUrl', () => {
       .doc(COURSE)
       .update({ archived: true, effectiveActive: false, archivedAccess: false, recordingsClosed: [{ from: Date.now(), to: null }] });
     expect(await denialOf(await req(STUDENT, 'student'))).toMatch(/archived/i);
+  });
+});
+
+/*
+ * A RECORDING STAFF GAVE ONE STUDENT, at the audio: open through the whole of
+ * its date on the REAL clock, as production decides it, and closed after, on
+ * leaving the class, on unpublishing, and the moment it is taken back.
+ */
+describe('getPlaybackUrl, given', () => {
+  const today = () => todayInZone(INSTITUTE_TIMEZONE);
+  async function give(uid: string, openUntil: string) {
+    await db().collection(COLLECTIONS.givenRecordings).doc(givenRecordingId(uid, RECORDING)).set({
+      studentUid: uid,
+      recordingId: RECORDING,
+      courseId: COURSE,
+      openUntil,
+      givenAt: Date.now(),
+      givenBy: MANAGER,
+    });
+  }
+  async function enrol(uid: string, active = true) {
+    await db().collection(COLLECTIONS.enrollments).doc(enrollmentId(uid, COURSE)).set({
+      studentUid: uid,
+      courseId: COURSE,
+      cohortId: 'cohort-play',
+      active,
+      stretches: active ? [{ from: 1, to: null }] : [{ from: 1, to: 2 }],
+      enrolledBy: MANAGER,
+    });
+  }
+
+  it('plays to a student given it, through the end of its date, and not after', async () => {
+    await enrol(STUDENT);
+    await give(STUDENT, today());
+    expect(await denialOf(await req(STUDENT, 'student'))).toBeNull();
+    await give(STUDENT, addDays(today(), -1));
+    expect(await denialOf(await req(STUDENT, 'student'))).toBe('This recording is no longer open to you.');
+  });
+
+  it('closes on leaving the class, on unpublishing, and when taken back', async () => {
+    await give(STUDENT, FUTURE);
+    await enrol(STUDENT, false);
+    expect(await denialOf(await req(STUDENT, 'student'))).toMatch(/not open to you/i);
+    await enrol(STUDENT);
+    expect(await denialOf(await req(STUDENT, 'student'))).toBeNull();
+    await db().collection(COLLECTIONS.recordings).doc(RECORDING).update({ status: 'unpublished' });
+    expect(await denialOf(await req(STUDENT, 'student'))).toMatch(/not published/i);
+    await db().collection(COLLECTIONS.recordings).doc(RECORDING).update({ status: 'published' });
+    await db().collection(COLLECTIONS.givenRecordings).doc(givenRecordingId(STUDENT, RECORDING)).delete();
+    expect(await denialOf(await req(STUDENT, 'student'))).toMatch(/not open to you/i);
+  });
+
+  it('plays a missed recording again under a later given date', async () => {
+    await grant(STUDENT, PAST);
+    await enrol(STUDENT);
+    await give(STUDENT, FUTURE);
+    expect(await denialOf(await req(STUDENT, 'student'))).toBeNull();
+  });
+
+  it('opens nothing to a classmate', async () => {
+    await enrol(OTHER_STUDENT);
+    await give(STUDENT, FUTURE);
+    expect(await denialOf(await req(OTHER_STUDENT, 'student'))).toMatch(/not open to you/i);
   });
 });
 

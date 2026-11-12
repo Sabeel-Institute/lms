@@ -1,5 +1,6 @@
 # A student: a password sign-in, a recording that keeps playing in the
-# background and resumes its place, the class list and Change password.
+# background and resumes its place, a recording a teacher gave, the class
+# list and Change password.
 # Seeded by scripts/seed-emulators.mjs; run by `npx sabeel-ci native-e2e`.
 #
 # On a busy CI simulator a tap or a keystroke can land before the screen takes
@@ -98,6 +99,59 @@ name: Student signs in, listens, and changes the password
       EXPECT: "Play"
       SECONDS: 15
 - takeScreenshot: 03-after-background
+- runFlow:
+    file: ci-tools/back-until.yaml
+    env:
+      FROM: "Bookmark this place"
+
+# A recording a teacher gave: on To do under Optional, it plays, and there is
+# nothing to mark (the seed gives this student a session they attended).
+# Centred, not merely visible: at the bottom edge the card sits under the
+# docked bar of the recording played above, and a tap there reopens that one.
+# The check names THIS player's own line, "open until" and its date, joined
+# by a non-breaking space: "Bookmark this place" is on every player, so it
+# passed over the wrong one on iOS, and the To do row's own label says
+# "open until" too, with an ordinary space, so a dropped tap passed as well.
+- scrollUntilVisible:
+    element: "Play Session 10 — Thankfulness in Ease, optional[\\s\\S]*"
+    centerElement: true
+    timeout: 30000
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Play Session 10 — Thankfulness in Ease, optional[\\s\\S]*"
+      EXPECT: "[\\s\\S]*open until[^ ][\\s\\S]*"
+      SECONDS: 30
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Play"
+      EXPECT: "Pause"
+      SECONDS: 60
+# And it plays: "Pause" shows from the tap, before the server has answered.
+- extendedWaitUntil:
+    visible:
+      id: "player-elapsed"
+      text: "0:0[3-9]|0:[1-5][0-9]|[1-9][0-9]*:[0-5][0-9]"
+    timeout: 60000
+- runFlow:
+    file: ci-tools/tap-until.yaml
+    env:
+      TARGET: "Pause"
+      EXPECT: "Play"
+      SECONDS: 15
+# By id: on iOS the player's texts can reach Maestro inside one label.
+- scrollUntilVisible:
+    element:
+      id: "optional-completion"
+    timeout: 20000
+- assertNotVisible:
+    id: "mark-complete"
+- takeScreenshot: 03b-optional
+- scrollUntilVisible:
+    element: "Bookmark this place"
+    direction: UP
+    timeout: 20000
 - runFlow:
     file: ci-tools/back-until.yaml
     env:

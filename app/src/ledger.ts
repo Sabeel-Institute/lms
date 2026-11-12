@@ -23,7 +23,7 @@ import {
 } from '@sabeel/shared';
 import { db, functions } from './firebase';
 import { useListenerFailed, useLiveQuery } from './liveQuery';
-import { useStudentsState } from './students';
+import { useStudentsState, type StudentRow } from './students';
 import { useCourseSessionsState } from './sessions';
 import { useRosterState, type CourseRow, type EnrollmentRow } from './structure';
 import type { RecordingRow } from './recordings';
@@ -157,6 +157,10 @@ export interface RecordingLedger {
   loading: boolean;
   /** A listener was refused, so the roster will never arrive. Not `loading`. */
   failed: boolean;
+  /** Every grant the recording made, by student, active or not; null until read. */
+  grants: Map<string, AssignmentDoc> | null;
+  /** The students the page names, from the same read the rows use; null until read. */
+  students: StudentRow[] | null;
   /** Excused, so granted the recording and required to listen — the only people
    *  who can open it at all. On a recording that is no longer published these
    *  are the grants as they stood when it closed: the term's record. */
@@ -170,8 +174,8 @@ export interface RecordingLedger {
    *  class, or corrected out of the roster. Deactivating keeps the attendance
    *  marks, so without this group they would appear in no section at all. */
   lapsed: LedgerRow[];
-  /** Listened without holding a current grant — e.g. excused, listened, then
-   *  corrected to present. Evidence, not accountability. */
+  /** Listened, and not on the session's register — e.g. joined the class
+   *  after it and was given the recording. Evidence, not accountability. */
   otherListeners: LedgerRow[];
   rollup: LedgerRollup;
 }
@@ -179,7 +183,8 @@ export interface RecordingLedger {
 /**
  * The recording ledger: the granted roster joined with completion, override, and
  * listening progress, split against the session's attendance into the excused
- * (who owe it), the present and the absent (who do not, and cannot open it), and
+ * (who owe it), the present and the absent (who do not, and open it only if
+ * staff give it to them), and
  * the excused whose grant has since lapsed. Every uid the session recorded lands
  * in exactly one group, which is what lets the screen claim to account for the
  * whole submitted roster. Every read is `courseId == && recordingId ==` — the
@@ -357,7 +362,8 @@ export function useRecordingLedger(
           .sort(byName);
 
     // Anyone with real listening/completion who holds no current grant and is
-    // not in the snapshot — e.g. excused and listening, then corrected out.
+    // not on the register — e.g. joined after it, and given the recording.
+    // Corrected from excused to present, they are on it, under Present.
     const known = new Set<string>([...granted.keys(), ...present, ...absent, ...excused]);
     const otherUids = new Set<string>();
     for (const [uid, c] of completions.entries()) if (c.completed && !known.has(uid)) otherUids.add(uid);
@@ -367,6 +373,8 @@ export function useRecordingLedger(
     return {
       loading,
       failed: unknown && failed,
+      grants: assignments,
+      students,
       accountable,
       attendees,
       absentees,

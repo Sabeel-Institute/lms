@@ -7,6 +7,7 @@ import { COLLECTIONS, EMULATOR_PROJECT_ID, enrollmentId } from '@sabeel/shared';
 import { idTokenFor } from './emulatorToken';
 import { createEnrollment, setEnrollmentActive } from '../../src/enrollments';
 import { clearCompletionOverride, overrideCompletion } from '../../src/overrides';
+import { giveRecording, takeBackRecording } from '../../src/given';
 import { createSession, deleteSession, submitAttendance, updateSession } from '../../src/sessions';
 import {
   editRecordingMedia,
@@ -224,6 +225,8 @@ const SCOPED: Array<{
   { name: 'setEnrollmentActive', call: (r) => setEnrollmentActive.run(r), data: { studentUid: STUDENT, courseId: THEIRS, active: false } },
   { name: 'overrideCompletion', call: (r) => overrideCompletion.run(r), data: { studentUid: STUDENT, recordingId: RECORDING, completed: true, reason: 'attended live' } },
   { name: 'clearCompletionOverride', call: (r) => clearCompletionOverride.run(r), data: { studentUid: STUDENT, recordingId: RECORDING, reason: 'set in error' } },
+  { name: 'giveRecording', call: (r) => giveRecording.run(r), data: { studentUid: STUDENT, recordingId: RECORDING, openUntil: '2099-03-01', expect: null } },
+  { name: 'takeBackRecording', call: (r) => takeBackRecording.run(r), data: { studentUid: STUDENT, recordingId: RECORDING, expect: { givenAt: 1, openUntil: '2099-03-01' } } },
   { name: 'createSession', call: (r) => createSession.run(r), data: { courseId: THEIRS, date: '2099-03-01', title: 'New', dueDate: '2099-04-01' } },
   { name: 'updateSession', call: (r) => updateSession.run(r), data: { sessionId: SESSION, title: 'Renamed' } },
   { name: 'submitAttendance', call: (r) => submitAttendance.run(r), data: { sessionId: SESSION, attendance: { [STUDENT]: 'present' } } },

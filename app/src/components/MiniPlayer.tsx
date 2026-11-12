@@ -5,12 +5,14 @@ import {
   SKIP_FORWARD_MS,
   closePlayback,
   formatClock,
+  noteListenOpen,
   playback,
   usePlayback,
 } from '../playback';
-import { canPlayFromCourse, canPlayNow } from '@sabeel/shared';
-import { playingSinceItsDay, useInstituteDay } from '../instituteDay';
-import { liveDueDate, useMyAssignmentState } from '../completion';
+import { canPlayFromCourse, canPlayNow, listenWindow } from '@sabeel/shared';
+import { playsOn } from '../listening';
+import { rememberedOpenDay, useInstituteDay } from '../instituteDay';
+import { useMyListenReads } from '../completion';
 import { useRecordingState } from '../recordings';
 import { useCourseState } from '../structure';
 import { PlayPauseGlyph, Skip } from './Transport';
@@ -48,11 +50,18 @@ const t = getTheme();
  */
 export function MiniPlayer({
   onOpen,
+  hidden,
 }: {
-  /** Carries the deadline as well as the id: the player screen gates the audio
-   *  on it, and re-opening without it would draw a live transport for a student
-   *  whose access closed while they were listening. */
+  /** Opens the player: the session's date for staff, nothing for a student,
+   *  whose access the player reads live. */
   onOpen: (recordingId: string, dueDate: string | null) => void;
+  /**
+   * The bar is not drawn (a player screen is open), but it still GUARDS what
+   * is playing. Unmounted there, nothing stopped a recording playing behind the
+   * player of a different one: a take back, an unenrolment or a closed class
+   * reached no one.
+   */
+  hidden: boolean;
 }) {
   const state = usePlayback();
   const wide = useWide();
@@ -78,45 +87,56 @@ export function MiniPlayer({
    */
   const loaded = useRecordingState(now?.recordingId ?? null, 'miniPlayer', !!now?.studentUid);
   const course = useCourseState(now?.courseId ?? null, 'miniPlayer');
-  // The student's deadline, live: `now.dueDate` was captured when the recording
-  // was opened, and a Listen-by date moved forward since is the documented way
-  // a closed session reopens — the bar must not close it at midnight on a date
-  // that no longer applies.
-  const grant = useMyAssignmentState(now?.studentUid ?? null, now?.recordingId ?? null, 'miniPlayer');
+  // The student's access, live: their grant, what staff gave them and their
+  // enrolment. Nothing is carried from when the recording was opened: a
+  // listen-by date moved forward since is the documented way a closed session
+  // reopens, and a take back has to stop the audio as soon as it is read.
+  const reads = useMyListenReads(now?.studentUid ?? null, now?.recordingId ?? null, now?.courseId ?? null, 'miniPlayer');
   /*
    * THREE WAYS ACCESS ENDS, and the audio has to stop for all of them:
    *   - the recording is deleted or unpublished (its document goes);
    *   - the course is archived with listening off;
-   *   - the STUDENT's own deadline passes, which happens at midnight while they
-   *     are listening and nothing else would notice. Staff have no deadline —
-   *     a session's date rides in `dueDate` for them too, and applying it here
-   *     cut a manager off from anything more than a week old the moment they
-   *     left the player.
+   *   - the STUDENT's own window closes: their last date passes at midnight
+   *     while they are listening and nothing else would notice, or staff take
+   *     back what they gave, or the student leaves the class. Staff have no
+   *     window — applying a date here once cut a manager off from anything
+   *     more than a week old the moment they left the player.
    * Watching only the first left the other two running off a signed URL good
    * for another twelve hours, with nothing on screen saying anything changed.
    */
   const today = useInstituteDay();
-  const due = now ? liveDueDate(now.studentUid, grant, now.dueDate) : null;
-  const shut = !!course.value && !canPlayNow(course.value, due, now?.studentUid ?? null, today);
+  const student = now?.studentUid ?? null;
+  // DECIDED ONLY ONCE THE READS HAVE ANSWERED: before that, "nothing held" is
+  // not known, and stopping on it stopped a given recording on every reload.
+  const window = student && reads.answered ? listenWindow(reads.grant, reads.given, reads.enrolled, today) : null;
+  const decided = student === null || reads.answered;
+  const shut = !!course.value && decided && !canPlayNow(course.value, window, student);
   const revoked = !!now && ((loaded.resolved && !loaded.value) || (course.resolved && shut));
+  const openLastDay = rememberedOpenDay(student, now?.recordingId ?? null, window);
+  const windowOpen = window?.state === 'open';
+  const playingId = now?.recordingId ?? null;
+  useEffect(() => {
+    if (student && playingId && window !== null) noteListenOpen(playingId, windowOpen);
+  }, [student, playingId, window, windowOpen]);
   /*
-   * A recording playing when the student's own deadline passes plays on to
-   * the end and closes once it stops, as the player screen lets it (see
-   * there). Anything else that shuts it stops it at once.
+   * A recording playing when the student's own last day ends plays on to the
+   * end and closes once it stops (`playsOn`). Anything else that shuts it,
+   * staff taking it away included, stops it at once. THE ONE PLACE THAT STOPS
+   * a recording whose access ended: mounted on every screen, the player's
+   * included.
    */
   const finishing =
     !!now &&
     loaded.value !== null &&
     !!course.value &&
     canPlayFromCourse(course.value) &&
-    due !== null &&
     state.playing &&
-    playingSinceItsDay(state.playingSince, due);
+    playsOn(window, openLastDay, state.playingSince);
   useEffect(() => {
     if (revoked && !finishing) void closePlayback();
   }, [revoked, finishing]);
 
-  if (!now) return null;
+  if (!now || hidden) return null;
 
   const pct = now.durationMs > 0 ? Math.min(1, state.positionMs / now.durationMs) : 0;
   const remaining = Math.max(0, now.durationMs - state.positionMs);

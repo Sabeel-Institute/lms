@@ -38,7 +38,7 @@ export const WORKBOOK_DEFINITIONS: readonly [term: string, definition: string][]
   ],
   [
     'Present / Absent / Excused',
-    'The mark on the register. Excused is the only mark that opens the recording and requires it.',
+    'The mark on the register. Excused is the only mark that requires the recording. A recording staff give to one student is not counted here.',
   ],
   ['Attendance rate', 'Present ÷ Held.'],
   [
@@ -52,7 +52,7 @@ export const WORKBOOK_DEFINITIONS: readonly [term: string, definition: string][]
   ['Still open', 'Not yet completed, and the due date has not passed.'],
   [
     'Missed deadline',
-    'Not completed by the due date. Access has closed; nothing further can happen to it unless the date is moved.',
+    'Not completed by the due date. It stays missed unless the date is moved or staff mark it complete.',
   ],
   [
     'Closed',
@@ -61,7 +61,7 @@ export const WORKBOOK_DEFINITIONS: readonly [term: string, definition: string][]
   ['Catch-up rate', 'Completed ÷ (Completed + Missed deadline). Open and closed items are not held against anyone.'],
   [
     'Played',
-    'Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark.',
+    'Time played as a share of the recording’s length. Evidence, not the gate — completion is the student’s own mark. It includes any listening after the due date.',
   ],
   [
     'Assigned',

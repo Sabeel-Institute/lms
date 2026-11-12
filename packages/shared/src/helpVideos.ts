@@ -36,6 +36,7 @@ export const HELP_VIDEOS: readonly HelpVideo[] = [
   { id: 'staff-attendance', audience: 'staff', title: 'Taking attendance', summary: 'Present, absent and excused — and why excused matters.' },
   { id: 'staff-recording', audience: 'staff', title: 'Adding a recording', summary: 'Uploading the files, checking them, and publishing.' },
   { id: 'staff-progress', audience: 'staff', title: 'Who has caught up', summary: 'A recording’s progress, and overriding a completion.' },
+  { id: 'staff-give', audience: 'staff', title: 'Giving a recording to one student', summary: 'Opening a recording to one student until a date, without requiring it.' },
   { id: 'staff-assignment', audience: 'staff', title: 'Writing and posting an assignment', summary: 'Instructions, files, dates and grading.' },
   { id: 'staff-grading', audience: 'staff', title: 'Grading and returning', summary: 'One student’s work at a time, and returning it.' },
   { id: 'staff-students', audience: 'staff', title: 'A class’s students', summary: 'The roster, adding and removing, and a student’s page.' },

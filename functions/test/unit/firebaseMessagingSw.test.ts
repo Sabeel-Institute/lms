@@ -8,8 +8,11 @@ import {
   dueDateMovedMessage,
   handInLastDayMessage,
   lastDayMessage,
+  lastRequiredDayMessage,
   newAssignmentMessage,
+  recordingGivenMessage,
   recordingReadyMessage,
+  recordingRequiredMessage,
   workReturnedMessage,
   type NotificationKind,
   type PushMessage,
@@ -55,7 +58,10 @@ const win = (url: string, focus = vi.fn(() => Promise.resolve())): Win => ({ url
 /** Every message the server sends, with the kind it is sent under and where its tap must land. */
 const sent: Array<[string, NotificationKind, PushMessage, string]> = [
   ['recordingReady', 'recordingReady', recordingReadyMessage('Hikam', 'Session 3', '2026-11-02', 'r1'), '/play/r1'],
+  ['recordingRequired', 'recordingReady', recordingRequiredMessage('Hikam', 'Session 3', '2026-11-02', 'r1'), '/play/r1'],
+  ['recordingGiven', 'recordingReady', recordingGivenMessage('Hikam', 'Session 3', '2026-11-09', 'r1'), '/play/r1'],
   ['lastDay', 'lastDay', lastDayMessage('Hikam', 'Session 3', '2026-11-02', 'r1'), '/play/r1'],
+  ['lastRequiredDay', 'lastDay', lastRequiredDayMessage('Hikam', 'Session 3', '2026-11-09', 'r1'), '/play/r1'],
   ['assignmentPosted', 'assignmentPosted', newAssignmentMessage('Hikam', 'Memorize', '2026-11-02', 'cw1'), '/work/cw1'],
   ['dueDateMoved', 'assignmentPosted', dueDateMovedMessage('Hikam', 'Memorize', '2026-11-09', 'cw1'), '/work/cw1'],
   ['handInLastDay', 'handInLastDay', handInLastDayMessage('Hikam', 'Memorize', '2026-11-02', 'cw1'), '/work/cw1'],

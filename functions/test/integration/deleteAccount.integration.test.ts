@@ -102,9 +102,17 @@ describe('deleting a student’s account', () => {
     const { uid, email } = await aStudent('Aminah');
     const cwId = await postedWork();
     expect(await rowsWithAddress(email)).toBeGreaterThan(0);
+    // A recording staff gave them is a permission, and goes; a classmate's stays.
+    const given = (studentUid: string) => db().collection(COLLECTIONS.givenRecordings).doc(`${studentUid}_rec-del`);
+    const record = (studentUid: string) => ({ studentUid, recordingId: 'rec-del', courseId, openUntil: '2099-01-01', givenAt: 1, givenBy: ADMIN });
+    await given(uid).set(record(uid));
+    await given('a-classmate').set(record('a-classmate'));
     await setStudentAccess.run(await as(ADMIN, 'admin', { uid, status: 'disabled' }));
 
     await deleteAccount.run(await as(ADMIN, 'admin', { uid }));
+
+    expect((await given(uid).get()).exists).toBe(false);
+    expect((await given('a-classmate').get()).exists).toBe(true);
 
     expect(await signInGone(uid)).toBe(true);
     expect(await studentDoc(uid)).toMatchObject({ displayName: 'Aminah', email: null, status: 'deleted' });
