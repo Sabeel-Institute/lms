@@ -245,6 +245,7 @@ describe('collections not yet opened', () => {
       COLLECTIONS.enrollments,
       COLLECTIONS.recordings,
       COLLECTIONS.assignments,
+      COLLECTIONS.givenRecordings,
       COLLECTIONS.auditLog,
       COLLECTIONS.completions,
       COLLECTIONS.completionEvents,

@@ -119,7 +119,43 @@ service cloud.firestore {
      * one read — Firestore caches a path within a request.
      */
     function holdsGrant(recordingId) {
-      return get(/databases/$(database)/documents/assignments/$(request.auth.uid + '_' + recordingId)).data.active == true;
+      let path = /databases/$(database)/documents/assignments/$(request.auth.uid + '_' + recordingId);
+      return exists(path) && get(path).data.active == true;
+    }
+
+    /*
+     * A RECORDING STAFF GAVE THE CALLER: the other way a student plays one,
+     * optional and counted nowhere (`GivenRecordingDoc` in @sabeel/shared).
+     * There is no `active` flag to read: whether it plays is the recording
+     * still published, in this class, and the student still enrolled in it.
+     * Its date is not read here, as the grant's is not: the deadline is
+     * enforced at the audio (`getPlaybackUrl`), and comparing `request.time`
+     * to a date in the institute's timezone would be a second copy of that
+     * maths.
+     *
+     * Every path is built from the caller's own uid or the row being written,
+     * so a progress save by a student holding only a given recording costs
+     * five distinct reads (students, assignments, givenRecordings, recordings,
+     * enrollments), inside Firestore's ten. The exists() guards are explicit
+     * because the usual answer is absence, and a get() of nothing is an
+     * evaluation error rather than a no.
+     */
+    function givenPath(recordingId) {
+      return /databases/$(database)/documents/givenRecordings/$(request.auth.uid + '_' + recordingId);
+    }
+    function enrolledIn(courseId) {
+      let path = /databases/$(database)/documents/enrollments/$(request.auth.uid + '_' + courseId);
+      return exists(path) && get(path).data.active == true;
+    }
+    // `courseId` is the row's: it must be the recording's own class, so a
+    // given recording cannot file listening under a class the ledger never
+    // reads, as `grantedCourse` keeps the excused arm honest.
+    function holdsGiven(recordingId, courseId) {
+      let recording = get(/databases/$(database)/documents/recordings/$(recordingId)).data;
+      return exists(givenPath(recordingId))
+        && recording.status == 'published'
+        && recording.courseId == courseId
+        && enrolledIn(courseId);
     }
 
     // ---- Staff ----
@@ -247,10 +283,14 @@ service cloud.firestore {
       // evaluation ERROR, which refuses the read rather than answering it. The
       // usual case here IS absence, so without the guard every student would
       // trip an error instead of a clean denial.
+      //
+      // OR A RECORDING STAFF GAVE THEM, while they are in its class: the
+      // second way a student plays one (`holdsGiven`, above). Still get only,
+      // for the same reason.
       allow get: if isStudent()
         && resource.data.status == 'published'
-        && exists(/databases/$(database)/documents/assignments/$(request.auth.uid + '_' + recordingId))
-        && get(/databases/$(database)/documents/assignments/$(request.auth.uid + '_' + recordingId)).data.active == true;
+        && (holdsGrant(recordingId)
+            || (exists(givenPath(recordingId)) && enrolledIn(resource.data.courseId)));
 
       // Every mutation goes through a callable that re-checks course scope and
       // the lifecycle state machine.
@@ -388,9 +428,14 @@ service cloud.firestore {
        * seconds for the length of a lecture, and an update that may not move
        * `courseId` is free — so the class is fixed once, when the row is born.
        */
+      //
+      // OR UNDER A RECORDING STAFF GAVE THEM, filed under that recording's
+      // class (`holdsGiven`). The grant arm is tried first: an excused student
+      // pays nothing more.
       allow create: if mine() && progressShape()
-        && holdsGrant(request.resource.data.recordingId)
-        && request.resource.data.courseId == grantedCourse(request.resource.data.recordingId);
+        && ((holdsGrant(request.resource.data.recordingId)
+              && request.resource.data.courseId == grantedCourse(request.resource.data.recordingId))
+            || holdsGiven(request.resource.data.recordingId, request.resource.data.courseId));
       // Three things matter: `mine()` stops a student writing someone else's uid
       // into the row, the studentUid check stops them overwriting a row that is
       // already someone else's, and the courseId check stops them moving a row
@@ -400,7 +445,8 @@ service cloud.firestore {
       allow update: if mine() && progressShape()
         && resource.data.studentUid == request.auth.uid
         && request.resource.data.courseId == resource.data.courseId
-        && holdsGrant(request.resource.data.recordingId);
+        && (holdsGrant(request.resource.data.recordingId)
+            || holdsGiven(request.resource.data.recordingId, request.resource.data.courseId));
       allow delete: if false;
     }
 
@@ -431,14 +477,17 @@ service cloud.firestore {
         && (resource == null
               ? bookmarkId.split('_')[0] == request.auth.uid
               : resource.data.studentUid == request.auth.uid);
-      // Set only in a recording the student holds, and filed under its class.
+      // Set only in a recording the student holds, excused or given, and
+      // filed under its class.
       allow create: if mine() && bookmarkShape()
-        && holdsGrant(request.resource.data.recordingId)
-        && request.resource.data.courseId == grantedCourse(request.resource.data.recordingId);
+        && ((holdsGrant(request.resource.data.recordingId)
+              && request.resource.data.courseId == grantedCourse(request.resource.data.recordingId))
+            || holdsGiven(request.resource.data.recordingId, request.resource.data.courseId));
       allow update: if mine() && bookmarkShape()
         && resource.data.studentUid == request.auth.uid
         && request.resource.data.courseId == resource.data.courseId
-        && holdsGrant(request.resource.data.recordingId);
+        && (holdsGrant(request.resource.data.recordingId)
+            || holdsGiven(request.resource.data.recordingId, request.resource.data.courseId));
       allow list, delete: if false;
     }
 
@@ -469,6 +518,27 @@ service cloud.firestore {
         || isAdmin()
         || (isStaff() && request.auth.uid in
             get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.managerUids);
+      allow write: if false;
+    }
+
+    // ---- Given recordings ----
+    // Document id is `${studentUid}_${recordingId}`. A recording staff opened
+    // to one student until a date: optional, counted nowhere. Written only by
+    // `giveRecording` and `takeBackRecording`, which check the class's scope,
+    // the register and the date; a client-writable one would hand out
+    // recordings. Reads follow /assignments: a student their own (bound to
+    // their own id when it does not exist, so absence tells nobody whether a
+    // classmate was given one), staff of the class with the per-row class
+    // get(), affordable only for a query scoped to one class. The admin arm of
+    // `staffManagesCourse` reads nothing.
+    match /givenRecordings/{givenId} {
+      allow get: if (isStudent()
+          && (resource == null
+                ? givenId.split('_')[0] == request.auth.uid
+                : resource.data.studentUid == request.auth.uid))
+        || (resource != null && staffManagesCourse(resource.data.courseId));
+      allow list: if (isStudent() && resource.data.studentUid == request.auth.uid)
+        || staffManagesCourse(resource.data.courseId);
       allow write: if false;
     }
 
