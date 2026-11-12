@@ -174,8 +174,8 @@ export interface RecordingLedger {
    *  class, or corrected out of the roster. Deactivating keeps the attendance
    *  marks, so without this group they would appear in no section at all. */
   lapsed: LedgerRow[];
-  /** Listened without holding a current grant — e.g. excused, listened, then
-   *  corrected to present. Evidence, not accountability. */
+  /** Listened, and not on the session's register — e.g. joined the class
+   *  after it and was given the recording. Evidence, not accountability. */
   otherListeners: LedgerRow[];
   rollup: LedgerRollup;
 }
@@ -183,7 +183,8 @@ export interface RecordingLedger {
 /**
  * The recording ledger: the granted roster joined with completion, override, and
  * listening progress, split against the session's attendance into the excused
- * (who owe it), the present and the absent (who do not, and cannot open it), and
+ * (who owe it), the present and the absent (who do not, and open it only if
+ * staff give it to them), and
  * the excused whose grant has since lapsed. Every uid the session recorded lands
  * in exactly one group, which is what lets the screen claim to account for the
  * whole submitted roster. Every read is `courseId == && recordingId ==` — the
@@ -361,7 +362,8 @@ export function useRecordingLedger(
           .sort(byName);
 
     // Anyone with real listening/completion who holds no current grant and is
-    // not in the snapshot — e.g. excused and listening, then corrected out.
+    // not on the register — e.g. joined after it, and given the recording.
+    // Corrected from excused to present, they are on it, under Present.
     const known = new Set<string>([...granted.keys(), ...present, ...absent, ...excused]);
     const otherUids = new Set<string>();
     for (const [uid, c] of completions.entries()) if (c.completed && !known.has(uid)) otherUids.add(uid);

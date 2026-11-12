@@ -270,7 +270,7 @@ export function CourseDetailScreen({
       {!cls.effectiveActive ? (
         <Notice tone="info">
           {cls.archivedAccess
-            ? 'This course is archived. Students can still play the recordings they were given.'
+            ? 'This course is archived. Students can still play the recordings open to them.'
             : 'This course is archived and its recordings are closed.'}
         </Notice>
       ) : null}
@@ -556,7 +556,7 @@ export function CourseDetailScreen({
             <SwitchRow
               testID="course-archived-access"
               label="Keep recordings open when archived"
-              description="Students can still play the recordings they were given."
+              description="Students can still play the recordings open to them."
               on={cls.archivedAccess}
               onChange={(next) =>
                 void run('access', () => updateCourse({ courseId: cls.id, archivedAccess: next }))

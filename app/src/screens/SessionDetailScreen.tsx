@@ -139,7 +139,7 @@ export function SessionDetailScreen({
           <Text style={styles.notes}>{session.notes}</Text>
         </Card>
       ) : null}
-      <AttendanceSection session={session} recording={recording} cls={cls} />
+      <AttendanceSection session={session} recording={recordingState} cls={cls} />
       <RecordingSection
         session={session}
         recording={recording}
@@ -233,7 +233,16 @@ function SessionEditor({ session, isAdmin, onClose }: { session: SessionRow; isA
 
 // ------------------------------------------------------------ attendance --
 
-function AttendanceSection({ session, recording, cls }: { session: SessionRow; recording: RecordingRow | null; cls: CourseRow }) {
+function AttendanceSection({
+  session,
+  recording: recordingState,
+  cls,
+}: {
+  session: SessionRow;
+  recording: { value: RecordingRow | null; resolved: boolean };
+  cls: CourseRow;
+}) {
+  const recording = recordingState.value;
   const wide = useWide();
   // `null` until the roster listener answers: "Enrol students first" is a
   // claim about the class, and the register said it on every cold load.
@@ -300,14 +309,17 @@ function AttendanceSection({ session, recording, cls }: { session: SessionRow; r
    * (owner, 2026-11-11), naming them: taking Excused from a student whose date
    * is still ahead stops their recording at once, unless they also hold it
    * given. Read from the register as it would be submitted, against the one
-   * on the server; until those reads answer, a correction waits. The confirm
-   * closes if a colleague submits underneath it, since the marks it would
-   * send are cleared then.
+   * on the server; until those reads answer, a correction asks anyway, and
+   * the sentence follows them while it is open, as Archive's does. The
+   * confirm closes if a colleague submits underneath it, since the marks it
+   * would send are cleared then.
    */
-  const who = useWhoLosesIt(session, recording, cls, todayInZone(INSTITUTE_TIMEZONE));
+  const who = useWhoLosesIt(session, recordingState, cls, todayInZone(INSTITUTE_TIMEZONE));
   const correcting = session.attendanceSubmittedAt !== null;
-  const deciding = correcting && recording?.status === 'published' && who === null;
-  const [confirm, setConfirm] = useState<{ at: number | null; names: string } | null>(null);
+  const losing = !correcting ? [] : who === null || who === 'unchecked' ? who : who.closes(attendancePayload(session, activeUids, marks));
+  const losingNames = Array.isArray(losing) && who && who !== 'unchecked' ? namesList(losing.map(who.nameOf)) : '';
+  /** Open: the register's submitted time as it was when the confirm opened. */
+  const [confirm, setConfirm] = useState<{ at: number | null } | null>(null);
   const submitNow = () =>
     void once('submit', async () => {
       setError(null);
@@ -323,13 +335,13 @@ function AttendanceSection({ session, recording, cls }: { session: SessionRow; r
       }
     });
   const submit = () => {
-    const lose = correcting && who ? who.closes(attendancePayload(session, activeUids, marks)) : [];
-    if (who && lose.length > 0) {
-      setConfirm({ at: session.attendanceSubmittedAt, names: namesList(lose.map(who.nameOf)) });
+    if (Array.isArray(losing) && losing.length === 0) {
+      submitNow();
       return;
     }
-    submitNow();
+    setConfirm({ at: session.attendanceSubmittedAt });
   };
+  const title = recording?.title ?? 'the recording';
 
   return (
     <>
@@ -369,7 +381,17 @@ function AttendanceSection({ session, recording, cls }: { session: SessionRow; r
               opened={{ open: confirm !== null, close: () => setConfirm(null) }}
               label="Submit attendance"
               confirmLabel="Submit"
-              warning={confirm ? `Submit? ${recording?.title ?? 'The recording'} closes now for ${confirm.names}.` : ''}
+              warning={
+                !confirm
+                  ? ''
+                  : losing === null
+                    ? `Submit? Checking who can play ${title} right now…`
+                    : losing === 'unchecked'
+                      ? `Submit? Who can play ${title} right now could not be checked, so this may close it to someone.`
+                      : losing.length > 0
+                        ? `Submit? ${recording?.title ?? 'The recording'} closes now for ${losingNames}.`
+                        : `Submit? Nobody who can play ${title} right now loses it.`
+              }
               busy={busy}
               confirmTestID="att-submit-confirm"
               onConfirm={submitNow}
@@ -416,7 +438,7 @@ function AttendanceSection({ session, recording, cls }: { session: SessionRow; r
               </View>
             ))}
             <Row>
-              <Button testID="att-submit" label="Submit attendance" busy={busy || deciding} onPress={submit} />
+              <Button testID="att-submit" label="Submit attendance" busy={busy} onPress={submit} />
               <Button
                 testID="att-mark-all-excused"
                 label="Mark all excused"
@@ -699,20 +721,22 @@ function RecordingCard({
    * confirm is open; until the reads behind it answer, it asks anyway.
    */
   const [closing, setClosing] = useState<RecordingStatus | null>(null);
-  const who = useWhoLosesIt(session, r, cls, todayInZone(INSTITUTE_TIMEZONE));
-  const losing = who ? who.closes().length : null;
+  const who = useWhoLosesIt(session, { value: r, resolved: true }, cls, todayInZone(INSTITUTE_TIMEZONE));
+  const losing = who === 'unchecked' ? who : who ? who.closes().length : null;
   const closingWarning = closing
     ? `${LABELS[closing]} ${r.title}? ${
         losing === null
           ? 'Checking who can play it…'
-          : losing === 0
+          : losing === 'unchecked'
+            ? 'Who can play it right now could not be checked.'
+            : losing === 0
             ? 'Nobody can play it right now.'
             : `It closes now for ${losing} student${losing === 1 ? '' : 's'} who can play it.`
       }${deadlinePassed ? ' To publish it again, first move its listen-by date forward, which reopens it to the students you excused.' : ''}`
     : '';
   const move = (to: RecordingStatus) => {
     const closes = r.status === 'published' && (to === 'archived' || to === 'unpublished');
-    if (closes && (losing === null || losing > 0)) {
+    if (closes && (losing === null || losing === 'unchecked' || losing > 0)) {
       setClosing(to);
       return;
     }

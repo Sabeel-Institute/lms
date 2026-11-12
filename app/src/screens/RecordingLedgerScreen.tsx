@@ -4,7 +4,6 @@ import {
   INSTITUTE_TIMEZONE,
   canPlayFromCourse,
   grantOutcome,
-  isOverdue,
   isVisibleToStudents,
   todayInZone,
   unbreakableDate,
@@ -37,7 +36,7 @@ import {
 import { useCohortName, useRosterState, type CourseRow } from '../structure';
 import { GivenSection } from '../components/GivenSection';
 import { useGivenRecordings } from '../given';
-import type { ClosedBy } from '../givenWords';
+import { givenOpen, type ClosedBy } from '../givenWords';
 import type { SessionRow } from '../sessions';
 import type { RecordingRow } from '../recordings';
 import { getTheme, spacing } from '../theme';
@@ -82,10 +81,14 @@ export function RecordingLedgerScreen({
   const given = useGivenRecordings(recording);
   const roster = useRosterState(cls.id);
   // A given student's listening shows where it always has, with the reason
-  // beside it: "· given until <date>" while what they were given is open.
+  // beside it: "· given until <date>" while what they were given plays, by
+  // the same answer the Given to row gives (`givenOpen`).
+  const inClass = useMemo(() => new Set((roster ?? []).filter((e) => e.active).map((e) => e.studentUid)), [roster]);
+  const activeAccount = useMemo(() => new Set((students ?? []).filter((s) => s.status === 'active').map((s) => s.uid)), [students]);
   const givenUntil = (uid: string) => {
     const g = given?.get(uid);
-    return g && !isOverdue(g.openUntil, today) ? g.openUntil : null;
+    const facts = g && { given: g, closedBy, enrolled: inClass.has(uid), accountActive: activeAccount.has(uid), today };
+    return facts && givenOpen(facts) ? facts.given.openUntil : null;
   };
   const [filter, setFilter] = useState<LedgerFilter>('notComplete');
   const { active: busy, run: once } = useOneAtATime();
@@ -232,8 +235,8 @@ export function RecordingLedgerScreen({
             <Notice tone="info">
               Excused at the session, but they hold no active grant — they were unenrolled from the
               class, or corrected out of the register since. Nothing is required of them, and they
-              can open it only if you give it to them. Re-enrolling them restores it — for anything
-              still inside its listen-by date.
+              can&apos;t open it. Re-enrolling them restores it — for anything still inside its
+              listen-by date.
             </Notice>
             <ListenerRows rows={lapsed} givenUntil={givenUntil} />
           </Collapsible>
@@ -242,8 +245,9 @@ export function RecordingLedgerScreen({
         {otherListeners.length > 0 ? (
           <Collapsible testID="ledger-also" title="Also listened" count={otherListeners.length}>
             <Notice tone="info">
-              Listening from someone it isn&apos;t required of: given it, or excused and then corrected
-              to present. Kept as history; it does not count toward accountability.
+              Listening from someone not on this session&apos;s register, such as a student who joined
+              the class after it and was given the recording. Kept as history; it does not count toward
+              accountability.
             </Notice>
             <ListenerRows rows={otherListeners} givenUntil={givenUntil} />
           </Collapsible>
@@ -275,7 +279,7 @@ function ListenerRows({ rows, givenUntil }: { rows: LedgerRow[]; givenUntil: (ui
 function ListenerRow({ row: r, givenUntil }: { row: LedgerRow; givenUntil: string | null }) {
   const listened = r.listenedPct !== 0 || !!r.lastListened || givenUntil !== null;
   return (
-    <View style={[styles.row, useGridCell()]}>
+    <View testID={`listener-row-${r.name}`} style={[styles.row, useGridCell()]}>
       <View style={styles.rowHead}>
         <View style={styles.rowText}>
           <Text style={styles.name}>{r.name}</Text>

@@ -3,15 +3,15 @@ import { httpsCallable } from 'firebase/functions';
 import { useMemo } from 'react';
 import {
   COLLECTIONS,
-  closesNow,
   type GivenExpectation,
   type GivenRecordingDoc,
   type RegisterFacts,
 } from '@sabeel/shared';
 import { useRosterState } from './structure';
 import { useStudentsState } from './students';
+import { whoLosesIt, type WhoLosesIt } from './givenWords';
 import { db, functions } from './firebase';
-import { useLiveQuery } from './liveQuery';
+import { useListenerFailed, useLiveQuery } from './liveQuery';
 import { read } from './documents';
 import type { GiveOutcome } from './givenWords';
 
@@ -29,9 +29,12 @@ export interface GivenRow extends GivenRecordingDoc {
 /**
  * The recording's given recordings, by student, live. `courseId ==` and
  * `recordingId ==`: the class scope is what the staff rule requires. Null
- * until the first snapshot.
+ * until the first snapshot (`confirmed`: the server's).
  */
-export function useGivenRecordings(recording: { id: string; courseId: string } | null): Map<string, GivenRow> | null {
+export function useGivenRecordings(
+  recording: { id: string; courseId: string } | null,
+  confirmed = false,
+): Map<string, GivenRow> | null {
   const courseId = recording?.courseId ?? null;
   const recordingId = recording?.id ?? null;
   return useLiveQuery<Map<string, GivenRow> | null>(
@@ -46,6 +49,9 @@ export function useGivenRecordings(recording: { id: string; courseId: string } |
     [courseId, recordingId],
     {
       label: 'givenRecordings',
+      confirmed,
+      // Its own key: the ordinary list's, torn down elsewhere, forgot this one's refusal.
+      context: confirmed ? { scope: 'confirmed' } : undefined,
       map: (snap) =>
         new Map(
           snap.docs.map((d) => {
@@ -59,20 +65,28 @@ export function useGivenRecordings(recording: { id: string; courseId: string } |
 }
 
 
+/** Gives, moves or reopens; answers with the record as it now stands, which the caller's sheet adopts. */
 export async function giveRecording(input: {
   recordingId: string;
   studentUid: string;
   openUntil: string;
   expect: GivenExpectation;
-}): Promise<GiveOutcome> {
-  const res = await httpsCallable<typeof input, { outcome: GiveOutcome }>(functions, 'giveRecording')(input);
-  return res.data.outcome;
+}): Promise<GiveAnswer> {
+  const res = await httpsCallable<typeof input, GiveAnswer>(functions, 'giveRecording')(input);
+  return res.data;
+}
+
+/** The record as it now stands, and whether a message about it already went to them today. */
+interface GiveAnswer {
+  outcome: GiveOutcome;
+  current: { givenAt: number; openUntil: string };
+  toldToday: boolean;
 }
 
 export async function takeBackRecording(input: {
   recordingId: string;
   studentUid: string;
-  expect: GivenExpectation;
+  expect: NonNullable<GivenExpectation>;
 }): Promise<'taken' | 'gone'> {
   const res = await httpsCallable<typeof input, { outcome: 'taken' | 'gone' }>(functions, 'takeBackRecording')(input);
   return res.data.outcome;
@@ -87,27 +101,22 @@ export async function takeBackRecording(input: {
  * nothing had loaded would close a recording on someone without asking.
  */
 export function useWhoLosesIt(
-  session: RegisterFacts & { courseId: string },
-  recording: { id: string; courseId: string; status: string } | null,
+  session: RegisterFacts & { courseId: string; recordingId: string | null },
+  recording: { value: { id: string; courseId: string; status: string } | null; resolved: boolean },
   cls: { effectiveActive: boolean; archivedAccess: boolean },
   today: string,
-): { closes: (after?: RegisterFacts['attendance']) => string[]; nameOf: (uid: string) => string } | null {
-  const roster = useRosterState(session.courseId);
-  const students = useStudentsState(true);
-  const given = useGivenRecordings(recording);
-  return useMemo(() => {
-    if (!recording) return { closes: () => [], nameOf: (uid: string) => uid };
-    if (!roster || !students || !given) return null;
-    const account = new Map(students.map((s) => [s.uid, s]));
-    const people = roster.map((e) => ({
-      uid: e.studentUid,
-      enrolled: e.active,
-      active: account.get(e.studentUid)?.status === 'active',
-    }));
-    return {
-      closes: (after?: RegisterFacts['attendance']) =>
-        closesNow({ students: people, session, after, recordingStatus: recording.status, cls, given, today }),
-      nameOf: (uid: string) => account.get(uid)?.displayName ?? uid,
-    };
-  }, [recording, roster, students, given, session, cls, today]);
+): WhoLosesIt | 'unchecked' | null {
+  // FROM THE SERVER: who would lose it, decided from this browser's cache,
+  // missed a colleague's give since, and the confirm did not ask.
+  const roster = useRosterState(session.courseId, true);
+  const students = useStudentsState(true, true);
+  const given = useGivenRecordings(recording.value, true);
+  // A refused read never answers, so it is said, not waited for: waited
+  // for, a correction's Submit stayed busy for good.
+  const failed = useListenerFailed(['roster', 'students', 'givenRecordings']);
+  const who = useMemo(
+    () => whoLosesIt({ session, recording, roster, students, given, cls, today }),
+    [session, recording, roster, students, given, cls, today],
+  );
+  return who === null && failed ? 'unchecked' : who;
 }

@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   DEFAULT_DUE_DAYS,
   addDays,
   giveRefusal,
+  unbreakableDate,
   isOverdue,
   requiredUntil,
   type AssignmentDoc,
@@ -62,8 +63,10 @@ export function GivenSection({
     () => new Set((roster ?? []).filter((e) => e.active).map((e) => e.studentUid)),
     [roster],
   );
-  if (!given || !roster || !students) return null;
-
+  const activeAccount = useMemo(
+    () => new Set((students ?? []).filter((s) => s.status === 'active').map((s) => s.uid)),
+    [students],
+  );
   // Giving is possible when the register is taken, the recording published and
   // the class playable; the sentence for the first that is not.
   const blocked = giveRefusal({
@@ -74,12 +77,28 @@ export function GivenSection({
     recordingStatus: recording.status,
     cls,
     enrolled: true,
+    accountActive: true,
     grant: null,
     given: null,
     fromPlus: true,
   });
+  const ready = !!given && !!roster && !!students;
+  const shown = ready && !(given.size === 0 && blocked);
+  /*
+   * A SHEET CLOSES WITH THE SECTION. Hidden (a colleague unpublished the
+   * recording and nothing was given), the section drew nothing, but the open
+   * sheet's state stayed, so it vanished without a word and sprang open again
+   * when the recording came back.
+   */
+  useEffect(() => {
+    if (!shown) {
+      setAdding(false);
+      setEditing(null);
+    }
+  }, [shown]);
+  if (!given || !roster || !students || !shown) return null;
+
   const rows = [...given.values()].sort((a, b) => (nameOf.get(a.studentUid) ?? '').localeCompare(nameOf.get(b.studentUid) ?? ''));
-  if (rows.length === 0 && blocked) return null;
   const grantOf = (uid: string) => grants?.get(uid) ?? null;
 
   return (
@@ -105,6 +124,7 @@ export function GivenSection({
                   given: g,
                   closedBy,
                   enrolled: enrolled.has(g.studentUid),
+                  accountActive: activeAccount.has(g.studentUid),
                   session,
                   grant: grantOf(g.studentUid),
                   recordingStatus: recording.status,
@@ -117,33 +137,40 @@ export function GivenSection({
         </Grid>
       )}
 
+      {/* MOUNTED ONLY WHILE OPEN, so nothing outlives a close: a give still
+          on its way when Close was pressed wrote its result line into the
+          next opening. */}
+      {adding ? (
       <GiveSheet
-        visible={adding}
+        visible
         onClose={() => setAdding(false)}
         recording={recording}
         session={session}
         cls={cls}
         today={today}
         candidates={[...enrolled]
-          .filter((uid) => !given.has(uid) && students.some((s) => s.uid === uid && s.status === 'active'))
+          .filter((uid) => !given.has(uid) && activeAccount.has(uid))
           .map((uid) => ({ uid, name: nameOf.get(uid) ?? uid }))
           .sort((a, b) => a.name.localeCompare(b.name))}
         grantOf={grantOf}
       />
+      ) : null}
 
       {editing ? (
         <RowSheet
           key={editing.uid}
           uid={editing.uid}
           name={nameOf.get(editing.uid) ?? editing.uid}
-          expect={editing.expect}
-          onExpect={(expect) => setEditing({ uid: editing.uid, expect })}
-          onClose={() => setEditing(null)}
+          opened={editing.expect}
+          // ONLY ITS OWN: an answer arriving after this sheet was closed, or
+          // another row's opened, closes nothing but this one.
+          onClose={() => setEditing((e) => (e?.uid === editing.uid ? null : e))}
           recording={recording}
           session={session}
           cls={cls}
           today={today}
           enrolled={enrolled.has(editing.uid)}
+          accountActive={activeAccount.has(editing.uid)}
           grant={grantOf(editing.uid)}
         />
       ) : null}
@@ -214,6 +241,7 @@ function GiveSheet({
           recordingStatus: recording.status,
           cls,
           enrolled: true,
+          accountActive: true,
           grant: grantOf(picked),
           given: null,
           fromPlus: true,
@@ -224,8 +252,8 @@ function GiveSheet({
       setError(null);
       setDone(null);
       try {
-        const outcome = await giveRecording({ recordingId: recording.id, studentUid: picked, openUntil: date, expect: null });
-        setDone(giveResult(outcome, pickedName, date, today));
+        const { outcome, toldToday } = await giveRecording({ recordingId: recording.id, studentUid: picked, openUntil: date, expect: null });
+        setDone(giveResult(outcome, pickedName, date, today, toldToday));
         setPicked(null);
       } catch (e) {
         setError(errorText(e));
@@ -254,7 +282,7 @@ function GiveSheet({
         They can play it through the end of that day. It is optional: nothing is required of them, and it isn&apos;t counted.
       </Text>
       {candidates.length === 0 ? (
-        <Empty>Everyone in this class already has it or is required to listen.</Empty>
+        <Empty>There is nobody else in this class to give it to.</Empty>
       ) : (
         candidates.map((c) => {
           const until = requiredFor(c.uid);
@@ -266,11 +294,15 @@ function GiveSheet({
               accessibilityRole="radio"
               accessibilityState={{ selected, disabled: !!until }}
               disabled={!!until}
-              onPress={() => setPicked(selected ? null : c.uid)}
+              onPress={() => {
+                // A refusal was about the last student picked.
+                setError(null);
+                setPicked(selected ? null : c.uid);
+              }}
               style={[styles.pick, selected ? styles.picked : null]}
             >
               <Text style={[styles.name, until ? styles.greyed : null]}>{c.name}</Text>
-              {until ? <Text style={styles.sub}>{`Required until ${until}; it can be given after that.`}</Text> : null}
+              {until ? <Text style={styles.sub}>{`Required until ${unbreakableDate(until)}; it can be given after that.`}</Text> : null}
             </Pressable>
           );
         })
@@ -282,42 +314,64 @@ function GiveSheet({
 /**
  * ONE ROW'S SHEET: its date, Save while the shared function finds nothing in
  * the way (its sentence in Save's place otherwise), and Take back at the
- * foot. `expect` is what the row showed when the sheet opened: a refusal for
- * a colleague's change replaces it with what is there now, and the date
- * typed stays, so Save again applies it on purpose.
+ * foot. `opened` is what the row showed when the sheet opened, and `expect`
+ * what the sheet holds since: every answer from the server replaces it with
+ * the record as it now stands. The date typed stays, so Save again applies
+ * it on purpose; a date not typed follows the record.
+ *
+ * ITS STATE IS ITS OWN, gone when it closes. Kept by the section, an answer
+ * arriving after the sheet was closed, or another row's opened, wrote into
+ * whatever sheet was open then: it sprang open again, or replaced the one
+ * being typed in.
  */
 function RowSheet({
   uid,
   name,
-  expect,
-  onExpect,
+  opened,
   onClose,
   recording,
   session,
   cls,
   today,
   enrolled,
+  accountActive,
   grant,
 }: {
   uid: string;
   name: string;
-  expect: GivenExpectation;
-  onExpect: (expect: GivenExpectation) => void;
+  opened: GivenExpectation;
   onClose: () => void;
   recording: RecordingRow;
   session: SessionRow;
   cls: CourseRow;
   today: string;
   enrolled: boolean;
+  accountActive: boolean;
   grant: AssignmentDoc | null;
 }) {
   // Its own date while open; a week from today once it has ended.
-  const [date, setDate] = useState(() =>
-    expect && !isOverdue(expect.openUntil, today) ? expect.openUntil : addDays(today, DEFAULT_DUE_DAYS),
-  );
+  const dateOf = (record: GivenExpectation) =>
+    record && !isOverdue(record.openUntil, today) ? record.openUntil : addDays(today, DEFAULT_DUE_DAYS);
+  const [expect, setExpect] = useState(opened);
+  const [date, setDate] = useState(() => dateOf(opened));
+  const [typed, setTyped] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const { active, run } = useOneAtATime();
+  /**
+   * The record as it now stands, from the server's answer. After a refused
+   * TAKE BACK, a date the teacher has not typed follows it: left as the sheet
+   * opened, a Save then put back the date a colleague had just moved, which
+   * nobody had chosen. After a refused Save the date stays: it is the one
+   * they saved, and "Save again to use yours" means it.
+   */
+  const adopt = (current: GivenExpectation, follow: boolean) => {
+    setExpect(current);
+    if (follow && !typed) setDate(dateOf(current));
+  };
+  // Required right now, they keep it after a take back until that date, so
+  // nothing stops: the warning says which.
+  const stillRequired = requiredUntil(uid, { session, grant, enrolled, recordingStatus: recording.status, today });
   const refusal = giveRefusal({
     studentUid: uid,
     openUntil: date,
@@ -326,6 +380,7 @@ function RowSheet({
     recordingStatus: recording.status,
     cls,
     enrolled,
+    accountActive,
     grant,
     given: expect,
     fromPlus: false,
@@ -338,40 +393,59 @@ function RowSheet({
         await fn();
       } catch (e) {
         const current = changedSince(e);
-        if (current !== undefined) onExpect(current);
+        if (current !== undefined) adopt(current, key === 'take');
         setError(errorText(e));
       }
     });
   const save = () =>
     act('save', async () => {
-      const outcome = await giveRecording({ recordingId: recording.id, studentUid: uid, openUntil: date, expect });
-      setDone(giveResult(outcome, name, date, today));
+      const { outcome, current, toldToday } = await giveRecording({ recordingId: recording.id, studentUid: uid, openUntil: date, expect });
+      // What the sheet now holds is what it just saved: its next action is
+      // judged against that, not against what it showed when it opened.
+      setExpect(current);
+      setTyped(false);
+      setDone(giveResult(outcome, name, date, today, toldToday));
     });
   const takeBack = () =>
     act('take', async () => {
+      // Offered only while the sheet holds a record (below), so it always has one.
+      if (!expect) return;
       await takeBackRecording({ recordingId: recording.id, studentUid: uid, expect });
       onClose();
     });
 
   return (
-    <Sheet visible title={`Given: ${name}`} onClose={onClose} closeLabel="Cancel">
+    // Close once something is saved: Cancel over "Now open until …" read as
+    // undoing it.
+    <Sheet visible title={`Given: ${name}`} onClose={onClose} closeLabel={done ? 'Close' : 'Cancel'}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {done ? <Notice tone="success">{done}</Notice> : null}
       {/* Taken back by a colleague while open: the sentence above says so,
           and there is nothing left here to change. */}
       {expect ? (
         // Take back confirms in place of everything else on the sheet: it is
-        // silent, and stops the audio at once.
+        // silent, and stops the audio if they are listening.
         <ConfirmDanger
           testID={`given-takeback-${name}`}
           confirmTestID={`given-takeback-confirm-${name}`}
           label="Take back"
           confirmLabel="Take back"
-          warning={`Take back from ${name}? If they are listening, it stops.`}
+          warning={
+            stillRequired
+              ? `Take back from ${name}? It stays open to them until ${unbreakableDate(stillRequired)}, while it is required.`
+              : `Take back from ${name}? If they are listening, it stops.`
+          }
           busy={active === 'take'}
           onConfirm={takeBack}
         >
-          <DateField label="Open until" value={date} onChange={setDate} />
+          <DateField
+            label="Open until"
+            value={date}
+            onChange={(d) => {
+              setDate(d);
+              setTyped(true);
+            }}
+          />
           {refusal ? (
             <Text style={styles.hint}>{refusal}</Text>
           ) : (
