@@ -46,6 +46,7 @@ import {
   PRIVACY_URL,
   RULES_VERSION,
   SIGN_UP_REFUSED,
+  addDays,
   helpVideoKey,
   pushPaths,
   readXlsx,
@@ -1843,6 +1844,291 @@ check(
 );
 await shot(mgr, '16b-recording-ledger-manager');
 
+// ------------------------------------------------------- giving a recording --
+//
+// A RECORDING GIVEN TO ONE STUDENT (docs/plans/GIVE-A-RECORDING.md): a
+// session both students ATTENDED, so its recording is required of nobody;
+// the manager gives it to Fatima, she plays it under Optional with nothing to
+// mark, her listening reaches Progress, a colleague moves the date, a sheet a
+// colleague changed underneath is refused and then saved on purpose, and a
+// take back stops the audio while she is listening.
+console.log('\nGiving a recording');
+const todayG = todayInZone(INSTITUTE_TIMEZONE);
+const seesText = (page, text) => sawText(page, text).then(() => true, () => false);
+await openHikam(admin);
+await tap(admin, 'nav-sessions');
+await tap(admin, 'sessions-add');
+await admin.getByTestId('session-title').fill('Session G');
+await tap(admin, 'session-create');
+await admin.getByTestId('session-create').waitFor({ state: 'detached', timeout: 15000 });
+await tap(admin, 'session-open-Session G');
+// Everyone starts Present: submitted as it stands, nobody is excused.
+await admin.getByTestId('att-submit').waitFor({ timeout: 15000 });
+await tap(admin, 'att-submit');
+await seesText(admin, 'Attendance submitted for');
+const gChooser = admin.waitForEvent('filechooser');
+await tap(admin, 'recording-upload');
+await (await gChooser).setFiles(AUDIO_FIXTURE);
+await tap(admin, 'upload-start');
+await admin.getByTestId('recording-play').waitFor({ timeout: 90000 });
+await tap(admin, 'upload-done');
+await tap(admin, 'recording-published');
+const gRecDoc = await until(
+  () => readCollection('recordings'),
+  (docs) => docs.some((d) => d.fields.title?.stringValue === 'Session G' && d.fields.status?.stringValue === 'published'),
+);
+const gRecId = gRecDoc.find((d) => d.fields.title?.stringValue === 'Session G')?.name.split('/').pop();
+const giveeUid = (await readCollection('students')).find((d) => d.fields.email?.stringValue === 'fatima@example.com')?.name.split('/').pop();
+await admin.waitForTimeout(2000);
+check(
+  'a session everyone attended grants its recording to nobody',
+  (await activeAssignments()).every((a) => a.fields.recordingId?.stringValue !== gRecId),
+);
+
+// The manager gives it, from its Progress page. Slowed, so a second tap lands
+// while the first is in flight; counted, so a second give would show.
+await goHome(mgr, 0);
+await tap(mgr, 'tab-courses');
+await tap(mgr, 'course-open-Hikam Foundations');
+await tap(mgr, 'nav-sessions');
+await tap(mgr, 'session-open-Session G');
+await tap(mgr, 'recording-ledger');
+await seesText(mgr, 'Not given to anyone.');
+const gCountsBefore = await mgr.getByTestId('ledger-counts').filter({ visible: true }).first().innerText().catch(() => '');
+let givePosts = 0;
+mgr.on('request', (r) => {
+  if (r.method() === 'POST' && r.url().endsWith('/giveRecording')) givePosts += 1;
+});
+await mgr.route('**/giveRecording', async (route) => {
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await route.continue().catch(() => undefined);
+});
+await tap(mgr, 'given-add');
+await tap(mgr, 'give-pick-Fatima Ahmed');
+const weekOut = addDays(todayG, 7);
+// Two clicks in one frame: the gate is `useOneAtATime`, not the busy state a
+// render later.
+await mgr.getByTestId('give-submit').filter({ visible: true }).first().evaluate((el) => {
+  el.click();
+  el.click();
+});
+check(
+  'giving says what happened, never that a message arrived',
+  await seesText(mgr, `Given to Fatima Ahmed until ${weekOut}. It is on their To do under Optional, with a message if their notifications are on.`),
+);
+await mgr.waitForTimeout(2000);
+check('a double tap gives once', givePosts === 1, `${givePosts} call(s)`);
+await mgr.unroute('**/giveRecording');
+const gGivenDocs = await until(() => readCollection('givenRecordings'), (docs) => docs.length > 0);
+const gGv = gGivenDocs[0]?.fields ?? {};
+check(
+  'the record names the student, the recording, its class and the date',
+  gGivenDocs.length === 1 &&
+    gGv.studentUid?.stringValue === giveeUid &&
+    gGv.recordingId?.stringValue === gRecId &&
+    gGv.openUntil?.stringValue === weekOut &&
+    !!gGv.courseId?.stringValue,
+);
+await closeSheet(mgr);
+check(
+  'the row says until when it is open',
+  /Open until/.test(await mgr.getByTestId('given-row-Fatima Ahmed').filter({ visible: true }).first().innerText()),
+);
+check(
+  'giving changes no attendance and requires nothing',
+  (await activeAssignments()).every((a) => a.fields.recordingId?.stringValue !== gRecId),
+);
+
+// The student: Optional, never Next up, nothing to mark, and it plays. The
+// page is loaded afresh with two watchers: every media element the player
+// makes, and any Mark complete ever put in the page.
+await student.context().addInitScript(() => {
+  window.__media = [];
+  window.__marks = 0;
+  const make = document.createElement.bind(document);
+  document.createElement = function (tag, options) {
+    const el = make(tag, options);
+    if (/^(audio|video)$/i.test(String(tag))) window.__media.push(el);
+    return el;
+  };
+  new MutationObserver((list) => {
+    for (const m of list) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType === 1 && (n.matches('[data-testid="mark-complete"]') || n.querySelector('[data-testid="mark-complete"]'))) window.__marks += 1;
+      }
+      if (m.type === 'attributes' && m.target.getAttribute('data-testid') === 'mark-complete') window.__marks += 1;
+    }
+  }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-testid'] });
+});
+await goHome(student, 0);
+await student.getByTestId('optional-Session G').filter({ visible: true }).first().waitFor({ timeout: 25000 });
+check(
+  'a given recording is on To do under Optional, until its date',
+  (await student.getByTestId('group-optional').filter({ visible: true }).first().innerText()).includes(`Open until ${weekOut}`.replace(/-/g, '‑')) ||
+    /Open until/.test(await student.getByTestId('group-optional').filter({ visible: true }).first().innerText()),
+);
+check('and never as Next up', !(await shows(student, 'next-up-Session G')));
+await tap(student, 'optional-Session G');
+await student.getByTestId('player-play').waitFor({ timeout: 25000 });
+check(
+  'the player says it is optional, with nothing to mark',
+  await seesText(student, 'This one is optional, so there is nothing to mark.'),
+);
+await tap(student, 'player-play');
+const gPlaying = await until(
+  () => student.evaluate(() => window.__media.some((m) => !m.paused && m.currentTime > 0)),
+  Boolean,
+  30000,
+);
+check('a student given a recording plays it', gPlaying);
+const gHeard = await until(
+  () => readCollection('listeningProgress'),
+  (docs) => docs.some((d) => d.name.endsWith(`/${giveeUid}_${gRecId}`)),
+  45000,
+);
+check('their listening is saved, under the recording’s class', gHeard.some((d) => d.name.endsWith(`/${giveeUid}_${gRecId}`)));
+check('Mark complete never appeared for a given recording', (await student.evaluate(() => window.__marks)) === 0);
+
+// Progress: their listening shows on their own row, with the reason, and the
+// counts are as they were.
+await mgr.reload();
+await mgr.getByTestId('given-row-Fatima Ahmed').filter({ visible: true }).first().waitFor({ timeout: 20000 });
+await tap(mgr, 'ledger-present');
+check('their Present row says why they have listening', await seesText(mgr, 'given until'));
+check(
+  'giving changes none of the counts',
+  (await mgr.getByTestId('ledger-counts').filter({ visible: true }).first().innerText().catch(() => '')) === gCountsBefore,
+);
+
+// A colleague moves the date: any teacher of the class, whoever gave it.
+await openHikam(admin);
+await tap(admin, 'nav-sessions');
+await tap(admin, 'session-open-Session G');
+await tap(admin, 'recording-ledger');
+const firstGivenAt = (await readCollection('givenRecordings'))[0]?.fields.givenAt?.integerValue;
+await tap(admin, 'given-edit-Fatima Ahmed');
+const tenOut = addDays(todayG, 10);
+await admin.getByLabel('Open until').filter({ visible: true }).first().fill(tenOut);
+await tap(admin, 'given-save-Fatima Ahmed');
+check('a colleague moves the date', await seesText(admin, `Now open until ${tenOut}.`));
+const gMoved = (await until(() => readCollection('givenRecordings'), (docs) => docs[0]?.fields.openUntil?.stringValue === tenOut))[0]?.fields ?? {};
+check('and the opening it moved stays the one it was', gMoved.givenAt?.integerValue === firstGivenAt);
+await admin.getByTestId('sheet-panel').filter({ visible: true }).getByRole('button', { name: 'Cancel' }).click();
+
+// A sheet a colleague changed underneath: opened first, then the date moved
+// out of band and shown on the row, then saved. Refused with what is there
+// now, and saving again applies the date typed.
+await tap(admin, 'given-edit-Fatima Ahmed');
+const twelveOut = addDays(todayG, 12);
+const fourteenOut = addDays(todayG, 14);
+await patchField('givenRecordings', `${giveeUid}_${gRecId}`, 'openUntil', twelveOut);
+await until(
+  () => admin.getByTestId('given-row-Fatima Ahmed').first().innerText().catch(() => ''),
+  (text) => text.includes(twelveOut),
+);
+await admin.getByLabel('Open until').filter({ visible: true }).first().fill(fourteenOut);
+await tap(admin, 'given-save-Fatima Ahmed');
+check(
+  'a save from a sheet a colleague changed is refused, saying what they set',
+  await seesText(admin, `Someone else changed the date to ${twelveOut} just now. Save again to use yours.`),
+);
+check('and nothing was overwritten', (await readCollection('givenRecordings'))[0]?.fields.openUntil?.stringValue === twelveOut);
+await tap(admin, 'given-save-Fatima Ahmed');
+check('saving again applies the date typed, on purpose', await seesText(admin, `Now open until ${fourteenOut}.`));
+await admin.getByTestId('sheet-panel').filter({ visible: true }).getByRole('button', { name: 'Cancel' }).click();
+
+// CLOSING AT ONCE ASKS FIRST, and only then. Unpublish while Fatima can play
+// it (given, and listening): asked, with the count; Cancel leaves it as it
+// was. A register correction that takes Excused from Bilal, who can play it
+// now: asked, naming him and nobody else (Fatima keeps it given); Cancel
+// sends nothing.
+await openHikam(admin);
+await tap(admin, 'nav-sessions');
+await tap(admin, 'session-open-Session G');
+await tap(admin, 'recording-actions');
+await tap(admin, 'recording-unpublished');
+check(
+  'Unpublish asks first while someone can play it, and says how many',
+  await seesText(admin, 'Unpublish Session G? It closes now for 1 student who can play it.'),
+);
+await admin.getByTestId('recording-close-confirm').filter({ visible: true }).first().waitFor({ timeout: 5000 });
+await admin.getByRole('button', { name: 'Cancel' }).filter({ visible: true }).first().click();
+await admin.waitForTimeout(1500);
+check(
+  'Cancel leaves it published, and her playing',
+  (await readCollection('recordings')).some((d) => d.name.endsWith(`/${gRecId}`) && d.fields.status?.stringValue === 'published') &&
+    (await student.evaluate(() => window.__media.some((m) => !m.paused))),
+);
+const attendanceOf = async (name) => {
+  const uid = (await readCollection('students')).find((d) => d.fields.displayName?.stringValue === name)?.name.split('/').pop();
+  const sess = (await readCollection('sessions')).find((d) => d.fields.title?.stringValue === 'Session G');
+  return sess?.fields.attendance?.mapValue?.fields?.[uid]?.stringValue;
+};
+await tap(admin, 'att-Bilal Khan-excused');
+await tap(admin, 'att-submit');
+await until(() => attendanceOf('Bilal Khan'), (mark) => mark === 'excused');
+check('a correction that closes nothing asks nothing', !(await shows(admin, 'att-submit-confirm')));
+await tap(admin, 'att-Bilal Khan-present');
+await tap(admin, 'att-submit');
+check(
+  'a correction that takes Excused from someone who can play it asks, naming only them',
+  await seesText(admin, 'Submit? Session G closes now for Bilal Khan.'),
+);
+await admin.getByRole('button', { name: 'Cancel' }).filter({ visible: true }).first().click();
+await admin.waitForTimeout(1500);
+check('Cancel sends nothing', (await attendanceOf('Bilal Khan')) === 'excused');
+await tap(admin, 'att-submit');
+await tap(admin, 'att-submit-confirm');
+check('and confirming submits it', (await until(() => attendanceOf('Bilal Khan'), (mark) => mark === 'present')) === 'present');
+await tap(admin, 'recording-ledger');
+
+// Take back while she listens: the audio stops at once.
+check(
+  'before the take back, the recording is playing (a control for the check after it)',
+  await student.evaluate(() => window.__media.some((m) => !m.paused)),
+);
+await tap(admin, 'given-edit-Fatima Ahmed');
+await tap(admin, 'given-takeback-Fatima Ahmed');
+check('take back asks first', await seesText(admin, 'Take back from Fatima Ahmed? It stops at once if they are listening.'));
+await tap(admin, 'given-takeback-confirm-Fatima Ahmed');
+const gStopped = await until(
+  () =>
+    student.evaluate(() =>
+      window.__media.every((m) => m.paused && !m.getAttribute('src') && m.networkState === 0),
+    ),
+  Boolean,
+  15000,
+);
+check('taking it back stops the audio at once', gStopped);
+check('and the record is gone', (await until(() => readCollection('givenRecordings'), (docs) => docs.length === 0)).length === 0);
+await goHome(student, 0);
+await onToDo(student);
+await student.waitForTimeout(2000);
+check('and it is off their To do', !(await shows(student, 'optional-Session G')));
+await shot(mgr, '16c-given-to');
+// Leave the class as the rest of the run counts it: Session G gone again,
+// through the app, as an admin removes a session and its recording. The
+// manager leaves its Progress page first: a manager's read of a recording
+// goes through its class, which a deleted recording no longer names, so a
+// listener left on it would be refused.
+await goHome(mgr, 0);
+await openHikam(admin);
+await tap(admin, 'nav-sessions');
+await tap(admin, 'session-open-Session G');
+await tap(admin, 'recording-actions');
+await tap(admin, 'recording-unpublished');
+await until(() => readCollection('recordings'), (docs) => docs.some((d) => d.name.endsWith(`/${gRecId}`) && d.fields.status?.stringValue === 'unpublished'));
+check('with nobody able to play it, Unpublish runs without asking', !(await shows(admin, 'recording-close-confirm')));
+await tap(admin, 'recording-actions');
+await tap(admin, 'recording-delete');
+await tap(admin, 'recording-delete-confirm');
+await until(() => readCollection('recordings'), (docs) => !docs.some((d) => d.name.endsWith(`/${gRecId}`)), 30000);
+await tap(admin, 'session-edit');
+await tap(admin, 'session-delete');
+await tap(admin, 'session-delete-confirm');
+const gGone = await until(() => readCollection('sessions'), (docs) => !docs.some((d) => d.fields.title?.stringValue === 'Session G'), 30000);
+check('Session G and its recording are removed again', !gGone.some((d) => d.fields.title?.stringValue === 'Session G'));
+
 // ------------------------------------------------------- attendance report --
 console.log('\nAttendance report');
 await openHikam(admin);
@@ -3503,6 +3789,45 @@ check(
   (await student.getByRole('button', { name: PLAYABLE }).count()) === 0,
 );
 await shot(student, '25-missed');
+
+// MISSED, THEN GIVEN: a teacher gives the recording to the excused student who
+// missed it. It is open again under Optional, the Missed row stands beside it,
+// the player says listening now changes nothing, and Mark complete never
+// appears. Then taken back, so the term's archive below finds nobody able to
+// play it, as it would have.
+await openHikam(admin);
+await tap(admin, 'nav-sessions');
+await tap(admin, 'session-open-Session 1');
+await tap(admin, 'recording-ledger');
+await tap(admin, 'given-add');
+await tap(admin, 'give-pick-Fatima Ahmed');
+await tap(admin, 'give-submit');
+check('an excused student who missed it can be given it', await seesText(admin, 'Given to Fatima Ahmed until'));
+await closeSheet(admin);
+await goHome(student, 0);
+await student.getByTestId('optional-Session 1').filter({ visible: true }).first().waitFor({ timeout: 25000 });
+const missedAndGiven = await until(
+  () => bodyText(student),
+  (text) => /missed/i.test(text) && /Closed 2020-01-01/.test(text) && /Open again until/.test(text),
+);
+check(
+  'Missed stays Missed, and the recording is open again under Optional',
+  /missed/i.test(missedAndGiven) && /Closed 2020-01-01/.test(missedAndGiven) && /Open again until/.test(missedAndGiven),
+  missedAndGiven.replace(/\n+/g, ' | ').slice(0, 240),
+);
+await tap(student, 'optional-Session 1');
+await student.getByTestId('player-play').waitFor({ timeout: 25000 });
+check(
+  'the player says the listen-by date has gone and the record stands',
+  (await until(() => bodyText(student), (text) => /Its listen-by date was 2020-01-01\. Listening now does not change your record\./.test(text)))
+    .includes('Its listen-by date was 2020-01-01. Listening now does not change your record.'),
+);
+await student.waitForTimeout(3000);
+check('Mark complete never appeared for a recording missed and then given', (await student.evaluate(() => window.__marks)) === 0);
+await tap(admin, 'given-edit-Fatima Ahmed');
+await tap(admin, 'given-takeback-Fatima Ahmed');
+await tap(admin, 'given-takeback-confirm-Fatima Ahmed');
+check('and it is taken back', (await until(() => readCollection('givenRecordings'), (docs) => docs.length === 0)).length === 0);
 
 // ------------------------------------------ the record survives the archive --
 console.log('\nThe archive keeps the record');
