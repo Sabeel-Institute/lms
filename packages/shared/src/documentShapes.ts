@@ -11,8 +11,8 @@ import type {
 import type { BookmarkDoc, ListeningProgressDoc, RecordingDoc } from './recordings';
 import { canPublish, hasLedger, isEmptyDraft, listenedShare, publishBlockers } from './recordings';
 import { deriveDurationSec, mediaParts, mediaSummary, playVerb, startingItem } from './media';
-import type { AssignmentDoc, CompletionDoc } from './assignments';
-import { hasRecordingAccess } from './assignments';
+import type { AssignmentDoc, CompletionDoc, GivenRecordingDoc } from './assignments';
+import { hasRecordingAccess, isCalendarDate, listenWindow } from './assignments';
 import type {
   CourseworkDoc,
   DraftDoc,
@@ -74,6 +74,7 @@ export interface StoredDocs {
   submissionEvents: SubmissionEventDoc;
   courseworkTallies: CourseworkTallyDoc;
   assignments: AssignmentDoc;
+  givenRecordings: GivenRecordingDoc;
   listeningProgress: ListeningProgressDoc;
   bookmarks: BookmarkDoc;
   completions: CompletionDoc;
@@ -302,6 +303,14 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     assignedAt: 'required',
     assignedBy: 'required',
   },
+  givenRecordings: {
+    studentUid: 'required',
+    recordingId: 'required',
+    courseId: 'required',
+    openUntil: 'required',
+    givenAt: 'required',
+    givenBy: 'required',
+  },
   listeningProgress: {
     studentUid: 'required',
     recordingId: 'required',
@@ -418,6 +427,14 @@ export const SCREEN_CHECKS: { [C in StoredCollection]?: ((doc: StoredDocs[C], to
   courses: [(c) => checkStretches(c.recordingsClosed, !canPlayFromCourse(c))],
   enrollments: [(e) => checkEnrolmentStretches(e)],
   assignments: [(a, today) => hasRecordingAccess(a, today)],
+  givenRecordings: [
+    (g) => {
+      // A date that does not exist compares as a string and stays "open" for
+      // years; the callable refuses one, so finding one means a bad write.
+      if (!isCalendarDate(g.openUntil)) throw new Error(`openUntil ${g.openUntil} is not a calendar date`);
+    },
+    (g, today) => listenWindow(null, g, true, today),
+  ],
   listeningProgress: [
     (p) => listenedShare(p.listenedMs, null),
     (p) => clientTime(p.updatedAt),

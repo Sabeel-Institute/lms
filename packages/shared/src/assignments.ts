@@ -359,3 +359,247 @@ export function dueBucket(
   if (isOverdue(item.dueDate, today)) return 'missed';
   return daysUntilDue(item.dueDate, today) <= DUE_SOON_DAYS ? 'dueSoon' : 'upcoming';
 }
+
+// ------------------------------------------------------ given recordings --
+
+/**
+ * One recording staff opened to one student until a date: optional, and
+ * counted nowhere.
+ *
+ * The other way a student can play a recording, beside being excused, and
+ * deliberately the lesser: it requires nothing, so there is no Mark complete,
+ * no Missed and no reminder, and the ledger, the workbooks and the stats never
+ * read it. Being excused stays the only thing that makes listening required.
+ *
+ * NO `active` FLAG. Whether it plays is worked out when it is read, from its
+ * date, the student's enrolment, the recording's status and the class's
+ * setting, so nothing has to be kept in step with any of them and the
+ * attendance reconcile never touches this collection. Leaving the class,
+ * unpublishing and archiving close it; undoing them opens it again while its
+ * date is good.
+ *
+ * Document id is `${studentUid}_${recordingId}`: at most one per student per
+ * recording. Written only by `giveRecording` and `takeBackRecording`; a
+ * student reads their own, staff of the class read the class's.
+ */
+export interface GivenRecordingDoc {
+  studentUid: string;
+  recordingId: string;
+  /** The recording's class, which never changes: rules and staff queries scope on it. */
+  courseId: string;
+  /** `YYYY-MM-DD` in the institute timezone: the last day it plays. */
+  openUntil: string;
+  /**
+   * When it was last opened: a give, or a new date on one that had ended.
+   * Moving the date of an open one keeps it, which is how the message trigger
+   * tells an opening (one message) from a move (none).
+   */
+  givenAt: number;
+  /** Who made that opening. */
+  givenBy: string;
+}
+
+export function givenRecordingId(studentUid: string, recordingId: string): string {
+  return `${studentUid}_${recordingId}`;
+}
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A calendar date that exists. The shape alone let `2026-99-99` through: a
+ * string compare then kept it "open" until 2027, the day count came out `NaN`
+ * (bucketed as upcoming), and the last-day sweep never matched it. Round-trip
+ * through the UTC calendar and require the same text back.
+ */
+export function isCalendarDate(value: string): boolean {
+  if (!DATE_ONLY.test(value)) return false;
+  const ms = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === value;
+}
+
+/** The facts about a session that decide who is required to listen to its recording. */
+export interface RegisterFacts {
+  attendanceSubmittedAt: number | null;
+  attendance: Record<string, 'present' | 'absent' | 'excused'>;
+  dueDate: string;
+}
+
+/**
+ * Until when is this student REQUIRED to listen, as of `today`? Null when they
+ * are not.
+ *
+ * The reconcile's own test, read from the SESSION as well as the grant,
+ * because the grant follows a submitted register by a few seconds: in that
+ * gap the session already says excused and the grant does not exist yet. A
+ * check of the grant alone let a teacher give a recording to a student the
+ * register had just made required, so the student was told "it is not
+ * required" moments before being told it was.
+ */
+export function requiredUntil(
+  studentUid: string,
+  facts: {
+    session: RegisterFacts;
+    grant: Pick<AssignmentDoc, 'active' | 'dueDate'> | null;
+    enrolled: boolean;
+    recordingStatus: string;
+    today: string;
+  },
+): string | null {
+  const { session, grant, enrolled, recordingStatus, today } = facts;
+  if (grant?.active && !isOverdue(grant.dueDate, today)) return grant.dueDate;
+  const excused =
+    session.attendanceSubmittedAt !== null &&
+    session.attendance[studentUid] === 'excused' &&
+    enrolled &&
+    recordingStatus === 'published' &&
+    !isOverdue(session.dueDate, today);
+  return excused ? session.dueDate : null;
+}
+
+/** What a give call does to the record it finds. */
+export type GiveAction = 'give' | 'move' | 'reopen';
+
+export function giveAction(given: Pick<GivenRecordingDoc, 'openUntil'> | null, today: string): GiveAction {
+  if (!given) return 'give';
+  return isOverdue(given.openUntil, today) ? 'reopen' : 'move';
+}
+
+/**
+ * Why this recording cannot be given (or its date changed) as asked, in the
+ * sentence the person is shown; null when it can.
+ *
+ * ONE FUNCTION FOR THE SHEET AND THE SERVER. The sheet hides Save and shows
+ * this sentence in its place; the callable throws the same sentence. Two
+ * spellings of these conditions would let the sheet offer a Save the server
+ * refuses, or hide one it would take.
+ *
+ * `fromPlus` is a call made from the give list (no record expected), as
+ * against a row's own sheet. Moving an open one is allowed while the student
+ * is required (given first, then excused): only an opening is refused then.
+ */
+export function giveRefusal(input: {
+  studentUid: string;
+  openUntil: string | null;
+  today: string;
+  session: RegisterFacts;
+  recordingStatus: string;
+  cls: { effectiveActive: boolean; archivedAccess: boolean };
+  enrolled: boolean;
+  grant: Pick<AssignmentDoc, 'active' | 'dueDate'> | null;
+  given: Pick<GivenRecordingDoc, 'openUntil'> | null;
+  fromPlus: boolean;
+}): string | null {
+  const { studentUid, openUntil, today, session, recordingStatus, cls, enrolled, grant, given, fromPlus } = input;
+  if (session.attendanceSubmittedAt === null) return 'Take attendance for this session first.';
+  if (recordingStatus !== 'published') return 'Only a published recording can be given.';
+  if (!canPlayFromCourse(cls)) return 'This class is archived and its recordings are closed.';
+  if (!enrolled) return 'That student is not in this class.';
+  if (fromPlus && given) return 'It has already been given to them. Change it from their row.';
+  if (!openUntil || !isCalendarDate(openUntil)) return 'Choose the last day it stays open.';
+  if (isOverdue(openUntil, today)) return 'That date has passed. Choose today or a later day.';
+  if (giveAction(given, today) !== 'move') {
+    const until = requiredUntil(studentUid, { session, grant, enrolled, recordingStatus, today });
+    if (until) return `It is required for them until ${until}. It can be given after that.`;
+  }
+  return null;
+}
+
+/** What a caller saw of a row when it acted: nothing (the give list), or the record as shown. */
+export type GivenExpectation = Pick<GivenRecordingDoc, 'givenAt' | 'openUntil'> | null;
+
+/**
+ * Has the record changed since the caller's sheet opened? The sentence that
+ * says what changed, or null when it is as they saw it.
+ *
+ * Any teacher of the class may change or take back a given recording,
+ * whoever gave it; this is only for two people acting on the same row at
+ * once, so the second never silently undoes the first. `expect` is frozen
+ * when the sheet opens: read from the live row at the moment of saving, it
+ * would follow a colleague's change within a second and overwrite it. The
+ * refusal carries the current record, which becomes what the sheet saw, so
+ * acting again does what was typed, on purpose.
+ *
+ * Not stale, so never refused: from the give list (`expect` null) a record
+ * that exists is already given, which `giveRefusal` says; a take back that
+ * finds nothing is simply done. A save of the date already stored is
+ * `unchanged`, which the callable decides before asking this.
+ */
+export function givenChanged(
+  expect: GivenExpectation,
+  current: Pick<GivenRecordingDoc, 'givenAt' | 'openUntil'> | null,
+  act: 'save' | 'takeBack',
+): string | null {
+  if (expect === null) return null;
+  if (!current) {
+    return act === 'takeBack' ? null : 'Someone else took it back just now. Give it again with the plus if they still need it.';
+  }
+  if (current.givenAt === expect.givenAt && current.openUntil === expect.openUntil) return null;
+  const again = act === 'takeBack' ? 'Take back again to take it back anyway.' : 'Save again to use yours.';
+  return `Someone else changed the date to ${current.openUntil} just now. ${again}`;
+}
+
+/**
+ * Whether a student may play a recording right now, and on what terms: the
+ * one answer the player, the docked bar, To do and `getPlaybackUrl` all read.
+ *
+ *  - `open`, required: an excused grant whose date has not passed. `then` is
+ *    a given date running later, when it stays open but optional.
+ *  - `open`, optional: a given recording whose date has not passed, for an
+ *    enrolled student. `listenByWas` is the excused date already passed, for
+ *    a student who missed it ("listening now does not change your record").
+ *  - `ended`: they held something and its date has passed. `lastDay` is the
+ *    LATER of the dates held, so the midnight play-on lets the file finish on
+ *    the day that actually closes it; `record` says the excused record stands.
+ *  - `none`: nothing to play under.
+ *
+ * Enrolment is read only for the given arm: an excused grant is deactivated
+ * on leaving the class, so it already carries that answer. The recording's
+ * status and the class's setting are not here: the rules and `canPlayNow` own
+ * those.
+ */
+export type ListenWindow =
+  | { state: 'open'; required: true; until: string; then: string | null }
+  | { state: 'open'; required: false; until: string; listenByWas: string | null }
+  | { state: 'ended'; lastDay: string; record: boolean }
+  | { state: 'none' };
+
+export function listenWindow(
+  grant: Pick<AssignmentDoc, 'active' | 'dueDate'> | null,
+  given: Pick<GivenRecordingDoc, 'openUntil'> | null,
+  enrolled: boolean,
+  today: string,
+): ListenWindow {
+  const held = grant?.active ? grant : null;
+  const own = given && enrolled ? given : null;
+  if (held && !isOverdue(held.dueDate, today)) {
+    return { state: 'open', required: true, until: held.dueDate, then: own && own.openUntil > held.dueDate ? own.openUntil : null };
+  }
+  if (own && !isOverdue(own.openUntil, today)) {
+    return { state: 'open', required: false, until: own.openUntil, listenByWas: held ? held.dueDate : null };
+  }
+  if (held || own) {
+    const lastDay = [held?.dueDate ?? '', own?.openUntil ?? ''].sort().at(-1) as string;
+    return { state: 'ended', lastDay, record: held !== null };
+  }
+  return { state: 'none' };
+}
+
+/** The last day this window plays: the day its midnight closes it. Null when it never opened. */
+export function windowLastDay(window: ListenWindow): string | null {
+  switch (window.state) {
+    case 'open':
+      return window.required ? (window.then ?? window.until) : window.until;
+    case 'ended':
+      return window.lastDay;
+    case 'none':
+      return null;
+  }
+}
+
+/**
+ * Is Mark complete offered? Only while listening is required and open: a
+ * given recording requires nothing, and a missed one stays missed.
+ */
+export function completionShown(window: ListenWindow): boolean {
+  return window.state === 'open' && window.required;
+}

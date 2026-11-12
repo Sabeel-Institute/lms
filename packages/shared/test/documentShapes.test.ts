@@ -216,6 +216,14 @@ const SAMPLES: { [C in StoredCollection]: Required<StoredDocs[C]> } = {
     assignedAt: 1,
     assignedBy: 's1',
   },
+  givenRecordings: {
+    studentUid: 'u1',
+    recordingId: 'r1',
+    courseId: 'k1',
+    openUntil: '2026-10-17',
+    givenAt: 1,
+    givenBy: 's1',
+  },
   listeningProgress: {
     studentUid: 'u1',
     recordingId: 'r1',

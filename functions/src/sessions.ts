@@ -3,6 +3,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   COLLECTIONS,
   INSTITUTE_TIMEZONE,
+  isCalendarDate,
   todayInZone,
   type AttendanceStatus,
   type CourseDoc,
@@ -15,19 +16,6 @@ import { applyDeleteRecording } from './recordings';
 import { MEDIA_WRITE_SECRETS } from './mediaStore';
 import { reconcileAttendanceRecords } from './attendanceMirror';
 
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * A calendar date that exists. The shape alone let `2026-99-99` through: a
- * string compare then kept it "open" until 2027, the day count came out `NaN`
- * (bucketed as upcoming), and the last-day sweep never matched it. Round-trip
- * through the UTC calendar and require the same text back.
- */
-export function isCalendarDate(value: string): boolean {
-  if (!DATE_ONLY.test(value)) return false;
-  const ms = Date.parse(`${value}T00:00:00Z`);
-  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === value;
-}
 const ATTENDANCE: AttendanceStatus[] = ['present', 'absent', 'excused'];
 
 /**

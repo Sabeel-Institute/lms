@@ -9,15 +9,20 @@
  */
 
 /**
- * The messages, and deliberately no more: six switches and seven messages.
+ * The messages, and deliberately no more: six switches and ten messages.
  *
- *  - `recordingReady` — a student was excused and the recording is published.
- *    Under the excused-only policy this is also "you now have access", so
- *    without it a student has no way to learn a recording appeared.
+ *  - `recordingReady` — a recording was opened to a student: they were
+ *    excused and it is published, or staff gave it to them. Without it a
+ *    student has no way to learn a recording appeared. Three wordings: the
+ *    excused one, the given one (open until a date, not required), and the
+ *    excused one for a student already holding it given, which says it is
+ *    now required.
  *  - `lastDay` — the morning of the due date, if not yet complete. There is no
  *    day-after reminder: once the deadline passes access has closed, so the
  *    message could only say "you missed it", which is a scolding with no action
- *    attached.
+ *    attached. A student whose given date runs later is told it stays open
+ *    after today. A given recording has no reminder of its own: it requires
+ *    nothing.
  *  - `assignmentPosted` — a teacher posted an assignment the student has, or
  *    moved its due date; the two share a switch because they are the same
  *    question, "what is due, and when".
@@ -190,8 +195,8 @@ export const NOTIFICATION_LABEL: Record<NotificationKind, string> = {
 };
 
 export const NOTIFICATION_DESCRIPTION: Record<NotificationKind, string> = {
-  recordingReady: 'When a class you were excused from has a recording for you.',
-  lastDay: 'On the morning of the day a recording closes, if you have not finished it.',
+  recordingReady: 'When a recording is opened to you, because you were excused or your teacher gave it to you.',
+  lastDay: "On the morning of a recording's listen-by date, if you have not finished it.",
   assignmentPosted: 'When a teacher posts an assignment for you, or moves its due date.',
   handInLastDay: 'On the morning an assignment is due, if you have not handed it in.',
   workReturned: 'When your teacher returns your work, asks for another try, or changes a returned grade.',
@@ -216,10 +221,44 @@ export function recordingReadyMessage(courseName: string, title: string, dueDate
   };
 }
 
+/**
+ * Excused, for a student who already holds the recording given: it was open
+ * and optional, and is now required, so that is the news.
+ */
+export function recordingRequiredMessage(courseName: string, title: string, dueDate: string, recordingId: string): PushMessage {
+  return {
+    title: `${courseName}: a recording is ready`,
+    body: `${title} — you were excused, so it is now required by ${dueDate}.`,
+    path: pushPaths.recording(recordingId),
+  };
+}
+
+/** Staff gave the student this recording: open until a date, and required by nothing. */
+export function recordingGivenMessage(courseName: string, title: string, openUntil: string, recordingId: string): PushMessage {
+  return {
+    title: `${courseName}: a recording is ready`,
+    body: `${title} is open to you until ${openUntil}. It is not required.`,
+    path: pushPaths.recording(recordingId),
+  };
+}
+
 export function lastDayMessage(courseName: string, title: string, dueDate: string, recordingId: string): PushMessage {
   return {
     title: `${courseName}: a recording closes today`,
     body: `${title} closes at the end of ${dueDate}.`,
+    path: pushPaths.recording(recordingId),
+  };
+}
+
+/**
+ * The last day of a required recording that stays open after it, given until
+ * a later date. "Closes today" would be untrue; what ends today is the
+ * requirement.
+ */
+export function lastRequiredDayMessage(courseName: string, title: string, openUntil: string, recordingId: string): PushMessage {
+  return {
+    title: `${courseName}: last day for a required recording`,
+    body: `${title} is required by the end of today. It stays open to you until ${openUntil}.`,
     path: pushPaths.recording(recordingId),
   };
 }

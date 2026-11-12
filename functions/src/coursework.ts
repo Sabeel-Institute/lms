@@ -31,6 +31,7 @@ import {
   type SubmissionDoc,
   type SubmissionEventDoc,
   type SubmissionState,
+  isCalendarDate,
 } from '@sabeel/shared';
 
 const SUBMISSION_STATES: SubmissionState[] = ['open', 'handedIn', 'returned'];
@@ -38,7 +39,6 @@ import { auditedCall } from './audited';
 import { reportedCall } from './reported';
 import { PUSH_SECRETS } from './messaging';
 import { isAdminCaller, requireCourseScope, requireStudent } from './guards';
-import { isCalendarDate } from './sessions';
 import { MEDIA_WRITE_SECRETS, deleteObject } from './mediaStore';
 import { notifyDueDateMoved, notifyPosted, notifyReturned } from './notifyCoursework';
 import type { AttachmentUploadDoc } from './attachments';
