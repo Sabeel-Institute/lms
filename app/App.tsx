@@ -19,7 +19,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { APP_NAME, APP_SHORT_NAME, hasAcceptedRules, type Role } from '@sabeel/shared';
 import { useMinVersion } from './src/minVersion';
 import { isReady, useSession } from './src/session';
-import { liveDueDate, useMyAssignmentState } from './src/completion';
+import { useMyListenReads } from './src/completion';
 import { SignInScreen } from './src/screens/SignInScreen';
 import { DisabledScreen, PendingScreen, ProvisioningScreen, RulesScreen, UpdateScreen } from './src/screens/GateScreens';
 import { ReportScreen } from './src/screens/ReportScreen';
@@ -714,11 +714,9 @@ function Landing({ role, uid, isAdmin }: { role: Role; uid: string; isAdmin: boo
     return (
       <StudentHomeScreen
         uid={uid}
-        // The student's OWN deadline, not the session's: it is the day their
-        // access closes, so the player has to be able to say so.
-        onOpenRecording={(recording, _cls, dueDate) =>
-          navigation.navigate('Player', { recordingId: recording.id, dueDate })
-        }
+        // No date: a student's access is read live by the player, from their
+        // grant and what staff gave them, never carried in the route.
+        onOpenRecording={(recording) => navigation.navigate('Player', { recordingId: recording.id, dueDate: null })}
         onOpenWork={(courseworkId) => navigation.navigate('Work', { courseworkId })}
       />
     );
@@ -1053,10 +1051,21 @@ function Play({ studentUid }: { studentUid: string | null }) {
   // archived under them — which is the app working, not a listener fault.
   const recording = useRecordingState(recordingId, undefined, studentUid !== null);
   const cls = useCourseState(recording.value?.courseId ?? null);
-  // A student's deadline comes from their live grant, not from the date the
-  // link was made with — see `useMyAssignmentState`. Staff keep the session's.
-  const grant = useMyAssignmentState(studentUid, recordingId);
-  const dueDate = liveDueDate(studentUid, grant, routeDueDate ?? null);
+  /*
+   * A STUDENT'S ACCESS IS READ LIVE, and waited for: their grant, what staff
+   * gave them and their enrolment (`useMyListenReads`). Drawn before those
+   * answer, the player decided from nothing: a Done row's tap while a given
+   * recording played stopped the audio, and Mark complete flashed for a
+   * student who had missed it. Once they have answered the player stays up
+   * while they change, so a take back or a midnight lands on screen rather
+   * than on a spinner. Staff keep the session's date from the route.
+   */
+  const reads = useMyListenReads(studentUid, recordingId, recording.value?.courseId ?? null);
+  const [answered, setAnswered] = useState<string | null>(null);
+  useEffect(() => {
+    if (reads.answered) setAnswered(recordingId);
+  }, [reads.answered, recordingId]);
+  const readsReady = studentUid === null || reads.answered || answered === recordingId;
   const gone = recording.resolved && !recording.value;
   /*
    * STOP THE AUDIO WHEN THE RECORDING GOES AWAY.
@@ -1073,7 +1082,7 @@ function Play({ studentUid }: { studentUid: string | null }) {
     // recording while listening to another one must not stop the other one.
     if (gone && playing === recordingId) void closePlayback();
   }, [gone, playing, recordingId]);
-  const gate = resolve(recording, 'recording') ?? resolve(cls, 'course');
+  const gate = resolve(recording, 'recording') ?? resolve(cls, 'course') ?? (readsReady ? null : <Loading />);
   if (gate || !recording.value || !cls.value) return gate;
   return (
     <PlayerScreen
@@ -1081,7 +1090,8 @@ function Play({ studentUid }: { studentUid: string | null }) {
       recording={recording.value}
       cls={cls.value}
       studentUid={studentUid}
-      dueDate={dueDate}
+      reads={studentUid === null ? null : reads}
+      dueDate={studentUid === null ? (routeDueDate ?? null) : null}
       itemId={itemId ?? null}
     />
   );

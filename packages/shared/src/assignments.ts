@@ -286,27 +286,18 @@ export function unbreakableDate(date: string): string {
 export function canPlayNow(
   cls: { effectiveActive: boolean; archivedAccess: boolean },
   /**
-   * The listener's own deadline.
-   *
-   * Null means two different things depending on who is asking, and they have
-   * OPPOSITE answers: for staff there is no deadline to apply, and for a student
-   * there is no grant — the date comes from their assignment, so its absence IS
-   * the absence of the assignment. Written as one `&&` chain this read "no date,
-   * so nothing has expired" and returned true for both, which is the fail-open
-   * the invariant rules out in as many words: a blank deadline would mean
-   * permanent access, so nothing may treat one as permission. The server refuses
-   * to mint a URL either way; what this fixes is the client drawing a live
-   * transport over a recording the person holds nothing for.
+   * What the student plays under (`listenWindow`), read live; null for staff,
+   * and for a student whose reads have not all answered, which the callers do
+   * not ask about: "not read yet" must never be taken for "nothing held".
    */
-  dueDate: string | null,
+  window: ListenWindow | null,
   /** Null when staff are listening — see `NowPlaying.studentUid`. */
   studentUid: string | null,
-  today: string,
 ): boolean {
   /*
    * STAFF FIRST, AND BEFORE THE COURSE CHECK.
    *
-   * Both ways a student's access ends — the deadline, and archiving a class with
+   * Both ways a student's access ends — their dates, and archiving a class with
    * listening off — are about students, and `playbackDenial` on the server has
    * always read them that way: its staff branch returns before either. This read
    * them in the other order and cut staff off from an archived class's audio,
@@ -319,7 +310,9 @@ export function canPlayNow(
    */
   if (studentUid === null) return true;
   if (!canPlayFromCourse(cls)) return false;
-  return dueDate !== null && !isOverdue(dueDate, today);
+  // A student plays under an open window and nothing else: no window is no
+  // permission, never permission with no expiry.
+  return window?.state === 'open';
 }
 
 /**

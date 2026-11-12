@@ -5,7 +5,10 @@ import {
   type AssignmentDoc,
   type CompletionDoc,
   type CompletionEventDoc,
+  type GivenRecordingDoc,
   assignmentId,
+  enrollmentId,
+  givenRecordingId,
   progressId,
 } from '@sabeel/shared';
 import { db } from './firebase';
@@ -164,50 +167,90 @@ export function useMyListening(
   );
 }
 
+/** What a student plays a recording under, as read live: see `useMyListenReads`. */
+export interface ListenReads {
+  grant: AssignmentRow | null;
+  given: GivenRecordingDoc | null;
+  enrolled: boolean;
+  /** All three have answered. Until then the window is not known, and nothing may be decided from it. */
+  answered: boolean;
+}
+
 /**
- * This student's own grant for one recording, LIVE — the deadline the player
- * and the docked bar hold the audio to.
+ * Everything a student's access to one recording is decided from, LIVE: their
+ * excused grant, the recording staff gave them, and their enrolment in its
+ * class. `listenWindow` in @sabeel/shared turns these into whether it plays,
+ * and on what terms, where the institute's clock ticks (the player and the
+ * docked bar), so the answer changes at midnight while paused.
  *
- * The date used to ride in the route params, captured when the recording was
- * opened. Staff move a Listen-by date forward to reopen a session — the
- * documented way back in — and a student with the player open, or a restored
- * tab, was then told at midnight that the recording had closed on the OLD date
- * and had the audio stopped under an open grant. Read from the assignment, the
- * date follows the move. `resolved` distinguishes "not yet read" from "no
- * grant", which have opposite answers in `canPlayNow`.
+ * Read here rather than carried in the route. A date captured when the
+ * recording was opened went stale two ways: staff move a listen-by date
+ * forward to reopen a session (the documented way back in), and a Done row's
+ * tap carried no date at all for a recording given since, which stopped the
+ * audio and drew Mark complete over a recording the student had missed.
+ *
+ * `answered` is all three having answered, so "not yet read" is never taken
+ * for "nothing held": the two have opposite answers. The enrolment is read
+ * whether or not anything is given, so a give landing while the player is
+ * open never sees a moment of "not enrolled". A refusal of it is an answer
+ * (a student never in the class may not read the row); a refusal of the
+ * other two is a fault, reported as one.
  */
-export function useMyAssignmentState(
+export function useMyListenReads(
   uid: string | null,
   recordingId: string | null,
+  courseId: string | null,
   scope?: string,
-): { value: AssignmentRow | null; resolved: boolean } {
-  return useLiveDocState<AssignmentRow | null>(
-    () =>
-      uid && recordingId ? doc(db, COLLECTIONS.assignments, assignmentId(uid, recordingId)) : null,
+): ListenReads {
+  const context = scope ? { scope } : undefined;
+  const grant = useLiveDocState<AssignmentRow | null>(
+    () => (uid && recordingId ? doc(db, COLLECTIONS.assignments, assignmentId(uid, recordingId)) : null),
     [uid, recordingId],
     {
       label: 'myAssignment',
-      context: scope ? { scope } : undefined,
+      context,
       map: (snap) => (snap.exists() ? { id: snap.id, ...read('assignments', snap) } : null),
       empty: null,
     },
   );
+  const given = useLiveDocState<GivenRecordingDoc | null>(
+    () => (uid && recordingId ? doc(db, COLLECTIONS.givenRecordings, givenRecordingId(uid, recordingId)) : null),
+    [uid, recordingId],
+    { label: 'myGiven', context, map: (snap) => read('givenRecordings', snap), empty: null },
+  );
+  const enrolled = useLiveDocState<boolean>(
+    () => (uid && courseId ? doc(db, COLLECTIONS.enrollments, enrollmentId(uid, courseId)) : null),
+    [uid, courseId],
+    { label: 'myEnrolment', context, map: (snap) => read('enrollments', snap).active, empty: false, denialIsAnswer: true },
+  );
+  return {
+    grant: grant.value,
+    given: given.value,
+    enrolled: enrolled.value,
+    answered: grant.resolved && given.resolved && enrolled.resolved,
+  };
+}
+
+/** A recording staff gave this student, with its id. */
+export interface GivenRow extends GivenRecordingDoc {
+  id: string;
 }
 
 /**
- * The deadline a student's grant currently carries, for the transport: null
- * when there is no ACTIVE grant, and the caller's fallback while the read is
- * still in flight. Staff pass through whatever they were given — they have no
- * deadline of their own.
+ * Every recording staff have given this student, live: null until the first
+ * snapshot, so "nothing given" is never said before it is known.
+ * Self-constrained, as the rule requires.
  */
-export function liveDueDate(
-  studentUid: string | null,
-  grant: { value: AssignmentRow | null; resolved: boolean },
-  fallback: string | null,
-): string | null {
-  if (!studentUid) return fallback;
-  if (!grant.resolved) return fallback;
-  return grant.value?.active ? grant.value.dueDate : null;
+export function useMyGivenRecordings(uid: string | null): GivenRow[] | null {
+  return useLiveQuery<GivenRow[] | null>(
+    () => (uid ? query(collection(db, COLLECTIONS.givenRecordings), where('studentUid', '==', uid)) : null),
+    [uid],
+    {
+      label: 'myGivenRecordings',
+      map: (snap) => snap.docs.map((d) => ({ id: d.id, ...read('givenRecordings', d) })),
+      empty: null,
+    },
+  );
 }
 
 /**

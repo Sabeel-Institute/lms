@@ -4,6 +4,9 @@ import { Icon, type IconName } from '../icons';
 import {
   canPlayFromCourse,
   canPlayNow,
+  completionShown,
+  listenWindow,
+  windowLastDay,
   VERSION_LABELS,
   isPlayable,
   listenedFraction,
@@ -11,6 +14,7 @@ import {
   playVerb,
   startingItem,
   unbreakableDate,
+  type ListenWindow,
   type MediaPart,
 } from '@sabeel/shared';
 import { Button, Chips, Notice } from '../components/ui';
@@ -31,7 +35,7 @@ import {
 } from '../playback';
 import { setBookmark, useMyBookmark } from '../bookmarks';
 import { playingSinceItsDay, useInstituteDay } from '../instituteDay';
-import { useCompletion, useMyListening, setCompleted } from '../completion';
+import { useCompletion, useMyListening, setCompleted, type ListenReads } from '../completion';
 import { useListenerError } from '../liveQuery';
 import { useOneAtATime } from '../oneAtATime';
 import { useCohortName, type CourseRow } from '../structure';
@@ -53,14 +57,17 @@ export function PlayerScreen({
   recording,
   cls,
   studentUid,
+  reads,
   dueDate,
   itemId: askedItemId,
 }: {
   recording: RecordingRow;
   cls: CourseRow;
   studentUid: string | null;
-  /** The caller's due date: the session's for staff, the student's own
-   *  assignment for students, or null when browsing something not assigned. */
+  /** A student's live grant, given recording and enrolment, all answered
+   *  (the route waits for them); null for staff. */
+  reads: ListenReads | null;
+  /** Staff only: the session's due date, shown on the date line. */
   dueDate: string | null;
   /** One file to open — staff previewing it from the session page — or null
    *  for the recording's starting file. */
@@ -68,11 +75,20 @@ export function PlayerScreen({
 }) {
   const listenerError = useListenerError();
   // Two independent reasons the audio may be shut: the course was archived with
-  // listening off, or this student's own deadline has passed. Either way the
-  // server refuses to mint a URL, so the transport must not be drawn — a play
-  // button that does nothing reads as a broken app rather than a closed door.
+  // listening off, or this student's window has closed. Either way the server
+  // refuses to mint a URL, so the transport must not be drawn — a play button
+  // that does nothing reads as a broken app rather than a closed door.
+  //
+  // THE WINDOW IS WORKED OUT HERE, on the institute's clock, so it changes at
+  // midnight while the student is paused: computed in the route, it did not,
+  // and Mark complete stayed on screen past the date.
   const today = useInstituteDay();
-  const allowed = canPlayNow(cls, dueDate, studentUid, today);
+  const window: ListenWindow | null =
+    studentUid !== null && reads ? listenWindow(reads.grant, reads.given, reads.enrolled, today) : null;
+  const allowed = canPlayNow(cls, window, studentUid);
+  // The day whose midnight closes it: the later of the dates held, so a file
+  // playing then plays on to its end on the day that actually closes it.
+  const lastDay = window ? windowLastDay(window) : null;
   // WHICH of the two, derived by ELIMINATION rather than by re-testing the
   // deadline. Spelling `studentUid !== null && isOverdue(dueDate, today)` here
   // would put half of `canPlayNow` in a second place, free to disagree with the
@@ -124,7 +140,7 @@ export function PlayerScreen({
   // Playing since before the day ended, without a stop: paused across
   // midnight and started again, it had begun to play on (`playingSince`).
   const playingThis = session.now?.recordingId === recording.id && session.playing;
-  const finishing = closed && dueDate !== null && playingThis && playingSinceItsDay(session.playingSince, dueDate);
+  const finishing = closed && lastDay !== null && playingThis && playingSinceItsDay(session.playingSince, lastDay);
   useEffect(() => {
     if (!allowed && !finishing && session.now?.recordingId === recording.id) void closePlayback();
   }, [allowed, finishing, session.now?.recordingId, recording.id]);
@@ -143,7 +159,8 @@ export function PlayerScreen({
       media: recording.media,
       defaultVersion: recording.defaultVersion,
       studentUid,
-      dueDate,
+      // Staff only: a student's access is read live wherever it is asked.
+      dueDate: studentUid === null ? dueDate : null,
     }),
     [
       requested,
@@ -188,22 +205,17 @@ export function PlayerScreen({
             check. */}
         {listenerError ? <Notice tone="error">{listenerError}</Notice> : null}
         <Hero recording={recording} courseName={cls.name} cohortName={cohortName} video={false} closes={null} />
-        {/* THREE REASONS, and each says something different to do about it.
-            "Closed on <date>" needs a date; a student who holds no grant at all
-            has none, and telling them a recording closed on `null` is worse
-            than telling them it was never theirs. */}
-        <Notice tone="info">
-          {!closed
-            ? 'This course has been archived and its recordings are closed. Your record is kept — ask your teacher if you need access again.'
-            : dueDate === null
-              ? `This recording is not open to you. Your teacher marks who needs to ${playVerb(recording.media).toLowerCase()} when they take the register.`
-              : `This recording closed on ${dueDate}. Your record is kept — ask your teacher if you need it reopened.`}
-        </Notice>
+        {/* FOUR REASONS, and each says something different to do about it.
+            "Closed on <date>" needs a date; a student who holds nothing has
+            none, and telling them a recording closed on `null` is worse than
+            telling them it was never theirs. */}
+        <Notice tone="info">{closedSentence(closed, window, reads)}</Notice>
         {/* AND THE RECORD ITSELF, which "is kept" above promises and the screen
             used not to show. A student who finished a recording on time could
             not see that they had, from the day it closed — they had to ask.
-            The transport is gone; the account of what they did is not. */}
-        {studentUid !== null && dueDate !== null ? (
+            The transport is gone; the account of what they did is not. A
+            recording only given was never required, so has no record. */}
+        {studentUid !== null && window?.state === 'ended' && window.record ? (
           <ClosedRecord studentUid={studentUid} recording={recording} />
         ) : null}
       </ScrollView>
@@ -270,8 +282,14 @@ export function PlayerScreen({
         courseName={cls.name}
         cohortName={cohortName}
         video={current?.kind === 'video'}
-        closes={dueDate ? `${studentUid ? 'available until' : 'due'}\u00A0${unbreakableDate(dueDate)}` : null}
+        closes={dateLine(studentUid, window, dueDate, playVerb(recording.media))}
       />
+      {/* Missed, then given: open again, and the record stands. */}
+      {window?.state === 'open' && !window.required && window.listenByWas ? (
+        <Notice tone="info">
+          Its listen-by date was {unbreakableDate(window.listenByWas)}. Listening now does not change your record.
+        </Notice>
+      ) : null}
 
       {/* THE VERSIONS OF THIS PART, which share its timeline: switching keeps
           the place and plays on. "Audio only" is also the way to save data
@@ -402,7 +420,7 @@ export function PlayerScreen({
 
       {/* AT THE END, the moment completion is for — said plainly, never as a
           demand: marking complete is the student's own statement. */}
-      {state.ended && studentUid ? (
+      {state.ended && window && completionShown(window) ? (
         <Notice tone="info">You have reached the end of this recording. If you have finished it, mark it complete below.</Notice>
       ) : null}
 
@@ -440,12 +458,19 @@ export function PlayerScreen({
             still covered — the stored total is restored when the session opens,
             so a student who listened yesterday is not asked to prove it again.
           */}
-          <CompletionControl
-            studentUid={studentUid}
-            recordingId={recording.id}
-            courseId={recording.courseId}
-            everPlayed={heardMs > 0}
-          />
+          {/* MARK COMPLETE ONLY WHILE LISTENING IS REQUIRED. A given recording
+              requires nothing, and a missed one stays missed: what was marked
+              before still shows, read-only. */}
+          {window && completionShown(window) ? (
+            <CompletionControl
+              studentUid={studentUid}
+              recordingId={recording.id}
+              courseId={recording.courseId}
+              everPlayed={heardMs > 0}
+            />
+          ) : (
+            <OptionalCompletion studentUid={studentUid} recordingId={recording.id} />
+          )}
         </>
       ) : (
         <Text style={styles.staffNote}>
@@ -462,6 +487,50 @@ export function PlayerScreen({
       ) : null}
 
     </ScrollView>
+  );
+}
+
+/**
+ * Why a student cannot play this, in the sentence that says what to do about
+ * it: the class closed, nothing held, an excused date passed, or a given date
+ * passed. Which date closed it is the window's later one.
+ */
+function closedSentence(classOpen: boolean, window: ListenWindow | null, reads: ListenReads | null): string {
+  if (!classOpen) {
+    return 'This course has been archived and its recordings are closed. Your record is kept — ask your teacher if you need access again.';
+  }
+  if (window?.state !== 'ended') return 'This recording is not open to you. Ask your teacher if you need it.';
+  const excusedLast = window.record && reads?.grant?.dueDate === window.lastDay;
+  return excusedLast
+    ? `This recording closed on ${window.lastDay}. Your record is kept — ask your teacher if you need it reopened.`
+    : `This recording was open to you until ${window.lastDay}. Ask your teacher if you need it again.`;
+}
+
+/**
+ * The date line under the title: for staff the session's due date; for a
+ * student, until when it is open, and, when a given date runs past a required
+ * one, both — the day it is required by, then the day it stays open until.
+ */
+function dateLine(studentUid: string | null, window: ListenWindow | null, dueDate: string | null, verb: string): string | null {
+  if (studentUid === null) return dueDate ? `due\u00A0${unbreakableDate(dueDate)}` : null;
+  if (window?.state !== 'open') return null;
+  if (window.required && window.then) {
+    return `${verb.toLowerCase()} by\u00A0${unbreakableDate(window.until)} · open until\u00A0${unbreakableDate(window.then)}`;
+  }
+  return `${window.required ? 'available' : 'open'} until\u00A0${unbreakableDate(window.until)}`;
+}
+
+/**
+ * In place of Mark complete when nothing is required: what was marked while
+ * it was, read-only, or why there is nothing to mark.
+ */
+function OptionalCompletion({ studentUid, recordingId }: { studentUid: string; recordingId: string }) {
+  const { completed, override } = useCompletion(studentUid, recordingId);
+  const done = override ? override.completed : completed;
+  return (
+    <Text testID="optional-completion" style={done ? styles.completedText : styles.gateHint}>
+      {done ? `✓ Completed${override ? ' — marked by your teacher' : ''}` : 'This one is optional, so there is nothing to mark.'}
+    </Text>
   );
 }
 

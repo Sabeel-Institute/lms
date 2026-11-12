@@ -14,6 +14,7 @@ import {
   unbreakableDate,
   todayInZone,
   type DueBucket,
+  type ListenWindow,
 } from '../src';
 
 describe('composite ids', () => {
@@ -198,74 +199,54 @@ describe('canPlayNow', () => {
   const live = { effectiveActive: true, archivedAccess: false };
   const archived = { effectiveActive: false, archivedAccess: false };
   const archivedButOpen = { effectiveActive: false, archivedAccess: true };
-  const TODAY = '2026-07-25';
+  const required: ListenWindow = { state: 'open', required: true, until: '2026-07-25', then: null };
+  const optional: ListenWindow = { state: 'open', required: false, until: '2026-07-25', listenByWas: null };
+  const ended: ListenWindow = { state: 'ended', lastDay: '2026-07-24', record: true };
 
-  it('a student may play an open recording in a live course', () => {
-    expect(canPlayNow(live, '2026-07-25', 'stu-1', TODAY)).toBe(true);
+  it('a student may play under an open window, required or given, in a live course', () => {
+    expect(canPlayNow(live, required, 'stu-1')).toBe(true);
+    expect(canPlayNow(live, optional, 'stu-1')).toBe(true);
   });
 
-  it('the deadline closes it the day after the due date', () => {
-    expect(canPlayNow(live, '2026-07-24', 'stu-1', TODAY)).toBe(false);
+  it('a window that has ended closes it', () => {
+    expect(canPlayNow(live, ended, 'stu-1')).toBe(false);
   });
 
-  it('an archived course closes it whatever the date', () => {
-    expect(canPlayNow(archived, '2026-12-31', 'stu-1', TODAY)).toBe(false);
+  it('an archived course closes it whatever the window', () => {
+    expect(canPlayNow(archived, required, 'stu-1')).toBe(false);
+    expect(canPlayNow(archived, optional, 'stu-1')).toBe(false);
   });
 
   it('an archived course that kept listening open stays open', () => {
-    expect(canPlayNow(archivedButOpen, '2026-12-31', 'stu-1', TODAY)).toBe(true);
+    expect(canPlayNow(archivedButOpen, required, 'stu-1')).toBe(true);
   });
 
   /*
-   * STAFF HAVE NO DEADLINE. A session's date rides in `dueDate` for them too,
-   * so a gate that read the date without checking WHOSE it is stopped a manager
-   * reviewing last term's lecture — which is the bug two copies of this rule
-   * produced.
-   */
-  it('a past due date does not close it for staff', () => {
-    expect(canPlayNow(live, '2020-01-01', null, TODAY)).toBe(true);
-  });
-
-  /*
-   * AND NEITHER CLOSES A CLASS TO STAFF.
+   * STAFF HAVE NO DEADLINE, AND NEITHER CLOSES A CLASS TO STAFF.
    *
-   * Both of a student's two closures — the deadline, and archiving with
-   * listening off — are a student's. The server has always read them that way:
+   * Both of a student's closures — their dates, and archiving with listening
+   * off — are a student's. The server has always read them that way:
    * `playbackDenial` returns from its staff branch before reaching either, so a
    * class manager is served the audio for an archived course. This said the
    * opposite, and the disagreement showed up as a player with no transport and
    * the STUDENT's message on it — "ask your teacher if you need access again" —
-   * shown to the teacher being asked.
-   *
-   * Staff keeping access is what makes that sentence answerable: somebody has to
-   * hear the recording to decide whether to turn listening back on. Settled
-   * 2026-09-07; see `docs/PHASE_STATUS.md`.
+   * shown to the teacher being asked. Settled 2026-09-07; see
+   * `docs/PHASE_STATUS.md`.
    */
-  it('nor does an archived course with listening off', () => {
-    expect(canPlayNow(archived, '2020-01-01', null, TODAY)).toBe(true);
-    expect(canPlayNow(archivedButOpen, '2020-01-01', null, TODAY)).toBe(true);
+  it('staff play whatever the window or the class', () => {
+    expect(canPlayNow(live, null, null)).toBe(true);
+    expect(canPlayNow(live, ended, null)).toBe(true);
+    expect(canPlayNow(archived, null, null)).toBe(true);
   });
 
   /*
-   * THE PROMISE: a student may play what they were granted, and nothing else.
-   *
-   * A student's deadline comes from their assignment, so no deadline means no
-   * assignment — the absence of permission, not the absence of an expiry. This
-   * case used to assert the opposite ("not closed out"), which made a green test
-   * out of the one outcome `CLAUDE.md` rules out by name: "a blank one would
-   * mean permanent access". A test asserting that is worse than no test, because
-   * the next reader stops looking.
-   *
-   * Staff are the other half of the same null, and must keep playing: theirs
-   * means "no deadline applies to me", which is why the two cannot share a
-   * branch.
+   * THE PROMISE: a student may play what they hold, and nothing else. No
+   * window means no permission, not the absence of an expiry: `CLAUDE.md`
+   * rules out the reading where "a blank one would mean permanent access".
    */
-  it('does not let a student play a recording they hold no grant for', () => {
-    expect(canPlayNow(live, null, 'stu-1', TODAY)).toBe(false);
-  });
-
-  it('still lets staff play, whose null means no deadline of their own', () => {
-    expect(canPlayNow(live, null, null, TODAY)).toBe(true);
+  it('does not let a student play with nothing held', () => {
+    expect(canPlayNow(live, { state: 'none' }, 'stu-1')).toBe(false);
+    expect(canPlayNow(live, null, 'stu-1')).toBe(false);
   });
 });
 

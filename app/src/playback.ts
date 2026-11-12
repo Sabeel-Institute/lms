@@ -109,15 +109,21 @@ export interface NowPlaying {
   /** The length of the file being played: a part, not the whole recording. */
   durationMs: number;
   /**
-   * Whose deadline `dueDate` is, or null when staff are listening.
+   * The student listening, or null when staff are.
    *
-   * The deadline closes a STUDENT's access and nobody else's — the server says
-   * the same, returning no due date for staff before it checks one. Any surface
-   * acting on `dueDate` has to consult this first, or a manager reviewing a
-   * lecture from last term is cut off the moment they leave the player.
+   * Dates close a STUDENT's access and nobody else's — the server says the
+   * same, returning for staff before it checks one. Any surface deciding
+   * whether this may still play has to consult this first, or a manager
+   * reviewing a lecture from last term is cut off the moment they leave the
+   * player. A student's access is read live (`useMyListenReads`), never from
+   * here.
    */
   studentUid: string | null;
-  /** The listener's deadline, for the surfaces that state it. Null for staff. */
+  /**
+   * STAFF ONLY: the session's due date, which reopening the player shows. Null
+   * for a student, whose dates are their grant's and what staff gave them, read
+   * live by every surface that needs them.
+   */
   dueDate: string | null;
 }
 

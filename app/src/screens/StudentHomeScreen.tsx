@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Icon } from '../icons';
 import {
   COLLECTIONS,
@@ -8,6 +9,8 @@ import {
   closesOn,
   dueBucket,
   gradeText,
+  isOverdue,
+  listenWindow,
   nextDeadline,
   playVerb,
   todayInZone,
@@ -19,14 +22,14 @@ import {
 } from '@sabeel/shared';
 import { Empty, Grid, Screen, useGridCell } from '../components/ui';
 import { PushNudge } from '../components/PushNudge';
-import { useMyAssignments, useMyCompletions } from '../completion';
+import { useMyAssignments, useMyCompletions, useMyGivenRecordings } from '../completion';
 import { useMyDraftIds, useMySubmissions, type CourseworkRow, type SubmissionRow } from '../coursework';
 import { useListenerFailed } from '../liveQuery';
 import { drainCompletionOutbox } from '../completionOutbox';
 import { drainProgressJournal } from '../playback';
 import { useResolvedDocs } from '../resolveDocs';
 import { arrangeTodo, type TodoEntry } from '../todo';
-import type { CourseRow } from '../structure';
+import { useStudentEnrollmentsState, type CourseRow } from '../structure';
 import type { RecordingRow } from '../recordings';
 import { getTheme, spacing } from '../theme';
 
@@ -43,6 +46,19 @@ interface RecordingItem extends TodoEntry {
   override: { completed: boolean; reason: string } | null;
 }
 
+/**
+ * A recording staff gave the student: open until a date, optional, counted
+ * nowhere. `again` when it reopens one whose listen-by date they missed or
+ * met: the record row for it stays where it is.
+ */
+interface GivenItem extends TodoEntry {
+  kind: 'given';
+  recording: RecordingRow;
+  cls: CourseRow;
+  openUntil: string;
+  again: boolean;
+}
+
 /** An assignment on the list. */
 interface WorkItem extends TodoEntry {
   kind: 'work';
@@ -53,16 +69,17 @@ interface WorkItem extends TodoEntry {
   draftSaved: boolean;
 }
 
-type Item = RecordingItem | WorkItem;
+type Item = RecordingItem | GivenItem | WorkItem;
 
 /**
  * The student's To do: everything they owe, in one list
  * (docs/proposals/lms-assignments-proposal.html, section 2).
  *
- * Two kinds of work, each by its own rules. A recording is here because the
- * student was marked excused — the grant is both the access and the
- * obligation — and nothing else puts one here. An assignment is here because
- * the student is in the class; the register plays no part.
+ * Two kinds of work, each by its own rules. A recording is required because
+ * the student was marked excused — the grant is both the access and the
+ * obligation. An assignment is here because the student is in the class; the
+ * register plays no part. And under Optional, a recording a teacher gave
+ * them: open until a date, required by nothing, never Next up.
  *
  * Open work first, the record after: the nearest deadline drawn large, then
  * Past due, Due soon, Upcoming; then Missed and Archived, quiet and
@@ -75,7 +92,7 @@ export function StudentHomeScreen({
   onOpenWork,
 }: {
   uid: string;
-  onOpenRecording: (recording: RecordingRow, cls: CourseRow, dueDate: string) => void;
+  onOpenRecording: (recording: RecordingRow, cls: CourseRow) => void;
   onOpenWork: (courseworkId: string) => void;
 }) {
   const granted = useMyAssignments(uid);
@@ -92,6 +109,45 @@ export function StudentHomeScreen({
   const recordings = useResolvedDocs(COLLECTIONS.recordings, useMemo(() => grants.map((a) => a.recordingId), [grants]));
   const coursework = useResolvedDocs(COLLECTIONS.coursework, useMemo(() => work.map((s) => s.courseworkId), [work]));
 
+  const today = todayInZone(INSTITUTE_TIMEZONE);
+
+  /*
+   * GIVEN RECORDINGS, and the classes the student is still in. The list is
+   * live; the recordings and classes behind it are read once, like the
+   * required ones. But nothing about a given recording changes when its
+   * recording is unpublished or its class archived, so those are read again
+   * on coming back to To do, on coming back to the app, and when the
+   * student's classes change: until then a tap reaches "not available", which
+   * is the truth.
+   */
+  const givenList = useMyGivenRecordings(uid);
+  const enrolments = useStudentEnrollmentsState(uid);
+  const givenFailed = useListenerFailed(['myGivenRecordings', 'studentEnrollments']);
+  const inClass = useMemo(
+    () => new Set((enrolments ?? []).filter((e) => e.active).map((e) => e.courseId)),
+    [enrolments],
+  );
+  const classKey = [...inClass].sort().join(',');
+  const openGiven = useMemo(
+    () => (givenList ?? []).filter((g) => !isOverdue(g.openUntil, today) && inClass.has(g.courseId)),
+    [givenList, inClass, today],
+  );
+  const [refresh, setRefresh] = useState(0);
+  const again = useCallback(() => setRefresh((n) => n + 1), []);
+  useFocusEffect(again);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') again();
+    });
+    return () => sub.remove();
+  }, [again]);
+  useEffect(again, [classKey, again]);
+  const givenRecordings = useResolvedDocs(
+    COLLECTIONS.recordings,
+    useMemo(() => openGiven.map((g) => g.recordingId), [openGiven]),
+    refresh,
+  );
+
   // On launch, replay what this device saved and then lost before it synced:
   // a completion marked offline (native only), and listening done with the
   // screen locked or the tab closed offline (progressJournal.ts).
@@ -99,8 +155,6 @@ export function StudentHomeScreen({
     void drainCompletionOutbox(uid);
     void drainProgressJournal(uid);
   }, [uid]);
-
-  const today = todayInZone(INSTITUTE_TIMEZONE);
 
   const items = useMemo((): Item[] => {
     const out: Item[] = [];
@@ -131,6 +185,28 @@ export function StudentHomeScreen({
         override: state?.override ?? null,
       });
     }
+    for (const g of openGiven) {
+      const r = givenRecordings.resolved.get(g.recordingId);
+      // Closed with its class: the audio is refused, so it is not on offer.
+      if (!r || !canPlayFromCourse(r.cls)) continue;
+      const grant = grants.find((a) => a.recordingId === g.recordingId) ?? null;
+      const window = listenWindow(grant, g, true, today);
+      // Required right now: the required row says everything, and a second
+      // row for the same recording would only confuse it.
+      if (window.state !== 'open' || window.required) continue;
+      out.push({
+        kind: 'given',
+        key: `given-${g.id}`,
+        title: r.doc.title,
+        bucket: 'optional',
+        deadline: g.openUntil,
+        doneAt: null,
+        recording: r.doc,
+        cls: r.cls,
+        openUntil: g.openUntil,
+        again: window.listenByWas !== null,
+      });
+    }
     for (const s of work) {
       const c = coursework.resolved.get(s.courseworkId);
       if (!c) continue;
@@ -152,7 +228,7 @@ export function StudentHomeScreen({
       });
     }
     return out;
-  }, [grants, work, recordings.resolved, coursework.resolved, completions, drafts, today]);
+  }, [grants, work, openGiven, recordings.resolved, givenRecordings.resolved, coursework.resolved, completions, drafts, today]);
 
   const { next, groups } = useMemo(() => arrangeTodo(items, Date.now()), [items]);
 
@@ -162,11 +238,10 @@ export function StudentHomeScreen({
    * up one at a time afterwards. And a warm update replaces the rows in place;
    * only a cold one has nothing to replace.
    */
-  const loading = (granted === null || submissions === null) && !failed;
-  const checking = (loading || recordings.resolving || coursework.resolving) && items.length === 0;
+  const loading = ((granted === null || submissions === null) && !failed) || ((givenList === null || enrolments === null) && !givenFailed);
+  const checking = (loading || recordings.resolving || coursework.resolving || givenRecordings.resolving) && items.length === 0;
 
-  const open = (item: Item) =>
-    item.kind === 'recording' ? onOpenRecording(item.recording, item.cls, item.dueDate) : onOpenWork(item.coursework.id);
+  const open = (item: Item) => (item.kind === 'work' ? onOpenWork(item.coursework.id) : onOpenRecording(item.recording, item.cls));
 
   return (
     <Screen
@@ -186,7 +261,7 @@ export function StudentHomeScreen({
           with three things due — so it waits for everything to arrive. */}
       {checking ? (
         <Empty>Checking what you have to do…</Empty>
-      ) : granted === null || submissions === null ? (
+      ) : granted === null || submissions === null || (items.length === 0 && (givenList === null || enrolments === null)) ? (
         // Refused, not empty — and the banner above already says why.
         <Empty>Your list could not be loaded. The message above says why.</Empty>
       ) : items.length === 0 ? (
@@ -216,6 +291,7 @@ function dueLines(item: Item): string[] {
 }
 
 function dueLine(item: Item): string {
+  if (item.kind === 'given') return `${item.again ? 'Open again' : 'Open'} until ${unbreakableDate(item.openUntil)}`;
   if (item.kind === 'recording') {
     if (item.bucket === 'archived') return 'Course archived';
     if (item.bucket === 'missed') return `Closed ${unbreakableDate(item.dueDate)}`;
@@ -242,7 +318,7 @@ function dueLine(item: Item): string {
 }
 
 const action = (item: Item) =>
-  item.kind === 'recording' ? 'Play ›' : item.draftSaved || item.submission.attempt > 1 ? 'Continue ›' : 'Start ›';
+  item.kind !== 'work' ? 'Play ›' : item.draftSaved || item.submission.attempt > 1 ? 'Continue ›' : 'Start ›';
 
 /**
  * The one thing to do next, at full size. THE CARD IS THE BUTTON, so it says
@@ -254,7 +330,7 @@ function Hero({ item, onOpen }: { item: Item; onOpen: () => void }) {
     <Pressable
       testID={`next-up-${item.title}`}
       accessibilityRole="button"
-      accessibilityLabel={`${item.kind === 'recording' ? 'Play' : 'Open'} ${item.title}`}
+      accessibilityLabel={`${item.kind === 'work' ? 'Open' : 'Play'} ${item.title}`}
       onPress={onOpen}
       style={({ pressed }) => [styles.hero, pressed ? styles.heroPressed : null]}
     >
@@ -282,11 +358,11 @@ function Card({ item, onOpen }: { item: Item; onOpen: () => void }) {
   const body = (
     <>
       <Icon
-        name={item.kind === 'recording' ? 'play-circle-outline' : 'assignment'}
+        name={item.kind === 'work' ? 'assignment' : 'play-circle-outline'}
         size={22}
         color={t.text.secondary}
         style={styles.icon}
-        accessibilityLabel={item.kind === 'recording' ? 'Recording' : 'Assignment'}
+        accessibilityLabel={item.kind === 'work' ? 'Assignment' : 'Recording'}
       />
       {/* THE ICON STAYS OUT OF THE WRAP. Inside it, a phone's wrapped due
           lines went to the start of the card's own line, under the icon. */}
@@ -329,9 +405,13 @@ function Card({ item, onOpen }: { item: Item; onOpen: () => void }) {
   }
   return (
     <Pressable
-      testID={`task-${item.title}`}
+      testID={item.kind === 'given' ? `optional-${item.title}` : `task-${item.title}`}
       accessibilityRole="button"
-      accessibilityLabel={`${item.kind === 'recording' ? 'Play' : 'Open'} ${item.title}`}
+      accessibilityLabel={
+        item.kind === 'given'
+          ? `Play ${item.title}, optional, open until ${item.openUntil}`
+          : `${item.kind === 'recording' ? 'Play' : 'Open'} ${item.title}`
+      }
       onPress={onOpen}
       style={({ pressed }) => [styles.card, inGrid, closed ? styles.cardClosed : null, pressed ? styles.pressed : null]}
     >

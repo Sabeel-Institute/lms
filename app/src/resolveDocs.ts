@@ -54,6 +54,13 @@ type InACourse = { [C in StoredCollection]: StoredDocs[C] extends { courseId: st
 export function useResolvedDocs<C extends InACourse, T extends StoredDocs[C] & { courseId: string } = StoredDocs[C] & { courseId: string }>(
   collectionPath: C,
   ids: string[],
+  /**
+   * Bumped to read the same ids again. Not part of the key, so the list
+   * already shown stays while it is read: for documents whose readability
+   * changes with no change to the list naming them (a given recording whose
+   * recording was unpublished since), on returning to the screen.
+   */
+  refresh = 0,
 ): {
   resolved: Map<string, Resolved<T>>;
   /**
@@ -117,7 +124,7 @@ export function useResolvedDocs<C extends InACourse, T extends StoredDocs[C] & {
     return () => {
       cancelled = true;
     };
-  }, [key, collectionPath]);
+  }, [key, collectionPath, refresh]);
 
   return { resolved: state.map, resolving: state.key !== key };
 }
