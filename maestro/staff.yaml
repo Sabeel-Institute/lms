@@ -65,6 +65,9 @@ name: Staff work through the day
     when:
       platform: Android
     commands:
+      # More is a sheet over the screen it came from: closed first, or the
+      # tab bar under it takes no tap.
+      - pressKey: Back
       - runFlow:
           file: ci-tools/tap-until.yaml
           env:
