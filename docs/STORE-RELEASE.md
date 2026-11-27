@@ -126,9 +126,9 @@ remove `rulesAcceptedAt` and `rulesVersion` from the reviewer's
 `students/<uid>` record after the check (an Admin SDK update; no screen does
 it). App Review meets the screen (skill, decision 3).
 
-**It must survive switchover day.** The final seed wipes this project
-(`docs/plans/SWITCHOVER.md`, switchover day, step 3). Recreate it afterwards,
-as an admin on the web:
+**It survives the switchover seed**, whose plan keeps the App Review cohort
+and the reviewer account through its wipe (`docs/plans/SWITCHOVER.md`). If it
+is ever lost, recreate it as an admin on the web:
 
 1. Cohorts: add "App Review"; in it, the class "Sample Class".
 2. Students: add `apps-reviewer@oursabeel.com`, name "App Review"; set its

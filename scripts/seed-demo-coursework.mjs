@@ -23,7 +23,7 @@
  * Credentials belong to another account. Deterministic: a re-run rewrites the
  * same documents.
  */
-import { refuseAfterSwitchover } from './lib/before-switchover.mjs';
+import { refuseOnceRealData } from './lib/before-switchover.mjs';
 import { execFileSync } from 'node:child_process';
 import {
   FIREBASE_PROJECT_ID,
@@ -37,7 +37,7 @@ import {
   todayInZone,
 } from '@sabeel/shared';
 
-refuseAfterSwitchover('seed-demo-coursework', "demo data would land on real students' records");
+await refuseOnceRealData('seed-demo-coursework', "demo data would land on real students' records");
 const EXECUTE = process.argv.includes('--yes');
 const unknown = process.argv.slice(2).filter((a) => a !== '--yes');
 if (unknown.length) {

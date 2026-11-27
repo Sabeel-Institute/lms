@@ -55,3 +55,21 @@ export async function* listDocuments(projectId, collection, token) {
     pageToken = out.nextPageToken;
   }
 }
+
+/**
+ * A REST document's `fields` as one string, the same for every spelling
+ * Firestore treats as the same value: keys in order, and an empty array or map
+ * whether written with its empty `values`/`fields` or without (Firestore
+ * returns `{ arrayValue: {} }` for an empty array written as `{ values: [] }`).
+ * For comparing what was written with what is stored.
+ */
+export function canonicalFields(fields) {
+  const norm = (v) => {
+    if (!v || typeof v !== 'object') return v;
+    if ('arrayValue' in v) return { arrayValue: { values: (v.arrayValue.values ?? []).map(norm) } };
+    if ('mapValue' in v) return { mapValue: { fields: normFields(v.mapValue.fields ?? {}) } };
+    return v;
+  };
+  const normFields = (f) => Object.fromEntries(Object.keys(f).sort().map((k) => [k, norm(f[k])]));
+  return JSON.stringify(normFields(fields ?? {}));
+}

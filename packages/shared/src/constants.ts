@@ -155,6 +155,14 @@ export const APP_STORE_URL = 'https://apps.apple.com/app/id6823374038';
 export interface AppConfigDoc {
   /** Android `versionCode`; a build below this shows the update screen. */
   minVersionCode: number;
+  /**
+   * The day (`YYYY-MM-DD`, institute time) this project began holding the
+   * institute's real records: the day the switchover seed copied the live
+   * app's cohorts in. Written by that seed and read by no screen. Every
+   * script that wipes this project or invents data in it refuses once it is
+   * set (`scripts/lib/before-switchover.mjs`).
+   */
+  realDataSince?: string;
 }
 
 /** Is a build too old to run? Unknown floors (no document yet) refuse nobody. */

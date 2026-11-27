@@ -6,7 +6,8 @@ Faisal's personal Firebase project `sabeel-class-recordings`. Development of
 the LMS features (assignments and grades, video, media on Cloudflare) happens
 here, against the institute's Firebase project `oursabeel-lms`. When it is
 ready, everyone moves over on one planned day and the personal project is
-retired.
+retired. That day was 2026-11-26 (Switchover, below): this project has held
+the institute's records since.
 
 Related plans:
 [MEDIA-ON-CLOUDFLARE.md](MEDIA-ON-CLOUDFLARE.md) ·
@@ -141,87 +142,101 @@ Free plan is enough
 
 ## Seeding from the legacy project
 
-`scripts/seed-from-legacy.mjs` copies a snapshot, so teachers and students sign
-in here with what they already use. First run: 2026-10-12, before the first
-deploy (994 documents, 46 accounts, 8 audio files, 442.5 MB; counts matched).
+`scripts/seed-from-legacy.mjs` copies chosen cohorts of the live app, so
+teachers and students sign in here with what they already use. The copy that
+made this project the institute's record ran on 2026-11-26 (below). Earlier
+runs copied the whole live app as test data, the first on 2026-10-12 before
+the first deploy.
 
 ```bash
-node scripts/seed-from-legacy.mjs --from sabeel-class-recordings --from-account faisal.shah@gmail.com         # dry run
-node scripts/seed-from-legacy.mjs --from sabeel-class-recordings --from-account faisal.shah@gmail.com --yes   # wipe here, copy
+node scripts/seed-from-legacy.mjs --from sabeel-class-recordings --from-account faisal.shah@gmail.com --plan <file>         # dry run
+node scripts/seed-from-legacy.mjs --from sabeel-class-recordings --from-account faisal.shah@gmail.com --plan <file> --yes   # wipe here, copy
 ```
 
 The legacy project is named only on the command line, and the script only
 reads it (GETs and lists, with the gmail account's token; no export bucket, no
 IAM change there).
 
+**The plan file** (`scripts/lib/legacy-selection.mjs` documents its keys)
+names the cohorts to copy, the students left out, a duplicate account folded
+into the one its owner uses, sessions and recordings not carried, and the
+cohorts and accounts of this project that survive the wipe. It holds account
+ids, so it is kept out of this public repo. What comes, by one rule: every
+staff account; every student with an enrolment, present or past, in a copied
+class; and every document that names nothing left behind. A student left out
+also has their mark taken out of each register, and a session whose
+recording is dropped arrives with its register and no recording. The dry run
+prints every person, class, session count, recording and register change it
+would make, and what of this project it keeps and removes.
+
 | What | How | Notes |
 |---|---|---|
-| Accounts | Identity Toolkit `accounts:batchGet` from legacy, `accounts:batchCreate` here with legacy's scrypt parameters (read from its Auth config into the process, never printed) | Same uids, same passwords, same Google links, same custom claims (`role`, `status`). |
-| Firestore | Every document, recursively, through the REST API, field values passed through unchanged, except recordings, enrolments, classes and two audit actions | Same document ids, so every reference by uid or id stays intact. |
+| Accounts | Identity Toolkit `accounts:batchGet` from legacy, `accounts:batchCreate` here with legacy's scrypt parameters (read from its Auth config into the process, never printed) | Same uids, same passwords, same Google links, same custom claims (`role`, `status`). A student who never set a password in the live app has none here either, and asks for a link from the sign-in screen. |
+| Firestore | Every chosen document, recursively, through the REST API, field values passed through unchanged, except recordings, enrolments, classes and two audit actions | Same document ids, so every reference by uid or id stays intact. A folded duplicate's records are re-keyed to the account it folds into; its own student record and its creation entry stay behind. |
 | Recordings | Converted on the way: the one audio file becomes the recording's single media item (Part 1, audio only) at the key it already has (`scripts/lib/legacy-media.mjs`) | The live app stores one file per recording; this project stores media items. |
 | Enrolments and classes | Converted on the way: an enrolment's first joining and last leaving dates become every stretch the student spent in the class, and a class gains every stretch its recordings were closed to students, both rebuilt from the live app's audit log (`scripts/lib/stretches.mjs`) | A second removal erases the first in the live app's two dates, and an archive is known only while it lasts; the ledgers and workbooks here need each one. The dry run names any record whose log and stored fields disagree. |
-| Audit entries | Renamed on the way where the live app's action name is retired: `clearRecordingAudio` becomes `removeRecordingMedia`, `importZoomRecording` becomes `importZoomFiles` (`scripts/lib/legacy-audit.mjs`) | The audit screen has words only for the actions written today, and `check:documents` fails on any other. |
-| Media | Every object under `recordings/` in the legacy bucket, streamed into R2 at the same key | Through this machine: pennies of Google egress at this size. |
+| Audit entries | Renamed on the way where the live app's action name is retired: `clearRecordingAudio` becomes `removeRecordingMedia`, `importZoomRecording` becomes `importZoomFiles` (`scripts/lib/legacy-audit.mjs`). An entry with no target and no class is not copied: nothing shows it concerns the copied cohorts | The audit screen has words only for the actions written today, and `check:documents` fails on any other. |
+| Media | The copied recordings' files under `recordings/` in the legacy bucket, streamed into R2 at the same key | Through this machine: pennies of Google egress at this size. |
 | Push registrations | **Not copied** (`notifications/{uid}/devices`) | FCM tokens belong to the legacy project's sender and cannot deliver from here. Devices register again on first sign-in. |
-| Zoom import markers | Each Zoom recording's file gets its `zoomImports/{fileId}` claim | So a recording imported in legacy is not offered again. |
+| Zoom import markers | Each copied Zoom recording's file gets its `zoomImports/{fileId}` claim | So a recording imported in legacy is not offered again. |
 
-Every run wipes this project first: documents, accounts, and the media under
-`recordings/`, `media/`, `coursework/` and `work/` (never `help/`). Anything
-entered here before switchover is test data and is lost on the next run, and
-staff trying features early are told so. The source's password hashing is read
-before the wipe, so a failure there leaves this project as it was.
+Every run wipes this project first, but for what the plan keeps:
+`config/app`, the kept cohorts with everything that names them, the kept
+accounts with their own records (not their work in classes that go), the
+media of kept recordings and assignments, and the help films (`help/` is
+never touched). The source's password hashing is read before the wipe, so a
+failure there leaves this project as it was.
 
-Once functions are deployed, the wipe's deletes and the copy's writes fire the
-triggers here (`onRecordingWritten`, `onSessionWritten`, `onAssignmentWritten`).
-On copied data they change nothing, but one from the WIPE that runs after the
-copy reads a recording as gone and switches its grants off, and a past
-session's grant is never revived. So after copying the seed waits for that
-burst to pass, compares every copied document field by field with what it
-wrote, writes back any a trigger changed, and repeats until a pass finds
-none (it fails after three). Then it counts documents per collection shape (the
-claims it added included), accounts, custom claims, and media objects and
-sizes on both sides, and fails on any difference. Notifications go to staff at
-most until switchover (`NOTIFY_AUDIENCE`).
+The wipe's deletes and the copy's writes fire the triggers here
+(`onRecordingWritten`, `onSessionWritten`, `onAssignmentWritten`). On copied
+data they change nothing, but one from the WIPE that runs after the copy reads
+a recording as gone and switches its grants off, and a past session's grant is
+never revived. So after copying the seed waits for that burst to pass,
+compares every copied and kept document field by field with what it should
+hold, writes back any a trigger changed, and repeats until a pass finds none
+(it fails after three). Then it counts documents per collection shape,
+accounts, custom claims, and media objects and sizes, and fails on any
+difference.
 
-## Switchover day
+**Then it records the day** in `config/app.realDataSince`. From then on the
+seed and both demo seeds refuse to run (`scripts/lib/before-switchover.mjs`,
+which reads the marker from the project, so another checkout is refused too).
+A copy that went wrong before anyone used it is replaced with `--replacing
+<that day>`; nothing else passes.
 
-Before the day: the user manual (`docs/USER-MANUAL.md`, rendered to PDF by
-`npx sabeel-ci render-manual`) still names "Class Recordings" and the legacy web
-address throughout; it is rewritten for "Sabeel Institute LMS" and
-`oursabeel-lms.web.app`, with fresh screenshots, and published on the new
-download page alongside the first Android release of
-`com.sabeelinstitute.lms`.
+## Switchover
 
-1. Announce the date and the new app to staff and students a week ahead.
-2. **Freeze legacy:** deploy a legacy release whose server refuses writes
-   with a plain message, and whose app shows that the institute has moved.
-3. Final seed, then `node scripts/backfill-zoom-segments.mjs --yes` (the seed
-   copies Zoom files without the segment start an import keys parts by, so
-   the same class's video would otherwise land as a second part), count check,
-   smoke test on the new address. Set
-   `NOTIFY_AUDIENCE=everyone` in `functions/.env.oursabeel-lms` and deploy
-   functions, so the new app notifies everyone from here on. Point the legacy
-   `sabeel-recording-app/` page at `sabeel-institute-lms/`, which is already
-   listed on Faisal's site index with live links, for testers, and say on it
-   that the move has happened.
-   **Recreate the App Review world:** the seed wipes this project, and the
-   store reviewers' account goes with it. Before the stores review anything
-   again, the reviewer account (apps-reviewer@oursabeel.com, a student, its
-   password the one in the vault) must exist again as the only student of the
-   "App Review" cohort, with its sample class, a session whose due date is in
-   the future and on which the reviewer is marked excused, a published
-   recording and an assignment. The shape is in `docs/STORE-RELEASE.md`.
-4. **Retire the legacy Android app** with a final update whose only screen
-   says the app has moved and links to the new one. This is allowed by the
-   store rule in `CLAUDE.md`: it points to an app, not to a sign-up flow.
-5. Redirect the legacy web address to the new one (Hosting redirect in the
-   legacy project).
-6. Scheduled functions in legacy are deleted so nothing more is sent from it.
-7. Keep the legacy project read-only for a set period (suggested 90 days),
+Done on 2026-11-26. The live app's classes had finished, so the copy ran
+without a freeze.
+
+1. **Copied** with the plan: the cohorts "Hikam Year 3" and "Quran Immersion
+   2026 Istiqlal" with their five classes, 42 sessions and 12 recordings
+   (753.6 MB), every staff account and 27 students: 1,015 documents and 42
+   accounts, counted on both sides. Left behind: the cohorts "C1" and "TEST COHORT" (its Board
+   meetings class included), staff members' personal student accounts with
+   no real attendance, test accounts, a duplicate account (folded into the
+   one its owner signs in with), a test session in Tajweed QI 2026 and a
+   failed Zoom import in Arabic QI 2026. Kept here: the App Review cohort and
+   its reviewer (`docs/STORE-RELEASE.md`), the five test-alpha accounts, with
+   no classes.
+2. Then `node scripts/backfill-zoom-segments.mjs --yes` (the seed copies Zoom
+   files without the segment start an import keys parts by, so the same
+   class's video would otherwise land as a second part: 8 filled, 4 no
+   longer listed by Zoom), `node scripts/migrate-listening-sittings.mjs
+   --yes` (the live app's listening rows hold one total, not sittings: 10
+   migrated), `npm run check:documents` (every document reads), `npm run
+   smoke:prod` (passed), and the minimum version raised to 1.1.1. Every
+   copied recording's file was fetched from R2 through a signed read link,
+   and every copied account's password hash, Google link and claims compared
+   equal with the live app's.
+3. **The legacy project's reminders are paused** (the Cloud Scheduler job
+   `firebase-schedule-onMorning-us-central1`, paused rather than deleted).
+   Nothing else in it changed: the legacy Android app gets no final update
+   and the legacy web address no redirect (Faisal's decision).
+4. **Notifications here reach nobody** (`NOTIFY_AUDIENCE=` empty) until
+   Faisal says to send them to everyone.
+5. Keep the legacy project read-only for a set period (suggested 90 days),
    then export it to cold storage and shut it down.
-
-**Rollback** before step 4: unfreeze legacy; nothing in it was changed. After
-step 4 the new project is the record.
 
 ## Open questions
 

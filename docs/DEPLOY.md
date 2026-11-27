@@ -11,9 +11,9 @@ testing; iPhone testers use TestFlight. Secret files are backed up in
 
 **Function parameters** (not secrets) are in `functions/.env.<projectId>`, which
 `firebase deploy` reads for that project. `NOTIFY_AUDIENCE` decides who push
-notifications go to: empty (nobody) while the live site is bug-hunted, then
-`staff` (optionally with test accounts' email addresses) until switchover day,
-`everyone` after it. Empty or absent means nobody.
+notifications go to: `everyone`, `staff` (optionally with test accounts' email
+addresses), or nobody when empty or absent. It is empty until Faisal says to
+send them to everyone.
 
 ## Access a releaser needs
 
