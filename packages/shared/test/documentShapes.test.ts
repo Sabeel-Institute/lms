@@ -254,7 +254,7 @@ const SAMPLES: { [C in StoredCollection]: Required<StoredDocs[C]> } = {
     updatedAt: 1,
   },
   auditLog: { at: 1, actorUid: 's1', actorRole: 'admin', action: 'setRecordingStatus', courseId: 'k1', targets: { recordingId: 'r1' }, detail: {} },
-  config: { minVersionCode: 30 },
+  config: { minVersionCode: 30, realDataSince: '2026-11-26' },
 };
 
 const collections = Object.keys(DOCUMENT_SHAPES) as StoredCollection[];

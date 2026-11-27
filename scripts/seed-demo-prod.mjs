@@ -8,7 +8,7 @@
  *   node scripts/wipe-demo-prod.mjs          # remove it all again
  *
  * Refused after switchover, when the project holds real students
- * (`refuseAfterSwitchover`).
+ * (`refuseOnceRealData`).
  *
  * THIS WRITES TO PRODUCTION. It is additive: everything it creates carries
  * `demoSeed: true` and a `demo-` id prefix, so anything you made yourself is
@@ -35,14 +35,14 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { r2Config, s3For } from './lib/r2.mjs';
-import { refuseAfterSwitchover } from './lib/before-switchover.mjs';
+import { refuseOnceRealData } from './lib/before-switchover.mjs';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 const { CopyObjectCommand, DeleteObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-refuseAfterSwitchover('seed-demo-prod', "demo data would land on real students' records");
+await refuseOnceRealData('seed-demo-prod', "demo data would land on real students' records");
 const unknownArgs = process.argv.slice(2).filter((a) => a !== '--yes');
 if (unknownArgs.length) {
   console.error('usage: node scripts/seed-demo-prod.mjs [--yes]');

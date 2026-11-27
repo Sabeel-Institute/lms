@@ -103,9 +103,10 @@ sections marked DONE below record the setup of the legacy project,
 - [ ] **DNS**: `firebase1._domainkey` CNAME is shown in NameSilo but was not
       published after two hours, while the other three records were. Delete
       and re-add it there.
-- Notifications go to nobody while the live site is bug-hunted
-  (`NOTIFY_AUDIENCE=` empty in `functions/.env.oursabeel-lms`), then to staff
-  only (`staff`) until switchover day. Done: the Web Push key and the Android
+- [ ] **Say when notifications go to everyone.** They reach nobody
+  (`NOTIFY_AUDIENCE=` empty in `functions/.env.oursabeel-lms`) since the
+  institute's records moved here on 2026-11-26; the agent sets `everyone`
+  and deploys Functions when you say. Done: the Web Push key and the Android
   app registration (debug and release SHA-1s, `google-services.json` in
   place).
 - `npm run check:queries` and `npm run check:push` take the oursabeel.com

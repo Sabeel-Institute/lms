@@ -363,7 +363,7 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     targets: 'required',
     detail: 'optional',
   },
-  config: { minVersionCode: 'required' },
+  config: { minVersionCode: 'required', realDataSince: 'optional' },
 };
 
 type AnyShape = Readonly<Record<string, 'required' | 'optional' | { each: AnyShape; optional?: true }>>;

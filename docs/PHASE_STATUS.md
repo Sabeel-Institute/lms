@@ -162,6 +162,20 @@ the day everyone moves.
 
 ## Decision log
 
+- 2026-11-26 — **The institute's records moved here, two cohorts, not the
+  whole live app** (`docs/plans/SWITCHOVER.md`, Switchover; Faisal,
+  2026-11-26). The live app's classes had finished, so no freeze. Copied:
+  Hikam Year 3 and Quran Immersion 2026 Istiqlal, every staff account, and
+  their students, less staff members' personal student accounts with no real
+  attendance (two with real attendance stay), test accounts, and a duplicate
+  account folded into the one its owner signs in with. Not copied: a test
+  session and a failed Zoom import. Kept here: App Review and the test-alpha
+  accounts. The legacy reminders are paused; the legacy Android app gets no
+  final update and its web address no redirect. Notifications reach nobody
+  until Faisal says everyone. The seed's guard is the copy's own marker,
+  `config/app.realDataSince`, not the notification setting, so it holds in
+  between.
+
 - 2026-11-11 — **A recording can be given to one student, optional and
   counted nowhere** (`docs/plans/GIVE-A-RECORDING.md`; Faisal, 2026-11-06 and
   2026-11-11). A student who attended wanted more time, and excusing them

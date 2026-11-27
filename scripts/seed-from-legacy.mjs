@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /**
- * Copy the live app's data into this project: accounts, Firestore and media.
+ * Copy chosen cohorts of the live app into this project: accounts, Firestore
+ * and media.
  *
- *     node scripts/seed-from-legacy.mjs --from <project> --from-account <email>         # dry run
- *     node scripts/seed-from-legacy.mjs --from <project> --from-account <email> --yes   # wipe this project, copy
+ *     node scripts/seed-from-legacy.mjs --from <project> --from-account <email> --plan <file>         # dry run
+ *     node scripts/seed-from-legacy.mjs --from <project> --from-account <email> --plan <file> --yes   # wipe this project, copy
  *
- * docs/plans/SWITCHOVER.md, "Seeding from the legacy project". Run before the
- * first deploy and again on switchover day; every run WIPES this project first,
- * so anything entered here in between is test data and is lost.
+ * docs/plans/SWITCHOVER.md, "Seeding from the legacy project". The plan file
+ * (`scripts/lib/legacy-selection.mjs`) names the cohorts to copy, the
+ * corrections made on the way, and what of this project to keep. Every run
+ * WIPES the rest of this project first. Once a copy has succeeded it writes
+ * `config/app.realDataSince`, and from then on this refuses
+ * (`refuseOnceRealData`) unless `--replacing <that day>` says which copy it
+ * replaces.
  *
  * READ-ONLY ON THE SOURCE. Every request to it is a GET or a list, made with
  * its own account's token; nothing is written there and no IAM changes. The
@@ -16,45 +21,47 @@
  *
  * What it copies, all with the same ids so every reference stays intact:
  *
- *  - Accounts, with their password hashes (imported with the source's scrypt
- *    parameters, read from its Auth config into this process and never
+ *  - Every staff account, and every student enrolled (now or before) in a
+ *    copied class, with their password hashes (imported with the source's
+ *    scrypt parameters, read from its Auth config into this process and never
  *    printed), Google links, custom claims and disabled flags. Same uids.
- *  - Every Firestore document, recursively, field values passed through
- *    untouched (REST JSON keeps every type). EXCEPT push registrations
- *    (`notifications/{uid}/devices`): FCM tokens belong to the source's sender
- *    and cannot deliver from here; devices register again on first sign-in.
- *    And EXCEPT recordings, which the live app stores as one audio file and
- *    this project as media items: each is converted on the way
- *    (`scripts/lib/legacy-media.mjs`), and a Zoom import gets its
- *    `zoomImports` claim so the picker knows the file is here. And EXCEPT the
- *    audit entries the live app writes under action names this app has
- *    replaced, which are renamed on the way (`scripts/lib/legacy-audit.mjs`).
- *    And EXCEPT enrolments and classes, which the live app keeps as a first
- *    joining and a last leaving date, and as whether its recordings are
- *    closed now, and this project as every stretch of each: they are rebuilt
- *    from the live app's audit log on the way (`scripts/lib/stretches.mjs`).
- *  - Every object under `recordings/` in the source's Storage bucket, into the
+ *  - Every Firestore document of the copied cohorts, and every document about
+ *    the people copied, field values passed through untouched (REST JSON keeps
+ *    every type). EXCEPT push registrations (`notifications/{uid}/devices`):
+ *    FCM tokens belong to the source's sender and cannot deliver from here;
+ *    devices register again on first sign-in. And EXCEPT recordings, which
+ *    the live app stores as one audio file and this project as media items:
+ *    each is converted on the way (`scripts/lib/legacy-media.mjs`), and a Zoom
+ *    import gets its `zoomImports` claim so the picker knows the file is here.
+ *    And EXCEPT the audit entries the live app writes under action names this
+ *    app has replaced, which are renamed on the way
+ *    (`scripts/lib/legacy-audit.mjs`). And EXCEPT enrolments and classes,
+ *    which the live app keeps as a first joining and a last leaving date, and
+ *    as whether its recordings are closed now, and this project as every
+ *    stretch of each: they are rebuilt from the live app's audit log on the
+ *    way (`scripts/lib/stretches.mjs`).
+ *  - The copied recordings' files from the source's Storage bucket, into the
  *    R2 media bucket at the same key, with the R2 write key.
  *
  * Then it waits for the triggers its wipe fired to finish, writes back any
- * copied document one of them changed, counts both sides, and fails loudly on
- * any difference.
+ * copied or kept document one of them changed, counts both sides, and fails
+ * loudly on any difference.
  */
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
-import { FIREBASE_PROJECT_ID } from '@sabeel/shared';
+import { FIREBASE_PROJECT_ID, INSTITUTE_TIMEZONE, todayInZone } from '@sabeel/shared';
 import { r2Config, s3For } from './lib/r2.mjs';
 import { ZOOM_IMPORTS, convertRecording, isLegacyRecording } from './lib/legacy-media.mjs';
 import { RENAMED_AUDIT_ACTIONS, convertAuditEntry } from './lib/legacy-audit.mjs';
 import { archiveHistory, convertCourse, convertEnrolment, enrolmentHistory } from './lib/stretches.mjs';
-import { decodeFields, encodeValue } from './lib/firestore-rest.mjs';
-import { refuseAfterSwitchover } from './lib/before-switchover.mjs';
+import { canonicalFields, decodeFields, encodeValue } from './lib/firestore-rest.mjs';
+import { refuseOnceRealData } from './lib/before-switchover.mjs';
+import { keptHere, parsePlan, selectFromLegacy } from './lib/legacy-selection.mjs';
+import { readFileSync } from 'node:fs';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } = require('@aws-sdk/client-s3');
-
-refuseAfterSwitchover('seed-from-legacy', 'a seed would wipe everything made here since the move');
 
 // ------------------------------------------------------------------ args --
 const args = process.argv.slice(2);
@@ -64,17 +71,38 @@ const opt = (name) => {
 };
 const SOURCE = opt('--from');
 const SOURCE_ACCOUNT = opt('--from-account');
+const PLAN_FILE = opt('--plan');
+const REPLACING = opt('--replacing');
 const EXECUTE = args.includes('--yes');
 const TARGET = FIREBASE_PROJECT_ID;
 const TARGET_ACCOUNT = 'faisal.shah@oursabeel.com';
-if (!SOURCE || !SOURCE_ACCOUNT || !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(SOURCE) || !SOURCE_ACCOUNT.includes('@')) {
-  console.error('usage: seed-from-legacy.mjs --from <project-id> --from-account <email> [--yes]');
+const USAGE = 'usage: seed-from-legacy.mjs --from <project-id> --from-account <email> --plan <file> [--replacing YYYY-MM-DD] [--yes]';
+const VALUED = new Set(['--from', '--from-account', '--plan', '--replacing']);
+const stray = args.filter((a, i) => !(VALUED.has(a) || VALUED.has(args[i - 1]) || a === '--yes'));
+if (
+  stray.length ||
+  !SOURCE ||
+  !SOURCE_ACCOUNT ||
+  !PLAN_FILE ||
+  !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(SOURCE) ||
+  !SOURCE_ACCOUNT.includes('@') ||
+  (REPLACING !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(REPLACING))
+) {
+  console.error(stray.length ? `unknown argument(s): ${stray.join(' ')}\n${USAGE}` : USAGE);
   process.exit(2);
 }
 if (SOURCE === TARGET) {
   console.error(`--from is ${TARGET}, the project this copies INTO`);
   process.exit(2);
 }
+let plan;
+try {
+  plan = parsePlan(JSON.parse(readFileSync(PLAN_FILE, 'utf8')));
+} catch (e) {
+  console.error(`--plan ${PLAN_FILE}: ${e.message}`);
+  process.exit(2);
+}
+await refuseOnceRealData('seed-from-legacy', 'a seed would wipe everything made here since', { replacing: REPLACING });
 
 const token = (account) =>
   execFileSync('gcloud', ['auth', 'print-access-token', `--account=${account}`], { encoding: 'utf8' }).trim();
@@ -227,12 +255,6 @@ const [tgtDocs, tgtUsers, tgtObjects] = await Promise.all([
 const mb = (n) => `${(n / 1e6).toFixed(1)} MB`;
 const sum = (xs) => xs.reduce((a, o) => a + o.size, 0);
 
-console.log('Source:');
-for (const [k, n] of [...countByShape(srcDocs)].sort()) console.log(`  ${String(n).padStart(5)}  ${k}`);
-console.log(`  ${String(srcUsers.length).padStart(5)}  accounts`);
-console.log(`  ${String(srcObjects.length).padStart(5)}  media objects (${mb(sum(srcObjects))})`);
-console.log(`\nThis project now: ${tgtDocs.length} documents, ${tgtUsers.length} accounts, ${tgtObjects.length} media objects. All are removed first.`);
-
 /*
  * ENROLMENTS IN THE OLD SHAPE. The live app keeps a first joining and a last
  * leaving date; this app keeps every stretch in the class, rebuilt here from
@@ -257,80 +279,178 @@ const converted = new Map([
     return [relPath(d.name), { field: 'recordingsClosed', c: convertCourse(idOf(d), data, legacyCohorts.get(data.cohortId), legacyArchives) }];
   }),
 ]);
-const inferredRecords = [...converted].filter(([, { c }]) => c?.inferred).map(([rel]) => rel);
-console.log(
-  `\nEnrolments and classes given their stretches: ${[...converted.values()].filter(({ c }) => c).length}; ` +
-    `inferred where the log and what is stored disagree: ${inferredRecords.join(', ') || 'none'}`,
-);
 
-if (!EXECUTE) {
-  console.log('\nDry run. Re-run with --yes to wipe this project and copy.');
-  process.exit(0);
-}
-
-// 1. Wipe this project.
-console.log('\n1/6  wiping this project');
-await batchWrite(tgtDocs.map((d) => ({ delete: d.name })));
-for (let i = 0; i < tgtUsers.length; i += 1000) {
-  await call('target', 'POST', `${itBase(TARGET)}/accounts:batchDelete`, {
-    localIds: tgtUsers.slice(i, i + 1000).map((u) => u.localId),
-    force: true,
-  });
-}
-for (let i = 0; i < tgtObjects.length; i += 1000) {
-  await s3.send(new DeleteObjectsCommand({
-    Bucket: media.bucket,
-    Delete: { Objects: tgtObjects.slice(i, i + 1000).map((o) => ({ Key: o.key })) },
-  }));
-}
-
-// 2. Accounts.
-console.log(`2/6  ${srcUsers.length} accounts`);
-for (let i = 0; i < srcUsers.length; i += 1000) {
-  const r = await json('target', 'POST', `${itBase(TARGET)}/accounts:batchCreate`, {
-    hashAlgorithm: 'SCRYPT',
-    signerKey: hash.signerKey,
-    saltSeparator: hash.saltSeparator,
-    rounds: hash.rounds,
-    memoryCost: hash.memoryCost,
-    users: srcUsers.slice(i, i + 1000).map(importable),
-  });
-  if (r.error?.length) throw new Error(`account import: ${JSON.stringify(r.error.slice(0, 3))}`);
-}
-
-// 3. Firestore, recordings converted and retired audit actions renamed on the way.
-const docName = (rel) => `projects/${TARGET}/databases/(default)/documents/${rel}`;
-const writes = [];
-/** How many audit entries were renamed, by the live app's name for the action. */
+// Every document the whole live app would become here, converted; the plan
+// then chooses among them, so a choice is made on what is actually written.
+const candidates = [];
+/** The audit entries renamed on the way, with the live app's name for each one's action. */
 const renamed = new Map();
 for (const d of srcDocs) {
   const rel = relPath(d.name);
   const fields = d.fields ?? {};
   if (shape(rel) === 'recordings' && isLegacyRecording(fields)) {
     const conv = convertRecording(rel.split('/')[1], fields);
-    writes.push({ update: { name: docName(rel), fields: conv.fields } });
-    if (conv.claim) writes.push({ update: { name: docName(`${ZOOM_IMPORTS}/${conv.claim.id}`), fields: conv.claim.fields } });
+    candidates.push({ rel, fields: conv.fields });
+    if (conv.claim) candidates.push({ rel: `${ZOOM_IMPORTS}/${conv.claim.id}`, fields: conv.claim.fields });
   } else if (converted.get(rel)?.c) {
     // Every field as it was, less an enrolment's two dates the stretches replace.
     const { field, c } = converted.get(rel);
     const { enrolledAt: _first, unenrolledAt: _last, ...kept } = fields;
-    writes.push({ update: { name: docName(rel), fields: { ...(field === 'stretches' ? kept : fields), [field]: encodeValue(c.data[field]) } } });
+    candidates.push({ rel, fields: { ...(field === 'stretches' ? kept : fields), [field]: encodeValue(c.data[field]) } });
   } else if (shape(rel) === 'auditLog') {
     const entry = convertAuditEntry(fields);
-    const from = fields.action?.stringValue;
-    if (entry !== fields) renamed.set(from, (renamed.get(from) ?? 0) + 1);
-    writes.push({ update: { name: docName(rel), fields: entry } });
+    if (entry !== fields) renamed.set(rel, fields.action?.stringValue);
+    candidates.push({ rel, fields: entry });
   } else {
-    writes.push({ update: { name: docName(rel), fields } });
+    candidates.push({ rel, fields });
   }
 }
-const renames = [...renamed].map(([from, n]) => `${n} ${from} → ${RENAMED_AUDIT_ACTIONS[from]}`).join(', ');
-console.log(`3/6  ${srcDocs.length} documents, ${writes.length - srcDocs.length} Zoom claims; audit entries renamed: ${renames || 'none'}`);
-await batchWrite(writes);
+
+const chosen = selectFromLegacy(candidates, srcUsers, plan);
+const kept = keptHere(tgtDocs.map((d) => ({ rel: relPath(d.name), fields: d.fields ?? {} })), tgtUsers, plan);
+const writes = chosen.writes;
+const copiedUsers = srcUsers.filter((u) => chosen.uids.has(u.localId));
+for (const u of copiedUsers) {
+  if (kept.accounts.has(u.localId)) throw new Error(`account ${u.localId} is both copied and kept here`);
+}
+const writtenRels = new Set(writes.map((w) => w.rel));
+for (const d of kept.docs) if (writtenRels.has(d.rel)) throw new Error(`${d.rel} is both copied and kept here`);
+const copiedRecordings = new Set(writes.filter((w) => shape(w.rel) === 'recordings').map((w) => w.rel.split('/')[1]));
+const copiedObjects = srcObjects.filter((o) => copiedRecordings.has(o.key.split('/')[1]));
+const keptObjects = tgtObjects.filter((o) => kept.keepsObject(o.key));
+const keptRels = new Set(kept.docs.map((d) => d.rel));
+const wipedDocs = tgtDocs.filter((d) => !keptRels.has(relPath(d.name)));
+const wipedUsers = tgtUsers.filter((u) => !kept.accounts.has(u.localId));
+const wipedObjects = tgtObjects.filter((o) => !kept.keepsObject(o.key));
+
+// ------------------------------------------------------------- the report --
+const data = (rel) => {
+  const w = writes.find((x) => x.rel === rel) ?? candidates.find((x) => x.rel === rel);
+  return w ? decodeFields(w.fields) : {};
+};
+const userOf = new Map(srcUsers.map((u) => [u.localId, u]));
+const tgtUserOf = new Map(tgtUsers.map((u) => [u.localId, u]));
+const courseName = (id) => data(`courses/${id}`).name ?? id;
+const person = (uid) => {
+  const d = data(`students/${uid}`);
+  const s = data(`staffUsers/${uid}`);
+  return `${d.displayName ?? s.displayName ?? '?'} <${d.email ?? s.email ?? userOf.get(uid)?.email ?? '?'}>`;
+};
+const classesOf = (uid) =>
+  candidates
+    .filter((c) => shape(c.rel) === 'enrollments')
+    .map((c) => decodeFields(c.fields))
+    .filter((e) => e.studentUid === uid)
+    .map((e) => `${courseName(e.courseId)}${chosen.report.keptCourses.has(e.courseId) ? '' : ' [not copied]'}${e.active ? '' : ' (left)'}`)
+    .join(', ');
+const copiedClassesOf = (uid) =>
+  writes
+    .filter((w) => shape(w.rel) === 'enrollments')
+    .map((w) => decodeFields(w.fields))
+    .filter((e) => e.studentUid === uid)
+    .map((e) => `${courseName(e.courseId)}${e.active ? '' : ' (left)'}`)
+    .join(', ');
+
+const liveCount = countByShape(candidates.map((c) => ({ name: `x/documents/${c.rel}` })));
+const copyCount = countByShape(writes.map((w) => ({ name: `x/documents/${w.rel}` })));
+console.log('Documents, live app → copied:');
+for (const [k, n] of [...liveCount].sort()) console.log(`  ${String(n).padStart(5)} → ${String(copyCount.get(k) ?? 0).padStart(5)}  ${k}`);
+console.log('  (push registrations are never read or copied)');
+
+console.log('\nCohorts and classes copied:');
+for (const c of plan.cohorts) {
+  console.log(`  ${data(`cohorts/${c}`).name}`);
+  for (const course of [...chosen.report.keptCourses].filter((id) => data(`courses/${id}`).cohortId === c)) {
+    const sessions = writes.filter((w) => shape(w.rel) === 'sessions' && decodeFields(w.fields).courseId === course);
+    const recs = writes.filter((w) => shape(w.rel) === 'recordings' && decodeFields(w.fields).courseId === course);
+    console.log(`    ${courseName(course)}: ${sessions.length} sessions, ${recs.length} recordings`);
+  }
+}
+const left = (ids, label) => ids.forEach((id) => console.log(`  not copied: ${label(id)}`));
+left(plan.dropSessions, (id) => `session "${data(`sessions/${id}`).title}" ${data(`sessions/${id}`).date}, ${courseName(data(`sessions/${id}`).courseId)}`);
+left(plan.dropRecordings, (id) => `recording "${data(`recordings/${id}`).title}", ${courseName(data(`recordings/${id}`).courseId)} (its session stays, with no recording)`);
+
+const staffUids = [...chosen.uids].filter((u) => candidates.some((c) => c.rel === `staffUsers/${u}`));
+console.log(`\nStaff copied (${staffUids.length}):`);
+for (const u of staffUids) console.log(`  ${person(u)}  ${data(`staffUsers/${u}`).role}`);
+const studentUids = [...chosen.report.copiedStudents];
+const withPassword = (uid) => (userOf.get(uid)?.providerUserInfo ?? []).some((p) => p.providerId === 'password');
+console.log(`\nStudents copied (${studentUids.length}; * = has never set a password):`);
+for (const u of studentUids.sort((a, b) => person(a).localeCompare(person(b)))) {
+  console.log(`  ${withPassword(u) ? ' ' : '*'} ${person(u)}  ${copiedClassesOf(u)}`);
+}
+console.log('\nStudents not copied:');
+for (const u of plan.leaveOut) console.log(`  ${person(u)}  left out by the plan; was in ${classesOf(u)}`);
+for (const [from, to] of chosen.report.merged) console.log(`  ${person(from)}  folded into ${person(to)}; was in ${classesOf(from)}`);
+for (const u of chosen.report.notEnrolled) console.log(`  ${person(u)}  in no copied class${classesOf(u) ? `; was in ${classesOf(u)}` : ''}`);
+if (chosen.report.marksRemoved.size) {
+  console.log('\nMarks taken out of registers (students not copied):');
+  for (const [rel, n] of chosen.report.marksRemoved) {
+    const s = data(rel);
+    console.log(`  ${n}  ${courseName(s.courseId)}, "${s.title}" ${s.date}`);
+  }
+}
+console.log(`\nDocuments moved onto the account a duplicate folds into: ${chosen.report.moved}`);
+const renames = new Map();
+for (const [rel, from] of renamed) if (writtenRels.has(rel)) renames.set(from, (renames.get(from) ?? 0) + 1);
+console.log(`Audit entries renamed: ${[...renames].map(([from, n]) => `${n} ${from} → ${RENAMED_AUDIT_ACTIONS[from]}`).join(', ') || 'none'}`);
+const inferred = [...converted]
+  .filter(([rel, { c }]) => c?.inferred && writtenRels.has(rel))
+  .map(([rel]) => rel);
+console.log(`Enrolments and classes whose log and stored dates disagree: ${inferred.join(', ') || 'none'}`);
+console.log(`\nAccounts copied: ${copiedUsers.length} of ${srcUsers.length}`);
+console.log(`Media copied: ${copiedObjects.length} of ${srcObjects.length} files (${mb(sum(copiedObjects))} of ${mb(sum(srcObjects))})`);
+
+console.log(`\nKept in ${TARGET}:`);
+for (const [k, n] of [...countByShape(kept.docs.map((d) => ({ name: `x/documents/${d.rel}` })))].sort()) console.log(`  ${String(n).padStart(5)}  ${k}`);
+for (const u of kept.accounts) console.log(`  account ${tgtUserOf.get(u)?.email}`);
+console.log(`  ${keptObjects.length} media files (${mb(sum(keptObjects))}), and the help films`);
+console.log(`Removed from ${TARGET}: ${wipedDocs.length} documents, ${wipedUsers.length} accounts, ${wipedObjects.length} media files (${mb(sum(wipedObjects))}).`);
+
+if (!EXECUTE) {
+  console.log('\nDry run. Re-run with --yes to wipe this project and copy.');
+  process.exit(0);
+}
+
+// 1. Wipe this project, but what the plan keeps.
+console.log('\n1/7  wiping this project');
+await batchWrite(wipedDocs.map((d) => ({ delete: d.name })));
+for (let i = 0; i < wipedUsers.length; i += 1000) {
+  await call('target', 'POST', `${itBase(TARGET)}/accounts:batchDelete`, {
+    localIds: wipedUsers.slice(i, i + 1000).map((u) => u.localId),
+    force: true,
+  });
+}
+for (let i = 0; i < wipedObjects.length; i += 1000) {
+  await s3.send(new DeleteObjectsCommand({
+    Bucket: media.bucket,
+    Delete: { Objects: wipedObjects.slice(i, i + 1000).map((o) => ({ Key: o.key })) },
+  }));
+}
+
+// 2. Accounts.
+console.log(`2/7  ${copiedUsers.length} accounts`);
+for (let i = 0; i < copiedUsers.length; i += 1000) {
+  const r = await json('target', 'POST', `${itBase(TARGET)}/accounts:batchCreate`, {
+    hashAlgorithm: 'SCRYPT',
+    signerKey: hash.signerKey,
+    saltSeparator: hash.saltSeparator,
+    rounds: hash.rounds,
+    memoryCost: hash.memoryCost,
+    users: copiedUsers.slice(i, i + 1000).map(importable),
+  });
+  if (r.error?.length) throw new Error(`account import: ${JSON.stringify(r.error.slice(0, 3))}`);
+}
+
+// 3. Firestore.
+const docName = (rel) => `projects/${TARGET}/databases/(default)/documents/${rel}`;
+const updates = writes.map((w) => ({ update: { name: docName(w.rel), fields: w.fields } }));
+console.log(`3/7  ${updates.length} documents`);
+await batchWrite(updates);
 
 // 4. Media.
-console.log(`4/6  ${srcObjects.length} media objects (${mb(sum(srcObjects))})`);
-for (const o of srcObjects) {
+console.log(`4/7  ${copiedObjects.length} media objects (${mb(sum(copiedObjects))})`);
+for (const o of copiedObjects) {
   const res = await call('source', 'GET', `https://storage.googleapis.com/storage/v1/b/${o.bucket}/o/${encodeURIComponent(o.key)}?alt=media`);
   await s3.send(new PutObjectCommand({
     Bucket: media.bucket,
@@ -349,21 +469,20 @@ for (const o of srcObjects) {
  * switches every grant of it off; a past session's grant is never revived.
  * That rewrote the term's Missed and Completed record, and the count below
  * cannot see it (the documents are all there). So once the burst of trigger
- * runs has passed, every copied document is compared with what was written,
- * field by field, and any a trigger changed is written back, until a pass
- * finds none. The triggers themselves change nothing in data copied whole.
+ * runs has passed, every copied and every kept document is compared with what
+ * it should hold, field by field, and any a trigger changed is written back,
+ * until a pass finds none. The triggers themselves change nothing in data
+ * copied whole.
  */
-const canonical = (v) =>
-  JSON.stringify(v, (_k, x) =>
-    x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x,
-  );
+const expected = [...updates, ...kept.docs.map((d) => ({ update: { name: docName(d.rel), fields: d.fields } }))];
 const problems = [];
 const SETTLE_MS = 90_000;
 for (let pass = 1; ; pass += 1) {
   await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
   const now = new Map((await allDocs('target', TARGET, fsBase(TARGET), new Set())).map((d) => [relPath(d.name), d.fields ?? {}]));
-  const drifted = writes.filter((w) => canonical(now.get(relPath(w.update.name))) !== canonical(w.update.fields));
-  console.log(`5/6  settle pass ${pass}: ${drifted.length} document(s) changed since the copy`);
+  const drifted = expected.filter((w) => canonicalFields(now.get(relPath(w.update.name))) !== canonicalFields(w.update.fields));
+  console.log(`5/7  settle pass ${pass}: ${drifted.length} document(s) changed since the copy`);
+  for (const w of drifted.slice(0, 20)) console.log(`       ${relPath(w.update.name)}`);
   if (drifted.length === 0) break;
   if (pass === 3) {
     problems.push(`${drifted.length} document(s) still change after the copy, e.g. ${drifted.slice(0, 3).map((w) => relPath(w.update.name)).join(', ')}`);
@@ -373,25 +492,39 @@ for (let pass = 1; ; pass += 1) {
 }
 
 // 6. Count both sides.
-console.log('6/6  checking');
+console.log('6/7  checking');
 const [afterDocs, afterUsers, afterObjects] = await Promise.all([
   allDocs('target', TARGET, fsBase(TARGET), new Set()),
   allUsers('target', TARGET),
-  targetObjects(),
+  Promise.all(WIPED_PREFIXES.map((prefix) => targetObjects(prefix))).then((lists) => lists.flat()),
 ]);
-const want = countByShape(writes.map((w) => w.update));
+const want = countByShape(expected.map((w) => w.update));
 const got = countByShape(afterDocs);
 for (const k of new Set([...want.keys(), ...got.keys()])) {
-  if (want.get(k) !== got.get(k)) problems.push(`${k}: source ${want.get(k) ?? 0}, here ${got.get(k) ?? 0}`);
+  if (want.get(k) !== got.get(k)) problems.push(`${k}: expected ${want.get(k) ?? 0}, here ${got.get(k) ?? 0}`);
 }
-if (afterUsers.length !== srcUsers.length) problems.push(`accounts: source ${srcUsers.length}, here ${afterUsers.length}`);
-const claimsLost = srcUsers.filter((u) => u.customAttributes && afterUsers.find((a) => a.localId === u.localId)?.customAttributes !== u.customAttributes);
+const afterUids = new Set(afterUsers.map((u) => u.localId));
+const wantUids = new Set([...copiedUsers.map((u) => u.localId), ...kept.accounts]);
+if (afterUids.size !== wantUids.size || [...wantUids].some((u) => !afterUids.has(u))) {
+  problems.push(`accounts: expected ${wantUids.size}, here ${afterUids.size}`);
+}
+const claimsLost = copiedUsers.filter((u) => u.customAttributes && afterUsers.find((a) => a.localId === u.localId)?.customAttributes !== u.customAttributes);
 if (claimsLost.length) problems.push(`${claimsLost.length} accounts lost their claims`);
 const sizes = new Map(afterObjects.map((o) => [o.key, o.size]));
-for (const o of srcObjects) if (sizes.get(o.key) !== o.size) problems.push(`media ${o.key}: ${o.size} vs ${sizes.get(o.key)}`);
+for (const o of [...copiedObjects, ...keptObjects]) if (sizes.get(o.key) !== o.size) problems.push(`media ${o.key}: ${o.size} vs ${sizes.get(o.key)}`);
+if (afterObjects.length !== copiedObjects.length + keptObjects.length) {
+  problems.push(`media: expected ${copiedObjects.length + keptObjects.length} files, here ${afterObjects.length}`);
+}
 
 if (problems.length) {
   console.error(`\nMISMATCH:\n  ${problems.join('\n  ')}`);
   process.exit(1);
 }
+
+// 7. Record that this project now holds the real records (`refuseOnceRealData`).
+const since = todayInZone(INSTITUTE_TIMEZONE, Date.now());
+await call('target', 'PATCH', `${fsBase(TARGET)}/config/app?updateMask.fieldPaths=realDataSince`, {
+  fields: { realDataSince: { stringValue: since } },
+});
+console.log(`7/7  config/app.realDataSince = ${since}`);
 console.log(`\nCopied and checked: ${afterDocs.length} documents, ${afterUsers.length} accounts, ${afterObjects.length} media objects.`);

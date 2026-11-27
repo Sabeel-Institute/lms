@@ -9,12 +9,13 @@ students who missed a class play in the app, and an accountability ledger for
 staff. Faisal is the
 developer; the institute's staff are the admins/managers.
 
-**This repo is the permanent home, and it is mid-move.** `Sabeel-Institute/lms`
-on GitHub, Firebase project `oursabeel-lms` under the oursabeel.com account.
-It carries the full history of `faisal-shah/sabeel-recording-app`, whose
-Firebase project `sabeel-class-recordings` (gmail account) stays the live app
-until switchover day. Never point a command from this checkout at
-`sabeel-class-recordings`.
+**This repo is the permanent home, and its project holds the institute's real
+records** (since 2026-11-26). `Sabeel-Institute/lms` on GitHub, Firebase
+project `oursabeel-lms` under the oursabeel.com account. It carries the full
+history of `faisal-shah/sabeel-recording-app`, whose Firebase project
+`sabeel-class-recordings` (gmail account) is retired and kept read-only, its
+reminders paused. Never point a command from this checkout at
+`sabeel-class-recordings`, but for reading it with `seed-from-legacy`.
 
 - **The project's identity has one source:** `FIREBASE_PROJECT_ID`, `APP_NAME`
   and `APP_SHORT_NAME` in `packages/shared/src/constants.ts`. Files that cannot
@@ -27,17 +28,19 @@ until switchover day. Never point a command from this checkout at
   (`cloudflare/media-copier`, its own workspace with tests that run in workerd);
   what remains is listed in `docs/plans/MEDIA-ON-CLOUDFLARE.md`. The Worker
   deploys before the Functions that call it.
+- **Real students and staff are here, and nothing may invent or wipe data.**
+  `config/app.realDataSince` records the day the switchover seed copied the
+  institute's cohorts in; the seed and the demo seeds refuse from then on
+  (`scripts/lib/before-switchover.mjs`). Test on the emulators, or with the
+  test-alpha accounts and the App Review class, which belong to no real class.
 - **Push notifications reach nobody** (`NOTIFY_AUDIENCE=` empty in
-  `functions/.env.oursabeel-lms`) while the live site is bug-hunted; after
-  that, only staff (`staff`) until switchover day, when it becomes
-  `everyone`. The project holds a copy of every real account while the live app
-  still notifies them; without it a student would hear everything twice.
-  Notification work is tested on the emulators, or on the live site with
-  Faisal's own account, asking him what arrived.
+  `functions/.env.oursabeel-lms`) until Faisal says to send them to
+  `everyone`. Notification work is tested on the emulators, or on the live
+  site with Faisal's own account, asking him what arrived.
 
 The plans:
 
-- `docs/plans/SWITCHOVER.md` — accounts, Phase 0, seeding, switchover day.
+- `docs/plans/SWITCHOVER.md` — accounts, Phase 0, seeding, the switchover.
 - `docs/plans/MEDIA-ON-CLOUDFLARE.md` — all media on R2, Zoom copied by a
   Cloudflare Worker.
 - `docs/plans/VIDEO-AND-MULTIPLE-MEDIA.md` — video, parts and versions per
