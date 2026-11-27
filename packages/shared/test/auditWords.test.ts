@@ -93,10 +93,30 @@ describe('describeAuditEntry', () => {
   });
 });
 
+describe('who made the change', () => {
+  it('is named from the entry, whether or not the screen has loaded its directory yet', () => {
+    const e = entry({ actorUid: 'u2', names: { u2: 'Faisal Shah' } });
+    expect(describeAuditEntry(e, nothing).by).toBe('Faisal Shah (admin)');
+    expect(describeAuditEntry(e, (kind, id) => (kind === 'person' && id === 'u2' ? 'Faisal Shah' : undefined)).by).toBe('Faisal Shah (admin)');
+    expect(describeAuditEntry(entry({ actorRole: 'system', actorUid: 'u2' }), nothing).by).toBe('System');
+  });
+
+  it('is not looked up for the system', () => {
+    expect(auditIds({ actorUid: 'u9', actorRole: 'system', targets: {} })).toEqual([]);
+  });
+});
+
 describe('auditIds', () => {
-  it('lists the class, every target and the ids inside the detail, a file with its recording', () => {
-    const got = auditIds({ courseId: 'c1', targets: { recordingId: 'r1', uid: 'u1' }, detail: { itemId: 'i1', added: ['u2'], status: 'x' } });
+  it('lists who made it, the class, every target and the ids inside the detail, a file with its recording', () => {
+    const got = auditIds({
+      actorUid: 'u3',
+      actorRole: 'admin',
+      courseId: 'c1',
+      targets: { recordingId: 'r1', uid: 'u1' },
+      detail: { itemId: 'i1', added: ['u2'], status: 'x' },
+    });
     expect(got).toEqual([
+      { kind: 'person', id: 'u3' },
       { kind: 'class', id: 'c1' },
       { kind: 'recording', id: 'r1' },
       { kind: 'person', id: 'u1' },

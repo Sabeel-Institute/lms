@@ -113,7 +113,7 @@ export function AuditScreen({
         ) : (
           <Grid min={330} rows>
             {entries.map((e) => (
-              <AuditCard key={e.id} entry={e} people={people} current={current} courseId={courseId} />
+              <AuditCard key={e.id} entry={e} current={current} courseId={courseId} />
             ))}
           </Grid>
         )}
@@ -160,7 +160,7 @@ export function MyAuditScreen({ uid }: { uid: string }) {
         ) : (
           <Grid min={330} rows>
             {entries.map((e) => (
-              <AuditCard key={e.id} entry={e} people={people} current={current} courseId={null} />
+              <AuditCard key={e.id} entry={e} current={current} courseId={null} />
             ))}
           </Grid>
         )}
@@ -191,12 +191,10 @@ function useCurrentNames(people: Map<string, string>, courseNames: Map<string, s
 
 function AuditCard({
   entry: e,
-  people,
   current,
   courseId,
 }: {
   entry: AuditRow;
-  people: Map<string, string>;
   current: CurrentName;
   /** The course this screen is about, which its entries need not repeat. */
   courseId: string | null;
@@ -214,8 +212,7 @@ function AuditCard({
   const whole = (line: string) => line.replace(/\d{4}-\d{2}-\d{2}/g, unbreakableDate);
   const about = words.about.map(whole);
   const details = words.details.map(whole);
-  const actor =
-    e.actorRole === 'system' ? 'System' : `${people.get(e.actorUid) ?? 'An account no longer in the app'} (${e.actorRole})`;
+
   return (
     <View style={[styles.row, inGrid]}>
       <View style={styles.head}>
@@ -225,7 +222,7 @@ function AuditCard({
             reading their own zone dates an override to the wrong day. */}
         <Text style={styles.time}>{stampInZone(INSTITUTE_TIMEZONE, e.at)}</Text>
       </View>
-      <Text style={styles.targets}>By {actor}</Text>
+      <Text style={styles.targets}>By {whole(words.by)}</Text>
       {about.map((line) => (
         <Text key={line} style={styles.targets}>
           {line}

@@ -2390,17 +2390,19 @@ check(
 );
 await shot(admin, '18-audit');
 
-// The institute-wide view names each entry's course, with its term since a
-// course name recurs from term to term, where it printed the course's id.
+// The institute-wide view names each entry's class, with its term since a
+// class name recurs from term to term, and prints no id of any kind: every
+// entry here was written by a real callable, which names what it touched.
 await goHome(admin, 0);
 await tap(admin, 'tab-more');
 await tap(admin, 'more-audit');
 await admin.getByTestId('audit-list').waitFor({ timeout: 15000 });
-await admin.getByText('course: Hikam Foundations · Autumn 2026').first().waitFor({ timeout: 15000 }).catch(() => {});
+await admin.getByText('Class: Hikam Foundations · Autumn 2026').first().waitFor({ timeout: 15000 }).catch(() => {});
 const wideAudit = await bodyText(admin);
 check(
-  'the institute-wide audit names each course and its term, not its id',
-  wideAudit.includes('course: Hikam Foundations · Autumn 2026') && !wideAudit.includes('courseId='),
+  'the institute-wide audit names each class and its term, and prints no id',
+  wideAudit.includes('Class: Hikam Foundations · Autumn 2026') && !/[A-Za-z]+(Id|Uid)=/.test(wideAudit) && !/no longer in the app/.test(wideAudit),
+  wideAudit.split('\n').filter((l) => /(Id|Uid)=|no longer in the app/.test(l)).slice(0, 6).join(' | '),
 );
 
 // -------------------------------------------------------------- assignments --

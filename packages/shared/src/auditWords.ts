@@ -67,12 +67,21 @@ export interface AuditId {
 
 /**
  * Every id an entry (or a call's request data) names, for the server to look
- * up: its class, its targets, and the ids inside its detail. A file is named
+ * up: who made it, its class, its targets, and the ids inside its detail. A file is named
  * through its recording, so it carries the recording's id.
  */
-export function auditIds(e: { courseId?: string | null; targets?: Record<string, unknown>; detail?: Record<string, unknown> }): AuditId[] {
+export function auditIds(e: {
+  actorUid?: string;
+  actorRole?: string;
+  courseId?: string | null;
+  targets?: Record<string, unknown>;
+  detail?: Record<string, unknown>;
+}): AuditId[] {
   const out: AuditId[] = [];
   const recordingId = typeof e.targets?.recordingId === 'string' ? e.targets.recordingId : undefined;
+  // Who made the change is named like everything else, so the line never
+  // waits on, or depends on, the staff directory the screen loads beside it.
+  if (e.actorUid && e.actorRole !== 'system') out.push({ kind: 'person', id: e.actorUid });
   if (e.courseId) out.push({ kind: 'class', id: e.courseId });
   for (const [k, v] of Object.entries(e.targets ?? {})) {
     const t = AUDIT_TARGETS[k];
@@ -101,8 +110,10 @@ export const auditFileName = (item: Pick<MediaItem, 'part' | 'label' | 'version'
 /** Today's name of a person, class or cohort, when the screen has it. */
 export type CurrentName = (kind: AuditNameKind, id: string) => string | undefined;
 
-/** An entry's lines in words: who it was about, then what changed. */
+/** An entry's lines in words: who made it, who it was about, then what changed. */
 export interface AuditWords {
+  /** "Faisal Shah (admin)", or "System". */
+  by: string;
   /** "Class: Arabic QI 2026 · Quran Immersion 2026 Istiqlal", one per thing touched. */
   about: string[];
   /** "Status: Published", one per detail. */
@@ -207,6 +218,7 @@ export function describeAuditEntry(e: AuditEntryDoc, current: CurrentName, scree
     if (now && then && now !== then) return `${now} (then ${then})`;
     return now ?? then ?? GONE[kind];
   };
+  const by = e.actorRole === 'system' ? 'System' : `${name('person', e.actorUid)} (${e.actorRole})`;
   const about: string[] = [];
   const seen = new Set<string>();
   const say = (key: string, id: string) => {
@@ -234,7 +246,7 @@ export function describeAuditEntry(e: AuditEntryDoc, current: CurrentName, scree
     const line = words ? words(v, e, name) : `${capital(k.replace(/([A-Z])/g, ' $1').toLowerCase())}: ${String(v)}`;
     if (line) details.push(line);
   }
-  return { about, details };
+  return { by, about, details };
 }
 
 /** Reads documents by path (`courses/k1`), answering with those that exist. */

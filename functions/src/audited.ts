@@ -140,7 +140,7 @@ export function auditedCall<T>(
       const detail = audit.detail ? pruneDetail(audit.detail) : undefined;
       const targets = Object.keys(audit.targets).length ? audit.targets : deriveTargets(req.data);
       // And AFTER, for what the change created; a name read before wins.
-      const ids = auditIds({ courseId: audit.courseId, targets, detail });
+      const ids = auditIds({ actorUid: req.auth?.uid, actorRole: token.role ?? 'system', courseId: audit.courseId, targets, detail });
       const after = await names(action, ids.filter((i) => !(i.id in before)));
       const named = Object.fromEntries(
         ids.flatMap((i) => (before[i.id] ?? after[i.id] ? [[i.id, before[i.id] ?? after[i.id]]] : [])),
