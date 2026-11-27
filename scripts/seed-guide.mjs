@@ -10,6 +10,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 import { putLocalObject } from './lib/media-store.mjs';
 import { AUDIO_FIXTURE, MEDIA_FIXTURES, ensureAudioFixture, ensureSlideVideo } from './lib/media-fixtures.mjs';
+import { namedAuditEntry } from './lib/audit-names.mjs';
 import { FIRST_ADMIN_EMAIL, NEW_STAFF_ACCESS, RULES_VERSION, deriveDurationSec, mediaFromSingleAudio, mediaStorageKey } from '@sabeel/shared';
 
 // The emulator ports and project, from ci-tools.json (`npx sabeel-ci ports`).
@@ -191,8 +192,8 @@ const auditEntries=[
   A('createStudent',null,{studentUid:uids[7]}),
   A('createEnrollment',null,{studentUid:uids[7], courseId:H}),
 ];
-for (const e of auditEntries) await db.collection('auditLog').add(e);
-await db.collection('auditLog').add({ at:now-2*day, actorUid:ADMIN, actorRole:'admin', action:'createCohort', courseId:null, targets:{cohortId} });
+for (const e of auditEntries) await db.collection('auditLog').add(await namedAuditEntry(db, e));
+await db.collection('auditLog').add(await namedAuditEntry(db, { at:now-2*day, actorUid:ADMIN, actorRole:'admin', action:'createCohort', courseId:null, targets:{cohortId} }));
 // Fatima's own history, as her page reads it out of the log: enrolled, then
 // removed from Arabic and brought back — every sentence the History card can
 // print, so the student-page figure shows the card with rows in it.
@@ -203,10 +204,10 @@ const history=[
   ['setEnrollmentActive', courses.arabic.id, {active:true}],
 ];
 for (const [i,[action,courseId,detail]] of history.entries()){
-  await db.collection('auditLog').doc(`guide-history-${i}`).set({
+  await db.collection('auditLog').doc(`guide-history-${i}`).set(await namedAuditEntry(db, {
     at:now-(38-i*9)*day, actorUid:ADMIN, actorRole:'admin', action, courseId,
     targets:{studentUid:uids[0], courseId}, ...(detail?{detail}:{}),
-  });
+  }));
 }
 
 // ---- assignments ----

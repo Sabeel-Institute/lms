@@ -47,6 +47,8 @@ async function countRejected(uid: string, email: string | null, reason: string):
         courseId: null,
         targets: { uid },
         detail: { attempts: FieldValue.increment(1), email, reason },
+        // The account is deleted at once, so the address is the only name it has.
+        ...(email ? { names: { [uid]: email } } : {}),
       },
       { merge: true },
     );
@@ -135,6 +137,7 @@ export const onUserCreate = functionsV1
         courseId: null,
         targets: { uid: user.uid },
         detail: { email: profile.email, status: 'pending' },
+        ...(profile.displayName ? { names: { [user.uid]: profile.displayName } } : {}),
       });
     } catch (e) {
       // Provisioning failures are invisible (no caller) yet security-relevant —

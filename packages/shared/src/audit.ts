@@ -24,6 +24,14 @@ export interface AuditEntryDoc {
   targets: Record<string, string>;
   /** Semantic extra where it matters: an override reason, a status change. */
   detail?: Record<string, unknown>;
+  /**
+   * What each id in `courseId`, `targets` and `detail` was called when the
+   * change was made, keyed by the id: "Session 9 (2026-11-12)", a person's
+   * name. Looked up by the server before the change runs, so a deletion still
+   * names what it deleted; the screen shows these and never an id
+   * (`describeAuditEntry`). An id missing here was not found.
+   */
+  names?: Record<string, string>;
 }
 
 /**

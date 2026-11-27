@@ -1,7 +1,8 @@
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
-import { COLLECTIONS, type AuditEntryDoc, type Role } from '@sabeel/shared';
+import { COLLECTIONS, auditIds, type AuditEntryDoc, type AuditId, type Role } from '@sabeel/shared';
 import { assertAccountLive } from './guards';
+import { nameAuditIds } from './auditNames';
 import { SENTRY_DSN, type CallableRuntime, type Secret } from './reported';
 import { reportError } from './sentry';
 
@@ -49,6 +50,7 @@ const ID_KEYS = [
   'studentUid',
   'cohortId',
   'courseId',
+  'courseworkId',
   'uid',
 ] as const;
 
@@ -57,6 +59,28 @@ export function deriveTargets(data: unknown): Record<string, string> {
   const d = (data ?? {}) as Record<string, unknown>;
   for (const k of ID_KEYS) if (typeof d[k] === 'string' && d[k]) out[k] = d[k] as string;
   return out;
+}
+
+/**
+ * The ids a request names, for naming before the change runs: the ids
+ * `deriveTargets` finds, and a recording's file (`itemId`, alone or inside an
+ * `edit`), which a removal takes out of the recording.
+ */
+function requestIds(data: unknown): AuditId[] {
+  const d = (data ?? {}) as Record<string, unknown>;
+  const edit = (d.edit ?? {}) as Record<string, unknown>;
+  const itemId = typeof d.itemId === 'string' ? d.itemId : typeof edit.itemId === 'string' ? edit.itemId : undefined;
+  return auditIds({ targets: deriveTargets(data), detail: itemId ? { itemId } : {} });
+}
+
+/** `nameAuditIds`, never failing the call: an entry without names still records the change. */
+async function names(action: string, ids: AuditId[]): Promise<Record<string, string>> {
+  try {
+    return await nameAuditIds(ids);
+  } catch (e) {
+    await reportError(e, { source: `auditNames:${action}` });
+    return {};
+  }
 }
 
 /** Append an audit entry. Used by the wrapper and directly by the auth trigger. */
@@ -97,9 +121,13 @@ export function auditedCall<T>(
   return onCall({ secrets: [SENTRY_DSN, ...extraSecrets], ...runtime }, async (req) => {
     const audit: AuditContext = { courseId: null, targets: {} };
     let result: T;
+    let before: Record<string, string> = {};
     try {
       // The account, not just the token — see `assertAccountLive`.
       await assertAccountLive(req);
+      // NAMED BEFORE THE CHANGE, so an entry about a deletion still says what
+      // was deleted: what the request names, read while it still exists.
+      before = await names(action, requestIds(req.data));
       result = await handler(req, audit);
     } catch (e) {
       if (!(e instanceof HttpsError)) await reportError(e, { source: action });
@@ -110,14 +138,22 @@ export function auditedCall<T>(
     try {
       const token = (req.auth?.token ?? {}) as { role?: Role };
       const detail = audit.detail ? pruneDetail(audit.detail) : undefined;
+      const targets = Object.keys(audit.targets).length ? audit.targets : deriveTargets(req.data);
+      // And AFTER, for what the change created; a name read before wins.
+      const ids = auditIds({ courseId: audit.courseId, targets, detail });
+      const after = await names(action, ids.filter((i) => !(i.id in before)));
+      const named = Object.fromEntries(
+        ids.flatMap((i) => (before[i.id] ?? after[i.id] ? [[i.id, before[i.id] ?? after[i.id]]] : [])),
+      );
       await writeAudit({
         at: Date.now(),
         actorUid: req.auth?.uid ?? 'unknown',
         actorRole: token.role ?? 'system',
         action,
         courseId: audit.courseId,
-        targets: Object.keys(audit.targets).length ? audit.targets : deriveTargets(req.data),
+        targets,
         ...(detail ? { detail } : {}),
+        ...(Object.keys(named).length ? { names: named } : {}),
       });
     } catch (e) {
       // Never fail (or undo) a completed mutation because the audit write did.

@@ -1,6 +1,15 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { AUDIT_ACTION_LABELS, AUDIT_PAGE, INSTITUTE_TIMEZONE, stampInZone } from '@sabeel/shared';
+import {
+  AUDIT_ACTION_LABELS,
+  AUDIT_PAGE,
+  INSTITUTE_TIMEZONE,
+  auditClassName,
+  describeAuditEntry,
+  stampInZone,
+  unbreakableDate,
+  type CurrentName,
+} from '@sabeel/shared';
 import { useDecidedStaff } from '../staff';
 import { useStudents } from '../students';
 import { Empty, Grid, Notice, Screen, useGridCell } from '../components/ui';
@@ -66,6 +75,7 @@ export function AuditScreen({
   // The institute-wide view spans courses, so each entry names its own; a
   // course's view leaves its course off every entry.
   const courseNames = useCourseNames(useAllCourses(allowed && courseId === null));
+  const current = useCurrentNames(people, courseNames);
 
   if (!allowed) {
     return (
@@ -103,7 +113,7 @@ export function AuditScreen({
         ) : (
           <Grid min={330} rows>
             {entries.map((e) => (
-              <AuditCard key={e.id} entry={e} people={people} courseNames={courseNames} courseId={courseId} />
+              <AuditCard key={e.id} entry={e} people={people} current={current} courseId={courseId} />
             ))}
           </Grid>
         )}
@@ -111,12 +121,6 @@ export function AuditScreen({
     </Screen>
   );
 }
-
-/** Which target keys name a PERSON, and what to call them in the row. */
-const PERSON_TARGETS: Record<string, string> = {
-  studentUid: 'student',
-  uid: 'account',
-};
 
 /**
  * A staff member's own actions, wherever they happened.
@@ -141,6 +145,7 @@ export function MyAuditScreen({ uid }: { uid: string }) {
       ]),
     [staff, students],
   );
+  const current = useCurrentNames(people, courseNames);
 
   return (
     <Screen title="Your actions" subtitle="Everything you have changed, newest first" width="list">
@@ -155,7 +160,7 @@ export function MyAuditScreen({ uid }: { uid: string }) {
         ) : (
           <Grid min={330} rows>
             {entries.map((e) => (
-              <AuditCard key={e.id} entry={e} people={people} courseNames={courseNames} courseId={null} />
+              <AuditCard key={e.id} entry={e} people={people} current={current} courseId={null} />
             ))}
           </Grid>
         )}
@@ -165,61 +170,52 @@ export function MyAuditScreen({ uid }: { uid: string }) {
 }
 
 /**
- * Each course's name and term, by id: "course: Hikam Foundations · Autumn 2026"
- * where an entry printed `courseId=…`. The term, because a course name recurs
- * from one term to the next.
+ * Each course's name and term, by id: "Hikam Foundations · Autumn 2026", as
+ * an entry names it (`auditClassName`), so "then …" compares like with like.
+ * The term, because a course name recurs from one term to the next.
  */
 function useCourseNames(courses: CourseRow[]): Map<string, string> {
   const cohortNameOf = useCohortName();
-  return useMemo(
-    () =>
-      new Map(
-        courses.map((c) => {
-          const cohort = cohortNameOf(c.cohortId);
-          return [c.id, cohort ? `${c.name} · ${cohort}` : c.name];
-        }),
-      ),
-    [courses, cohortNameOf],
+  return useMemo(() => new Map(courses.map((c) => [c.id, auditClassName(c, cohortNameOf(c.cohortId))])), [courses, cohortNameOf]);
+}
+
+/** Today's names of the people, classes and cohorts this screen has in hand. */
+function useCurrentNames(people: Map<string, string>, courseNames: Map<string, string>): CurrentName {
+  const cohortNameOf = useCohortName();
+  return useCallback<CurrentName>(
+    (kind, id) =>
+      kind === 'person' ? people.get(id) : kind === 'class' ? courseNames.get(id) : kind === 'cohort' ? cohortNameOf(id) || undefined : undefined,
+    [people, courseNames, cohortNameOf],
   );
 }
 
 function AuditCard({
   entry: e,
   people,
-  courseNames,
+  current,
   courseId,
 }: {
   entry: AuditRow;
   people: Map<string, string>;
-  courseNames: Map<string, string>;
+  current: CurrentName;
   /** The course this screen is about, which its entries need not repeat. */
   courseId: string | null;
 }) {
   const inGrid = useGridCell();
-  // A list of uids in a detail — the managers added to or removed from a
-  // course — reads as names where the directory has them, like a target does.
-  const named = (v: unknown) =>
-    Array.isArray(v) ? v.map((u) => people.get(String(u)) ?? String(u)).join(', ') : String(v);
-  const detail = e.detail ? Object.entries(e.detail).map(([k, v]) => `${k}: ${named(v)}`).join(' · ') : '';
-  // A name when the directory has one; the raw uid when it does not — a deleted
-  // account is still evidence, and a shortened id is worse than a full one when
-  // it is the only handle left.
+  /*
+   * IN WORDS, NEVER IDS (`describeAuditEntry`). Every id an entry touched is
+   * named: today's name for a person, class or cohort, with the name it had
+   * then when that differs; the name at the time for a session, recording,
+   * assignment or file; and a sentence for one no longer in the app.
+   */
+  const words = describeAuditEntry(e, current, courseId);
+  // A date inside a line never breaks at its hyphens (`unbreakableDate`):
+  // "(2026-11-" over "25)" split a session's date at a phone's width.
+  const whole = (line: string) => line.replace(/\d{4}-\d{2}-\d{2}/g, unbreakableDate);
+  const about = words.about.map(whole);
+  const details = words.details.map(whole);
   const actor =
-    e.actorRole === 'system' ? 'system' : `${people.get(e.actorUid) ?? e.actorUid} (${e.actorRole})`;
-  // WHO, THEN WHAT TO, on one line. The screen's own course is not repeated on
-  // every entry of its history.
-  const who = [
-    actor,
-    ...Object.entries(e.targets)
-      .filter(([k, v]) => !(k === 'courseId' && v === courseId))
-      .map(([k, v]) =>
-        PERSON_TARGETS[k]
-          ? `${PERSON_TARGETS[k]}: ${people.get(String(v)) ?? v}`
-          : k === 'courseId' && courseNames.has(v)
-            ? `course: ${courseNames.get(v)}`
-            : `${k}=${v}`,
-      ),
-  ].join(' · ');
+    e.actorRole === 'system' ? 'System' : `${people.get(e.actorUid) ?? 'An account no longer in the app'} (${e.actorRole})`;
   return (
     <View style={[styles.row, inGrid]}>
       <View style={styles.head}>
@@ -229,8 +225,13 @@ function AuditCard({
             reading their own zone dates an override to the wrong day. */}
         <Text style={styles.time}>{stampInZone(INSTITUTE_TIMEZONE, e.at)}</Text>
       </View>
-      <Text style={styles.targets}>{who}</Text>
-      {detail ? <Text style={styles.detail}>{detail}</Text> : null}
+      <Text style={styles.targets}>By {actor}</Text>
+      {about.map((line) => (
+        <Text key={line} style={styles.targets}>
+          {line}
+        </Text>
+      ))}
+      {details.length ? <Text style={styles.detail}>{details.join(' · ')}</Text> : null}
     </View>
   );
 }

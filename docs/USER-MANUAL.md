@@ -1321,8 +1321,16 @@ recording edits, and assignments posted, edited, closed, deleted and returned,
 with any change to a returned grade — newest first. A grade becomes a record
 when it is returned; drafts change constantly while a teacher works and are not
 logged keystroke by keystroke. What students do with assignments is kept on
-their work instead (Section 2.15). Each entry shows *who* did *what*, *when*, and the
-details that matter.
+their work instead (Section 2.15). Each entry shows *who* did *what*, *when*, what
+it was about by name (the class, session, recording, assignment, file or
+person), and the details that matter, in words.
+
+A name is the one it had when the change was made, so an entry about a session
+that was later deleted still says which session it was. A person, class or
+cohort renamed since shows today's name first and the earlier one after
+"then": *Class: Arabic II · Autumn 2026 (then Arabic · Autumn 2026)*. A few
+entries from before names were kept refer to something deleted since; those
+say so, for example *a session no longer in the app*.
 
 You can reach it two ways: **globally** from **More → Audit history** (admins,
 all courses), or **scoped to one course** from that course's page (managers see
