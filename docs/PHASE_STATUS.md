@@ -162,6 +162,19 @@ the day everyone moves.
 
 ## Decision log
 
+- 2026-11-26 — **The audit history names things; it never shows an id**
+  (Faisal, 2026-11-26: "make some good decisions and let me know"). Each entry
+  keeps what every id it touched was called when the change was made
+  (`names`, looked up by the server before the change runs and again after,
+  so a deletion names what it deleted and a creation what it created). People,
+  classes and cohorts, which the screen already has, show today's name with
+  "then …" when it differs; sessions, recordings, assignments and files show
+  the name at the time. Something with no name (an entry from before, about
+  something deleted since) is said in words. One table of words for every
+  detail the server writes, held to the server's source by a test. Existing
+  entries were given names from the data as it stood
+  (`scripts/backfill-audit-names.mjs`).
+
 - 2026-11-26 — **The institute's records moved here, two cohorts, not the
   whole live app** (`docs/plans/SWITCHOVER.md`, Switchover; Faisal,
   2026-11-26). The live app's classes had finished, so no freeze. Copied:

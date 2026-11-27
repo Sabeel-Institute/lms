@@ -11,6 +11,7 @@ export * from './coursework';
 export * from './richtext';
 export * from './richtextHtml';
 export * from './audit';
+export * from './auditWords';
 export * from './ledger';
 export * from './notifications';
 export * from './zoom';

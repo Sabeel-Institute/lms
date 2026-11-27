@@ -23,6 +23,7 @@ import type {
 } from './coursework';
 import { closesOn, nextDeadline, workState } from './coursework';
 import { AUDIT_ACTION_LABELS, type AuditEntryDoc } from './audit';
+import { AUDIT_DETAIL_WORDS, AUDIT_TARGETS, describeAuditEntry } from './auditWords';
 import type { CompletionOverrideDoc } from './ledger';
 import { effectiveCompletion } from './ledger';
 import type { NotificationPrefsDoc } from './notifications';
@@ -362,6 +363,7 @@ export const DOCUMENT_SHAPES: { [C in StoredCollection]: Shape<StoredDocs[C]> } 
     courseId: 'required',
     targets: 'required',
     detail: 'optional',
+    names: 'optional',
   },
   config: { minVersionCode: 'required', realDataSince: 'optional' },
 };
@@ -462,14 +464,19 @@ export const SCREEN_CHECKS: { [C in StoredCollection]?: ((doc: StoredDocs[C], to
     (e) => {
       if (!Object.hasOwn(AUDIT_ACTION_LABELS, e.action)) throw new Error(`no words for the action ${e.action}`);
     },
-    // The audit screen prints each detail as "key: value", so a value is a
-    // word, a number or a list of ids it can name: a map printed as
-    // [object Object].
+    // The audit screen says each detail in words, so a value is a word, a
+    // number or a list of ids it can name (a map would print as
+    // [object Object]), and its key has words (`AUDIT_DETAIL_WORDS`).
     (e) => {
       for (const [k, v] of Object.entries(e.detail ?? {})) {
         const flat = v === null || ['string', 'number', 'boolean'].includes(typeof v) || (Array.isArray(v) && v.every((x) => typeof x === 'string'));
         if (!flat) throw new Error(`the detail ${k} is not something the audit screen can print`);
+        if (!Object.hasOwn(AUDIT_DETAIL_WORDS, k)) throw new Error(`no words for the detail ${k}`);
+      }
+      for (const k of Object.keys(e.targets)) {
+        if (!Object.hasOwn(AUDIT_TARGETS, k)) throw new Error(`no words for the target ${k}`);
       }
     },
+    (e) => describeAuditEntry(e, () => undefined),
   ],
 };

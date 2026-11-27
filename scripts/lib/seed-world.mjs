@@ -26,6 +26,7 @@ import { config } from '@sabeel-institute/ci-tools/lib/config.mjs';
 import { emulatorProject } from '@sabeel-institute/ci-tools/lib/ports.mjs';
 import { putLocalObject } from './media-store.mjs';
 import { VIDEO_FIXTURE, ensureVideoFixture } from './media-fixtures.mjs';
+import { namedAuditEntry } from './audit-names.mjs';
 import {
   FIRST_ADMIN_EMAIL,
   HELP_VARIANTS,
@@ -820,14 +821,22 @@ export async function seedWorld({ db, auth }) {
     overriddenBy: adminUid, at: now - DAY,
   });
 
-  for (const [i, action] of ['createCourse', 'submitAttendance', 'createRecording',
-    'setRecordingStatus', 'overrideCompletion', 'createStudent'].entries()) {
-    await db.collection('auditLog').add({
+  // Rows at every width, each as the server writes it: its names, and a
+  // detail it really writes, the longest one (an override's reason) included.
+  for (const [i, [action, detail]] of [
+    ['createCourse', null],
+    ['submitAttendance', null],
+    ['createRecording', null],
+    ['setRecordingStatus', { status: 'published' }],
+    ['overrideCompletion', { completed: true, reason: 'Listened on a borrowed phone; confirmed in person after class on the 14th.' }],
+    ['createStudent', { email: STUDENT.email, mail: 'sent' }],
+  ].entries()) {
+    await db.collection('auditLog').add(await namedAuditEntry(db, {
       at: now - i * 3600_000, actorUid: adminUid, actorRole: 'admin', action,
       courseId: i % 2 ? COURSE : null,
       targets: { courseId: COURSE, recordingId: dueSoon.recId },
-      detail: { note: 'Seeded so the audit list has rows at every width.' },
-    });
+      ...(detail ? { detail } : {}),
+    }));
   }
   /**
    * The demo student's own history — the rows their page reads out of the
@@ -845,12 +854,12 @@ export async function seedWorld({ db, auth }) {
     ['createEnrollment', LONG_COURSE, { reenrolled: true }],
   ];
   for (const [i, [action, courseId, detail]] of history.entries()) {
-    await db.collection('auditLog').doc(`sw-history-${i}`).set({
+    await db.collection('auditLog').doc(`sw-history-${i}`).set(await namedAuditEntry(db, {
       at: now - (30 - i * 4) * DAY, actorUid: i % 2 ? managerUid : adminUid,
       actorRole: i % 2 ? 'manager' : 'admin', action, courseId,
       targets: courseId ? { studentUid: STUDENT.uid, courseId } : { studentUid: STUDENT.uid },
       ...(Object.keys(detail).length ? { detail } : {}),
-    });
+    }));
   }
   /** The last row, for the admin's tour — and the last one INSIDE the
    *  manager's course for theirs, since a manager's read is pinned to the

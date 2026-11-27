@@ -253,7 +253,16 @@ const SAMPLES: { [C in StoredCollection]: Required<StoredDocs[C]> } = {
     attendanceMissing: true,
     updatedAt: 1,
   },
-  auditLog: { at: 1, actorUid: 's1', actorRole: 'admin', action: 'setRecordingStatus', courseId: 'k1', targets: { recordingId: 'r1' }, detail: {} },
+  auditLog: {
+    at: 1,
+    actorUid: 's1',
+    actorRole: 'admin',
+    action: 'setRecordingStatus',
+    courseId: 'k1',
+    targets: { recordingId: 'r1' },
+    detail: {},
+    names: { k1: 'Arabic · Autumn 2026', r1: 'Week 1' },
+  },
   config: { minVersionCode: 30, realDataSince: '2026-11-26' },
 };
 
@@ -324,11 +333,13 @@ describe('an audit entry whose action has no words', () => {
 });
 
 describe('an audit entry whose detail the screen cannot print', () => {
-  it('fails its check: a map, or a list of anything but ids', () => {
+  it('fails its check: a map, a list of anything but ids, or a key with no words', () => {
     const [, flat] = SCREEN_CHECKS.auditLog ?? [];
     expect(() => flat({ ...SAMPLES.auditLog, detail: { before: { dueDate: '2026-10-21' } } }, TODAY)).toThrow(/before/);
     expect(() => flat({ ...SAMPLES.auditLog, detail: { grades: [{ points: 7 }] } }, TODAY)).toThrow(/grades/);
-    expect(() => flat({ ...SAMPLES.auditLog, detail: { dueDate: '2026-10-21 → 2026-10-23', returned: ['u1'], retry: false, n: 2 } }, TODAY)).not.toThrow();
+    expect(() => flat({ ...SAMPLES.auditLog, detail: { note: 'x' } }, TODAY)).toThrow(/no words for the detail note/);
+    expect(() => flat({ ...SAMPLES.auditLog, targets: { lessonId: 'l1' } }, TODAY)).toThrow(/no words for the target lessonId/);
+    expect(() => flat({ ...SAMPLES.auditLog, detail: { dueDate: '2026-10-21 → 2026-10-23', returned: ['u1'], retry: false, files: 2 } }, TODAY)).not.toThrow();
   });
 });
 

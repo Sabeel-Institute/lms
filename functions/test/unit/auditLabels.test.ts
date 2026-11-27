@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { AUDIT_ACTION_LABELS } from '@sabeel/shared';
+import { AUDIT_ACTION_LABELS, AUDIT_DETAIL_WORDS } from '@sabeel/shared';
 
 /**
  * Every action the server audits has a sentence, and every sentence has an
@@ -71,5 +71,62 @@ describe('audit action labels', () => {
   it('carries no sentence for an action nothing writes', () => {
     const orphaned = [...labelledActions()].filter((a) => !serverActions().has(a)).sort();
     expect(orphaned).toEqual([]);
+  });
+});
+
+/**
+ * The detail keys the server writes, read from its source: every object
+ * literal assigned to `audit.detail`, and the `detail:` of the auth trigger's
+ * direct writes. Keys at any depth of the literal count, since a conditional
+ * spread (`...(x ? { dueDate } : {})`) writes its keys too. A spread of a
+ * variable cannot be read from text, so each is listed with the keys its type
+ * holds, and a new one fails until it is listed.
+ */
+const SPREADS: Record<string, string[]> = {
+  edit: ['op', 'itemId', 'part', 'version'], // MediaEdit, @sabeel/shared media.ts
+  dates: ['dueDate', 'lateUntil'], // validateDates, coursework.ts
+};
+function literalAt(src: string, open: number): string {
+  let depth = 0;
+  for (let i = open; i < src.length; i += 1) {
+    if (src[i] === '{') depth += 1;
+    else if (src[i] === '}' && --depth === 0) return src.slice(open + 1, i);
+  }
+  throw new Error('unbalanced detail literal');
+}
+function serverDetailKeys(): Set<string> {
+  const dir = resolve(REPO, 'functions/src');
+  const out = new Set<string>();
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.ts'))) {
+    const src = readFileSync(resolve(dir, file), 'utf8');
+    for (const m of src.matchAll(/audit\.detail\s*=\s*\{|\bdetail:\s*\{/g)) {
+      const body = literalAt(src, m.index + m[0].length - 1)
+        .replace(/'[^']*'|`[^`]*`/g, "''")
+        .replace(/\?[^:?]*?:/g, '?'); // a ternary's colon is not a key's
+      for (const k of body.matchAll(/([A-Za-z]+)\s*:/g)) out.add(k[1]);
+      for (const k of body.matchAll(/[{,]\s*([A-Za-z]+)\s*(?=[,}])/g)) out.add(k[1]);
+      for (const k of body.matchAll(/\.\.\.([A-Za-z]+)/g)) {
+        const keys = SPREADS[k[1]];
+        if (!keys) throw new Error(`${file}: audit detail spreads ${k[1]}; list its keys in SPREADS`);
+        keys.forEach((x) => out.add(x));
+      }
+    }
+  }
+  return out;
+}
+
+describe('audit detail words', () => {
+  it('found the details', () => {
+    expect(serverDetailKeys().size).toBeGreaterThan(25);
+  });
+
+  it('gives every detail the server writes a phrase', () => {
+    const missing = [...serverDetailKeys()].filter((k) => !Object.hasOwn(AUDIT_DETAIL_WORDS, k)).sort();
+    expect(missing).toEqual([]);
+  });
+
+  it('carries no phrase for a detail nothing writes', () => {
+    const written = serverDetailKeys();
+    expect(Object.keys(AUDIT_DETAIL_WORDS).filter((k) => !written.has(k)).sort()).toEqual([]);
   });
 });
