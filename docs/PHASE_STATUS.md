@@ -45,6 +45,19 @@ request and the GitHub release (`npx sabeel-ci deploy-notes <version>` prints
 it). What was checked before and after each release is in the verification
 log below.
 
+### 2026-11-27 — The audit history in words — v1.2.0
+
+- **The audit history names what each change was about.** The class and its
+  term, the session and its date, the recording, the assignment, the file
+  ("Part 1, Audio only"), the student or the account, where it used to show
+  a code. A session deleted since is still named.
+- **A class, cohort or person renamed since** shows today's name first, then
+  the name it had: "Arabic II · Autumn 2026 (then Arabic · Autumn 2026)".
+- **Each detail reads as words**: "Removed from the class", "Listen by:
+  2026-10-21", "Returned to: Amy", "Status: Published".
+- **The app must be updated to this version.** Older versions show the
+  update screen.
+
 ### 2026-11-12 — Choosing a date on an iPhone — v1.1.1
 
 - **On an iPhone, a date field opens the calendar in one tap.** It used to
